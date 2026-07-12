@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Trazaloop · tokens de diseño (Sprint 1)
+   Sujeto: trazabilidad industrial de plástico reciclado.
+   Paleta: tinta verde profunda + papel gris-verde + verde reciclado como
+   único acento fuerte; ámbar reservado para avisos. Nada decorativo.
+--------------------------------------------------------------------------- */
+:root {
+  --ink: #16201b;          /* texto principal, casi negro verdoso */
+  --ink-soft: #55645b;     /* texto secundario */
+  --paper: #f6f8f5;        /* fondo general */
+  --surface: #ffffff;      /* tarjetas */
+  --hairline: #dfe6e0;     /* bordes finos */
+  --loop: #1e7a5a;         /* verde reciclado (acento) */
+  --loop-deep: #14573f;    /* acento presionado / sidebar */
+  --amber: #b4690e;        /* avisos */
+  --danger: #a33a2a;       /* errores */
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-hairline: var(--hairline);
+  --color-loop: var(--loop);
+  --color-loop-deep: var(--loop-deep);
+  --color-amber: var(--amber);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Etiqueta "eyebrow": la voz tipográfica de Trazaloop */
+.eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* Códigos y datos trazables siempre en mono tabular */
+.code {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--loop);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

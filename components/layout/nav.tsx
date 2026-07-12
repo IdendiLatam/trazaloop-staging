@@ -1,0 +1,42 @@
+import Link from "next/link";
+
+/**
+ * Navegación. Sprint 3 habilita Trazabilidad.
+ * Cálculo (Sprint 4) y Reportes siguen "pronto".
+ */
+const ITEMS: { label: string; href: string | null }[] = [
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "Diagnóstico", href: "/diagnostic" },
+  { label: "Catálogos", href: "/catalog" },
+  { label: "Evidencias", href: "/evidences" },
+  { label: "Trazabilidad", href: "/traceability" },
+  { label: "Cálculo", href: null },
+  { label: "Reportes", href: null },
+];
+
+export function AppNav() {
+  return (
+    <nav aria-label="Navegación principal" className="space-y-1">
+      {ITEMS.map((item) =>
+        item.href ? (
+          <Link
+            key={item.label}
+            href={item.href}
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            {item.label}
+          </Link>
+        ) : (
+          <span
+            key={item.label}
+            className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-emerald-100/50"
+            title="Disponible en un sprint posterior"
+          >
+            {item.label}
+            <span className="text-[10px] uppercase tracking-wider">pronto</span>
+          </span>
+        )
+      )}
+    </nav>
+  );
+}
