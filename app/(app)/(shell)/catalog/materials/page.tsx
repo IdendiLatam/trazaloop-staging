@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { SupportBadge } from "@/components/domain/catalog/support-badge";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { listMaterials, listClassifications } from "@/lib/db/catalog";
 import { createServerClient } from "@/lib/supabase/server";
@@ -90,11 +91,43 @@ export default async function MaterialsPage({
               <li key={m.id} className="rounded-lg border border-hairline bg-surface p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium">{m.name}</p>
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      {m.name}
+                      {(alreadyReclassified
+                        ? classByCode.get(m.reclassified_to_code!)?.eligible_as_recycled
+                        : cls?.eligible_as_recycled) ? (
+                        <SupportBadge
+                          evidenceId={
+                            alreadyReclassified
+                              ? m.reclassification_evidence_id
+                              : m.origin_support_evidence_id
+                          }
+                          status={
+                            alreadyReclassified
+                              ? m.reclassification_evidence_status
+                              : m.origin_evidence_status
+                          }
+                        />
+                      ) : null}
+                    </p>
                     <p className="text-xs text-ink-soft">
                       {m.classification_label}
                       {cls?.never_counts ? " · nunca cuenta como reciclado" : ""}
                       {cls?.eligible_as_recycled ? " · elegible como reciclado" : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      Evidencia de origen:{" "}
+                      {m.origin_evidence_name
+                        ? `${m.origin_evidence_name} · ${m.origin_evidence_status}`
+                        : "sin asociar"}
+                      {alreadyReclassified ? (
+                        <span className="block">
+                          Evidencia de reclasificación:{" "}
+                          {m.reclassification_evidence_name
+                            ? `${m.reclassification_evidence_name} · ${m.reclassification_evidence_status}`
+                            : "sin asociar"}
+                        </span>
+                      ) : null}
                     </p>
                     {alreadyReclassified ? (
                       <p className="mt-1 rounded-md border border-loop/30 bg-loop/5 px-2 py-1 text-xs text-loop-deep">

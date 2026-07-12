@@ -191,6 +191,33 @@ esquema `storage` no está expuesto por la API REST y una llamada por API
 puede fallar por permisos aunque el bucket exista; debe existir la fila con
 `public = false`.
 
+### 16.1 Si el smoke falla por semillas faltantes
+
+Si el esquema está aplicado (tablas y vistas existen, RLS activo) pero el
+smoke reporta `diagnostic_questions: 0`, `material_classifications: 0` o
+metodología ausente, el historial de migraciones quedó desincronizado (por
+ejemplo, migraciones marcadas como aplicadas sin ejecutarse, o un esquema
+restaurado sin datos). **Causa raíz revisada**: el seed de Sprint 2 (`0022`)
+sí es idempotente (`on conflict do nothing` en sus 6 inserts), pero el de la
+metodología (`0028`) no lo era — un re-push parcial podía dejarla fuera.
+
+Repáralo sin tocar datos de usuarios, organizaciones, evidencias,
+trazabilidad ni cálculos:
+
+```bash
+npm run repair:seeds
+```
+
+Requiere en `.env.local` únicamente `SUPABASE_DB_URL` (Supabase → Settings →
+Database → Connection string): TODO el script —conexión, reparación, conteos
+finales y verificación— va por SQL directo, sin PostgREST, y cualquier fallo
+imprime el mensaje real de Postgres. El script re-ejecuta el `0022` canónico tal cual y hace upsert de
+la metodología `RC-6632-15343` v1 extrayéndola del `0028` canónico (cero
+duplicación de datos en el script). Es idempotente: puedes correrlo las
+veces que necesites; **no borra nada**. Al final imprime los conteos de
+`frameworks`, `diagnostic_questions`, `material_classifications` y
+`calculation_methodologies`, y vuelve a sugerir `npm run test:smoke`.
+
 ## 17. Correr test RLS
 
 ### Cómo ejecutar test:rls contra staging
@@ -226,6 +253,11 @@ pida el *password*.
 - Migración aplicada parcialmente → revisa `supabase migration list` y el
   error SQL exacto; no edites migraciones antiguas, corrige hacia adelante.
 - SQL incompatible → verifica que el proyecto sea Postgres 15+.
+
+### 18.2b El smoke falla por semillas (questions/classifications/metodología en 0)
+
+El esquema aplicó pero los datos semilla no. Ejecuta `npm run repair:seeds`
+(ver §16.1). No borra nada y es idempotente.
 
 ### 18.3 El build en Vercel falla por variables
 

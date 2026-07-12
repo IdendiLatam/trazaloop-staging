@@ -1587,6 +1587,78 @@ async function main() {
       `obB: esperado calculated_with_gaps, fue ${rowsB?.[0]?.readiness_level}`);
   });
 
+
+  // =========================================================================
+  // Sprint 5C fix · Soporte de origen desde la UI de evidencias
+  // =========================================================================
+  await check("41. Regresión: el link genérico no sustituye al soporte de origen; el campo sí; cross-tenant bloqueado", async () => {
+    // Reproduce el bug reportado: material postconsumo SIN soporte de origen.
+    const { data: matNoSup } = await userA.client
+      .from("materials")
+      .insert({ organization_id: orgA, name: "Posconsumo Opaco S5C", classification_code: "postconsumer_valid" })
+      .select("id").single();
+    await makeChain("50", 100);
+    await compose(obS4["50"], matNoSup!.id, 100);
+
+    const rpc = () =>
+      userA.client.rpc("calculate_recycled_content", { p_output_batch_id: obS4["50"] });
+
+    // (i) Sin soporte → 0% con missing_origin_support (estado del bug).
+    const { data: c0 } = await rpc();
+    assert(close(c0.recycled_percent, 0), `esperado 0%, fue ${c0.recycled_percent}`);
+    assert((c0.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "missing_origin_support",
+      "esperada razón missing_origin_support");
+
+    // (ii) REGLA 9: un evidence_link genérico al material NO hace contar.
+    const { error: linkErr } = await userA.client.from("evidence_links").insert({
+      organization_id: orgA, evidence_id: evValid, target_type: "material",
+      target_id: matNoSup!.id, link_role: "soporte general",
+    });
+    assert(!linkErr, `no se pudo crear el link genérico: ${linkErr?.message}`);
+    const { data: matAfterLink } = await userA.client
+      .from("materials").select("origin_support_evidence_id").eq("id", matNoSup!.id).single();
+    assert(matAfterLink!.origin_support_evidence_id === null,
+      "el link genérico NO debe modificar origin_support_evidence_id");
+    const { data: c1 } = await rpc();
+    assert(close(c1.recycled_percent, 0)
+      && (c1.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "missing_origin_support",
+      "el link genérico no debe sustituir silenciosamente al soporte de origen");
+
+    // (iii) Soporte de origen con evidencia PENDIENTE: queda asociado pero no
+    // cuenta hasta validarla.
+    const { error: updPend } = await userA.client
+      .from("materials").update({ origin_support_evidence_id: evPending }).eq("id", matNoSup!.id);
+    assert(!updPend, `no se pudo asociar evidencia pendiente: ${updPend?.message}`);
+    const { data: c2 } = await rpc();
+    assert(close(c2.recycled_percent, 0)
+      && (c2.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "origin_support_not_valid",
+      "con evidencia pendiente el material no debe contar (origin_support_not_valid)");
+
+    // (iv) Soporte de origen VÁLIDO → recalcular hace que cuente (100%).
+    const { error: updValid } = await userA.client
+      .from("materials").update({ origin_support_evidence_id: evValid }).eq("id", matNoSup!.id);
+    assert(!updValid, `no se pudo asociar evidencia válida: ${updValid?.message}`);
+    const { data: c3 } = await rpc();
+    assert(close(c3.recycled_percent, 100), `esperado 100%, fue ${c3.recycled_percent}`);
+    assert((c3.components as { counted: boolean }[])[0]?.counted === true, "el material debía contar");
+    assert(c3.defensibility_level === "defensible", `esperado defensible, fue ${c3.defensibility_level}`);
+
+    // (v) Cross-tenant: evidencia de la empresa B como soporte en material de
+    // A debe fallar (FK compuesta por organización).
+    const { data: evB } = await userB.client
+      .from("evidences").insert({ organization_id: orgB, name: "Evidencia B S5C" }).select("id").single();
+    const { data: crossUpd, error: crossErr } = await userA.client
+      .from("materials")
+      .update({ origin_support_evidence_id: evB!.id })
+      .eq("id", matNoSup!.id)
+      .select();
+    assert(crossErr !== null || (crossUpd ?? []).length === 0,
+      "se pudo usar una evidencia de otra empresa como soporte de origen");
+    const { data: still } = await userA.client
+      .from("materials").select("origin_support_evidence_id").eq("id", matNoSup!.id).single();
+    assert(still!.origin_support_evidence_id === evValid, "el soporte válido debía permanecer intacto");
+  });
+
   // 8 (nivel BD) y 10: requieren conexión directa (SUPABASE_DB_URL).
   if (DB_URL) {
     const pg = new PgClient({ connectionString: DB_URL });
@@ -1702,7 +1774,7 @@ async function main() {
       "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 29 tablas y 23 triggers de inmutabilidad)."
     );
     console.log(
-      "    Las pruebas por cliente (1-9 y 11-40) sí corren con Supabase local."
+      "    Las pruebas por cliente (1-9 y 11-41) sí corren con Supabase local."
     );
     console.log(
       "    Alternativa para el barrido: psql \"$SUPABASE_DB_URL\" -f tests/rls/check-rls-enabled.sql"

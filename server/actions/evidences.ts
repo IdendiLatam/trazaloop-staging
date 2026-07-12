@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 
-export type EvidenceActionState = { error: string | null };
+export type EvidenceActionState = { error: string | null; warning?: string | null };
 
 /**
  * Crea una evidencia y, si viene archivo, lo sube al bucket privado con la
@@ -175,7 +175,12 @@ export async function linkEvidenceAction(
   const evidenceId = String(formData.get("evidence_id") ?? "");
   const targetType = String(formData.get("target_type") ?? "");
   const targetId = String(formData.get("target_id") ?? "");
-  const linkRole = String(formData.get("link_role") ?? "").trim() || null;
+  // Tipo de vínculo (Sprint 5C fix): 'general' solo crea evidence_links;
+  // 'material_origin' / 'material_reclassification' ADEMÁS actualizan el
+  // campo del material que el motor de cálculo exige. El enlace genérico
+  // jamás sustituye silenciosamente al campo (regla del motor intacta).
+  const linkKind = String(formData.get("link_kind") ?? "general");
+  const linkRoleInput = String(formData.get("link_role") ?? "").trim() || null;
 
   const allowed = [
     "supplier",
@@ -190,19 +195,103 @@ export async function linkEvidenceAction(
   if (!evidenceId || !targetId || !allowed.includes(targetType)) {
     return { error: "Selecciona la evidencia y el destino a asociar." };
   }
+  const isSupportKind =
+    linkKind === "material_origin" || linkKind === "material_reclassification";
+  if (isSupportKind && targetType !== "material") {
+    return {
+      error:
+        "El soporte de origen o de reclasificación solo aplica cuando el destino es un material.",
+    };
+  }
 
-  const { error } = await supabase.from("evidence_links").insert({
+  // Multiempresa EXPLÍCITO: la evidencia debe ser de la empresa activa.
+  const { data: evidence } = await supabase
+    .from("evidences")
+    .select("id, status")
+    .eq("id", evidenceId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!evidence) {
+    return { error: "La evidencia no pertenece a tu empresa activa." };
+  }
+
+  // Y el material también, cuando el vínculo es de soporte.
+  let material: { id: string; reclassified_to_code: string | null } | null = null;
+  if (isSupportKind) {
+    const { data } = await supabase
+      .from("materials")
+      .select("id, reclassified_to_code")
+      .eq("id", targetId)
+      .eq("organization_id", org.organizationId)
+      .maybeSingle();
+    material = data;
+    if (!material) {
+      return { error: "El material no pertenece a tu empresa activa." };
+    }
+    if (linkKind === "material_reclassification" && material.reclassified_to_code === null) {
+      return {
+        error:
+          "El material no está reclasificado. Reclasifícalo primero en Catálogos → Materiales y luego asocia aquí su soporte de reclasificación.",
+      };
+    }
+  }
+
+  const linkRole =
+    linkRoleInput ??
+    (linkKind === "material_origin"
+      ? "soporte de origen del material"
+      : linkKind === "material_reclassification"
+        ? "soporte de reclasificación del material"
+        : null);
+
+  // Crear/mantener el enlace para trazabilidad y dossier. Un duplicado no
+  // debe bloquear la asignación del soporte (crear/MANTENER).
+  const { error: linkError } = await supabase.from("evidence_links").insert({
     organization_id: org.organizationId,
     evidence_id: evidenceId,
     target_type: targetType,
     target_id: targetId,
     link_role: linkRole,
   });
-
-  if (error) {
+  const duplicateLink = linkError?.code === "23505";
+  if (linkError && !duplicateLink) {
     return { error: "No fue posible asociar. Verifica que la evidencia y el destino sean de tu empresa." };
+  }
+  if (linkError && duplicateLink && linkKind === "general") {
+    return { error: null, warning: "La evidencia ya estaba asociada a ese destino." };
+  }
+
+  // Actualizar el campo del material que el motor de cálculo exige.
+  if (linkKind === "material_origin") {
+    const { error: updError } = await supabase
+      .from("materials")
+      .update({ origin_support_evidence_id: evidenceId })
+      .eq("id", targetId)
+      .eq("organization_id", org.organizationId);
+    if (updError) {
+      return { error: `No fue posible marcar el soporte de origen: ${updError.message}` };
+    }
+  } else if (linkKind === "material_reclassification") {
+    const { error: updError } = await supabase
+      .from("materials")
+      .update({ reclassification_evidence_id: evidenceId })
+      .eq("id", targetId)
+      .eq("organization_id", org.organizationId);
+    if (updError) {
+      return { error: `No fue posible marcar el soporte de reclasificación: ${updError.message}` };
+    }
   }
 
   revalidatePath("/evidences");
+  revalidatePath("/catalog/materials");
+  revalidatePath("/guided-flow");
+
+  if (isSupportKind && evidence.status !== "valid") {
+    return {
+      error: null,
+      warning:
+        "La evidencia quedó asociada, pero no contará para el cálculo hasta que esté validada.",
+    };
+  }
   return { error: null };
 }

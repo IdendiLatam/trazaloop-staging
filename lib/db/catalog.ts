@@ -41,6 +41,11 @@ export type Material = {
   reclassified_to_code: string | null;
   reclassification_justification: string | null;
   origin_support_evidence_id: string | null;
+  reclassification_evidence_id: string | null;
+  origin_evidence_name: string | null;
+  origin_evidence_status: string | null;
+  reclassification_evidence_name: string | null;
+  reclassification_evidence_status: string | null;
 };
 
 export async function listSuppliers(orgId: string): Promise<Supplier[]> {
@@ -98,12 +103,37 @@ export async function listMaterials(orgId: string): Promise<Material[]> {
   const { data } = await supabase
     .from("materials")
     .select(
-      "id, name, classification_code, reclassified_to_code, reclassification_justification, origin_support_evidence_id, material_classifications!materials_classification_code_fkey(label)"
+      "id, name, classification_code, reclassified_to_code, reclassification_justification, origin_support_evidence_id, reclassification_evidence_id, material_classifications!materials_classification_code_fkey(label)"
     )
     .eq("organization_id", orgId)
     .order("name");
+
+  // Estado de las evidencias de soporte referenciadas (origen/reclasificación).
+  const evidenceIds = Array.from(
+    new Set(
+      (data ?? [])
+        .flatMap((m) => [m.origin_support_evidence_id, m.reclassification_evidence_id])
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const evidenceById = new Map<string, { name: string; status: string }>();
+  if (evidenceIds.length > 0) {
+    const { data: evs } = await supabase
+      .from("evidences")
+      .select("id, name, status")
+      .eq("organization_id", orgId)
+      .in("id", evidenceIds);
+    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+  }
+
   return (data ?? []).map((m) => {
     const cls = m.material_classifications as unknown as { label: string } | null;
+    const originEv = m.origin_support_evidence_id
+      ? evidenceById.get(m.origin_support_evidence_id) ?? null
+      : null;
+    const reclassEv = m.reclassification_evidence_id
+      ? evidenceById.get(m.reclassification_evidence_id) ?? null
+      : null;
     return {
       id: m.id,
       name: m.name,
@@ -112,6 +142,11 @@ export async function listMaterials(orgId: string): Promise<Material[]> {
       reclassified_to_code: m.reclassified_to_code,
       reclassification_justification: m.reclassification_justification,
       origin_support_evidence_id: m.origin_support_evidence_id,
+      reclassification_evidence_id: m.reclassification_evidence_id,
+      origin_evidence_name: originEv?.name ?? null,
+      origin_evidence_status: originEv?.status ?? null,
+      reclassification_evidence_name: reclassEv?.name ?? null,
+      reclassification_evidence_status: reclassEv?.status ?? null,
     };
   });
 }

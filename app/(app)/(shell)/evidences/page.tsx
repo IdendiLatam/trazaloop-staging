@@ -161,8 +161,9 @@ export default async function EvidencesPage() {
       <section className="rounded-lg border border-hairline bg-surface p-5">
         <h2 className="mb-1 text-sm font-semibold">Asociar evidencia</h2>
         <p className="mb-4 text-xs text-ink-soft">
-          Asocia evidencias a proveedores, materiales, productos, familias o
-          sedes de tu empresa. Los lotes y órdenes llegan en el Sprint 3.
+          Asocia evidencias a proveedores, materiales, productos, lotes y
+          órdenes. Para que un material reciclado cuente en el cálculo, marca
+          la evidencia como soporte de origen del material y valídala.
         </p>
         <EvidenceLinkForm
           evidences={(evidences ?? []).map((e) => ({ value: e.id, label: e.name }))}

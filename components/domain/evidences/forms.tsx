@@ -59,6 +59,7 @@ export function EvidenceLinkForm({
 }) {
   const [state, formAction, pending] = useActionState(linkEvidenceAction, initial);
   const [targetType, setTargetType] = useState<string>("supplier");
+  const [linkKind, setLinkKind] = useState<string>("general");
 
   const TYPE_LABEL: Record<string, string> = {
     supplier: "Proveedor",
@@ -76,6 +77,14 @@ export function EvidenceLinkForm({
   return (
     <form action={formAction} className="space-y-4">
       <ErrorAlert message={state.error} />
+      {state.warning ? (
+        <p
+          role="status"
+          className="rounded-md border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber"
+        >
+          {state.warning}
+        </p>
+      ) : null}
       <label className="block">
         <span className="mb-1.5 block text-sm font-medium text-ink">Evidencia</span>
         <select
@@ -106,6 +115,28 @@ export function EvidenceLinkForm({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-ink">Tipo de vínculo</span>
+        <select
+          name="link_kind"
+          value={targetType === "material" ? linkKind : "general"}
+          onChange={(e) => setLinkKind(e.target.value)}
+          disabled={targetType !== "material"}
+          className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm disabled:opacity-60"
+        >
+          <option value="general">Soporte general</option>
+          <option value="material_origin">Soporte de origen del material</option>
+          <option value="material_reclassification">
+            Soporte de reclasificación del material
+          </option>
+        </select>
+        <span className="mt-1 block text-xs text-ink-soft">
+          {targetType === "material"
+            ? "Para que un material reciclado cuente en el cálculo, márcala como soporte de origen y valídala."
+            : "El soporte de origen o reclasificación solo aplica a materiales."}
+        </span>
       </label>
 
       <label className="block">
