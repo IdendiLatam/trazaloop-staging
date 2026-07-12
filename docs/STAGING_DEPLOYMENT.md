@@ -184,7 +184,12 @@ npm run test:smoke
 
 Verifica variables, conexión, migraciones (tablas y vistas clave), RLS activo
 (chequeo conductual con anon), y —con `SUPABASE_SERVICE_ROLE_KEY` como
-herramienta administrativa— bucket privado, metodología activa y semillas.
+herramienta administrativa— metodología activa y semillas. El bucket
+`evidences` se verifica con **SQL directo** (`select id, public from
+storage.buckets where id = 'evidences'`) usando `SUPABASE_DB_URL`, porque el
+esquema `storage` no está expuesto por la API REST y una llamada por API
+puede fallar por permisos aunque el bucket exista; debe existir la fila con
+`public = false`.
 
 ## 17. Correr test RLS
 

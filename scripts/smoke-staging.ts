@@ -14,6 +14,7 @@
  * parte del código de la app ni del bundle del cliente.
  */
 import { createClient } from "@supabase/supabase-js";
+import { Client as PgClient } from "pg";
 import { config as loadEnv } from "dotenv";
 
 loadEnv({ path: ".env.local" });
@@ -105,20 +106,10 @@ async function main() {
   }
   const admin = createClient(url, serviceKey);
 
-  const { data: bucket, error: bucketErr } = await createClient(url, serviceKey, {
-    db: { schema: "storage" },
-  })
-    .from("buckets")
-    .select("id, public")
-    .eq("id", "evidences")
-    .maybeSingle();
-  if (bucketErr || !bucket) {
-    fail("Evidence bucket", "el bucket 'evidences' no existe. Aplica la migración 0015 (`npx supabase db push`).");
-  } else if (bucket.public) {
-    fail("Evidence bucket privacidad", "el bucket 'evidences' es PÚBLICO; debe ser privado.");
-  } else {
-    ok("Evidence bucket exists (privado)");
-  }
+  // Bucket de evidencias: SQL DIRECTO contra storage.buckets. El esquema
+  // storage no está expuesto por la API REST en Supabase Cloud, así que una
+  // consulta vía PostgREST puede fallar por permisos aunque el bucket exista.
+  await checkEvidenceBucket(process.env.SUPABASE_DB_URL);
 
   const { data: meth } = await admin
     .from("calculation_methodologies")
@@ -153,6 +144,51 @@ async function main() {
   finish();
 }
 
+
+/**
+ * Verifica el bucket con `select id, public from storage.buckets where
+ * id = 'evidences'` por conexión directa (SUPABASE_DB_URL, la misma que usan
+ * los chequeos a nivel de BD de test:rls). Pasa solo si existe la fila con
+ * id = 'evidences' y public = false.
+ */
+export async function checkEvidenceBucket(dbUrl: string | undefined) {
+  if (!dbUrl) {
+    warn(
+      "SUPABASE_DB_URL no configurada: se omite el chequeo del bucket.\n" +
+        "   Agrégala en .env.local (Supabase → Settings → Database → Connection string)\n" +
+        "   para verificar storage.buckets por SQL directo."
+    );
+    return;
+  }
+  const pg = new PgClient({ connectionString: dbUrl });
+  try {
+    await pg.connect();
+    const { rows } = await pg.query(
+      "select id, public from storage.buckets where id = 'evidences'"
+    );
+    if (rows.length === 0) {
+      fail(
+        "Evidence bucket",
+        "El bucket evidences no existe. Créalo como bucket privado o aplica migraciones."
+      );
+    } else if (rows[0].public === true) {
+      fail(
+        "Evidence bucket",
+        "El bucket evidences existe pero está público. Debe ser privado."
+      );
+    } else {
+      ok("Evidence bucket exists (id = 'evidences', public = false)");
+    }
+  } catch (err) {
+    fail(
+      "Evidence bucket",
+      `no se pudo consultar storage.buckets por SQL directo: ${(err as Error).message}. Verifica SUPABASE_DB_URL.`
+    );
+  } finally {
+    await pg.end().catch(() => undefined);
+  }
+}
+
 function finish() {
   if (failures > 0) {
     console.error(`\nResultado: ${failures} chequeo(s) en rojo. Revisa docs/STAGING_DEPLOYMENT.md → Troubleshooting.`);
@@ -161,7 +197,10 @@ function finish() {
   console.log("\nResultado: staging listo ✅");
 }
 
-main().catch((err) => {
-  console.error(`❌ Error inesperado: ${(err as Error).message}`);
-  process.exit(1);
-});
+// Ejecutar solo como entrypoint (permite importar checkEvidenceBucket en pruebas).
+if (process.argv[1]?.includes("smoke-staging")) {
+  main().catch((err) => {
+    console.error(`❌ Error inesperado: ${(err as Error).message}`);
+    process.exit(1);
+  });
+}
