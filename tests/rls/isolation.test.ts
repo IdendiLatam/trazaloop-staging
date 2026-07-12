@@ -25,6 +25,7 @@
  * jamás forma parte del flujo de la aplicación.
  */
 import { config as loadEnv } from "dotenv";
+import { resolveNextStep } from "../../lib/domain/guided-flow";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
 
@@ -37,7 +38,7 @@ const DB_URL = process.env.SUPABASE_DB_URL; // ej. postgresql://postgres:postgre
 
 if (!URL || !ANON || !SERVICE) {
   console.error(
-    "Faltan NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY en .env.local"
+    "Faltan variables para test:rls. Crea .env.local con NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY (cp .env.example .env.local). ADVERTENCIA: este test crea usuarios, organizaciones y datos de prueba; ejecutarlo solo en staging o local, nunca en producción con datos reales."
   );
   process.exit(1);
 }
@@ -926,6 +927,666 @@ async function main() {
     void poA3;
   });
 
+
+  // =========================================================================
+  // Sprint 4 · Motor de cálculo de contenido reciclado
+  // =========================================================================
+  const close = (a: unknown, b: number, tol = 0.001) => Math.abs(Number(a) - b) <= tol;
+
+  await check("31. Metodología global: legible por autenticados, inmutable desde cliente", async () => {
+    const { data: meths } = await userC.client
+      .from("calculation_methodologies")
+      .select("id, code, version, is_active, rules")
+      .eq("code", "RC-6632-15343");
+    assert((meths ?? []).length >= 1, "no se pudo leer la metodología RC-6632-15343");
+    assert(meths![0].is_active === true, "la metodología seed no está activa");
+
+    const { data: ins, error: insErr } = await userA.client
+      .from("calculation_methodologies")
+      .insert({ code: "HACK", version: 1, name: "x", description: "x", rules: {} })
+      .select();
+    assert(insErr !== null || (ins ?? []).length === 0, "un cliente pudo insertar metodología");
+
+    const { data: upd, error: updErr } = await userA.client
+      .from("calculation_methodologies")
+      .update({ is_active: false })
+      .eq("id", meths![0].id)
+      .select();
+    assert(updErr !== null || (upd ?? []).length === 0, "un cliente pudo editar metodología");
+  });
+
+  // Fixtures de cálculo en A (materiales, evidencias y cadenas balanceadas).
+  let evValid = ""; let evValid2 = ""; let evPending = "";
+  let matPC = ""; let matVirgin = ""; let matSame = ""; let matPI = ""; let matPIre = ""; let matPCpend = "";
+  let famS4 = ""; let prodP41 = ""; let prodP42 = "";
+  const obS4: Record<string, string> = {};
+  const orderS4: Record<string, string> = {};
+
+  async function makeChain(tag: string, consumeKg: number, extra: Record<string, unknown> = {}) {
+    const { data: po } = await userA.client
+      .from("production_orders")
+      .insert({ organization_id: orgA, order_code: `A-OP-${tag}`, order_date: "2026-07-05" })
+      .select("id").single();
+    const { data: ib } = await userA.client
+      .from("input_batches")
+      .insert({
+        organization_id: orgA, batch_code: `A-LE-${tag}`, supplier_id: supA3,
+        material_id: matA3, received_date: "2026-07-04", quantity_kg: consumeKg * 2,
+      })
+      .select("id").single();
+    await userA.client.from("batch_consumption").insert({
+      organization_id: orgA, production_order_id: po!.id, input_batch_id: ib!.id, mass_kg: consumeKg,
+    });
+    const { data: ob } = await userA.client
+      .from("output_batches")
+      .insert({
+        organization_id: orgA, batch_code: `A-LS-${tag}`, production_order_id: po!.id, ...extra,
+      })
+      .select("id").single();
+    orderS4[tag] = po!.id;
+    obS4[tag] = ob!.id;
+    return ob!.id;
+  }
+
+  async function compose(obId: string, materialId: string, mass: number, sameProcess = false) {
+    const { error } = await userA.client.from("batch_composition").insert({
+      organization_id: orgA, output_batch_id: obId, material_id: materialId,
+      mass_kg: mass, is_same_process: sameProcess,
+    });
+    assert(!error, `no se pudo componer: ${error?.message}`);
+  }
+
+  await check("32. Fixtures de cálculo: evidencias validadas y materiales por clasificación", async () => {
+    async function makeEvidence(name: string, validate: boolean) {
+      const { data: ev, error } = await userA.client
+        .from("evidences")
+        .insert({ organization_id: orgA, name })
+        .select("id").single();
+      assert(!error && ev, `no se pudo crear evidencia ${name}: ${error?.message}`);
+      if (validate) {
+        const { error: vErr } = await userA.client
+          .from("evidences").update({ status: "valid" }).eq("id", ev!.id);
+        assert(!vErr, `no se pudo validar evidencia ${name}: ${vErr?.message}`);
+      }
+      return ev!.id;
+    }
+    evValid = await makeEvidence("Soporte de origen S4", true);
+    evValid2 = await makeEvidence("Soporte de reclasificación S4", true);
+    evPending = await makeEvidence("Soporte pendiente S4", false);
+
+    async function makeMaterial(name: string, cls: string, patch: Record<string, unknown> | null) {
+      const { data: m, error } = await userA.client
+        .from("materials")
+        .insert({ organization_id: orgA, name, classification_code: cls })
+        .select("id").single();
+      assert(!error && m, `no se pudo crear material ${name}: ${error?.message}`);
+      if (patch) {
+        const { error: uErr } = await userA.client
+          .from("materials").update(patch).eq("id", m!.id);
+        assert(!uErr, `no se pudo actualizar material ${name}: ${uErr?.message}`);
+      }
+      return m!.id;
+    }
+    matPC = await makeMaterial("PC valido S4", "postconsumer_valid", {
+      origin_support_evidence_id: evValid,
+    });
+    matVirgin = await makeMaterial("Virgen S4", "virgin", null);
+    matSame = await makeMaterial("Mismo proceso S4", "internal_same_process", null);
+    matPI = await makeMaterial("Postindustrial S4", "postindustrial", null);
+    matPIre = await makeMaterial("Postindustrial reclasificado S4", "postindustrial", {
+      reclassified_to_code: "preconsumer_valid",
+      reclassification_justification: "Origen externo verificado, flujo separado",
+      reclassification_evidence_id: evValid2,
+    });
+    matPCpend = await makeMaterial("PC pendiente S4", "postconsumer_valid", {
+      origin_support_evidence_id: evPending,
+    });
+
+    const { data: fam } = await userA.client
+      .from("product_families")
+      .insert({ organization_id: orgA, name: "Familia calculo S4" })
+      .select("id").single();
+    famS4 = fam!.id;
+    const { data: p1 } = await userA.client
+      .from("products")
+      .insert({ organization_id: orgA, code: "S4-P1", name: "Producto S4-1", family_id: famS4 })
+      .select("id").single();
+    const { data: p2 } = await userA.client
+      .from("products")
+      .insert({
+        organization_id: orgA, code: "S4-P2", name: "Producto S4-2",
+        family_id: famS4, declared_recycled_percent: 80,
+      })
+      .select("id").single();
+    prodP41 = p1!.id; prodP42 = p2!.id;
+  });
+
+  await check("33. Casos de cálculo 1-6: reglas por material, soporte y riesgo declarado", async () => {
+    const rpc = (obId: string) =>
+      userA.client.rpc("calculate_recycled_content", { p_output_batch_id: obId });
+
+    // Caso 1 — postconsumo válido cuenta; virgen no.
+    await makeChain("41", 100, { product_id: prodP41, produced_date: "2026-07-10", produced_quantity_kg: 100 });
+    await compose(obS4["41"], matPC, 70);
+    await compose(obS4["41"], matVirgin, 30);
+    const { data: c1, error: e1 } = await rpc(obS4["41"]);
+    assert(!e1 && c1, `caso 1 falló: ${e1?.message}`);
+    assert(close(c1.total_mass_kg, 100) && close(c1.recycled_mass_kg, 70) && close(c1.recycled_percent, 70),
+      `caso 1: esperado 70/100=70%, fue ${c1.recycled_mass_kg}/${c1.total_mass_kg}=${c1.recycled_percent}`);
+    assert(c1.defensibility_level === "defensible", `caso 1: esperado defensible, fue ${c1.defensibility_level}`);
+    const comps1 = c1.components as { material_id: string; counted: boolean; exclusion_reason: string | null }[];
+    assert(comps1.find((x) => x.material_id === matPC)?.counted === true, "caso 1: PC no contó");
+    assert(comps1.find((x) => x.material_id === matVirgin)?.exclusion_reason === "non_recycled_material",
+      "caso 1: virgen sin razón non_recycled_material");
+
+    // Caso 2 — mismo proceso suma denominador pero no numerador.
+    await makeChain("42", 100);
+    await compose(obS4["42"], matPC, 60);
+    await compose(obS4["42"], matSame, 40, true);
+    const { data: c2, error: e2 } = await rpc(obS4["42"]);
+    assert(!e2 && close(c2.recycled_percent, 60) && close(c2.total_mass_kg, 100),
+      `caso 2: esperado 60%, fue ${c2?.recycled_percent}`);
+    const comps2 = c2.components as { material_id: string; exclusion_reason: string | null }[];
+    assert(comps2.find((x) => x.material_id === matSame)?.exclusion_reason === "same_process_or_never_counts",
+      "caso 2: mismo proceso sin razón same_process_or_never_counts");
+
+    // Caso 3 — postindustrial sin reclasificar no cuenta.
+    await makeChain("43", 100);
+    await compose(obS4["43"], matPI, 50);
+    await compose(obS4["43"], matVirgin, 50);
+    const { data: c3, error: e3 } = await rpc(obS4["43"]);
+    assert(!e3 && close(c3.recycled_percent, 0), `caso 3: esperado 0%, fue ${c3?.recycled_percent}`);
+    assert(c3.defensibility_level === "preliminary", `caso 3: esperado preliminary, fue ${c3.defensibility_level}`);
+    const comps3 = c3.components as { material_id: string; exclusion_reason: string | null }[];
+    assert(comps3.find((x) => x.material_id === matPI)?.exclusion_reason === "postindustrial_not_reclassified",
+      "caso 3: falta razón postindustrial_not_reclassified");
+
+    // Caso 4 — postindustrial reclasificado con soporte válido cuenta.
+    await makeChain("44", 200, { product_id: prodP41, produced_date: "2026-07-15", produced_quantity_kg: 200 });
+    await compose(obS4["44"], matPIre, 100);
+    await compose(obS4["44"], matVirgin, 100);
+    const { data: c4, error: e4 } = await rpc(obS4["44"]);
+    assert(!e4 && close(c4.recycled_percent, 50) && close(c4.total_mass_kg, 200),
+      `caso 4: esperado 50%, fue ${c4?.recycled_percent}`);
+    assert(c4.defensibility_level === "defensible", `caso 4: esperado defensible, fue ${c4.defensibility_level}`);
+
+    // Caso 5 — evidencia pendiente no cuenta.
+    await makeChain("45", 100);
+    await compose(obS4["45"], matPCpend, 100);
+    const { data: c5, error: e5 } = await rpc(obS4["45"]);
+    assert(!e5 && close(c5.recycled_percent, 0), `caso 5: esperado 0%, fue ${c5?.recycled_percent}`);
+    const comps5 = c5.components as { exclusion_reason: string | null }[];
+    assert(comps5[0]?.exclusion_reason === "origin_support_not_valid",
+      `caso 5: razón fue ${comps5[0]?.exclusion_reason}`);
+    assert((c5.warnings as string[]).includes("related_evidence_not_valid"),
+      "caso 5: falta advertencia related_evidence_not_valid");
+
+    // Caso 6 — declarado (80) mayor que calculado (60) genera riesgo.
+    await makeChain("46", 100, { product_id: prodP42, produced_date: "2026-06-20" });
+    await compose(obS4["46"], matPC, 60);
+    await compose(obS4["46"], matVirgin, 40);
+    const { data: c6, error: e6 } = await rpc(obS4["46"]);
+    assert(!e6 && close(c6.recycled_percent, 60), `caso 6: esperado 60%, fue ${c6?.recycled_percent}`);
+    assert(c6.risk_flag === true, "caso 6: risk_flag debería ser true");
+    assert((c6.warnings as string[]).includes("declared_above_calculated"),
+      "caso 6: falta advertencia declared_above_calculated");
+    assert(c6.defensibility_level !== "defensible", "caso 6: no puede ser defensible");
+  });
+
+  await check("34. Recalcular crea un snapshot nuevo y v_latest muestra el último", async () => {
+    const first = await userA.client
+      .from("recycled_content_calculations")
+      .select("id, recycled_percent, calculated_at")
+      .eq("output_batch_id", obS4["41"])
+      .order("calculated_at", { ascending: true });
+    const firstRow = first.data![0];
+
+    const { error } = await userA.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: obS4["41"],
+    });
+    assert(!error, `recalcular falló: ${error?.message}`);
+
+    const after = await userA.client
+      .from("recycled_content_calculations")
+      .select("id, recycled_percent, calculated_at")
+      .eq("output_batch_id", obS4["41"])
+      .order("calculated_at", { ascending: true });
+    assert((after.data ?? []).length === 2, `esperadas 2 filas, hay ${after.data?.length}`);
+    assert(
+      after.data![0].id === firstRow.id &&
+        after.data![0].calculated_at === firstRow.calculated_at &&
+        Number(after.data![0].recycled_percent) === Number(firstRow.recycled_percent),
+      "el primer snapshot cambió"
+    );
+
+    const { data: latest } = await userA.client
+      .from("v_latest_batch_recycled")
+      .select("calculation_id")
+      .eq("output_batch_id", obS4["41"])
+      .single();
+    assert(latest!.calculation_id === after.data![1].id, "v_latest no muestra el cálculo más reciente");
+  });
+
+  await check("35. Snapshots inmutables: sin UPDATE, sin DELETE, sin cambio de empresa", async () => {
+    const { data: rows } = await userA.client
+      .from("recycled_content_calculations")
+      .select("id")
+      .eq("output_batch_id", obS4["41"])
+      .limit(1);
+    const calcId = rows![0].id;
+
+    const { data: upd, error: updErr } = await userA.client
+      .from("recycled_content_calculations")
+      .update({ recycled_percent: 99 })
+      .eq("id", calcId)
+      .select();
+    assert(updErr !== null || (upd ?? []).length === 0, "se pudo actualizar un snapshot");
+
+    const { data: updOrg, error: updOrgErr } = await userA.client
+      .from("recycled_content_calculations")
+      .update({ organization_id: orgB })
+      .eq("id", calcId)
+      .select();
+    assert(updOrgErr !== null || (updOrg ?? []).length === 0, "se pudo mover un snapshot de empresa");
+
+    const { data: del, error: delErr } = await userA.client
+      .from("recycled_content_calculations")
+      .delete()
+      .eq("id", calcId)
+      .select();
+    assert(delErr !== null || (del ?? []).length === 0, "se pudo eliminar un snapshot");
+
+    const { data: still } = await userA.client
+      .from("recycled_content_calculations")
+      .select("id")
+      .eq("id", calcId)
+      .eq("organization_id", orgA);
+    assert((still ?? []).length === 1, "el snapshot desapareció o cambió de empresa");
+  });
+
+  await check("36. Multiempresa: A no ve ni calcula lotes de B; consultant sí calcula en su empresa", async () => {
+    // B calcula su propio lote (tiene composición del caso 24).
+    const { error: bErr } = await userB.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: obB,
+    });
+    assert(!bErr, `B no pudo calcular su lote: ${bErr?.message}`);
+
+    // A no ve cálculos de B (tabla y vista).
+    const { data: tblLeak } = await userA.client
+      .from("recycled_content_calculations")
+      .select("id")
+      .eq("organization_id", orgB);
+    assert((tblLeak ?? []).length === 0, "A pudo leer cálculos de B");
+    const { data: viewLeak } = await userA.client
+      .from("v_latest_batch_recycled")
+      .select("calculation_id")
+      .eq("organization_id", orgB);
+    assert((viewLeak ?? []).length === 0, "la vista filtró cálculos de B hacia A");
+
+    // A no puede calcular un lote de B (nota: userA solo es miembro de A).
+    const { error: crossErr } = await userA.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: obB,
+    });
+    assert(crossErr !== null, "A pudo calcular un lote de B");
+
+    // Consultant C calcula un lote de A (obA2 tiene composición del caso 28).
+    const { data: cCalc, error: cErr } = await userC.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: obA2,
+    });
+    assert(!cErr && cCalc, `consultant no pudo calcular: ${cErr?.message}`);
+  });
+
+  await check("37. Agregaciones ponderadas por masa (orden, producto, familia, periodo)", async () => {
+    // Por orden: O41 → 70/100 = 70%, 1/1 lote, defendible.
+    const { data: byOrder } = await userA.client
+      .from("v_recycled_by_order")
+      .select("*")
+      .eq("production_order_id", orderS4["41"])
+      .single();
+    assert(close(byOrder!.recycled_percent, 70), `orden 41: ${byOrder!.recycled_percent}`);
+    assert(Number(byOrder!.calculated_batches_count) === 1 && Number(byOrder!.output_batches_count) === 1,
+      "orden 41: conteos incorrectos");
+    assert(byOrder!.defensibility_level === "defensible", `orden 41: ${byOrder!.defensibility_level}`);
+
+    const { data: byOrder43 } = await userA.client
+      .from("v_recycled_by_order")
+      .select("defensibility_level")
+      .eq("production_order_id", orderS4["43"])
+      .single();
+    assert(byOrder43!.defensibility_level === "preliminary",
+      `orden 43: esperado preliminary, fue ${byOrder43!.defensibility_level}`);
+
+    // Por producto: P41 = OB41 (70/100) + OB44 (100/200) → 170/300 = 56.6667
+    // ponderado (NO el promedio simple 60).
+    const { data: byProd } = await userA.client
+      .from("v_recycled_by_product")
+      .select("*")
+      .eq("product_id", prodP41)
+      .single();
+    assert(close(byProd!.recycled_percent, 56.6667), `producto P41: ${byProd!.recycled_percent}`);
+    assert(Number(byProd!.batches_count) === 2, "producto P41: batches_count incorrecto");
+    assert(byProd!.defensibility_level === "defensible", `producto P41: ${byProd!.defensibility_level}`);
+
+    // Por familia: P41 (170/300) + P42 (60/100) → 230/400 = 57.5; la
+    // advertencia del caso 6 arrastra el agregado a with_warnings.
+    const { data: byFam } = await userA.client
+      .from("v_recycled_by_family")
+      .select("*")
+      .eq("family_id", famS4)
+      .single();
+    assert(close(byFam!.recycled_percent, 57.5), `familia: ${byFam!.recycled_percent}`);
+    assert(Number(byFam!.products_count) === 2 && Number(byFam!.batches_count) === 3,
+      "familia: conteos incorrectos");
+    assert(byFam!.defensibility_level === "with_warnings", `familia: ${byFam!.defensibility_level}`);
+
+    // Por periodo: julio 2026 = OB41 + OB44 → 170/300; junio 2026 = OB46.
+    const { data: periods } = await userA.client
+      .from("v_recycled_by_period")
+      .select("*")
+      .eq("organization_id", orgA);
+    const july = (periods ?? []).find((r) => String(r.period_month).startsWith("2026-07"));
+    const june = (periods ?? []).find((r) => String(r.period_month).startsWith("2026-06"));
+    assert(july && close(july.recycled_percent, 56.6667) && Number(july.batches_count) === 2,
+      `periodo julio: ${july?.recycled_percent} (${july?.batches_count} lotes)`);
+    assert(june && close(june.recycled_percent, 60), `periodo junio: ${june?.recycled_percent}`);
+  });
+
+
+  await check("38. Sprint 4.1: agregados transparentes (sin cálculos ≠ defendible; parcial = preliminar)", async () => {
+    // Orden con un lote de salida SIN cálculo: nivel null, jamás 'defensible'.
+    await makeChain("47", 100, { produced_date: "2026-08-10" });
+    const ob47a = obS4["47"];
+    const order47 = orderS4["47"];
+
+    const read47 = async () => {
+      const { data } = await userA.client
+        .from("v_recycled_by_order")
+        .select("*")
+        .eq("production_order_id", order47)
+        .single();
+      return data!;
+    };
+
+    let agg = await read47();
+    assert(agg.defensibility_level === null,
+      `orden sin cálculos: esperado null, fue ${agg.defensibility_level}`);
+    assert(agg.recycled_percent === null && agg.recycled_mass_kg === null && agg.total_mass_kg === null,
+      "orden sin cálculos: masas/porcentaje deberían ser null");
+    assert(Number(agg.output_batches_count) === 1 && Number(agg.calculated_batches_count) === 0
+      && Number(agg.uncalculated_batches_count) === 1 && agg.has_uncalculated_batches === true,
+      `orden sin cálculos: conteos 1/0/1 esperados, fueron ${agg.output_batches_count}/${agg.calculated_batches_count}/${agg.uncalculated_batches_count}`);
+
+    // Segundo lote en la MISMA orden, este sí calculado → agregado PARCIAL:
+    // 'preliminary' aunque el lote calculado sea defendible, porcentaje solo
+    // sobre lo calculado, y conteos 2/1/1.
+    const { data: ob47b } = await userA.client
+      .from("output_batches")
+      .insert({
+        organization_id: orgA, batch_code: "A-LS-47B", production_order_id: order47,
+        produced_date: "2026-08-15",
+      })
+      .select("id").single();
+    await compose(ob47b!.id, matPC, 70);
+    await compose(ob47b!.id, matVirgin, 30);
+    const { data: calc47b, error: e47b } = await userA.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: ob47b!.id,
+    });
+    assert(!e47b && calc47b.defensibility_level === "defensible",
+      `el lote calculado debía ser defendible, fue ${calc47b?.defensibility_level} (${e47b?.message ?? ""})`);
+
+    agg = await read47();
+    assert(agg.defensibility_level === "preliminary",
+      `orden parcialmente calculada: esperado preliminary, fue ${agg.defensibility_level}`);
+    assert(close(agg.recycled_percent, 70) && close(agg.total_mass_kg, 100),
+      `porcentaje parcial: esperado 70% sobre 100 kg calculados, fue ${agg.recycled_percent} sobre ${agg.total_mass_kg}`);
+    assert(Number(agg.output_batches_count) === 2 && Number(agg.calculated_batches_count) === 1
+      && Number(agg.uncalculated_batches_count) === 1 && agg.has_uncalculated_batches === true,
+      "orden parcial: conteos 2/1/1 esperados");
+
+    // Calculado el lote restante → aplica la regla normal (ambos defendibles).
+    await compose(ob47a, matPC, 100);
+    const { error: e47a } = await userA.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: ob47a,
+    });
+    assert(!e47a, `no se pudo calcular el lote restante: ${e47a?.message}`);
+    agg = await read47();
+    assert(agg.defensibility_level === "defensible",
+      `orden completamente calculada: esperado defensible, fue ${agg.defensibility_level}`);
+    assert(close(agg.recycled_percent, 85),
+      `ponderado (100+70)/200 = 85%, fue ${agg.recycled_percent}`);
+    assert(Number(agg.uncalculated_batches_count) === 0 && agg.has_uncalculated_batches === false,
+      "orden completa: no deberían quedar pendientes");
+
+    // Producto / familia / periodo con lote pendiente dentro del alcance:
+    // nunca 'defensible'; se informan totales y pendientes.
+    const { data: famNew } = await userA.client
+      .from("product_families")
+      .insert({ organization_id: orgA, name: "Familia parcial S41" })
+      .select("id").single();
+    const { data: prodNew } = await userA.client
+      .from("products")
+      .insert({ organization_id: orgA, code: "S41-P1", name: "Producto parcial S41", family_id: famNew!.id })
+      .select("id").single();
+
+    await makeChain("48", 100, {
+      product_id: prodNew!.id, produced_date: "2026-09-05",
+    });
+    await compose(obS4["48"], matPC, 100);
+    const { error: e48 } = await userA.client.rpc("calculate_recycled_content", {
+      p_output_batch_id: obS4["48"],
+    });
+    assert(!e48, `no se pudo calcular OB48: ${e48?.message}`);
+    // Lote hermano del MISMO producto y periodo, sin cálculo.
+    await userA.client.from("output_batches").insert({
+      organization_id: orgA, batch_code: "A-LS-48B", production_order_id: orderS4["48"],
+      product_id: prodNew!.id, produced_date: "2026-09-20",
+    });
+
+    const { data: byProd } = await userA.client
+      .from("v_recycled_by_product").select("*").eq("product_id", prodNew!.id).single();
+    assert(byProd!.defensibility_level === "preliminary",
+      `producto con pendiente: esperado preliminary, fue ${byProd!.defensibility_level}`);
+    assert(Number(byProd!.total_batches_count) === 2 && Number(byProd!.calculated_batches_count) === 1
+      && Number(byProd!.uncalculated_batches_count) === 1 && byProd!.has_uncalculated_batches === true,
+      "producto con pendiente: conteos 2/1/1 esperados");
+    assert(close(byProd!.recycled_percent, 100),
+      `producto: porcentaje solo sobre calculados (100%), fue ${byProd!.recycled_percent}`);
+
+    const { data: byFam } = await userA.client
+      .from("v_recycled_by_family").select("*").eq("family_id", famNew!.id).single();
+    assert(byFam!.defensibility_level === "preliminary",
+      `familia con pendiente: esperado preliminary, fue ${byFam!.defensibility_level}`);
+    assert(Number(byFam!.total_batches_count) === 2 && Number(byFam!.uncalculated_batches_count) === 1,
+      "familia con pendiente: conteos incorrectos");
+
+    const { data: periods41 } = await userA.client
+      .from("v_recycled_by_period").select("*").eq("organization_id", orgA);
+    const sep = (periods41 ?? []).find((r) => String(r.period_month).startsWith("2026-09"));
+    assert(sep && sep.defensibility_level === "preliminary",
+      `periodo con pendiente: esperado preliminary, fue ${sep?.defensibility_level}`);
+    assert(Number(sep!.total_batches_count) === 2 && Number(sep!.calculated_batches_count) === 1,
+      "periodo con pendiente: conteos incorrectos");
+  });
+
+
+  // =========================================================================
+  // Sprint 5A · Vistas de soporte técnico (dossier, componentes, matriz,
+  // brechas)
+  // =========================================================================
+  await check("39. Soporte técnico: dossier fiel al snapshot, matriz con soportes implícitos, brechas y aislamiento", async () => {
+    // Dossier del último cálculo de OB41: debe reflejar el snapshot exacto.
+    const { data: latest41 } = await userA.client
+      .from("v_latest_batch_recycled")
+      .select("calculation_id")
+      .eq("output_batch_id", obS4["41"])
+      .single();
+    const calc41 = latest41!.calculation_id;
+
+    const { data: dossier } = await userA.client
+      .from("v_calculation_dossier")
+      .select("*")
+      .eq("calculation_id", calc41)
+      .single();
+    assert(dossier !== null, "no se pudo leer el dossier");
+    assert(close(dossier!.recycled_percent, 70) && close(dossier!.total_mass_kg, 100),
+      `dossier: snapshot esperado 70%/100kg, fue ${dossier!.recycled_percent}/${dossier!.total_mass_kg}`);
+    assert(dossier!.methodology_code === "RC-6632-15343" && Number(dossier!.methodology_version) === 1,
+      "dossier: metodología incorrecta");
+    assert(dossier!.product_name === "Producto S4-1" && dossier!.family_name === "Familia calculo S4",
+      `dossier: producto/familia incorrectos (${dossier!.product_name} / ${dossier!.family_name})`);
+    assert(dossier!.calculated_by === userA.id, "dossier: calculated_by incorrecto");
+    assert(dossier!.defensibility_level === "defensible", "dossier: nivel incorrecto");
+    assert(dossier!.traceability_status !== null, "dossier: sin estado de trazabilidad");
+
+    // Componentes expandidos del snapshot: 2 filas ordenadas con casts.
+    const { data: comps } = await userA.client
+      .from("v_calculation_component_rows")
+      .select("*")
+      .eq("calculation_id", calc41)
+      .order("component_index");
+    assert((comps ?? []).length === 2, `componentes: esperadas 2 filas, hay ${comps?.length}`);
+    const pcRow = comps!.find((r) => r.material_id === matPC);
+    const vgRow = comps!.find((r) => r.material_id === matVirgin);
+    assert(pcRow?.counted === true && close(pcRow?.mass_kg, 70),
+      "componentes: el PC no expandió counted/mass correctamente");
+    assert(vgRow?.counted === false && vgRow?.exclusion_reason === "non_recycled_material",
+      "componentes: el virgen no expandió la razón de exclusión");
+
+    // Matriz OB41: la evidencia de ORIGEN aparece como soporte requerido y
+    // válido AUNQUE no exista evidence_link explícito.
+    const { data: matrix41 } = await userA.client
+      .from("v_output_batch_evidence_matrix")
+      .select("*")
+      .eq("output_batch_id", obS4["41"]);
+    const originRow = (matrix41 ?? []).find(
+      (r) => r.evidence_id === evValid && r.support_role === "material_origin_support"
+    );
+    assert(originRow !== undefined, "matriz: falta la evidencia de origen del material contado");
+    assert(originRow!.is_required_for_defensibility === true && originRow!.is_valid_for_defensibility === true,
+      "matriz: la evidencia de origen debería ser requerida y válida");
+    assert(originRow!.calculation_id === calc41, "matriz: calculation_id no apunta al último cálculo");
+
+    // Matriz OB44: la evidencia de RECLASIFICACIÓN aparece con su rol.
+    const { data: matrix44 } = await userA.client
+      .from("v_output_batch_evidence_matrix")
+      .select("*")
+      .eq("output_batch_id", obS4["44"]);
+    const reclassRow = (matrix44 ?? []).find(
+      (r) => r.evidence_id === evValid2 && r.support_role === "material_reclassification_support"
+    );
+    assert(reclassRow !== undefined && reclassRow!.is_required_for_defensibility === true,
+      "matriz: falta la evidencia de reclasificación como soporte requerido");
+
+    // Brechas: missing_origin_support (obA2: materiales elegibles sin
+    // evidencia de origen), origin_support_not_valid (OB45) y riesgo (OB46).
+    const { data: gapsA2 } = await userA.client
+      .from("v_output_batch_support_gaps")
+      .select("gap_code, gap_severity, suggested_action")
+      .eq("output_batch_id", obA2);
+    assert((gapsA2 ?? []).some((g) => g.gap_code === "missing_origin_support" && g.gap_severity === "critical"),
+      "brechas: falta missing_origin_support para obA2");
+
+    const { data: gaps45 } = await userA.client
+      .from("v_output_batch_support_gaps")
+      .select("gap_code")
+      .eq("output_batch_id", obS4["45"]);
+    assert((gaps45 ?? []).some((g) => g.gap_code === "origin_support_not_valid"),
+      "brechas: falta origin_support_not_valid para OB45");
+
+    const { data: gaps46 } = await userA.client
+      .from("v_output_batch_support_gaps")
+      .select("gap_code, gap_severity")
+      .eq("output_batch_id", obS4["46"]);
+    assert((gaps46 ?? []).some((g) => g.gap_code === "declared_above_calculated" && g.gap_severity === "critical"),
+      "brechas: falta declared_above_calculated para OB46 (risk_flag)");
+
+    // Aislamiento multiempresa: A no ve dossier, matriz ni brechas de B.
+    const { data: calcB } = await userB.client
+      .from("v_latest_batch_recycled")
+      .select("calculation_id")
+      .eq("output_batch_id", obB)
+      .single();
+    const { data: dossierLeak } = await userA.client
+      .from("v_calculation_dossier").select("calculation_id")
+      .eq("calculation_id", calcB!.calculation_id);
+    assert((dossierLeak ?? []).length === 0, "A pudo leer un dossier de B");
+    const { data: dossierLeakOrg } = await userA.client
+      .from("v_calculation_dossier").select("calculation_id").eq("organization_id", orgB);
+    assert((dossierLeakOrg ?? []).length === 0, "el dossier filtró datos de B hacia A");
+    const { data: matrixLeak } = await userA.client
+      .from("v_output_batch_evidence_matrix").select("evidence_id").eq("organization_id", orgB);
+    assert((matrixLeak ?? []).length === 0, "la matriz filtró datos de B hacia A");
+    const { data: gapsLeak } = await userA.client
+      .from("v_output_batch_support_gaps").select("gap_code").eq("organization_id", orgB);
+    assert((gapsLeak ?? []).length === 0, "las brechas filtraron datos de B hacia A");
+    // El export JSON se construye EXCLUSIVAMENTE desde v_calculation_dossier
+    // filtrado por la empresa activa, así que este aislamiento lo cubre.
+  });
+
+
+  // =========================================================================
+  // Sprint 5B · Flujo guiado: readiness, dashboard y paridad SQL ↔ TS
+  // =========================================================================
+  await check("40. Flujo guiado: la vista replica la lógica pura fila a fila y no filtra entre empresas", async () => {
+    const { data: rowsA } = await userA.client
+      .from("v_output_batch_readiness")
+      .select("*")
+      .eq("organization_id", orgA);
+    assert((rowsA ?? []).length > 0, "A debería ver readiness de sus lotes");
+
+    // Paridad: cada fila de la vista debe coincidir con resolveNextStep
+    // aplicado a sus propios hechos (misma cadena de reglas, cero divergencia).
+    // Nota: la rama complete_order es defensiva — production_order_id es NOT
+    // NULL en el esquema — y queda cubierta por el unit test (test:guided).
+    for (const r of rowsA!) {
+      const expected = resolveNextStep({
+        hasProductionOrder: r.has_production_order,
+        hasConsumption: r.has_consumption,
+        hasComposition: r.has_composition,
+        anySupportMissing: r.has_missing_required_evidence,
+        anySupportPending: r.has_pending_required_evidence,
+        hasCalculation: r.has_calculation,
+        latestDefensibilityLevel: r.latest_defensibility_level,
+        latestRiskFlag: Boolean(r.latest_risk_flag),
+      });
+      assert(r.next_step_code === expected.code && r.readiness_level === expected.readiness,
+        `divergencia SQL↔TS en ${r.output_batch_code}: vista=${r.next_step_code}/${r.readiness_level}, ` +
+        `pura=${expected.code}/${expected.readiness}`);
+    }
+
+    // Filas concretas: OB41 defendible sin riesgo → calculated_ready/open_dossier;
+    // OB46 con riesgo → calculated_with_gaps/review_gaps; OB45 preliminar tras
+    // cálculo → review_gaps.
+    const byId = new Map(rowsA!.map((r) => [r.output_batch_id, r]));
+    const r41 = byId.get(obS4["41"]);
+    assert(r41?.readiness_level === "calculated_ready" && r41?.next_step_code === "open_dossier"
+      && r41?.next_step_href === `/audit-support/calculations/${r41?.latest_calculation_id}`,
+      `OB41: esperado calculated_ready/open_dossier, fue ${r41?.readiness_level}/${r41?.next_step_code}`);
+    const r46 = byId.get(obS4["46"]);
+    assert(r46?.readiness_level === "calculated_with_gaps" && r46?.next_step_code === "review_gaps",
+      `OB46 (riesgo): esperado calculated_with_gaps/review_gaps, fue ${r46?.readiness_level}/${r46?.next_step_code}`);
+    const r45 = byId.get(obS4["45"]);
+    assert(r45?.next_step_code === "review_gaps",
+      `OB45 (preliminar): esperado review_gaps, fue ${r45?.next_step_code}`);
+
+    // Aislamiento: A no ve readiness ni dashboard de B; B sí ve lo suyo.
+    const { data: leakReadiness } = await userA.client
+      .from("v_output_batch_readiness").select("output_batch_id").eq("organization_id", orgB);
+    assert((leakReadiness ?? []).length === 0, "A pudo ver readiness de B");
+    const { data: leakDash } = await userA.client
+      .from("v_guided_flow_dashboard").select("organization_id").eq("organization_id", orgB);
+    assert((leakDash ?? []).length === 0, "A pudo ver el dashboard guiado de B");
+    const { data: dashA } = await userA.client
+      .from("v_guided_flow_dashboard").select("*").eq("organization_id", orgA).single();
+    assert(Number(dashA!.output_batches_count) === rowsA!.length,
+      `dashboard A: output_batches_count=${dashA!.output_batches_count} ≠ ${rowsA!.length}`);
+    assert(Number(dashA!.calculated_batches_count) > 0, "dashboard A: sin lotes calculados");
+    const { data: rowsB } = await userB.client
+      .from("v_output_batch_readiness").select("readiness_level").eq("output_batch_id", obB);
+    assert((rowsB ?? []).length === 1 && rowsB![0].readiness_level === "calculated_with_gaps",
+      `obB: esperado calculated_with_gaps, fue ${rowsB?.[0]?.readiness_level}`);
+  });
+
   // 8 (nivel BD) y 10: requieren conexión directa (SUPABASE_DB_URL).
   if (DB_URL) {
     const pg = new PgClient({ connectionString: DB_URL });
@@ -941,7 +1602,7 @@ async function main() {
       assert(threw, "el trigger forbid_mutation no bloqueó el UPDATE directo");
     });
 
-    await check("10. Todas las tablas (Sprint 1 + 2 + 3) tienen RLS activo", async () => {
+    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4) tienen RLS activo", async () => {
       const expected = [
         // Sprint 1
         "profiles",
@@ -973,6 +1634,9 @@ async function main() {
         "batch_consumption",
         "output_batches",
         "batch_composition",
+        // Sprint 4
+        "calculation_methodologies",
+        "recycled_content_calculations",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name, c.relrowsecurity as rls
@@ -989,7 +1653,9 @@ async function main() {
     });
 
     await check("23. Toda tabla org-scoped mutable tiene el trigger prevent_organization_id_change", async () => {
-      // audit_log se excluye: su trigger forbid_mutation ya bloquea TODO update.
+      // audit_log y recycled_content_calculations se excluyen: su trigger
+      // forbid_mutation ya bloquea TODO update, así que organization_id es
+      // inmutable por definición. calculation_methodologies es global sin org.
       const expected = [
         "memberships",
         "organization_modules",
@@ -1033,10 +1699,10 @@ async function main() {
       "  ⚠ SUPABASE_DB_URL no definido: se omite la inspección DIRECTA de la base"
     );
     console.log(
-      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 27 tablas y 23 triggers de inmutabilidad)."
+      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 29 tablas y 23 triggers de inmutabilidad)."
     );
     console.log(
-      "    Las pruebas por cliente (1-9 y 11-22) sí corren con Supabase local."
+      "    Las pruebas por cliente (1-9 y 11-40) sí corren con Supabase local."
     );
     console.log(
       "    Alternativa para el barrido: psql \"$SUPABASE_DB_URL\" -f tests/rls/check-rls-enabled.sql"

@@ -19,16 +19,38 @@ export default async function TraceabilityIndexPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <header className="space-y-1">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
         <p className="eyebrow">Trazabilidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">
           Trazabilidad de {org.organizationName}
         </h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Registra la cadena lote a lote: entrada → orden → salida → composición.
-          El cálculo de contenido reciclado llega en el siguiente sprint, sobre
-          estos mismos datos.
+          Registra la cadena lote a lote: entrada → orden → salida →
+          composición. Sobre estos datos se calcula el contenido reciclado y
+          se construye el dossier técnico.
         </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/guided-flow"
+            className="rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:bg-loop-deep"
+          >
+            Continuar en flujo guiado
+          </Link>
+          <Link
+            href="/recycled-content/output-batches"
+            className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium hover:border-loop"
+          >
+            Calcular contenido reciclado
+          </Link>
+          <Link
+            href="/audit-support"
+            className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium hover:border-loop"
+          >
+            Ver matriz de evidencias
+          </Link>
+        </div>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">

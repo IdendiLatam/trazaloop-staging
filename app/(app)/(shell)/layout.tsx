@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
+import { isStagingEnvironment } from "@/lib/env";
 import { requireSession } from "@/lib/auth/require-session";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { signOutAction } from "@/server/actions/auth";
@@ -27,7 +28,7 @@ export default async function ShellLayout({
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
-      <aside className="hidden flex-col gap-8 bg-loop-deep p-5 lg:flex">
+      <aside className="no-print hidden flex-col gap-8 bg-loop-deep p-5 lg:flex">
         <Wordmark inverted />
         <AppNav />
         <div className="mt-auto">
@@ -44,7 +45,12 @@ export default async function ShellLayout({
 
       <div className="flex min-h-screen flex-col">
         {/* Barra superior: empresa activa siempre visible */}
-        <header className="flex items-center justify-between border-b border-hairline bg-surface px-6 py-3">
+        <header className="no-print flex items-center justify-between border-b border-hairline bg-surface px-6 py-3">
+          {isStagingEnvironment() ? (
+            <span className="rounded-full border border-amber/40 bg-amber/10 px-2.5 py-0.5 text-xs font-medium text-amber">
+              Ambiente staging
+            </span>
+          ) : null}
           <div className="flex items-center gap-3 lg:hidden">
             <LoopMark className="h-5 w-5 text-loop" />
           </div>

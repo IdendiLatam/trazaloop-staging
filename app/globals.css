@@ -69,3 +69,36 @@ body {
     transition: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Impresión (Sprint 5A): el dossier se imprime desde el navegador
+   («Imprimir → Guardar como PDF»). No hay generación de PDF en servidor.
+--------------------------------------------------------------------------- */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .print-page {
+    box-shadow: none;
+    margin: 0;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  section,
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+}

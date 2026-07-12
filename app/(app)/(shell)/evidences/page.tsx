@@ -2,6 +2,7 @@
 // prerenderiza en build (Sprint 3.1).
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import {
@@ -53,7 +54,7 @@ export default async function EvidencesPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("evidence_links")
-        .select("evidence_id")
+        .select("evidence_id, target_type, target_id")
         .eq("organization_id", org.organizationId),
       listSuppliers(org.organizationId),
       listFamilies(org.organizationId),
@@ -66,9 +67,18 @@ export default async function EvidencesPage() {
     ]);
 
   const linkCount = new Map<string, number>();
+  // Flujo guiado (Sprint 5B): si la evidencia está vinculada a un lote de
+  // salida (o a un material, cuyo flujo pasa por sus lotes), enlazamos al
+  // recorrido guiado del primer lote relacionado.
+  const guidedBatchByEvidence = new Map<string, string>();
+  const batchIdsByMaterial = new Map<string, string>();
   for (const l of links ?? []) {
     linkCount.set(l.evidence_id, (linkCount.get(l.evidence_id) ?? 0) + 1);
+    if (l.target_type === "output_batch" && !guidedBatchByEvidence.has(l.evidence_id)) {
+      guidedBatchByEvidence.set(l.evidence_id, l.target_id);
+    }
   }
+  void batchIdsByMaterial;
 
   const targets = {
     supplier: suppliers.map((s) => ({ value: s.id, label: s.name })),
@@ -121,6 +131,14 @@ export default async function EvidencesPage() {
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
+                  {guidedBatchByEvidence.has(e.id) ? (
+                    <Link
+                      href={`/guided-flow/output-batches/${guidedBatchByEvidence.get(e.id)}`}
+                      className="text-xs text-loop hover:underline"
+                    >
+                      Ver flujo del lote relacionado
+                    </Link>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span

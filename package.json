@@ -10,7 +10,13 @@
     "test:rls": "tsx tests/rls/isolation.test.ts",
     "typecheck": "tsc --noEmit",
     "test:diagnostic": "tsx tests/diagnostic/scoring.test.ts",
-    "test:compliance": "tsx tests/compliance/no-certifier-names.test.ts"
+    "test:compliance": "tsx tests/compliance/no-certifier-names.test.ts",
+    "test:csv": "tsx tests/unit/csv.test.ts",
+    "test:guided": "tsx tests/unit/guided-flow.test.ts",
+    "test:smoke": "tsx scripts/smoke-staging.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "test:all": "npm run typecheck && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided",
+    "predeploy": "npm run typecheck && npm run build && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

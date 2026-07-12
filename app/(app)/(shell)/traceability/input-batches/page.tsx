@@ -119,7 +119,13 @@ export default async function InputBatchesPage({
       </form>
 
       {batches.length === 0 ? (
-        <p className="text-sm text-ink-soft">No hay lotes de entrada con esos criterios.</p>
+        <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
+          <p className="text-sm font-medium">Aún no tienes lotes de entrada.</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
+            Registra los lotes recibidos para poder conectarlos con órdenes de
+            producción; el formulario está arriba en esta misma página.
+          </p>
+        </div>
       ) : (
         <ul className="space-y-3">
           {batches.map((b) => {

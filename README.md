@@ -206,7 +206,7 @@ En Trazabilidad → Lotes de entrada → *Importar por CSV*: descargar plantilla
 
 ### Pruebas del Sprint 3
 
-`tests/rls/isolation.test.ts` suma los casos 24–30: aislamiento de las 5 tablas, FK compuestas cruzadas (consumo con lote de otra empresa, salida con orden ajena, composición con material ajeno), inmutabilidad de `organization_id`, enlaces de evidencia entre empresas bloqueados, consultant creando toda la cadena, delete restringido a admin/quality y — integrados en `test:rls` porque requieren las vistas sobre Postgres real — los seis escenarios de trazabilidad: lote sin composición `incomplete`, cadena balanceada `complete`, desbalance > 5% `complete_with_warnings`, reconstrucción backward y forward, y sumas de masa por lote y por orden. El barrido de RLS y el de triggers cubren ahora 27 tablas (también `tests/rls/check-rls-enabled.sql`).
+`tests/rls/isolation.test.ts` suma los casos 24–30: aislamiento de las 5 tablas, FK compuestas cruzadas (consumo con lote de otra empresa, salida con orden ajena, composición con material ajeno), inmutabilidad de `organization_id`, enlaces de evidencia entre empresas bloqueados, consultant creando toda la cadena, delete restringido a admin/quality y — integrados en `test:rls` porque requieren las vistas sobre Postgres real — los seis escenarios de trazabilidad: lote sin composición `incomplete`, cadena balanceada `complete`, desbalance > 5% `complete_with_warnings`, reconstrucción backward y forward, y sumas de masa por lote y por orden. El barrido de RLS y el de triggers cubrían 27 tablas (29 desde Sprint 4) (también `tests/rls/check-rls-enabled.sql`).
 
 ## Sprint 3.1 · corrección del build colgado
 
@@ -221,6 +221,162 @@ En Trazabilidad → Lotes de entrada → *Importar por CSV*: descargar plantilla
 - Metodología de cálculo y **cálculo de contenido reciclado** sobre `batch_composition` (con `is_same_process` y las reglas de clasificación).
 - **Snapshots inmutables** de cada cálculo y su defendibilidad (datos de origen congelados).
 - **Reportes de contenido reciclado** y documentos/PDFs congelados (subfase 1B).
+
+
+## Sprint 4 · Motor de cálculo de contenido reciclado
+
+Capa de cálculo para **NTC 6632:2022** y **UNE-EN 15343:2008**. Sin documentos, sin constructor documental, sin PDFs congelados: solo el motor. El lenguaje del producto habla de cálculo, trazabilidad, soporte documental, nivel de defendibilidad y preparación frente a auditorías y revisión de cumplimiento normativo.
+
+### Migraciones nuevas
+
+- **`0028_recycled_content.sql`**
+  - `calculation_methodologies`: catálogo **global versionado** (`unique(code, version)` + índice único parcial: una sola versión activa por código). Legible por autenticados; **sin escritura desde cliente**. Seed: `RC-6632-15343` v1 con las reglas en JSON (fórmula, elegibles `preconsumer_valid`/`postconsumer_valid`, mismo proceso no cuenta, postindustrial exige reclasificación, soporte de origen obligatorio, tolerancia de balance 5%).
+  - `recycled_content_calculations`: **snapshot inmutable** por lote de salida — sin `updated_at`, trigger `forbid_mutation` en `UPDATE`/`DELETE` (por eso mismo `organization_id` es inmutable por definición, como en `audit_log`), `unique(organization_id, id)`, FK compuesta a `output_batches`, checks de masa/porcentaje/nivel. **Insertar solo puede la RPC**: no hay política de `insert` para clientes.
+  - RPC **`calculate_recycled_content(p_output_batch_id, p_methodology_id default null)`** (`security definer` con validación estricta): exige sesión, lote existente, **membresía activa** y rol `admin`/`quality`/`consultant`; usa la metodología activa si no se indica; **jamás** acepta `organization_id` del cliente ni usa `service_role`. Congela las reglas en `methodology_rules_snapshot`, guarda el JSON de `components` con razón de inclusión/exclusión por material, registra el evento semántico `recycled_content_calculated` vía `log_event()` interno y retorna la fila creada. El cálculo se hace en SQL (no en Server Action) para que exista **una sola fuente de la lógica**, sin divergencias entre UI, tests y datos.
+- **`0029_recycled_content_views.sql`** (todas `security_invoker`): `v_latest_batch_recycled` (último cálculo por lote, `distinct on` por `calculated_at`), `v_recycled_by_order`, `v_recycled_by_product`, `v_recycled_by_family`, `v_recycled_by_period` (mes de `produced_date`).
+
+### La fórmula y las reglas
+
+```
+contenido_reciclado_% = masa_reciclada_válida / masa_total_de_composición * 100
+```
+
+`produced_quantity_kg` **nunca** es denominador; solo alimenta la advertencia de balance. Por componente: mismo proceso o `never_counts` suma al denominador pero no al numerador (`same_process_or_never_counts`); postindustrial sin reclasificar no cuenta (`postindustrial_not_reclassified`); solo cuentan clasificaciones efectivas elegibles; el reciclado exige evidencia de origen **`valid`** (criterio estricto: pendiente/rechazada ⇒ `origin_support_not_valid`); la reclasificación exige destino `preconsumer_valid`, justificación, evidencia `valid` y autor autorizado (`invalid_reclassification_support`); virgen/aditivo/pigmento/carga/masterbatch no cuentan (`non_recycled_material`); `other` no cuenta en la metodología v1 (`counts_override` queda guardado en el snapshot para el futuro, sin efecto todavía).
+
+### Recalcular crea un snapshot nuevo
+
+Un cálculo **jamás se sobrescribe**: recalcular inserta otra fila y el vigente es el último por `calculated_at`. `UPDATE`/`DELETE` sobre snapshots lanzan excepción a nivel de trigger, además de estar revocados y sin política RLS.
+
+### Niveles de defendibilidad
+
+- **`preliminary`**: sin consumos/trazabilidad hacia atrás, proveedor faltante, o ninguna masa contó como reciclada (incluido el caso donde toda la masa elegible quedó excluida por falta de soporte).
+- **`with_warnings`**: hay cálculo válido pero existe alguna advertencia — balance fuera de tolerancia (consumo o `produced_quantity_kg` vs composición > 5%), calculado por debajo del declarado (además activa `risk_flag`), masa elegible excluida por soporte, postindustrial sin reclasificar, o evidencia pendiente/rechazada asociada.
+- **`defensible`**: composición + orden + consumos + genealogía completa, todo lo contado con soporte `valid`, sin advertencias de balance y sin declarado por encima del calculado.
+
+**Agregados**: si algún lote es `preliminary` el grupo es `preliminary`; si no, con alguno `with_warnings` el grupo es `with_warnings`; solo si todos son `defensible` el grupo es `defensible`.
+
+### Agregaciones ponderadas
+
+Siempre `sum(masa_reciclada) / sum(masa_total) * 100` — **nunca se promedian porcentajes**. Vistas por orden, producto, familia y periodo (mes de producción), con conteos de lotes.
+
+### UI (`Contenido reciclado` en la navegación)
+
+- `/recycled-content`: tarjetas (con/sin cálculo, defendibles, con advertencias, preliminares, último cálculo) y tabla de últimos cálculos con detalle.
+- `/recycled-content/output-batches`: lotes con estado de trazabilidad, último porcentaje y nivel; **sin composición no se puede calcular**; con trazabilidad incompleta se permite calcular con advertencia visible; con cálculo previo el botón dice **Recalcular** y aclara que se crea un snapshot nuevo.
+- `/recycled-content/output-batches/[id]`: lote, producto, orden, composición, consumos, evidencias, resultado con masas/porcentajes/riesgo/advertencias, **tabla de componentes explicada** (¿cuenta? y razón) e historial de cálculos.
+- `/recycled-content/reports`: agregaciones por orden, producto, familia y periodo. Sin PDF todavía.
+
+Server Actions (`server/actions/recycled.ts`): `calculateRecycledContentAction`, `getLatestCalculationForOutputBatchAction`, `listCalculationsForOutputBatchAction`, `getCalculationDetailAction`, `listOutputBatchesForCalculationAction`, `getRecycledContentDashboardAction` y las cuatro de agregación — todas con cliente de servidor con sesión, empresa activa validada y errores entendibles; el cálculo siempre pasa por la RPC.
+
+### Cómo preparar datos para calcular
+
+1. Crear proveedor → 2. crear material (con su clasificación) → 3. cargar la evidencia de origen → 4. validarla (admin/calidad) → 5. crear lote de entrada → 6. crear orden de producción → 7. registrar consumo → 8. crear lote de salida → 9. registrar composición → 10. calcular contenido reciclado. Si un producto declara un porcentaje (campo del catálogo de productos), el cálculo lo compara y marca riesgo cuando el calculado queda por debajo.
+
+### Pruebas de Sprint 4
+
+`tests/rls/isolation.test.ts` suma los casos **31–37** (integrados en `test:rls` porque el motor vive en SQL y exige Postgres real): metodología global legible e inmutable desde cliente; los casos de cálculo 1–6 (postconsumo válido cuenta, mismo proceso no, postindustrial sin reclasificar no, reclasificado con soporte sí, evidencia pendiente no, declarado > calculado ⇒ riesgo y nunca `defensible`); recalcular crea segundo snapshot con el primero intacto y `v_latest` mostrando el último; inmutabilidad total (`UPDATE`/`DELETE`/cambio de empresa fallan); aislamiento multiempresa (A no ve ni calcula lotes de B, consultant sí calcula, vistas sin fugas); y agregaciones ponderadas (por orden con nivel agregado, por producto 170/300 = 56.6667% ≠ promedio 60%, por familia con arrastre a `with_warnings`, por periodo con `produced_date`). Los barridos de RLS y `tests/rls/check-rls-enabled.sql` cubren ahora **29 tablas**.
+
+Las migraciones `0028`/`0029` y la lógica completa del motor se verificaron además contra un PostgreSQL 16 efímero: las 21 migraciones aplican en orden, y el humo funcional confirmó fórmula, razones por componente, riesgo por declarado, doble snapshot, bloqueo de mutaciones, ponderación por masa y el evento `recycled_content_calculated` en `audit_log`.
+
+### Qué queda para el Sprint 5
+
+- **Reportes imprimibles** y preparación para auditoría.
+- Mejoras UX del flujo de cálculo.
+- Documentación guiada en fase posterior.
+
+
+## Sprint 4.1 · agregados de contenido reciclado transparentes
+
+**Problema corregido:** en `0029`, una orden **con lotes de salida pero sin ningún cálculo** aparecía como `defensible`: con todos los `defensibility_level` en null, el `CASE` del agregado caía en `else 3` y `min(...) = 3` se traducía a `defensible`. Un agregado sin un solo snapshot no puede parecer listo.
+
+**Corrección (`0030_recycled_aggregation_fix.sql`, `create or replace view` sin tocar migraciones anteriores):** las cuatro vistas agregadas (orden, producto, familia y periodo) distinguen ahora tres poblaciones dentro del alcance — **lotes totales** (todos los lotes de salida del agregado: los de la orden, los del producto, los de productos de la familia, o los del mes de `produced_date`), **lotes calculados** (los que tienen último snapshot) y **lotes pendientes** (la diferencia) — expuestas como `total_batches_count`/`output_batches_count`, `calculated_batches_count`, `uncalculated_batches_count` y `has_uncalculated_batches`. Reglas de defendibilidad agregada: **sin cálculos → nivel `null`** (y masas/porcentaje `null`); **cálculos parciales → `preliminary`**, aunque cada lote calculado sea defendible, para que un agregado a medias nunca parezca listo; **todos calculados → regla normal** (algún `preliminary` → `preliminary`; si no, algún `with_warnings` → `with_warnings`; solo si todos son `defensible` → `defensible`). Los **porcentajes agregados se calculan únicamente sobre las masas de los lotes con snapshot** — siempre `sum(masa_reciclada)/sum(masa_total)*100`, nunca promedios — y el agregado se marca como parcial cuando hay pendientes. Producto/familia/periodo conservan `batches_count` (lotes calculados, semántica de 0029) por compatibilidad, duplicado en `calculated_batches_count`.
+
+**UI (`/recycled-content/reports`):** la columna de lotes muestra `calculados / totales` (p. ej. `3 / 5`), debajo `2 pendientes` cuando aplica, la advertencia «Agregado parcial: hay lotes sin cálculo.» cuando `has_uncalculated_batches`, y «Sin cálculos» cuando el nivel es `null`.
+
+**Pruebas:** caso **38** en `tests/rls/isolation.test.ts` (integrado en `test:rls`; se ejecuta con Supabase local y `.env.local`): orden sin cálculos con nivel `null` y conteos `1/0/1` (jamás `defensible`); la misma orden con 2 lotes y solo 1 calculado queda `preliminary` con porcentaje solo sobre lo calculado y conteos `2/1/1`; calculado el restante aplica la regla normal (`defensible`, ponderado `(100+70)/200 = 85%`); y producto, familia y periodo con un lote pendiente en el alcance quedan `preliminary` con `total/calculados/pendientes` correctos. La migración `0030` se verificó además sobre el PostgreSQL 16 efímero: el `create or replace` aplica sobre las vistas de `0029` (columnas nuevas solo al final) y el humo reprodujo el bug y confirmó los tres estados (sin cálculos → `null`; parcial → `preliminary` con porcentaje intacto; completo → regla normal).
+
+
+## Sprint 5A · Soporte técnico: dossiers imprimibles, matriz de evidencias y brechas
+
+Capa de revisión, impresión y compartición interna de la evidencia técnica que soporta cada cálculo. **Todo se lee de los snapshots existentes**: no se recalcula nada, no se modifica ningún cálculo, no se persisten documentos ni PDFs, y no existe todavía Trazaloop Docs ni gestión documental.
+
+### Migración nueva: `0031_audit_support_views.sql` (4 vistas `security_invoker`)
+
+- **`v_calculation_dossier`**: una fila por cálculo con todo el contexto — lote, orden, producto, familia, metodología (código/versión/reglas congeladas), resultado completo del snapshot, autor con nombre, estado de trazabilidad, balance del snapshot y masas consumida/composición. Los opcionales ausentes se devuelven `null` de forma segura (`evidence_code` y `validated_at` no existen en el esquema de evidencias y van como `null` documentado).
+- **`v_calculation_component_rows`**: expande el JSON `components` con `jsonb_array_elements ... with ordinality`, casts seguros de masa/booleans y tolerancia a `components` no-array.
+- **`v_output_batch_evidence_matrix`**: consolida evidencias por TODAS las rutas — enlaces directos a lote, orden, lotes de entrada consumidos, proveedores, materiales, producto y familia — e incluye los **soportes de origen y de reclasificación de los materiales de la composición aunque no exista `evidence_link` explícito** (una fila por evidencia/rol/entidad, `distinct` contra duplicados). `is_required_for_defensibility = true` para esos dos roles (son las piezas que el motor exige) y `is_valid_for_defensibility` solo con estado `valid`.
+- **`v_output_batch_support_gaps`**: una fila por brecha con severidad (`critical`/`warning`/`info`), descripción y **acción sugerida**: cálculo preliminar o con advertencias, declarado por encima del calculado (riesgo), material elegible sin origen o con origen sin validar, postindustrial sin reclasificar, reclasificación sin soporte completo, balance fuera de tolerancia, trazabilidad incompleta y lote sin cálculo.
+
+### Rutas nuevas (navegación: **Soporte técnico**)
+
+- `/audit-support`: tarjetas (defendibles, con advertencias, preliminares, lotes con brechas críticas, lotes con evidencias pendientes), últimos cálculos con «Ver dossier»/«Imprimir» y brechas recientes con acción sugerida.
+- `/audit-support/calculations/[id]`: **el dossier técnico** — encabezado con badges (defendibilidad, riesgo, trazabilidad), resultado con diferencia calculado−declarado, fórmula y resumen legible de las reglas congeladas, cadena de trazabilidad (lote → orden → lotes de entrada → proveedores → materiales, con clasificación y recepción), tabla de componentes que deja clarísimo por qué cada masa cuenta o no, matriz de evidencias con filtros (todas/requeridas/pendientes/válidas/no válidas), brechas con acciones y el historial de snapshots del lote.
+- `/audit-support/calculations/[id]/print`: versión imprimible en un **route group sin shell** (misma URL, sin navegación), con fecha de generación y nota técnica; el botón «Imprimir / guardar como PDF» usa `window.print()` y los estilos `@media print` de `globals.css` (`.no-print`, `.print-page`, cortes de tabla controlados). **Sin librerías de PDF ni generación server-side**: el usuario usa «Imprimir → Guardar como PDF» del navegador.
+- `/audit-support/output-batches/[id]/evidence-matrix`: matriz por lote — qué evidencias lo soportan, qué falta, cuáles están pendientes de validar y cuáles son críticas para la defendibilidad; con acceso al dossier del último cálculo o a calcular si no hay.
+
+Accesos también desde el dashboard de contenido reciclado (dossier del último cálculo, matriz e imprimir). La página de agregaciones (`/recycled-content/reports`) funciona además como **vista ejecutiva imprimible** por orden/producto/familia/periodo: botón «Imprimir / guardar como PDF», encabezado de impresión, fecha de generación y nota técnica; el chrome del shell (navegación lateral y barra superior) queda marcado `no-print`, así que cualquier página se imprime limpia desde el navegador.
+
+### Server Actions (`server/actions/audit-support.ts`)
+
+`getCalculationDossierAction`, `getPrintableCalculationDossierAction`, `getOutputBatchEvidenceMatrixAction`, `getOutputBatchSupportGapsAction`, `getAuditSupportDashboardAction`, `exportCalculationDossierJsonAction` y `exportEvidenceMatrixCsvAction` — todas con cliente de servidor con sesión, empresa activa validada, sin `organization_id` del cliente y sin `service_role`.
+
+### Exportaciones
+
+- **Dossier JSON** (botón «Exportar JSON»): objeto estructurado con metadata, resultado, snapshot de metodología, componentes, evidencias, brechas e historial breve; se descarga desde el cliente. Se construye exclusivamente del dossier org-validado.
+- **Matriz CSV** (botón «Exportar matriz CSV»): exactamente las columnas `evidence_code,evidence_title,evidence_type,evidence_status,linked_entity_type,linked_entity_label,support_role,is_required_for_defensibility,is_valid_for_defensibility` — nada sensible innecesario. Usa `toCsv`, que **escapa comillas, comas y saltos de línea** (verificado por `npm run test:csv`, test unitario sin BD con roundtrip `toCsv → parseCsv`).
+
+### Cómo generar un dossier
+
+1. Crear la trazabilidad (proveedor, material, lote de entrada, orden, consumo, lote de salida) → 2. registrar la composición → 3. cargar y validar evidencias → 4. calcular contenido reciclado → 5. abrir el dossier desde Soporte técnico o desde el dashboard de contenido reciclado → 6. imprimir o guardar como PDF desde el navegador.
+
+El dossier **se basa en el snapshot del cálculo y no lo modifica**; **no constituye por sí mismo una certificación**; **no es todavía un documento formal controlado** (Trazaloop Docs vendrá después).
+
+### Pruebas de Sprint 5A
+
+Caso **39** en `tests/rls/isolation.test.ts` (integrado en `test:rls`; requiere Supabase local y `.env.local`): dossier fiel al snapshot (porcentaje, metodología, producto/familia, autor, nivel); expansión correcta de componentes con casts; matriz que incluye la evidencia de origen del material contado y la de reclasificación **sin enlace explícito**, requeridas y válidas; brechas `missing_origin_support`, `origin_support_not_valid` y `declared_above_calculated`; y aislamiento multiempresa de dossier, matriz y brechas (el export JSON se construye del mismo dossier org-filtrado). El escapado CSV se prueba sin BD con `npm run test:csv`. La migración `0031` se verificó además sobre el PostgreSQL 16 efímero con humo funcional de las cuatro vistas.
+
+### Qué queda para fases posteriores
+
+- Trazaloop Docs: documentos formales controlados, versionado y aprobación.
+- Generación de PDF en servidor y PDFs congelados.
+- Módulo de auditorías y planes de acción.
+
+
+## Sprint 5B · Flujo guiado: de datos básicos a dossier sin perderse
+
+Nueva sección **Flujo guiado** (`/guided-flow` y `/guided-flow/output-batches/[id]`) que funciona como centro de trabajo: responde qué falta para calcular, qué hacer después, qué datos están incompletos, qué evidencias faltan, qué lote se puede calcular, cuál se defiende mejor y cómo llegar al dossier técnico. **El flujo guiado NO cambia la metodología de cálculo**: solo lee estados existentes; el cálculo sigue pasando por la misma RPC. No se creó módulo documental ni PDF server-side. Las pantallas existentes siguen intactas para el usuario experto.
+
+### Migración `0032_guided_flow_views.sql` (vistas `security_invoker`, sin tablas nuevas)
+
+- **`v_output_batch_readiness`**: una fila por lote de salida con hechos (producto, orden, consumo, composición, soporte de origen/reclasificación válido, evidencias pendientes o faltantes, último cálculo), más `next_step_code/label/href` y `readiness_level`. Los estados: **`not_ready`** (sin orden — rama defensiva: el esquema exige orden), **`needs_data`** (falta consumo o composición), **`needs_evidence`** (hay materiales elegibles con soporte faltante o pendiente), **`ready_to_calculate`** (todo listo, sin cálculo), **`calculated_with_gaps`** (cálculo con nivel débil o riesgo) y **`calculated_ready`** (defendible sin riesgo → dossier).
+- **`v_guided_flow_dashboard`**: agregado por empresa para las tarjetas (conteos de entrada/órdenes/salida, listos para calcular, sin composición, sin consumo, con evidencia pendiente, calculados por nivel y brechas críticas).
+
+### Una sola fuente de las reglas
+
+La cadena de decisión (orden → consumo → composición → soporte faltante → soporte pendiente → calcular → brechas/dossier) está especificada como **función pura** en `lib/domain/guided-flow.ts` (`resolveNextStep`), testeable sin BD con **`npm run test:guided`** (los 9 casos del spec + 2 extras: riesgo sobre defendible y faltante-gana-a-pendiente). La vista SQL implementa la misma cadena y el **caso 40** de `test:rls` cruza vista ↔ función **fila a fila** para garantizar que jamás diverjan, además de validar el aislamiento multiempresa de ambas vistas.
+
+### “Siguiente mejor acción”
+
+Sección con 1–5 acciones priorizadas: 1) lotes con composición sin cálculo, 2) cálculos con riesgo, 3) evidencias requeridas pendientes, 4) lotes sin composición, 5) órdenes sin consumo, 6) catálogos incompletos — cada una con descripción, entidad y botón directo. El CTA principal de la página también es dinámico según el estado real de la empresa.
+
+### UX
+
+Tarjetas de avance (los 7 pasos: catálogos → evidencias → lotes de entrada → órdenes/consumos → salida/composición → cálculo → dossier) con estado textual, contadores y CTA; tabla de lotes con semáforo (`ReadinessBadge` con texto, nunca solo color) y acciones por fila; detalle guiado tipo **stepper de 7 pasos** con acciones contextuales (incluido el botón Calcular/Recalcular existente); componentes reutilizables (`ReadinessBadge`, `RiskBadge`, `EmptyState`, `ProgressStepCard`, `GuidedStep`); estados vacíos útiles en materiales, lotes de entrada, composición y cálculo; y navegación cruzada: Trazabilidad → flujo guiado/calcular/matriz, Contenido reciclado → flujo guiado/brechas, Soporte técnico → flujo guiado/evidencias/recalcular, y en Evidencias el enlace «Ver flujo del lote relacionado» cuando la evidencia está vinculada a un lote de salida. No se implementaron quick-actions duplicadas: los formularios existentes ya cubren la creación y el flujo enlaza a ellos.
+
+
+## Sprint 5C · Preparación para staging (Supabase Cloud + Vercel)
+
+Sin funcionalidades nuevas de negocio: este sprint deja el sistema **probable, desplegable, demostrable y testeable en nube**. La lógica normativa de cálculo, las reglas de defendibilidad y la RLS quedan intactas.
+
+- **Limpieza**: `tsconfig.tsbuildinfo` eliminado del repo y de los entregables (ya estaba en `.gitignore` vía `*.tsbuildinfo`); `.gitignore` ampliado con `dist`; barrido de secretos limpio (el único match de `eyJ` es un integrity hash de `package-lock.json`, no una credencial).
+- **`.env.example`** reescrito con las 5 variables y comentarios explicativos, incluido cómo generar el secreto de la cookie (`openssl rand -base64 32`).
+- **`lib/env.ts`**: validación de entorno con mensajes claros («Falta X. Configúrala en .env.local o en Vercel → Environment Variables»), invocada SOLO en runtime (jamás top-level: el build sigue terminando sin `.env.local`, regla del Sprint 3.1). `createServerClient` la usa; `isStagingEnvironment()` activa el badge **«Ambiente staging»** en el header cuando `NEXT_PUBLIC_SITE_URL` apunta a Vercel/staging.
+- **Scripts**: `npm run test:smoke` (`scripts/smoke-staging.ts`) verifica variables, conexión, migraciones (tablas y vistas clave), **RLS conductual** (un cliente anónimo no debe leer filas), y con la service key como herramienta administrativa: bucket `evidences` privado, metodología `RC-6632-15343` activa, 52 preguntas y 10 clasificaciones — con ✅/❌ y qué revisar en cada fallo. `npm run seed:demo` (`scripts/seed-demo.ts`) siembra el caso demo completo **iniciando sesión como el usuario demo** (sin `service_role` en operaciones de negocio: aplican RLS y triggers reales), exige `DEMO_ORGANIZATION_ID` explícito, verifica membresía, solo inserta en esa organización y calcula por la misma RPC; imprime las URLs de flujo guiado y dossier. También `test:all` y `predeploy` (sin `test:rls` a propósito: requiere Supabase; documentado como obligatorio antes de producción real).
+- **`test:rls`** ahora falla sin variables con el mensaje exacto y la advertencia («crea usuarios y datos de prueba; solo staging o local»), sin stacktrace.
+- **Docs**: `docs/STAGING_DEPLOYMENT.md` (18 secciones: requisitos, `npm ci`, `.env.local`, GitHub, Supabase CLI con `login/link/db push`, verificaciones SQL de semillas y bucket, Auth Redirect URLs, Vercel + env vars, flujo demo manual de 14 pasos o por script, smoke, RLS contra staging, y troubleshooting de los 7 errores frecuentes: PAT de GitHub, `db push`, variables en Vercel, redirects de Auth, evidencias que no suben, app sin datos y build colgado) y `docs/PREDEPLOY_CHECKLIST.md` con la checklist completa.
+- **Seguridad §14 verificada**: cero referencias a la service key en `app/`/`components/` (solo `lib/supabase/admin.ts` server-only y scripts administrativos); bucket privado con políticas por organización; RLS en las 29 tablas; **19/19 vistas `security_invoker`**; Server Actions con empresa activa; rutas protegidas dinámicas con sesión.
+
+`test:smoke` se ejecutó en sus caminos de fallo (sin variables → mensaje claro; URL inalcanzable → «Supabase connection ❌» con guía): la corrida completa exige un Supabase real de staging, igual que `test:rls`.
 
 ## Decisiones y riesgos pendientes
 

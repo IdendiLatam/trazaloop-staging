@@ -1,17 +1,18 @@
 import Link from "next/link";
 
 /**
- * Navegación. Sprint 3 habilita Trazabilidad.
- * Cálculo (Sprint 4) y Reportes siguen "pronto".
+ * Navegación. Sprint 5A habilita Soporte técnico (dossiers imprimibles,
+ * matriz de evidencias y brechas).
  */
 const ITEMS: { label: string; href: string | null }[] = [
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Flujo guiado", href: "/guided-flow" },
   { label: "Diagnóstico", href: "/diagnostic" },
   { label: "Catálogos", href: "/catalog" },
   { label: "Evidencias", href: "/evidences" },
   { label: "Trazabilidad", href: "/traceability" },
-  { label: "Cálculo", href: null },
-  { label: "Reportes", href: null },
+  { label: "Contenido reciclado", href: "/recycled-content" },
+  { label: "Soporte técnico", href: "/audit-support" },
 ];
 
 export function AppNav() {

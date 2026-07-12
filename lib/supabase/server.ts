@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { requireEnv } from "@/lib/env";
 import { createServerClient as createSSRServerClient } from "@supabase/ssr";
 
 /**
@@ -11,16 +12,9 @@ import { createServerClient as createSSRServerClient } from "@supabase/ssr";
  * - Es el cliente por defecto para TODA lectura y mutación de negocio.
  */
 export async function createServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anonKey) {
-    throw new Error(
-      "createServerClient: faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY. " +
-        "Configura .env.local (ver README). Este error es inmediato a propósito: " +
-        "ninguna ruta debe intentar conectar a Supabase sin configuración."
-    );
-  }
+  // Fail-fast con mensaje claro (lib/env.ts); nunca en top-level (Sprint 3.1).
+  const url = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const anonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
   const cookieStore = await cookies();
 

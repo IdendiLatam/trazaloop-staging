@@ -1,4 +1,4 @@
--- Trazaloop · Verificación: todas las tablas (Sprint 1 + 2 + 3) tienen RLS activo.
+-- Trazaloop · Verificación: todas las tablas (Sprint 1 + 2 + 3 + 4) tienen RLS activo.
 -- Correr con: psql "$SUPABASE_DB_URL" -f tests/rls/check-rls-enabled.sql
 -- Debe devolver 0 filas. Cada fila devuelta es una tabla SIN RLS (fallo).
 select c.relname as tabla_sin_rls
@@ -18,6 +18,8 @@ where n.nspname = 'public'
     'import_jobs',
     -- Sprint 3
     'input_batches','production_orders','batch_consumption',
-    'output_batches','batch_composition'
+    'output_batches','batch_composition',
+    -- Sprint 4
+    'calculation_methodologies','recycled_content_calculations'
   )
   and c.relrowsecurity = false;
