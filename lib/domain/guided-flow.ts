@@ -80,7 +80,7 @@ export function resolveNextStep(f: ReadinessFacts): NextStep {
 
 export const NEXT_STEP_LABEL: Record<NextStepCode, string> = {
   create_product_or_link_product: "Asociar producto",
-  complete_order: "Completar orden de producción",
+  complete_order: "Completar orden / corrida de producción",
   add_consumption: "Agregar consumo",
   add_composition: "Registrar composición",
   add_evidence: "Cargar evidencia",

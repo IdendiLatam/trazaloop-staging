@@ -13,8 +13,10 @@ import { join, relative } from "node:path";
 
 const ROOT = process.cwd();
 
-// Directorios del producto a escanear.
-const SCAN_DIRS = ["app", "components", "server", "lib", "supabase"];
+// Directorios del producto a escanear. Sprint 6: se agrega docs/ para que
+// la guía de prueba con empresa (COMPANY_TESTING_GUIDE.md) y el resto de la
+// documentación queden cubiertas por el mismo barrido.
+const SCAN_DIRS = ["app", "components", "server", "lib", "supabase", "docs"];
 
 // Extensiones con texto visible o sembrable.
 const EXTS = new Set([".ts", ".tsx", ".sql", ".md", ".css"]);
@@ -42,6 +44,10 @@ const BANNED: { pattern: RegExp; label: string }[] = [
   { pattern: /certificado\s+asegurado/i, label: "promesa fuerte de certificación" },
   { pattern: /certificaci[oó]n\s+(garantizada|asegurada)/i, label: "promesa fuerte de certificación" },
   { pattern: /asegurar?\s+(la\s+)?certificaci[oó]n/i, label: "promesa fuerte de certificación" },
+  // Sprint 6: "listo para (la) certificación" y variantes de "obtener
+  // certificación" como promesa (ya cubierto arriba para "obtener/garantizar",
+  // aquí se cubre específicamente el adjetivo "listo").
+  { pattern: /list[oa]s?\s+para\s+(la\s+)?certificaci[oó]n/i, label: "promesa fuerte de certificación" },
 ];
 
 const SKIP_DIRS = new Set(["node_modules", ".next", ".git"]);

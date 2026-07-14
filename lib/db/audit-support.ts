@@ -89,8 +89,8 @@ export type SupportGapRow = {
 };
 
 export const SUPPORT_ROLE_LABEL: Record<string, string> = {
-  output_batch_support: "Soporte del lote de salida",
-  production_order_support: "Soporte de la orden de producción",
+  output_batch_support: "Soporte del lote producido / lote final",
+  production_order_support: "Soporte de la orden / corrida de producción",
   input_batch_support: "Soporte de lote de entrada",
   material_origin_support: "Soporte de origen del material",
   material_reclassification_support: "Soporte de reclasificación",

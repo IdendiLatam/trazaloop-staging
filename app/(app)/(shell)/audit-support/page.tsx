@@ -74,7 +74,7 @@ export default async function AuditSupportPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-xs text-ink-soft">
-                  <th className="px-4 py-2 font-medium">Lote de salida</th>
+                  <th className="px-4 py-2 font-medium">Lote producido / lote final</th>
                   <th className="px-4 py-2 font-medium">Producto</th>
                   <th className="px-4 py-2 font-medium">Calculado</th>
                   <th className="px-4 py-2 font-medium">Defendibilidad</th>

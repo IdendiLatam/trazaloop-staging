@@ -13,6 +13,9 @@ const ITEMS: { label: string; href: string | null }[] = [
   { label: "Trazabilidad", href: "/traceability" },
   { label: "Contenido reciclado", href: "/recycled-content" },
   { label: "Soporte técnico", href: "/audit-support" },
+  { label: "Implementación", href: "/implementation" },
+  { label: "Importaciones", href: "/imports" },
+  { label: "Equipo", href: "/team" },
 ];
 
 export function AppNav() {

@@ -35,6 +35,14 @@ export default async function ImportPage() {
           Solo CSV en este sprint. Descarga la plantilla, complétala y valida
           antes de importar.
         </p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Para importar también evidencias, lotes, órdenes / corridas, consumos y composición,
+          usa{" "}
+          <Link href="/imports" className="text-loop hover:underline">
+            Importaciones
+          </Link>
+          .
+        </p>
       </header>
 
       <ImportWizard />

@@ -59,6 +59,11 @@ function LoginForm() {
             Olvidé mi contraseña
           </Link>
         </p>
+        <p className="mt-2 text-center text-xs text-ink-soft">
+          <Link href="/legal" className="hover:underline">
+            Acerca de Trazaloop
+          </Link>
+        </p>
       </div>
     </div>
   );

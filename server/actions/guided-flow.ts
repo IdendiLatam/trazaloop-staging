@@ -154,7 +154,7 @@ export async function getOutputBatchGuidedDetailAction(outputBatchId: string) {
     .eq("output_batch_id", outputBatchId)
     .maybeSingle();
   if (!readiness) {
-    return { data: null, error: "El lote de salida no pertenece a tu empresa activa." };
+    return { data: null, error: "El lote producido / lote final no pertenece a tu empresa activa." };
   }
   const r = readiness as ReadinessRow;
   const [batches, completeness, composition, consumption, evidences, gaps, history] =
@@ -244,7 +244,7 @@ export async function getNextBestActionsAction(): Promise<NextBestAction[]> {
   if (dashboard.withoutConsumption > 0) {
     push({
       description: `Hay ${dashboard.withoutConsumption} lote(s) de salida cuya orden no tiene consumos registrados.`,
-      entityLabel: "Órdenes de producción",
+      entityLabel: "Órdenes / corridas de producción",
       actionLabel: "Agregar consumo",
       href: "/traceability/production-orders",
     });

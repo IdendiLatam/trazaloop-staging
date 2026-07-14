@@ -27,8 +27,9 @@ export function CreateOrgForm() {
         {pending ? "Creando empresa…" : "Crear empresa"}
       </Button>
       <p className="text-xs text-ink-soft">
-        Quedarás como administrador y se activarán los módulos base: Núcleo,
-        Trazaloop 6632 / UNE-EN 15343 y Trazaloop Docs.
+        Quedarás como administrador y se activarán los módulos base
+        disponibles para trazabilidad, cálculo de contenido reciclado y
+        soporte técnico.
       </p>
     </form>
   );

@@ -44,7 +44,7 @@ export async function calculateRecycledContentAction(
     .eq("organization_id", org.organizationId)
     .maybeSingle();
   if (!batch) {
-    return { error: "El lote de salida no pertenece a tu empresa activa." };
+    return { error: "El lote producido / lote final no pertenece a tu empresa activa." };
   }
 
   const { error } = await supabase.rpc("calculate_recycled_content", {
@@ -55,7 +55,10 @@ export async function calculateRecycledContentAction(
     const known = KNOWN_RPC_MESSAGES.find((m) => error.message?.includes(m));
     return {
       error: known
-        ? error.message
+        ? // Terminología visible (Sprint 5D) sin tocar los mensajes de la RPC.
+          error.message
+            .replace("lote de salida", "lote producido / lote final")
+            .replace("orden de producción", "orden / corrida de producción")
         : "No fue posible calcular. Revisa la composición, los consumos y las evidencias del lote.",
     };
   }
@@ -82,7 +85,7 @@ export async function getCalculationDetailAction(calculationId: string) {
   return getCalculationDetail(org.organizationId, calculationId);
 }
 
-/** Lotes de salida con su estado de trazabilidad y su último cálculo. */
+/** Lotes producidos / lotes finales con su estado de trazabilidad y su último cálculo. */
 export async function listOutputBatchesForCalculationAction() {
   const org = await requireActiveOrg();
   const [batches, completeness, latest] = await Promise.all([

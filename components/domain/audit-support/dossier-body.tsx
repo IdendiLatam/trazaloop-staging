@@ -72,7 +72,7 @@ export function DossierBody({
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div><dt className="text-xs text-ink-soft">Producto</dt><dd>{d.product_name ?? "Sin producto asociado"}</dd></div>
           <div><dt className="text-xs text-ink-soft">Familia</dt><dd>{d.family_name ?? "—"}</dd></div>
-          <div><dt className="text-xs text-ink-soft">Orden de producción</dt><dd className="code text-xs">{d.production_order_code ?? "—"}</dd></div>
+          <div><dt className="text-xs text-ink-soft">Orden / corrida de producción</dt><dd className="code text-xs">{d.production_order_code ?? "—"}</dd></div>
           <div><dt className="text-xs text-ink-soft">Fecha de producción</dt><dd>{d.produced_date ?? "—"}</dd></div>
           <div><dt className="text-xs text-ink-soft">Fecha de cálculo</dt><dd>{new Date(d.calculated_at).toLocaleString("es-CO")}</dd></div>
           <div><dt className="text-xs text-ink-soft">Calculado por</dt><dd>{d.calculated_by_name ?? "—"}</dd></div>
@@ -134,7 +134,7 @@ export function DossierBody({
       <section className="print-avoid-break rounded-lg border border-hairline bg-surface p-5">
         <h2 className="eyebrow mb-3">Trazabilidad</h2>
         <p className="mb-3 text-xs text-ink-soft">
-          Lote de salida → Orden de producción → Lotes de entrada consumidos → Proveedores → Materiales
+          Lote producido / lote final → Orden / corrida de producción → Lotes de entrada consumidos → Proveedores → Materiales
         </p>
         {chain.length === 0 ? (
           <p className="text-sm text-ink-soft">Sin consumos registrados para la orden.</p>

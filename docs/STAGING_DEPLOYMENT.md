@@ -91,7 +91,7 @@ npx supabase db push
 ```
 
 `TU_PROJECT_REF` es el identificador del proyecto (Settings → General). Deben
-aplicarse las migraciones `0001` … `0032` en orden.
+aplicarse las migraciones `0001` … `0037` en orden.
 
 Verifica las semillas en el SQL Editor de Supabase:
 
@@ -126,9 +126,16 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 ACTIVE_ORG_COOKIE_SECRET
 NEXT_PUBLIC_SITE_URL
+NEXT_TELEMETRY_DISABLED=1
 ```
 
 `NEXT_PUBLIC_SITE_URL` = la URL que Vercel asigna al proyecto.
+
+`NEXT_TELEMETRY_DISABLED=1` (Sprint 6): el script `build` de `package.json`
+ya la exporta automáticamente vía `cross-env`, así que el build no depende de
+que exista en Vercel. Se recomienda configurarla de todos modos como defensa
+en profundidad y para cubrir cualquier comando `next` ejecutado fuera del
+script `build` (por ejemplo, en una consola de Vercel).
 
 ## 12. Deploy
 
@@ -156,7 +163,7 @@ Dos opciones:
 proveedor **Recicladora Demo**. 4. Crear material **PCR Demo**
 (postconsumo). 5. Cargar evidencia de origen. 6. Validar la evidencia
 (admin/calidad). 7. Crear lote de entrada. 8. Crear orden. 9. Registrar
-consumo. 10. Crear lote de salida. 11. Registrar composición.
+consumo. 10. Crear lote producido / lote final. 11. Registrar composición.
 12. Calcular. 13. Abrir dossier. 14. Abrir flujo guiado.
 
 **B. Seed demo por script** (opcional; NUNCA automático, NUNCA en producción):
@@ -288,8 +295,33 @@ desarrollo, `http://localhost:3000/**`).
 
 ### 18.7 El build se queda colgado
 
-No debe pasar (corregido en Sprint 3.1). Si reaparece, revisa:
+Antes del Sprint 6 esto podía pasar si `next build` esperaba el prompt de
+telemetría en un entorno sin TTY (CI, algunos contenedores). Corregido: el
+script `build` de `package.json` exporta `NEXT_TELEMETRY_DISABLED=1`
+automáticamente vía `cross-env` (multiplataforma: macOS, Linux y Vercel), sin
+necesidad de exportarla a mano. `--webpack` evita además un teardown
+defectuoso conocido de Turbopack en builds de producción de Next.js 16.2.x.
+
+**Sprint 8.1:** si el build queda colgado específicamente en «Collecting
+page data» o «Collecting build traces» (más frecuente cuantos más núcleos
+tenga la máquina — Next.js reporta "using N workers"), la causa suele ser
+que Next.js **infiere mal la raíz de rastreo de archivos** (`@vercel/nft`)
+caminando hacia arriba en el árbol de directorios en busca de un lockfile,
+arrastrando carpetas ajenas al proyecto en entornos con estructuras de
+carpetas fuera de lo común (CI, contenedores, checkouts anidados).
+`next.config.ts` fija explícitamente `outputFileTracingRoot: process.cwd()`
+(opción estable desde Next 15, respetada igual por Vercel) y excluye del
+rastreo `tests/`, `scripts/`, `supabase/` y `docs/` — ninguna ruta de la
+app necesita esas carpetas en su bundle de servidor — vía
+`outputFileTracingExcludes`.
+
+Si reaparece, revisa además:
 
 - llamadas a Supabase en **top-level** de módulos (prohibidas);
 - rutas protegidas sin `export const dynamic = "force-dynamic"`;
-- server actions importadas incorrectamente en Client Components.
+- server actions importadas incorrectamente en Client Components;
+- que `NEXT_TELEMETRY_DISABLED=1` esté también configurada como variable de
+  entorno en Vercel (§11), como defensa en profundidad;
+- si el mensaje de Next.js advierte sobre "inferred your workspace root",
+  confirma que no haya un `package-lock.json`/`yarn.lock` suelto en algún
+  directorio por encima del proyecto en ese entorno concreto.

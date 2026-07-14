@@ -75,7 +75,7 @@ export default async function DashboardPage() {
             {[
               { label: "Lotes de entrada", value: metrics.inputBatches, tone: "text-ink" },
               { label: "Órdenes", value: metrics.productionOrders, tone: "text-ink" },
-              { label: "Lotes de salida", value: metrics.outputBatches, tone: "text-ink" },
+              { label: "Lotes producidos / lotes finales", value: metrics.outputBatches, tone: "text-ink" },
               { label: "Completos", value: metrics.completeBatches, tone: "text-loop-deep" },
               { label: "Incompletos", value: metrics.incompleteBatches, tone: "text-danger" },
               { label: "Con advertencia", value: metrics.warningBatches, tone: "text-amber" },

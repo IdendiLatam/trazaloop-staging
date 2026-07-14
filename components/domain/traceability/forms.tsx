@@ -221,8 +221,8 @@ export function OutputBatchForm({
       <ErrorAlert message={state.error} />
       {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Código de lote de salida" name="batch_code" defaultValue={editing?.batch_code} required />
-        <Select label="Orden de producción" name="production_order_id" options={orders} defaultValue={editing?.production_order_id} required />
+        <Field label="Código de lote producido / lote final" name="batch_code" defaultValue={editing?.batch_code} required />
+        <Select label="Orden / corrida de producción" name="production_order_id" options={orders} defaultValue={editing?.production_order_id} required />
         <Select
           label="Producto (opcional)"
           name="product_id"
@@ -245,7 +245,7 @@ export function OutputBatchForm({
         <Field label="Notas (opcional)" name="notes" defaultValue={editing?.notes ?? ""} />
       </div>
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Guardando…" : editing ? "Guardar cambios" : "Crear lote de salida"}
+        {pending ? "Guardando…" : editing ? "Guardar cambios" : "Crear lote producido / lote final"}
       </Button>
     </form>
   );

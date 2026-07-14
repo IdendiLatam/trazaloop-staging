@@ -177,8 +177,8 @@ Migraciones nuevas (incrementales, sin tocar las anteriores):
   - `input_batches` (lotes de entrada; código único por empresa, proveedor y material obligatorios, sede y cantidad opcionales, `quantity_kg > 0` si se informa).
   - `production_orders` (órdenes; estados `draft`/`in_progress`/`closed`/`cancelled`, `process_variables` en JSON).
   - `batch_consumption` (consumos por orden; único por orden+lote, `mass_kg > 0`; borrar la orden borra sus consumos en cascada, borrar un lote consumido está bloqueado por FK `restrict`). El sobreconsumo **no se bloquea**: se muestra como advertencia en UI.
-  - `output_batches` (lotes de salida; orden obligatoria con FK `restrict`, producto opcional).
-  - `batch_composition` (composición del lote de salida; única por lote+material, `is_same_process` y `counts_override` quedan preparados para el Sprint 4 **sin uso en cálculo**).
+  - `output_batches` (lotes producidos / lotes finales; orden obligatoria con FK `restrict`, producto opcional).
+  - `batch_composition` (composición del lote producido / lote final; única por lote+material, `is_same_process` y `counts_override` quedan preparados para el Sprint 4 **sin uso en cálculo**).
   - Roles: **select** cualquier miembro; **insert/update** admin, quality y consultant; **delete** solo admin/quality. El trigger polimórfico de `evidence_links` ahora también acepta `input_batch`, `production_order` y `output_batch` (mismo tenant obligatorio).
 - **`0026_traceability_views.sql`** — cuatro vistas `security_invoker` (la RLS de las tablas base aplica): `v_output_batch_completeness` (estado `incomplete` / `complete_with_warnings` / `complete`, `missing_items` en español y advertencia de balance con tolerancia fija del 5%), `v_traceability_backward`, `v_traceability_forward` y `v_production_order_mass_balance`.
 - **`0027_import_input_batches.sql`** — amplía `import_jobs.entity` con `input_batches`.
@@ -188,11 +188,11 @@ Migraciones nuevas (incrementales, sin tocar las anteriores):
 1. Crear un **proveedor** (Catálogos → Proveedores).
 2. Crear un **material** con su clasificación (Catálogos → Materiales).
 3. Crear un **lote de entrada** (Trazabilidad → Lotes de entrada): código, proveedor, material, fecha de recepción; cantidad, sede, tipo de residuo y procedencia opcionales.
-4. Crear una **orden de producción** (Trazabilidad → Órdenes).
+4. Crear una **orden / corrida de producción** (Trazabilidad → Órdenes).
 5. Abrir la orden con **Consumos** y registrar los lotes de entrada consumidos con su masa. Si el acumulado consumido supera lo recibido del lote, la UI lo advierte (no bloquea).
-6. Crear un **lote de salida** asociado a la orden (producto opcional).
+6. Crear un **lote producido / lote final** asociado a la orden (producto opcional).
 7. Abrir el lote con **Composición** y registrar los materiales con su masa (y marcar "mismo proceso" cuando aplique).
-8. Revisar la **genealogía** (Trazabilidad → Genealogía): hacia atrás desde el lote de salida (producto → orden → lotes de entrada → proveedores/materiales) o hacia adelante desde el lote de entrada (órdenes → lotes de salida → productos).
+8. Revisar la **genealogía** (Trazabilidad → Genealogía): hacia atrás desde el lote producido / lote final (producto → orden → lotes de entrada → proveedores/materiales) o hacia adelante desde el lote de entrada (órdenes → lotes producidos / lotes finales → productos).
 
 En cada lote y orden se pueden **asociar evidencias existentes** (subidas en el menú Evidencias).
 
@@ -202,7 +202,7 @@ En Trazabilidad → Lotes de entrada → *Importar por CSV*: descargar plantilla
 
 ### Trazabilidad completa / incompleta
 
-`v_output_batch_completeness` evalúa cada lote de salida: es **incompleta** si falta orden, consumos, composición o la información de proveedor/material de sus entradas (los faltantes se listan en la UI); es **completa con advertencias** si está todo pero el balance de masa difiere más del 5% (consumido vs composición, y producido vs composición cuando se informa la cantidad); es **completa** en caso contrario. El badge aparece en Lotes de salida y las métricas en el índice de Trazabilidad y el dashboard. Es una **advertencia informativa**, nunca un bloqueo, y **no es cálculo de contenido reciclado**.
+`v_output_batch_completeness` evalúa cada lote producido / lote final: es **incompleta** si falta orden, consumos, composición o la información de proveedor/material de sus entradas (los faltantes se listan en la UI); es **completa con advertencias** si está todo pero el balance de masa difiere más del 5% (consumido vs composición, y producido vs composición cuando se informa la cantidad); es **completa** en caso contrario. El badge aparece en Lotes producidos / lotes finales y las métricas en el índice de Trazabilidad y el dashboard. Es una **advertencia informativa**, nunca un bloqueo, y **no es cálculo de contenido reciclado**.
 
 ### Pruebas del Sprint 3
 
@@ -231,7 +231,7 @@ Capa de cálculo para **NTC 6632:2022** y **UNE-EN 15343:2008**. Sin documentos,
 
 - **`0028_recycled_content.sql`**
   - `calculation_methodologies`: catálogo **global versionado** (`unique(code, version)` + índice único parcial: una sola versión activa por código). Legible por autenticados; **sin escritura desde cliente**. Seed: `RC-6632-15343` v1 con las reglas en JSON (fórmula, elegibles `preconsumer_valid`/`postconsumer_valid`, mismo proceso no cuenta, postindustrial exige reclasificación, soporte de origen obligatorio, tolerancia de balance 5%).
-  - `recycled_content_calculations`: **snapshot inmutable** por lote de salida — sin `updated_at`, trigger `forbid_mutation` en `UPDATE`/`DELETE` (por eso mismo `organization_id` es inmutable por definición, como en `audit_log`), `unique(organization_id, id)`, FK compuesta a `output_batches`, checks de masa/porcentaje/nivel. **Insertar solo puede la RPC**: no hay política de `insert` para clientes.
+  - `recycled_content_calculations`: **snapshot inmutable** por lote producido / lote final — sin `updated_at`, trigger `forbid_mutation` en `UPDATE`/`DELETE` (por eso mismo `organization_id` es inmutable por definición, como en `audit_log`), `unique(organization_id, id)`, FK compuesta a `output_batches`, checks de masa/porcentaje/nivel. **Insertar solo puede la RPC**: no hay política de `insert` para clientes.
   - RPC **`calculate_recycled_content(p_output_batch_id, p_methodology_id default null)`** (`security definer` con validación estricta): exige sesión, lote existente, **membresía activa** y rol `admin`/`quality`/`consultant`; usa la metodología activa si no se indica; **jamás** acepta `organization_id` del cliente ni usa `service_role`. Congela las reglas en `methodology_rules_snapshot`, guarda el JSON de `components` con razón de inclusión/exclusión por material, registra el evento semántico `recycled_content_calculated` vía `log_event()` interno y retorna la fila creada. El cálculo se hace en SQL (no en Server Action) para que exista **una sola fuente de la lógica**, sin divergencias entre UI, tests y datos.
 - **`0029_recycled_content_views.sql`** (todas `security_invoker`): `v_latest_batch_recycled` (último cálculo por lote, `distinct on` por `calculated_at`), `v_recycled_by_order`, `v_recycled_by_product`, `v_recycled_by_family`, `v_recycled_by_period` (mes de `produced_date`).
 
@@ -270,7 +270,7 @@ Server Actions (`server/actions/recycled.ts`): `calculateRecycledContentAction`,
 
 ### Cómo preparar datos para calcular
 
-1. Crear proveedor → 2. crear material (con su clasificación) → 3. cargar la evidencia de origen → 4. validarla (admin/calidad) → 5. crear lote de entrada → 6. crear orden de producción → 7. registrar consumo → 8. crear lote de salida → 9. registrar composición → 10. calcular contenido reciclado. Si un producto declara un porcentaje (campo del catálogo de productos), el cálculo lo compara y marca riesgo cuando el calculado queda por debajo.
+1. Crear proveedor → 2. crear material (con su clasificación) → 3. cargar la evidencia de origen → 4. validarla (admin/calidad) → 5. crear lote de entrada → 6. crear orden / corrida de producción → 7. registrar consumo → 8. crear lote producido / lote final → 9. registrar composición → 10. calcular contenido reciclado. Si un producto declara un porcentaje (campo del catálogo de productos), el cálculo lo compara y marca riesgo cuando el calculado queda por debajo.
 
 ### Pruebas de Sprint 4
 
@@ -287,9 +287,9 @@ Las migraciones `0028`/`0029` y la lógica completa del motor se verificaron ade
 
 ## Sprint 4.1 · agregados de contenido reciclado transparentes
 
-**Problema corregido:** en `0029`, una orden **con lotes de salida pero sin ningún cálculo** aparecía como `defensible`: con todos los `defensibility_level` en null, el `CASE` del agregado caía en `else 3` y `min(...) = 3` se traducía a `defensible`. Un agregado sin un solo snapshot no puede parecer listo.
+**Problema corregido:** en `0029`, una orden **con lotes producidos / lotes finales pero sin ningún cálculo** aparecía como `defensible`: con todos los `defensibility_level` en null, el `CASE` del agregado caía en `else 3` y `min(...) = 3` se traducía a `defensible`. Un agregado sin un solo snapshot no puede parecer listo.
 
-**Corrección (`0030_recycled_aggregation_fix.sql`, `create or replace view` sin tocar migraciones anteriores):** las cuatro vistas agregadas (orden, producto, familia y periodo) distinguen ahora tres poblaciones dentro del alcance — **lotes totales** (todos los lotes de salida del agregado: los de la orden, los del producto, los de productos de la familia, o los del mes de `produced_date`), **lotes calculados** (los que tienen último snapshot) y **lotes pendientes** (la diferencia) — expuestas como `total_batches_count`/`output_batches_count`, `calculated_batches_count`, `uncalculated_batches_count` y `has_uncalculated_batches`. Reglas de defendibilidad agregada: **sin cálculos → nivel `null`** (y masas/porcentaje `null`); **cálculos parciales → `preliminary`**, aunque cada lote calculado sea defendible, para que un agregado a medias nunca parezca listo; **todos calculados → regla normal** (algún `preliminary` → `preliminary`; si no, algún `with_warnings` → `with_warnings`; solo si todos son `defensible` → `defensible`). Los **porcentajes agregados se calculan únicamente sobre las masas de los lotes con snapshot** — siempre `sum(masa_reciclada)/sum(masa_total)*100`, nunca promedios — y el agregado se marca como parcial cuando hay pendientes. Producto/familia/periodo conservan `batches_count` (lotes calculados, semántica de 0029) por compatibilidad, duplicado en `calculated_batches_count`.
+**Corrección (`0030_recycled_aggregation_fix.sql`, `create or replace view` sin tocar migraciones anteriores):** las cuatro vistas agregadas (orden, producto, familia y periodo) distinguen ahora tres poblaciones dentro del alcance — **lotes totales** (todos los lotes producidos / lotes finales del agregado: los de la orden, los del producto, los de productos de la familia, o los del mes de `produced_date`), **lotes calculados** (los que tienen último snapshot) y **lotes pendientes** (la diferencia) — expuestas como `total_batches_count`/`output_batches_count`, `calculated_batches_count`, `uncalculated_batches_count` y `has_uncalculated_batches`. Reglas de defendibilidad agregada: **sin cálculos → nivel `null`** (y masas/porcentaje `null`); **cálculos parciales → `preliminary`**, aunque cada lote calculado sea defendible, para que un agregado a medias nunca parezca listo; **todos calculados → regla normal** (algún `preliminary` → `preliminary`; si no, algún `with_warnings` → `with_warnings`; solo si todos son `defensible` → `defensible`). Los **porcentajes agregados se calculan únicamente sobre las masas de los lotes con snapshot** — siempre `sum(masa_reciclada)/sum(masa_total)*100`, nunca promedios — y el agregado se marca como parcial cuando hay pendientes. Producto/familia/periodo conservan `batches_count` (lotes calculados, semántica de 0029) por compatibilidad, duplicado en `calculated_batches_count`.
 
 **UI (`/recycled-content/reports`):** la columna de lotes muestra `calculados / totales` (p. ej. `3 / 5`), debajo `2 pendientes` cuando aplica, la advertencia «Agregado parcial: hay lotes sin cálculo.» cuando `has_uncalculated_batches`, y «Sin cálculos» cuando el nivel es `null`.
 
@@ -327,7 +327,7 @@ Accesos también desde el dashboard de contenido reciclado (dossier del último 
 
 ### Cómo generar un dossier
 
-1. Crear la trazabilidad (proveedor, material, lote de entrada, orden, consumo, lote de salida) → 2. registrar la composición → 3. cargar y validar evidencias → 4. calcular contenido reciclado → 5. abrir el dossier desde Soporte técnico o desde el dashboard de contenido reciclado → 6. imprimir o guardar como PDF desde el navegador.
+1. Crear la trazabilidad (proveedor, material, lote de entrada, orden, consumo, lote producido / lote final) → 2. registrar la composición → 3. cargar y validar evidencias → 4. calcular contenido reciclado → 5. abrir el dossier desde Soporte técnico o desde el dashboard de contenido reciclado → 6. imprimir o guardar como PDF desde el navegador.
 
 El dossier **se basa en el snapshot del cálculo y no lo modifica**; **no constituye por sí mismo una certificación**; **no es todavía un documento formal controlado** (Trazaloop Docs vendrá después).
 
@@ -348,7 +348,7 @@ Nueva sección **Flujo guiado** (`/guided-flow` y `/guided-flow/output-batches/[
 
 ### Migración `0032_guided_flow_views.sql` (vistas `security_invoker`, sin tablas nuevas)
 
-- **`v_output_batch_readiness`**: una fila por lote de salida con hechos (producto, orden, consumo, composición, soporte de origen/reclasificación válido, evidencias pendientes o faltantes, último cálculo), más `next_step_code/label/href` y `readiness_level`. Los estados: **`not_ready`** (sin orden — rama defensiva: el esquema exige orden), **`needs_data`** (falta consumo o composición), **`needs_evidence`** (hay materiales elegibles con soporte faltante o pendiente), **`ready_to_calculate`** (todo listo, sin cálculo), **`calculated_with_gaps`** (cálculo con nivel débil o riesgo) y **`calculated_ready`** (defendible sin riesgo → dossier).
+- **`v_output_batch_readiness`**: una fila por lote producido / lote final con hechos (producto, orden, consumo, composición, soporte de origen/reclasificación válido, evidencias pendientes o faltantes, último cálculo), más `next_step_code/label/href` y `readiness_level`. Los estados: **`not_ready`** (sin orden — rama defensiva: el esquema exige orden), **`needs_data`** (falta consumo o composición), **`needs_evidence`** (hay materiales elegibles con soporte faltante o pendiente), **`ready_to_calculate`** (todo listo, sin cálculo), **`calculated_with_gaps`** (cálculo con nivel débil o riesgo) y **`calculated_ready`** (defendible sin riesgo → dossier).
 - **`v_guided_flow_dashboard`**: agregado por empresa para las tarjetas (conteos de entrada/órdenes/salida, listos para calcular, sin composición, sin consumo, con evidencia pendiente, calculados por nivel y brechas críticas).
 
 ### Una sola fuente de las reglas
@@ -361,7 +361,7 @@ Sección con 1–5 acciones priorizadas: 1) lotes con composición sin cálculo,
 
 ### UX
 
-Tarjetas de avance (los 7 pasos: catálogos → evidencias → lotes de entrada → órdenes/consumos → salida/composición → cálculo → dossier) con estado textual, contadores y CTA; tabla de lotes con semáforo (`ReadinessBadge` con texto, nunca solo color) y acciones por fila; detalle guiado tipo **stepper de 7 pasos** con acciones contextuales (incluido el botón Calcular/Recalcular existente); componentes reutilizables (`ReadinessBadge`, `RiskBadge`, `EmptyState`, `ProgressStepCard`, `GuidedStep`); estados vacíos útiles en materiales, lotes de entrada, composición y cálculo; y navegación cruzada: Trazabilidad → flujo guiado/calcular/matriz, Contenido reciclado → flujo guiado/brechas, Soporte técnico → flujo guiado/evidencias/recalcular, y en Evidencias el enlace «Ver flujo del lote relacionado» cuando la evidencia está vinculada a un lote de salida. No se implementaron quick-actions duplicadas: los formularios existentes ya cubren la creación y el flujo enlaza a ellos.
+Tarjetas de avance (los 7 pasos: catálogos → evidencias → lotes de entrada → órdenes/consumos → salida/composición → cálculo → dossier) con estado textual, contadores y CTA; tabla de lotes con semáforo (`ReadinessBadge` con texto, nunca solo color) y acciones por fila; detalle guiado tipo **stepper de 7 pasos** con acciones contextuales (incluido el botón Calcular/Recalcular existente); componentes reutilizables (`ReadinessBadge`, `RiskBadge`, `EmptyState`, `ProgressStepCard`, `GuidedStep`); estados vacíos útiles en materiales, lotes de entrada, composición y cálculo; y navegación cruzada: Trazabilidad → flujo guiado/calcular/matriz, Contenido reciclado → flujo guiado/brechas, Soporte técnico → flujo guiado/evidencias/recalcular, y en Evidencias el enlace «Ver flujo del lote relacionado» cuando la evidencia está vinculada a un lote producido / lote final. No se implementaron quick-actions duplicadas: los formularios existentes ya cubren la creación y el flujo enlaza a ellos.
 
 
 ## Sprint 5C · Preparación para staging (Supabase Cloud + Vercel)
@@ -377,6 +377,350 @@ Sin funcionalidades nuevas de negocio: este sprint deja el sistema **probable, d
 - **Seguridad §14 verificada**: cero referencias a la service key en `app/`/`components/` (solo `lib/supabase/admin.ts` server-only y scripts administrativos); bucket privado con políticas por organización; RLS en las 29 tablas; **19/19 vistas `security_invoker`**; Server Actions con empresa activa; rutas protegidas dinámicas con sesión.
 
 `test:smoke` se ejecutó en sus caminos de fallo (sin variables → mensaje claro; URL inalcanzable → «Supabase connection ❌» con guía): la corrida completa exige un Supabase real de staging, igual que `test:rls`.
+
+
+## Sprint 5D · Pulido de terminología y experiencia pre-piloto
+
+Sin cambios de esquema, metodología ni RLS. Terminología visible unificada en toda la app y documentación: **«Orden / corrida de producción»** y **«Lote producido / lote final»** (los nombres internos —tablas, columnas, rutas, vistas y migraciones— quedan intactos; los mensajes de la RPC se transforman solo en la capa de presentación para no romper el matching, y el label del siguiente paso del flujo guiado se renderiza desde el mapa TS en lugar de la columna de la vista). Textos de ayuda cortos en órdenes/corridas, lotes producidos, composición, consumos y materiales (evidencia de origen). Estados vacíos útiles también en proveedores, órdenes/corridas y evidencias. El flujo «asociar evidencia de origen y que el material cuente al recalcular» quedó corregido y cubierto por regresión en el fix previo (caso 41). Nuevos `docs/DEMO_FLOW.md` (13 pasos + casos A 100 % defendible, B 90 %, C 0 % preliminar con remate de recálculo, y notas de balance para que los números salgan exactos) y `docs/PILOT_QA_CHECKLIST.md` (recorrido manual completo, incluido el chequeo de aislamiento multiempresa).
+
+
+## Estado del producto — v0.5.x (fase piloto)
+
+**Qué incluye esta versión:** multiempresa con RLS estricta y roles; diagnóstico normativo (52 preguntas); catálogos (proveedores, materiales con clasificación y reclasificación soportada, productos con % declarado, familias); evidencias en bucket privado con validación y soporte de origen; trazabilidad lote a lote (entrada → orden/corrida → lote producido → composición) con importación CSV y genealogía; motor de cálculo de contenido reciclado (NTC 6632:2022 / UNE-EN 15343:2008) con snapshots inmutables, niveles de defendibilidad y agregaciones ponderadas; soporte técnico (dossier imprimible, matriz de evidencias, brechas con acciones); flujo guiado; implementación con empresa (checklist de 17 pasos, siguiente acción recomendada y feedback de la prueba real); carga masiva real por CSV de las diez entidades del flujo, con vista previa, validación por fila y confirmación explícita; y tooling de operación (smoke, verificación de producción, reparación de semillas, seed demo, guías de despliegue/backup/QA).
+
+**Qué NO incluye todavía:** Trazaloop Docs (documentos formales controlados con versionado y aprobación), generación de PDF en servidor, módulo de auditorías y planes de acción, facturación/planes, notificaciones por correo, e integraciones externas. Trazaloop no emite certificaciones; ver `/legal` en la app.
+
+
+## Sprint 5E · Cierre para producción (v0.5.0 pilot)
+
+Sin cambios de negocio, metodología, migraciones ni RLS. Versión visible **v0.5.0 · pilot** (fuente única `package.json` vía `lib/version.ts`) en el aside del shell y en la nueva página pública **`/legal`** («Acerca de Trazaloop»: qué hace, no emite certificaciones, los resultados dependen de la información ingresada, la responsabilidad del uso es del usuario; enlazada desde el shell y el login). Nuevo **`npm run verify:prod`** (`scripts/verify-production.ts`): verificación ESTRICTA y 100 % de solo lectura para producción — conexión API y SQL, migraciones (tablas + vistas clave por `to_regclass`), semillas (52/10/frameworks/metodología v1 activa, con remedio `repair:seeds`), bucket `evidences` privado por SQL directo, **RLS activo de verdad por `pg_class`** y chequeo conductual con anon; exit 1 ante cualquier rojo; verificado contra PostgreSQL real incluidos los detectores (metodología inactiva y RLS desactivada). Nuevas guías `docs/PRODUCTION_DEPLOYMENT.md` (proyecto separado, migraciones, semillas, Auth productivo sin localhost, variables Production con secreto de cookie NUEVO, qué no ejecutar en producción, y rollback mínimo app/variables/BD) y `docs/BACKUP_RESTORE.md` (backups automáticos y manuales con `db dump`, restauración SIEMPRE a proyecto nuevo validado con `verify:prod`, y prueba mensual del procedimiento).
+
+
+## Sprint 5F · Herramientas de soporte post-piloto
+
+Sin cambios de negocio, metodología, migraciones ni RLS. Nuevo **`npm run diagnose:org -- --org <uuid>`** (`scripts/diagnose-org.ts`): diagnóstico de UNA organización en **solo lectura** (únicamente SELECTs vía `SUPABASE_DB_URL`) — existencia y miembros por rol/estado, conteos de catálogos/evidencias/trazabilidad, huecos (órdenes sin consumo, lotes sin composición), **materiales elegibles sin soporte de origen válido** (la causa clásica del 0 %), últimos cálculos con nivel y riesgo, brechas por severidad, semáforo del flujo guiado y **conclusiones con causas probables y remedio**; verificado contra datos reales (detectó las cuatro causas sembradas del fixture) y con caminos de error claros (UUID inválido, organización inexistente). Nueva **`docs/SUPPORT_GUIDE.md`** (las 10 preguntas de soporte con dónde mirar en la app y cuándo usar el diagnóstico) y **`docs/FAQ_PILOT.md`** (10 respuestas en lenguaje simple para usuarios finales, sin promesas de certificación). UX: los cálculos **preliminares** muestran ahora el enlace «Ver causas en Soporte técnico» en el detalle del lote y en la lista de cálculo.
+
+## Sprint 6 · Hotfixes + Implementación con empresa
+
+Dos hotfixes pendientes más una capa nueva de apoyo para probar Trazaloop
+con empresas y **datos reales** (no un caso piloto, no datos demo). Sin
+cambios en la metodología de cálculo, el motor normativo ni la RLS de las
+tablas de sprints anteriores.
+
+**Hotfixes:**
+
+- **`npm run build` colgado por telemetría de Next.js**: el script `build`
+  de `package.json` ahora exporta `NEXT_TELEMETRY_DISABLED=1` con
+  `cross-env` (multiplataforma: macOS, Linux y Vercel; también aplicado a
+  `dev` y `start`), sin depender de exportarla a mano. `.env.example` la
+  documenta y `docs/STAGING_DEPLOYMENT.md` recomienda configurarla también
+  como variable de entorno en Vercel, como defensa en profundidad.
+- **Texto de `components/layout/create-org-form.tsx`**: ya no menciona
+  «Trazaloop Docs» (módulo que no existe todavía); ahora dice que se
+  activan los módulos base disponibles para trazabilidad, cálculo de
+  contenido reciclado y soporte técnico.
+
+**Migraciones nuevas:**
+
+- **`0033_implementation_feedback.sql`**: tabla `implementation_feedback`
+  (errores, dudas, hallazgos de prueba y mejoras registrados durante la
+  prueba real), con la regla obligatoria completa (RLS deny-by-default,
+  `unique(organization_id, id)`, `prevent_organization_id_change`,
+  `set_updated_at`, `force_created_by`, `audit_row_change`) más un trigger
+  propio que fija/limpia `resolved_at` al entrar o salir del estado
+  `resolved`. Checks para `module`, `category`, `severity` y `status`.
+  Roles: **select** cualquier miembro; **insert** admin, quality o
+  consultant; **update** admin/quality (cualquier feedback) o el creador
+  (el suyo); **delete** solo admin/quality.
+- **`0034_implementation_views.sql`** (`security_invoker`): **no recalcula
+  contenido reciclado, solo cuenta y resume** reutilizando vistas ya
+  existentes (`v_guided_flow_dashboard`, `v_output_batch_readiness`,
+  `v_output_batch_support_gaps`, `v_latest_batch_recycled`).
+  `v_implementation_dashboard` (una fila por empresa, 18 conteos: catálogos,
+  evidencias, trazabilidad, cálculo por nivel y feedback) y
+  `v_implementation_next_actions` (recomendaciones priorizadas 1–12: sin
+  proveedores → crear proveedor … todo avanzado → registrar feedback; la
+  fila de menor `priority` es la «siguiente acción recomendada»).
+  Ambas migraciones se verificaron sobre un PostgreSQL 16 efímero: las 34
+  migraciones aplican en orden, y un humo funcional confirmó los conteos,
+  la cascada de prioridad extremo a extremo (sin proveedores → … → cálculo
+  defendible → dossier) y la RLS de `implementation_feedback` (aislamiento
+  de lectura/escritura entre empresas, edición del feedback propio y
+  borrado restringido a admin/quality).
+
+**Lógica pura** (`lib/domain/implementation.ts`, mismo patrón que
+`lib/domain/guided-flow.ts` del Sprint 5B): `resolveNextAction` decide la
+acción de mayor prioridad y `resolveChecklist` arma el checklist de 17
+pasos; ambas testeables sin BD con `npm run test:implementation`.
+
+**Server Actions** (`server/actions/implementation.ts`): lecturas
+`getImplementationDashboardAction`, `getImplementationChecklistAction`,
+`getImplementationNextActionsAction`, `listImplementationFeedbackAction` y
+mutaciones `createImplementationFeedbackAction`,
+`updateImplementationFeedbackAction`,
+`updateImplementationFeedbackStatusAction`,
+`deleteImplementationFeedbackAction` — todas con cliente de servidor con
+sesión, empresa activa validada (`requireActiveOrg`, nunca `organization_id`
+del cliente), validación de enums en servidor y, cuando la entidad
+relacionada del feedback es de un tipo validable (material, evidencia, lote
+de entrada, orden/corrida, lote producido/lote final, cálculo), confirmación
+de que pertenece a la empresa activa antes de guardar.
+
+**UI**: nueva sección **Implementación** en la navegación.
+`/implementation` («Implementación con empresa»): estado general (18
+tarjetas), checklist de 17 pasos con estado/explicación/acceso directo,
+siguiente acción recomendada, últimos cálculos y dossiers (con botones Ver
+cálculo / Ver dossier / Registrar feedback) y feedback reciente.
+`/implementation/feedback`: listar y filtrar por módulo/categoría/severidad/
+estado, registrar, cambiar estado, editar y eliminar (según rol), con
+prellenado desde `?module=…&related_entity_type=…&related_entity_id=…`.
+Botones discretos «Registrar feedback…» agregados en flujo guiado, detalle
+de cálculo de contenido reciclado, dossier técnico, evidencias y
+trazabilidad. Estados vacíos útiles («No hay datos suficientes…», «Hay
+materiales reciclados sin soporte de origen…», «Aún no hay lotes
+calculables…», «Existen cálculos preliminares…») — nunca «listo para
+certificación».
+
+**Restricciones respetadas**: sin caso piloto, sin datos demo automáticos,
+sin importador demo, sin Trazaloop Docs, sin constructor documental, sin
+PDF server-side, sin módulo ISO 9001, sin módulo formal de auditorías, sin
+planes de acción ni acciones correctivas, sin cambios de metodología de
+cálculo ni de motor normativo, sin promesas de certificación.
+
+**Documentación**: nueva `docs/COMPANY_TESTING_GUIDE.md` (los 17 pasos para
+probar con una empresa real). `docs/DEMO_FLOW.md` y
+`docs/PILOT_QA_CHECKLIST.md` aclaran que ese guion usa datos de
+**demostración** y remiten a `/implementation` + `COMPANY_TESTING_GUIDE.md`
+para la prueba con datos reales. `docs/STAGING_DEPLOYMENT.md` y
+`docs/PREDEPLOY_CHECKLIST.md` actualizados con `NEXT_TELEMETRY_DISABLED`,
+`test:implementation` y el rango de migraciones `0001` … `0034`.
+
+**Pruebas**: `npm run test:implementation` (`tests/unit/implementation.test.ts`)
+cubre los 12 casos de `resolveNextAction` (sin proveedores → `create_supplier`
+… todo completo → `record_feedback`) y validaciones de feedback (crear
+válido, rechazar severidad/módulo inválidos, rechazar título vacío, cambiar
+estado, no aceptar `organization_id` del cliente). `test:compliance` amplía
+el barrido a `docs/` y agrega el patrón «listo para certificación» a la
+lista de frases prohibidas. `tests/rls/isolation.test.ts` suma los casos de
+`implementation_feedback` (aislamiento de lectura/escritura entre empresas,
+edición del feedback propio, borrado restringido a admin/quality, sin
+asociación a organización ajena) — integrados en `test:rls` porque
+requieren Postgres real con RLS activa.
+
+## Sprint 7 · Carga masiva real de datos por CSV
+
+Nueva sección **Importaciones** (`/imports`) para reducir la fricción de la
+implementación real: una empresa carga sus datos reales desde plantillas
+CSV, valida errores antes de importar, corrige y confirma — sin caso
+piloto, sin datos demo automáticos y sin cambiar el motor de cálculo, la
+metodología ni las reglas de evidencia.
+
+**Migración `0035_import_job_rows.sql`:** amplía `import_jobs.entity`
+(0021/0027) con las cinco entidades nuevas (`evidences`,
+`production_orders`, `batch_consumption`, `output_batches`,
+`batch_composition`) y agrega **`import_job_rows`** — detalle por fila
+(`raw_data`/`normalized_data`/`errors`/`warnings`/`created_entity_id`) que
+`import_jobs` no tenía. `import_jobs` sigue siendo append-only (un evento
+por validación y otro por confirmación, igual que el importador de
+catálogos del Sprint 2/3); `import_job_rows` sí es mutable mientras dura el
+ciclo validar→confirmar, con RLS completa (select cualquier miembro,
+insert/update admin·quality·consultant, delete solo admin/quality),
+`prevent_organization_id_change` y FK compuesta hacia `import_jobs`.
+Verificado sobre un PostgreSQL 16 efímero: las 35 migraciones aplican en
+orden y un humo funcional confirmó la cascada completa (proveedor →
+material sin soporte → evidencia pendiente → …) tras cada carga.
+
+**Diez entidades importables** (proveedores, materiales, evidencias
+—solo metadatos—, familias, productos, lotes de entrada, órdenes/corridas,
+consumos, lotes producidos/lotes finales y composición), con **plantillas
+estáticas vacías** en `public/templates/imports/` (solo encabezados, sin
+filas demo) adaptadas al esquema real — no a una lista genérica; ver
+`docs/IMPORTS_GUIDE.md` para el detalle de cada adaptación.
+
+**Lógica pura** (`lib/imports/`: `types.ts`, `templates.ts`, `parse.ts`,
+`normalizers.ts`, `validators.ts`), sin imports de Supabase ni de
+`server-only`, testeable sin BD con `npm run test:imports`. Reutiliza
+`parseCsv`/`toCsv` (Sprint 2) en vez de duplicar el parser. Rechaza de
+plano cualquier archivo con columna `organization_id`; valida encabezado,
+tipos, masas > 0, porcentajes 0–100, fechas y detecta duplicados internos
+del archivo. Modo **"crear solamente"**: un registro que ya existe se
+omite con advertencia, nunca se sobrescribe (documentado en
+`docs/IMPORTS_GUIDE.md` §7).
+
+**Server Actions** (`server/actions/imports.ts` +
+`lib/db/imports.ts`): `getImportTemplatesAction`,
+`downloadImportTemplateAction`, `validateImportCsvAction` (paso 1: parsea,
+valida contra la empresa activa, registra el job y las filas — **cero**
+escritura de negocio), `commitImportAction` (paso 2: solo recibe el
+`import_job_id`; **relee y REVALIDA todo desde cero** contra el estado
+actual de la base antes de escribir, así que nada que cambie entre validar
+y confirmar puede colarse), `listImportJobsAction` y
+`getImportJobDetailAction`. `organization_id` nunca se acepta del cliente;
+solo admin/quality/consultant pueden importar; sin `service_role`.
+
+**UI**: `/imports` (plantillas, subir/pegar CSV, vista previa con estado
+por fila, errores/advertencias, confirmar, historial, enlaces cruzados) y
+`/imports/[id]` (detalle fila por fila de una importación pasada). CTA
+«Importar datos reales» agregado en `/implementation`; enlace cruzado desde
+el importador de catálogos existente (`/catalog/import`, intacto, sin
+tocar) hacia `/imports` para las entidades nuevas.
+
+**Documentación**: nueva `docs/IMPORTS_GUIDE.md` (qué se puede/no se puede
+importar, columnas por entidad y por qué se adaptaron, duplicados,
+relaciones entre archivos, seguridad multiempresa).
+`docs/COMPANY_TESTING_GUIDE.md`, `docs/PREDEPLOY_CHECKLIST.md` y
+`docs/STAGING_DEPLOYMENT.md` actualizados con `test:imports` y el rango de
+migraciones `0001` … `0035`.
+
+**Pruebas**: `npm run test:imports` (`tests/unit/imports.test.ts`) cubre
+los 15 casos mínimos del sprint (CSV válido, encabezado faltante,
+`organization_id` rechazado, masa/porcentaje/fecha/clasificación
+inválidos, duplicado interno, fila vacía ignorada, evidencia que nunca
+queda `valid` sola, cantidades en 0 o negativas rechazadas, pureza del
+paso de vista previa y revalidación fresca en el commit).
+`tests/rls/isolation.test.ts` suma los casos de `import_job_rows`
+(aislamiento entre empresas, confirmar en otra organización bloqueado, rol
+sin permiso no puede importar) — integrados en `test:rls`.
+
+## Sprint 7.1 · Endurecimiento y pulido
+
+Sin módulos nuevos. Tres ajustes pequeños sobre la entrega del Sprint 7:
+
+- **Encabezado CSV menos rígido**: el importador exigía TODAS las columnas
+  de la plantilla, incluidas las opcionales. Ahora `lib/imports/parse.ts`
+  valida el encabezado contra `requiredHeader(entity)` (nueva función en
+  `lib/imports/templates.ts`, subconjunto de `templateHeader`): solo las
+  columnas `required: true` son obligatorias; una opcional ausente del
+  encabezado se trata como valor vacío/null fila por fila (los
+  normalizadores de `lib/imports/normalizers.ts` ya aceptaban `undefined`,
+  así que no hizo falta tocar los validadores). La plantilla descargable
+  (`templateHeader`, los CSV de `public/templates/imports/`) sigue trayendo
+  todas las columnas sin cambios.
+- **`0036_import_jobs_rls_hardening.sql`**: la política de INSERT de
+  `import_jobs` (0021) permitía a cualquier miembro activo registrar un
+  evento de importación, sin importar su rol. Ahora exige
+  admin/quality/consultant, igual que `import_job_rows` (0035) y el resto
+  de tablas de negocio. Sin cambios de estructura, sin política de
+  UPDATE/DELETE (`import_jobs` sigue append-only) y sin tocar
+  `import_job_rows`. Verificado sobre un PostgreSQL 16 efímero: admin y
+  consultant siguen pudiendo importar igual que antes; un rol de prueba
+  fuera de esos tres queda bloqueado por RLS al insertar, pero conserva
+  lectura del historial.
+- **Documentación de demo separada con más claridad**: `docs/IMPORTS_GUIDE.md`
+  y `docs/COMPANY_TESTING_GUIDE.md` ya no presentan `npm run seed:demo` /
+  `docs/DEMO_FLOW.md` como parte del flujo con empresas reales; quedan como
+  nota técnica interna claramente aparte, sin promoverse como camino
+  recomendado.
+
+## Sprint 8 · Gestión de usuarios, invitaciones y roles por empresa
+
+Nueva sección **Equipo** (`/team`) para que una empresa administre su
+propio equipo: ver miembros, invitar, cambiar roles, desactivar/reactivar
+accesos — respetando multiempresa y RLS. Reutiliza TODO lo que ya existía
+(profiles, organizations, memberships con su columna `status` ya presente
+desde el Sprint 1, los 3 roles reales admin/quality/consultant, y los
+helpers `is_org_member`/`has_org_role`/`is_org_admin`): no se duplicó
+ninguna estructura.
+
+**Migración `0037_team_invitations.sql`:**
+
+- **`team_invitations`**: tabla nueva con RLS completa (select
+  admin/quality/consultant, insert/update solo admin, sin delete —
+  histórico vía `status`), único índice parcial que impide dos
+  invitaciones pendientes al mismo correo por empresa, y los triggers
+  obligatorios (`prevent_organization_id_change`, `set_updated_at`,
+  `force_invited_by` —nuevo, mismo patrón que `force_created_by`—,
+  `audit_row_change`).
+- **`guard_last_admin()`**: trigger nuevo sobre `memberships` (tabla
+  existente) que bloquea, a nivel de base de datos, quitar el rol admin o
+  desactivar al **último** administrador activo de una empresa —
+  verificado exhaustivamente contra PostgreSQL real (bloquea con un solo
+  admin, permite con un segundo admin activo, vuelve a bloquear si ese
+  segundo también se degrada).
+- **`accept_team_invitation(token)`** (RPC `security definer`, mismo
+  patrón que `create_organization`): única vía para aceptar una
+  invitación — valida token, estado, expiración y coincidencia exacta de
+  correo antes de crear la membership; nunca acepta `organization_id` del
+  cliente (todo sale del token).
+- **`get_invitation_preview(token)`** (RPC `security definer`, solo
+  `authenticated`): vista previa segura (empresa, rol, expiración) para
+  `/accept-invite` antes de aceptar, sin exigir membership.
+
+Verificado sobre un PostgreSQL 16 efímero: las 37 migraciones aplican en
+orden, y un humo funcional confirmó invitación → email distinto rechazado
+→ email correcto aceptado (membership creada con el rol invitado) →
+doble-aceptación rechazada → invitación expirada rechazada → guard del
+último admin en sus cuatro variantes (demover, suspender, con un segundo
+admin, y volver a bloquear si ese segundo se degrada también).
+
+**Lógica pura** (`lib/domain/team.ts`, mismo patrón que
+`lib/domain/guided-flow.ts` e `implementation.ts`): roles y su
+descripción (solo los 3 reales — sin inventar "user" ni "viewer" porque el
+catálogo `roles` no los tiene), validación de invitación, validación de
+aceptación y `wouldRemoveLastActiveAdmin` — el mismo espejo en TypeScript
+del trigger `guard_last_admin`, testeable sin BD con `npm run test:team`.
+
+**Server Actions** (`server/actions/team.ts` + `lib/db/team.ts`):
+`getTeamOverviewAction`, `listOrganizationMembersAction`,
+`listTeamInvitationsAction`, `getInvitationPreviewAction`,
+`createTeamInvitationAction`, `revokeTeamInvitationAction`,
+`acceptTeamInvitationAction`, `updateMemberRoleAction`,
+`deactivateMemberAction`, `reactivateMemberAction` — `organization_id`
+nunca sale del cliente; solo admin invita/cambia roles/desactiva; el
+guard del último admin se valida además en servidor (mensaje claro) antes
+de que el trigger lo bloquee de todas formas.
+
+**UI**: `/team` (organización activa, miembros con cambio de rol y
+desactivar/reactivar, invitaciones con revocar, formulario de invitar con
+enlace copiable, explicación de roles) y `/accept-invite` (ruta pública
+fuera del shell, sin tocar el flujo de login/registro existente: si no
+hay sesión, pide iniciar sesión y volver al mismo enlace; con sesión,
+muestra la vista previa, avisa si el correo no coincide, y permite
+aceptar). Tarjeta **"Definir equipo de prueba"** agregada en
+`/implementation` de forma aditiva (sin tocar el checklist de 17 pasos
+del Sprint 6).
+
+**Documentación**: nueva `docs/TEAM_MANAGEMENT_GUIDE.md` (roles, invitar,
+aceptar, cambiar roles, retirar acceso, por qué no se puede quitar el
+último admin, cómo usar Equipo en la prueba real).
+`docs/COMPANY_TESTING_GUIDE.md`, `docs/PREDEPLOY_CHECKLIST.md` y
+`docs/STAGING_DEPLOYMENT.md` actualizados con `test:team` y el rango de
+migraciones `0001` … `0037`.
+
+**Pruebas**: `npm run test:team` (`tests/unit/team.test.ts`) cubre los 12
+casos mínimos del sprint más 6 adicionales (correo inválido, rango de rol,
+determinismo de expiración, checklist de equipo). `tests/rls/isolation.test.ts`
+suma los casos de `team_invitations` (aislamiento de lectura/escritura
+entre empresas, no se acepta invitación de otra organización, no se
+cambia rol de miembro de otra organización, usuario no miembro no ve
+equipo) — integrados en `test:rls`.
+
+## Sprint 8.1 · Build: rastreo de archivos acotado a la raíz del proyecto
+
+Sin módulos nuevos. Un ajuste sobre el build tras el Sprint 8:
+
+- **`next.config.ts`**: `outputFileTracingRoot: process.cwd()` (estable
+  desde Next 15) fija explícitamente la raíz que usa `@vercel/nft` para
+  «Collecting build traces», evitando que Next.js la infiera caminando
+  hacia arriba en el árbol de directorios — inferencia que en entornos con
+  estructuras de carpetas fuera de lo común puede volverse muy lenta o no
+  terminar. `outputFileTracingExcludes` además saca `tests/`, `scripts/`,
+  `supabase/` y `docs/` del rastreo (ninguna ruta de la app las necesita
+  en su bundle de servidor). Verificado: el build sigue terminando en
+  ~1 minuto, y los `.nft.json` generados ya no referencian esas carpetas.
+- **`components/domain/team/member-list.tsx`**: ajuste de UX — la tabla de
+  miembros de `/team` ya no se oculta cuando solo hay un miembro; siempre
+  muestra al usuario actual, con el aviso «Invita a tu equipo…» debajo en
+  vez de reemplazar la tabla.
+
+Se revisó exhaustivamente el código nuevo del Sprint 8 (páginas, server
+actions, lógica pura, componentes) en busca de imports top-level
+problemáticos, llamadas a Supabase fuera de funciones, generación de
+tokens fuera de funciones y promesas sin resolver — no se encontró ninguno
+de esos patrones. `--webpack` (Sprint 7.1) se mantiene: sigue siendo la
+mitigación oficial de Next.js para un teardown defectuoso conocido de
+Turbopack en builds de producción de la serie 16.2.x, documentado aparte
+del ajuste de rastreo de este sprint.
 
 ## Decisiones y riesgos pendientes
 

@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { NEXT_STEP_LABEL } from "@/lib/domain/guided-flow";
 import {
   getGuidedFlowDashboardAction,
   listOutputBatchReadinessAction,
@@ -33,7 +34,7 @@ export default async function GuidedFlowPage() {
     if (d.inputBatchesCount === 0)
       return { label: "Registrar lote de entrada", href: "/traceability/input-batches" };
     if (d.productionOrdersCount === 0)
-      return { label: "Crear orden de producción", href: "/traceability/production-orders" };
+      return { label: "Crear orden / corrida de producción", href: "/traceability/production-orders" };
     if (d.withoutConsumption > 0)
       return { label: "Agregar consumo", href: "/traceability/production-orders" };
     if (d.withoutComposition > 0)
@@ -44,7 +45,7 @@ export default async function GuidedFlowPage() {
       return { label: "Revisar brechas", href: "/audit-support" };
     if (d.defensibleCount > 0)
       return { label: "Ver dossier técnico", href: "/audit-support" };
-    return { label: "Registrar lote de salida", href: "/traceability/output-batches" };
+    return { label: "Registrar lote producido / lote final", href: "/traceability/output-batches" };
   })();
 
   const evidenceStatus: ProgressStatus =
@@ -106,7 +107,7 @@ export default async function GuidedFlowPage() {
     },
     {
       step: 5,
-      title: "Lotes de salida y composición",
+      title: "Lotes producidos / lotes finales y composición",
       status: (d.outputBatchesCount === 0
         ? "pendiente"
         : d.withoutComposition > 0
@@ -116,7 +117,7 @@ export default async function GuidedFlowPage() {
         `${d.outputBatchesCount} lotes registrados`,
         `${d.withoutComposition} sin composición`,
       ],
-      actionLabel: d.withoutComposition > 0 ? "Completar composición" : "Ir a lotes de salida",
+      actionLabel: d.withoutComposition > 0 ? "Completar composición" : "Ir a lotes producidos / lotes finales",
       actionHref: "/traceability/output-batches",
     },
     {
@@ -174,6 +175,15 @@ export default async function GuidedFlowPage() {
         </Link>
       </header>
 
+      <div className="flex justify-end">
+        <Link
+          href="/implementation/feedback?module=guided_flow"
+          className="text-sm text-loop hover:underline"
+        >
+          Registrar feedback
+        </Link>
+      </div>
+
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((c) => (
           <ProgressStepCard key={c.step} {...c} />
@@ -207,12 +217,12 @@ export default async function GuidedFlowPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="eyebrow">Lotes de salida</h2>
+        <h2 className="eyebrow">Lotes producidos / lotes finales</h2>
         {rows.length === 0 ? (
           <EmptyState
-            title="Aún no tienes lotes de salida."
-            description="Registra un lote de salida en Trazabilidad para empezar el recorrido hacia el cálculo y el dossier técnico."
-            actionLabel="Registrar lote de salida"
+            title="Aún no tienes lotes producidos / lotes finales."
+            description="Registra un lote producido / lote final en Trazabilidad para empezar el recorrido hacia el cálculo y el dossier técnico."
+            actionLabel="Registrar lote producido / lote final"
             actionHref="/traceability/output-batches"
           />
         ) : (
@@ -220,7 +230,7 @@ export default async function GuidedFlowPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-xs text-ink-soft">
-                  <th className="px-4 py-2 font-medium">Lote de salida</th>
+                  <th className="px-4 py-2 font-medium">Lote producido / lote final</th>
                   <th className="px-4 py-2 font-medium">Producto</th>
                   <th className="px-4 py-2 font-medium">Orden</th>
                   <th className="px-4 py-2 font-medium">Trazabilidad</th>
@@ -268,7 +278,7 @@ export default async function GuidedFlowPage() {
                     </td>
                     <td className="px-4 py-2 text-xs">
                       <Link href={r.next_step_href} className="text-loop hover:underline">
-                        {r.next_step_label}
+                        {(NEXT_STEP_LABEL[r.next_step_code] ?? r.next_step_label)}
                       </Link>
                     </td>
                     <td className="px-4 py-2 text-xs">

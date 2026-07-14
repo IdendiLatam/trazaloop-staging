@@ -68,9 +68,13 @@ export default async function ProductionOrdersPage({
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
         <p className="eyebrow">
-          <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Órdenes de producción
+          <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Órdenes / corridas de producción
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Órdenes de producción</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Órdenes / corridas de producción</h1>
+        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+          Registra el proceso o corrida donde se consumen lotes de entrada y
+          se generan uno o varios lotes producidos.
+        </p>
       </header>
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
@@ -86,7 +90,13 @@ export default async function ProductionOrdersPage({
       </section>
 
       {orders.length === 0 ? (
-        <p className="text-sm text-ink-soft">Aún no hay órdenes registradas.</p>
+        <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
+          <p className="text-sm font-medium">Aún no tienes órdenes / corridas de producción.</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
+            La orden/corrida conecta los lotes de entrada consumidos con los
+            lotes producidos; el formulario está arriba en esta misma página.
+          </p>
+        </div>
       ) : (
         <ul className="space-y-3">
           {orders.map((o) => (
@@ -124,6 +134,10 @@ export default async function ProductionOrdersPage({
                 <div className="mt-4 space-y-4 border-t border-hairline pt-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">Consumos de lotes de entrada</h3>
+                    <p className="mb-2 text-xs text-ink-soft">
+                      El consumo conecta los lotes de entrada con la
+                      orden/corrida de producción.
+                    </p>
                     <span className="code text-sm text-ink-soft">
                       Total: {totalConsumed.toFixed(2)} kg
                     </span>

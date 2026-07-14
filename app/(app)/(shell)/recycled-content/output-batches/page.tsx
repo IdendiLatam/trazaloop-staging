@@ -25,9 +25,9 @@ export default async function RecycledOutputBatchesPage() {
       <header>
         <p className="eyebrow">
           <Link href="/recycled-content" className="hover:underline">Contenido reciclado</Link>{" "}
-          · Lotes de salida
+          · Lotes producidos / lotes finales
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Calcular por lote de salida</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Calcular por lote producido / lote final</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Cada cálculo queda congelado como snapshot inmutable con sus reglas,
           componentes y razones de inclusión o exclusión.
@@ -36,7 +36,7 @@ export default async function RecycledOutputBatchesPage() {
 
       {batches.length === 0 ? (
         <p className="text-sm text-ink-soft">
-          No hay lotes de salida. Créalos en{" "}
+          No hay lotes producidos / lotes finales. Créalos en{" "}
           <Link href="/traceability/output-batches" className="text-loop underline">
             Trazabilidad
           </Link>.
@@ -62,6 +62,14 @@ export default async function RecycledOutputBatchesPage() {
                       <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                         <span className="code">{calc.recycled_percent.toFixed(2)}%</span>
                         <DefensibilityBadge level={calc.defensibility_level} />
+                        {calc.defensibility_level === "preliminary" ? (
+                          <Link
+                            href={`/audit-support/output-batches/${b.id}/evidence-matrix`}
+                            className="text-xs text-loop hover:underline"
+                          >
+                            Ver causas en Soporte técnico
+                          </Link>
+                        ) : null}
                         <span className="text-xs text-ink-soft">
                           {new Date(calc.calculated_at).toLocaleDateString("es-CO")}
                         </span>

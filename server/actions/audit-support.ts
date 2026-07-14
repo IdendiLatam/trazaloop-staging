@@ -87,7 +87,7 @@ export async function getOutputBatchEvidenceMatrixAction(
     .eq("organization_id", org.organizationId)
     .maybeSingle();
   if (!batch) {
-    return { data: null, error: "El lote de salida no pertenece a tu empresa activa." };
+    return { data: null, error: "El lote producido / lote final no pertenece a tu empresa activa." };
   }
   let rows = await listEvidenceMatrix(org.organizationId, outputBatchId);
   if (calculationId) rows = rows.filter((r) => r.calculation_id === calculationId);

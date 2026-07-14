@@ -66,23 +66,27 @@ export default async function OutputBatchesPage({
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
         <p className="eyebrow">
-          <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Lotes de salida
+          <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Lotes producidos / lotes finales
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Lotes de salida</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Lotes producidos / lotes finales</h1>
+        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+          Registra el lote obtenido de una orden/corrida. Sobre este lote se
+          calcula el contenido reciclado.
+        </p>
       </header>
 
       {orders.length === 0 ? (
         <p className="rounded-md border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-amber">
           Necesitas al menos una{" "}
           <Link href="/traceability/production-orders" className="font-semibold underline">
-            orden de producción
+            orden / corrida de producción
           </Link>{" "}
-          antes de registrar lotes de salida.
+          antes de registrar lotes producidos / lotes finales.
         </p>
       ) : (
         <section className="rounded-lg border border-hairline bg-surface p-5">
           <h2 className="mb-4 text-sm font-semibold">
-            {editing ? `Editar: ${editing.batch_code}` : "Nuevo lote de salida"}
+            {editing ? `Editar: ${editing.batch_code}` : "Nuevo lote producido / lote final"}
           </h2>
           <OutputBatchForm orders={orderOptions} products={productOptions} editing={editing} />
           {editing ? (
@@ -94,7 +98,7 @@ export default async function OutputBatchesPage({
       )}
 
       {batches.length === 0 ? (
-        <p className="text-sm text-ink-soft">Aún no hay lotes de salida.</p>
+        <p className="text-sm text-ink-soft">Aún no hay lotes producidos / lotes finales.</p>
       ) : (
         <ul className="space-y-3">
           {batches.map((b) => {
@@ -158,6 +162,10 @@ export default async function OutputBatchesPage({
                   <div className="mt-4 space-y-4 border-t border-hairline pt-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-semibold">Composición del lote</h3>
+                      <p className="mb-2 text-xs text-ink-soft">
+                        La composición del lote producido define las masas
+                        consideradas en el cálculo.
+                      </p>
                       <span className="code text-sm text-ink-soft">
                         Total: {totalComposition.toFixed(2)} kg
                       </span>

@@ -203,7 +203,7 @@ export async function commitInputBatchCsvAction(
 }
 
 // ===========================================================================
-// Órdenes de producción
+// Órdenes / corridas de producción
 // ===========================================================================
 export async function listProductionOrdersAction() {
   const org = await requireActiveOrg();
@@ -322,7 +322,7 @@ export async function deleteProductionOrderAction(
     return {
       error:
         error.code === "23503"
-          ? "La orden no puede eliminarse: tiene lotes de salida asociados."
+          ? "La orden no puede eliminarse: tiene lotes producidos / lotes finales asociados."
           : dbError(error, "No fue posible eliminar la orden."),
     };
   }
@@ -428,7 +428,7 @@ export async function deleteBatchConsumptionAction(
 }
 
 // ===========================================================================
-// Lotes de salida
+// Lotes producidos / lotes finales
 // ===========================================================================
 export async function listOutputBatchesAction() {
   const org = await requireActiveOrg();
@@ -455,8 +455,8 @@ export async function createOutputBatchAction(
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
   const v = readOutputBatchForm(formData);
-  if (!v.batch_code) return { error: "El código del lote de salida es obligatorio." };
-  if (!v.production_order_id) return { error: "La orden de producción es obligatoria." };
+  if (!v.batch_code) return { error: "El código del lote producido / lote final es obligatorio." };
+  if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
   if (v.produced_quantity_kg !== "") {
     const n = Number(v.produced_quantity_kg);
     if (Number.isNaN(n) || n <= 0) return { error: "La cantidad producida debe ser mayor que 0." };
@@ -494,9 +494,9 @@ export async function updateOutputBatchAction(
   const org = await requireActiveOrg();
   const id = String(formData.get("id") ?? "");
   const v = readOutputBatchForm(formData);
-  if (!id) return { error: "Falta el identificador del lote de salida." };
-  if (!v.batch_code) return { error: "El código del lote de salida es obligatorio." };
-  if (!v.production_order_id) return { error: "La orden de producción es obligatoria." };
+  if (!id) return { error: "Falta el identificador del lote producido / lote final." };
+  if (!v.batch_code) return { error: "El código del lote producido / lote final es obligatorio." };
+  if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
   if (v.produced_quantity_kg !== "") {
     const n = Number(v.produced_quantity_kg);
     if (Number.isNaN(n) || n <= 0) return { error: "La cantidad producida debe ser mayor que 0." };
@@ -543,7 +543,7 @@ export async function deleteOutputBatchAction(
     .eq("organization_id", org.organizationId)
     .select("id");
 
-  if (error) return { error: dbError(error, "No fue posible eliminar el lote de salida.") };
+  if (error) return { error: dbError(error, "No fue posible eliminar el lote producido / lote final.") };
   if ((data ?? []).length === 0) {
     return { error: "No se eliminó: el lote no existe o tu rol no permite eliminarlo." };
   }
@@ -552,7 +552,7 @@ export async function deleteOutputBatchAction(
 }
 
 // ---------------------------------------------------------------------------
-// Composición por lote de salida
+// Composición por lote producido / lote final
 // ---------------------------------------------------------------------------
 export async function addBatchCompositionAction(
   _prev: TraceActionState,
@@ -566,7 +566,7 @@ export async function addBatchCompositionAction(
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   if (!outputBatchId || !materialId) {
-    return { error: "Selecciona el lote de salida y el material." };
+    return { error: "Selecciona el lote producido / lote final y el material." };
   }
   if (Number.isNaN(mass) || mass <= 0) {
     return { error: "La masa debe ser mayor que 0." };

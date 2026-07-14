@@ -12,8 +12,8 @@ export default async function TraceabilityIndexPage() {
 
   const cards = [
     { href: "/traceability/input-batches", title: "Lotes de entrada", count: m.inputBatches, hint: "Material que ingresa, con proveedor y clasificación." },
-    { href: "/traceability/production-orders", title: "Órdenes de producción", count: m.productionOrders, hint: "Dónde se consumen los lotes de entrada." },
-    { href: "/traceability/output-batches", title: "Lotes de salida", count: m.outputBatches, hint: "Producto terminado con su composición." },
+    { href: "/traceability/production-orders", title: "Órdenes / corridas de producción", count: m.productionOrders, hint: "Dónde se consumen los lotes de entrada." },
+    { href: "/traceability/output-batches", title: "Lotes producidos / lotes finales", count: m.outputBatches, hint: "Producto terminado con su composición." },
     { href: "/traceability/genealogy", title: "Genealogía", count: null, hint: "Reconstruye la cadena hacia atrás y hacia adelante." },
   ];
 
@@ -49,6 +49,12 @@ export default async function TraceabilityIndexPage() {
             className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium hover:border-loop"
           >
             Ver matriz de evidencias
+          </Link>
+          <Link
+            href="/implementation/feedback?module=traceability"
+            className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium text-ink-soft hover:border-loop"
+          >
+            Registrar feedback sobre trazabilidad
           </Link>
         </div>
       </header>
@@ -88,7 +94,7 @@ export default async function TraceabilityIndexPage() {
           </div>
         </dl>
         <p className="mt-3 text-xs text-ink-soft">
-          Un lote de salida está completo cuando tiene orden, consumos,
+          Un lote producido / lote final está completo cuando tiene orden, consumos,
           composición y la información de proveedor y material de sus entradas.
           Las advertencias señalan diferencias de balance de masa mayores al 5%.
         </p>

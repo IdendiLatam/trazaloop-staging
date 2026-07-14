@@ -68,8 +68,8 @@ export function EvidenceLinkForm({
     product_family: "Familia de producto",
     site: "Sede",
     input_batch: "Lote de entrada",
-    production_order: "Orden de producción",
-    output_batch: "Lote de salida",
+    production_order: "Orden / corrida de producción",
+    output_batch: "Lote producido / lote final",
   };
 
   const options = targets[targetType] ?? [];

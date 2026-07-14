@@ -27,7 +27,7 @@ export default async function RecycledContentPage() {
           Contenido reciclado de {org.organizationName}
         </h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Cálculo por lote de salida según NTC 6632:2022 y UNE-EN 15343:2008,
+          Cálculo por lote producido / lote final según NTC 6632:2022 y UNE-EN 15343:2008,
           con snapshots inmutables, soporte documental y nivel de
           defendibilidad como preparación frente a auditorías y revisión de
           cumplimiento normativo.
@@ -39,7 +39,7 @@ export default async function RecycledContentPage() {
           href="/recycled-content/output-batches"
           className="rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:bg-loop-deep"
         >
-          Calcular por lote de salida
+          Calcular por lote producido / lote final
         </Link>
         <Link
           href="/recycled-content/reports"
@@ -106,7 +106,7 @@ export default async function RecycledContentPage() {
           <p className="px-4 py-6 text-sm text-ink-soft">
             Aún no hay cálculos. Empieza en{" "}
             <Link href="/recycled-content/output-batches" className="text-loop underline">
-              Calcular por lote de salida
+              Calcular por lote producido / lote final
             </Link>.
           </p>
         ) : (
@@ -114,7 +114,7 @@ export default async function RecycledContentPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-xs text-ink-soft">
-                  <th className="px-4 py-2 font-medium">Lote de salida</th>
+                  <th className="px-4 py-2 font-medium">Lote producido / lote final</th>
                   <th className="px-4 py-2 font-medium">Producto</th>
                   <th className="px-4 py-2 font-medium">Calculado</th>
                   <th className="px-4 py-2 font-medium">Declarado</th>

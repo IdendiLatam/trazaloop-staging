@@ -40,10 +40,17 @@ export default async function SuppliersPage({
       </section>
 
       {suppliers.length === 0 ? (
-        <p className="text-sm text-ink-soft">
-          Aún no hay proveedores. Crea el primero o{" "}
-          <Link href="/catalog/import" className="text-loop hover:underline">impórtalos por CSV</Link>.
-        </p>
+        <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
+          <p className="text-sm font-medium">Aún no tienes proveedores.</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
+            Los proveedores dan origen a los lotes de entrada. Crea el primero
+            con el formulario de arriba o{" "}
+            <Link href="/catalog/import" className="text-loop hover:underline">
+              impórtalos por CSV
+            </Link>
+            .
+          </p>
+        </div>
       ) : (
         <ul className="divide-y divide-hairline rounded-lg border border-hairline bg-surface">
           {suppliers.map((s) => (

@@ -122,7 +122,7 @@ export default async function RecycledReportsPage() {
       </header>
 
       <AggregateTable
-        title="Por orden de producción"
+        title="Por orden / corrida de producción"
         rows={byOrder}
         labelHeader="Orden"
         labelOf={(r) => String(r.production_order_code ?? "—")}

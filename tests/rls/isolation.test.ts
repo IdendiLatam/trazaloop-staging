@@ -1659,6 +1659,361 @@ async function main() {
     assert(still!.origin_support_evidence_id === evValid, "el soporte válido debía permanecer intacto");
   });
 
+  // =========================================================================
+  // Sprint 6 · implementation_feedback (0033/0034): aislamiento multiempresa,
+  // edición del feedback propio, borrado restringido a admin/quality y
+  // bloqueo de asociación a organización ajena.
+  // =========================================================================
+  let feedbackA = "";
+  let feedbackB = "";
+
+  await check("42. A crea feedback en su empresa; B no ve el feedback de A ni A el de B", async () => {
+    const { data: fbA, error: errA } = await userA.client
+      .from("implementation_feedback")
+      .insert({
+        organization_id: orgA,
+        module: "recycled_content",
+        category: "question",
+        severity: "low",
+        title: "Duda sobre balance de masa",
+        description: "¿Por qué aparece la advertencia de balance en este lote?",
+      })
+      .select("id")
+      .single();
+    assert(!errA && fbA, `A no pudo crear feedback: ${errA?.message}`);
+    feedbackA = fbA!.id;
+
+    const { data: fbB, error: errB } = await userB.client
+      .from("implementation_feedback")
+      .insert({
+        organization_id: orgB,
+        module: "catalog",
+        category: "bug",
+        severity: "medium",
+        title: "El selector de familia no filtra bien",
+        description: "Al crear un producto, el selector de familia muestra todas las familias.",
+      })
+      .select("id")
+      .single();
+    assert(!errB && fbB, `B no pudo crear feedback: ${errB?.message}`);
+    feedbackB = fbB!.id;
+
+    const { data: aSeesB } = await userA.client
+      .from("implementation_feedback")
+      .select("id")
+      .eq("organization_id", orgB);
+    assert((aSeesB ?? []).length === 0, "A pudo ver feedback de la organización B");
+
+    const { data: bSeesA } = await userB.client
+      .from("implementation_feedback")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((bSeesA ?? []).length === 0, "B pudo ver feedback de la organización A");
+
+    const { data: aSeesOwn } = await userA.client
+      .from("implementation_feedback")
+      .select("id")
+      .eq("id", feedbackA)
+      .maybeSingle();
+    assert(aSeesOwn?.id === feedbackA, "A no pudo leer su propio feedback recién creado");
+  });
+
+  await check("43. A no puede actualizar ni borrar el feedback de B", async () => {
+    const { data: upd } = await userA.client
+      .from("implementation_feedback")
+      .update({ title: "Alterado por A" })
+      .eq("id", feedbackB)
+      .select();
+    assert((upd ?? []).length === 0, "A pudo actualizar el feedback de B");
+
+    const { data: del } = await userA.client
+      .from("implementation_feedback")
+      .delete()
+      .eq("id", feedbackB)
+      .select();
+    assert((del ?? []).length === 0, "A pudo borrar el feedback de B");
+
+    const { data: stillThere } = await userB.client
+      .from("implementation_feedback")
+      .select("title")
+      .eq("id", feedbackB)
+      .single();
+    assert(stillThere?.title === "El selector de familia no filtra bien",
+      "el feedback de B fue modificado por A");
+  });
+
+  await check("44. No se puede asociar feedback a una organización ajena (insert cross-tenant bloqueado)", async () => {
+    // B no es miembro de orgA: el INSERT debe fallar por RLS (WITH CHECK).
+    const { data, error } = await userB.client
+      .from("implementation_feedback")
+      .insert({
+        organization_id: orgA,
+        module: "other",
+        category: "other",
+        severity: "low",
+        title: "Intento cruzado",
+        description: "Esto no debería poder crearse.",
+      })
+      .select();
+    assert(error || (data ?? []).length === 0, "un usuario ajeno pudo crear feedback en orgA");
+  });
+
+  await check("45. El creador (no admin/quality) puede editar su propio feedback; borrar sigue restringido a admin/quality", async () => {
+    // C es consultant en orgA (no admin/quality): crea su propio feedback.
+    const { data: fbC, error: errC } = await userC.client
+      .from("implementation_feedback")
+      .insert({
+        organization_id: orgA,
+        module: "guided_flow",
+        category: "improvement",
+        severity: "low",
+        title: "Feedback de C (consultant)",
+        description: "El flujo guiado podría explicar mejor el siguiente paso.",
+      })
+      .select("id, created_by")
+      .single();
+    assert(!errC && fbC, `C no pudo crear su feedback: ${errC?.message}`);
+    assert(fbC!.created_by === userC.id, "created_by no quedó forzado al autor real");
+
+    // C edita SU PROPIO feedback: debe permitirlo la política de update.
+    const { data: updOwn, error: updOwnErr } = await userC.client
+      .from("implementation_feedback")
+      .update({ title: "Feedback de C (editado por C)" })
+      .eq("id", fbC!.id)
+      .select();
+    assert(!updOwnErr && (updOwn ?? []).length === 1, `C no pudo editar su propio feedback: ${updOwnErr?.message}`);
+
+    // C intenta BORRARLO: debe bloquearlo la RLS (delete solo admin/quality).
+    const { data: delByC } = await userC.client
+      .from("implementation_feedback")
+      .delete()
+      .eq("id", fbC!.id)
+      .select();
+    assert((delByC ?? []).length === 0, "un consultant pudo borrar feedback (debe ser solo admin/quality)");
+
+    // Admin (A) sí puede borrarlo.
+    const { data: delByAdmin, error: delErr } = await userA.client
+      .from("implementation_feedback")
+      .delete()
+      .eq("id", fbC!.id)
+      .select();
+    assert(!delErr && (delByAdmin ?? []).length === 1, `admin no pudo borrar el feedback: ${delErr?.message}`);
+  });
+
+  await check("46. Usuario no miembro no ve implementación: v_implementation_dashboard y v_implementation_next_actions sin fugas", async () => {
+    const { data: dashLeak } = await userB.client
+      .from("v_implementation_dashboard")
+      .select("organization_id")
+      .eq("organization_id", orgA);
+    assert((dashLeak ?? []).length === 0, "B pudo ver el dashboard de implementación de A");
+
+    const { data: actionsLeak } = await userB.client
+      .from("v_implementation_next_actions")
+      .select("organization_id")
+      .eq("organization_id", orgA);
+    assert((actionsLeak ?? []).length === 0, "B pudo ver las próximas acciones de implementación de A");
+
+    const { data: dashOwn } = await userA.client
+      .from("v_implementation_dashboard")
+      .select("open_feedback_count")
+      .eq("organization_id", orgA)
+      .maybeSingle();
+    assert(dashOwn && Number(dashOwn.open_feedback_count) >= 1,
+      "A debería ver al menos su propio feedback abierto en su dashboard de implementación");
+  });
+
+  // =========================================================================
+  // Sprint 7 · import_job_rows (0035): aislamiento multiempresa del detalle
+  // de importación y bloqueo de confirmación entre organizaciones. La FK
+  // COMPUESTA (organization_id, import_job_id) → import_jobs(organization_id,
+  // id) se verificó además directamente contra Postgres: un intento de
+  // mezclar el organization_id de una empresa con el import_job_id de otra
+  // falla por FK incluso si algo más bypaseara la RLS.
+  // =========================================================================
+  let importJobA = "";
+
+  await check("47. A crea un import_job + filas; B no ve ni el job ni las filas de A", async () => {
+    const { data: job, error: jobErr } = await userA.client
+      .from("import_jobs")
+      .insert({
+        organization_id: orgA,
+        entity: "suppliers",
+        filename: "proveedores-a.csv",
+        total_rows: 1,
+        status: "validated",
+      })
+      .select("id")
+      .single();
+    assert(!jobErr && job, `A no pudo crear el import_job: ${jobErr?.message}`);
+    importJobA = job!.id;
+
+    const { error: rowErr } = await userA.client.from("import_job_rows").insert({
+      organization_id: orgA,
+      import_job_id: importJobA,
+      row_number: 2,
+      status: "valid",
+      entity_type: "supplier",
+      raw_data: { supplier_name: "Proveedor Real A" },
+    });
+    assert(!rowErr, `A no pudo crear la fila de importación: ${rowErr?.message}`);
+
+    const { data: bSeesJob } = await userB.client
+      .from("import_jobs")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((bSeesJob ?? []).length === 0, "B pudo ver import_jobs de la organización A");
+
+    const { data: bSeesRows } = await userB.client
+      .from("import_job_rows")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((bSeesRows ?? []).length === 0, "B pudo ver import_job_rows de la organización A");
+  });
+
+  await check("48. No se puede confirmar/insertar una fila de importación en otra organización (cross-tenant bloqueado)", async () => {
+    // B (sin membership en orgA) intenta insertar una fila apuntando al
+    // import_job de A: debe bloquearlo la RLS (WITH CHECK de is_org_member).
+    const { data, error } = await userB.client
+      .from("import_job_rows")
+      .insert({
+        organization_id: orgA,
+        import_job_id: importJobA,
+        row_number: 3,
+        status: "valid",
+        entity_type: "supplier",
+        raw_data: { supplier_name: "Intento cruzado" },
+      })
+      .select();
+    assert(error || (data ?? []).length === 0, "un usuario ajeno pudo insertar una fila de importación en orgA");
+  });
+
+  await check("49. B no puede actualizar (confirmar) las filas de importación de A", async () => {
+    const { data: upd } = await userB.client
+      .from("import_job_rows")
+      .update({ status: "imported" })
+      .eq("organization_id", orgA)
+      .select();
+    assert((upd ?? []).length === 0, "B pudo actualizar filas de importación de la organización A");
+
+    const { data: stillValid } = await userA.client
+      .from("import_job_rows")
+      .select("status")
+      .eq("import_job_id", importJobA)
+      .eq("organization_id", orgA)
+      .single();
+    assert(stillValid?.status === "valid", "el estado de la fila de A fue alterado por B");
+  });
+
+  // =========================================================================
+  // Sprint 8 · team_invitations (0037) + guard_last_admin sobre memberships:
+  // aislamiento multiempresa de invitaciones, bloqueo de cambio de rol
+  // cross-tenant y "solo admin administra equipo".
+  // =========================================================================
+  let invitationA = "";
+  let invitationTokenA = "";
+
+  await check("50. A crea una invitación; B no la ve ni puede modificarla (revocar)", async () => {
+    const { data: inv, error: invErr } = await userA.client
+      .from("team_invitations")
+      .insert({
+        organization_id: orgA,
+        email: "invitado-s8@empresa.dev",
+        role_code: "quality",
+        token: `tok-s8-${Date.now()}`,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select("id, token")
+      .single();
+    assert(!invErr && inv, `A no pudo crear la invitación: ${invErr?.message}`);
+    invitationA = inv!.id;
+    invitationTokenA = inv!.token;
+
+    const { data: bSees } = await userB.client
+      .from("team_invitations")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((bSees ?? []).length === 0, "B pudo ver invitaciones de la organización A");
+
+    const { data: bRevokes } = await userB.client
+      .from("team_invitations")
+      .update({ status: "revoked" })
+      .eq("organization_id", orgA)
+      .select();
+    assert((bRevokes ?? []).length === 0, "B pudo revocar/modificar una invitación de la organización A");
+  });
+
+  await check("51. No se puede cambiar el rol de un miembro de otra organización (cross-tenant bloqueado)", async () => {
+    const { data: upd } = await userB.client
+      .from("memberships")
+      .update({ role_code: "consultant" })
+      .eq("organization_id", orgA)
+      .eq("user_id", userA.id)
+      .select();
+    assert((upd ?? []).length === 0, "B (admin de otra empresa) pudo cambiar el rol de un miembro de A");
+  });
+
+  await check("52. Usuario no miembro no puede ver el equipo (miembros ni invitaciones) de la organización", async () => {
+    const outsider = await newUser("s8-outsider");
+    const { data: members } = await outsider.client
+      .from("memberships")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((members ?? []).length === 0, "un usuario ajeno pudo ver memberships de A");
+
+    const { data: invites } = await outsider.client
+      .from("team_invitations")
+      .select("id")
+      .eq("organization_id", orgA);
+    assert((invites ?? []).length === 0, "un usuario ajeno pudo ver invitaciones de A");
+  });
+
+  await check("53. Solo admin administra equipo: un consultant de A no puede invitar ni cambiar roles", async () => {
+    // C es consultant en orgA desde el caso 16 (Sprint 3).
+    const { data: insByC, error: insErr } = await userC.client
+      .from("team_invitations")
+      .insert({
+        organization_id: orgA,
+        email: "otro-s8@empresa.dev",
+        role_code: "consultant",
+        token: `tok-s8-c-${Date.now()}`,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select();
+    assert(insErr || (insByC ?? []).length === 0, "un consultant pudo crear una invitación (solo admin debe poder)");
+
+    const { data: updByC } = await userC.client
+      .from("memberships")
+      .update({ role_code: "admin" })
+      .eq("organization_id", orgA)
+      .eq("user_id", userA.id)
+      .select();
+    assert((updByC ?? []).length === 0, "un consultant pudo cambiar el rol de otro miembro (solo admin debe poder)");
+  });
+
+  await check("54. No se acepta una invitación con un correo que no coincide (RPC accept_team_invitation)", async () => {
+    // B tiene un correo distinto al invitado (invitado-s8@empresa.dev): la
+    // RPC debe rechazar aunque B esté autenticado y el token sea válido.
+    const { error } = await userB.client.rpc("accept_team_invitation", {
+      p_token: invitationTokenA,
+    });
+    assert(error, "la RPC debía rechazar la aceptación con un correo que no coincide");
+
+    // La invitación sigue pendiente: no se creó membership de B en orgA.
+    const { data: stillPending } = await userA.client
+      .from("team_invitations")
+      .select("status")
+      .eq("id", invitationA)
+      .single();
+    assert(stillPending?.status === "pending", "la invitación no debía cambiar de estado");
+
+    const { data: noMembership } = await userA.client
+      .from("memberships")
+      .select("id")
+      .eq("organization_id", orgA)
+      .eq("user_id", userB.id);
+    assert((noMembership ?? []).length === 0, "no debía crearse membership para un correo que no coincide");
+  });
+
   // 8 (nivel BD) y 10: requieren conexión directa (SUPABASE_DB_URL).
   if (DB_URL) {
     const pg = new PgClient({ connectionString: DB_URL });
@@ -1674,7 +2029,7 @@ async function main() {
       assert(threw, "el trigger forbid_mutation no bloqueó el UPDATE directo");
     });
 
-    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4) tienen RLS activo", async () => {
+    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8) tienen RLS activo", async () => {
       const expected = [
         // Sprint 1
         "profiles",
@@ -1709,6 +2064,12 @@ async function main() {
         // Sprint 4
         "calculation_methodologies",
         "recycled_content_calculations",
+        // Sprint 6
+        "implementation_feedback",
+        // Sprint 7
+        "import_job_rows",
+        // Sprint 8
+        "team_invitations",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name, c.relrowsecurity as rls
@@ -1746,6 +2107,9 @@ async function main() {
         "batch_consumption",
         "output_batches",
         "batch_composition",
+        "implementation_feedback",
+        "import_job_rows",
+        "team_invitations",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name
@@ -1771,10 +2135,10 @@ async function main() {
       "  ⚠ SUPABASE_DB_URL no definido: se omite la inspección DIRECTA de la base"
     );
     console.log(
-      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 29 tablas y 23 triggers de inmutabilidad)."
+      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 32 tablas y 23 triggers de inmutabilidad)."
     );
     console.log(
-      "    Las pruebas por cliente (1-9 y 11-41) sí corren con Supabase local."
+      "    Las pruebas por cliente (1-9 y 11-54) sí corren con Supabase local."
     );
     console.log(
       "    Alternativa para el barrido: psql \"$SUPABASE_DB_URL\" -f tests/rls/check-rls-enabled.sql"

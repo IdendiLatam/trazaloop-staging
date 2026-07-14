@@ -45,6 +45,12 @@ export default async function CalculationDossierPage({
           >
             Matriz de evidencias
           </Link>
+          <Link
+            href={`/implementation/feedback?module=audit_support&related_entity_type=dossier&related_entity_id=${id}`}
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft hover:border-loop"
+          >
+            Registrar feedback sobre este dossier
+          </Link>
         </div>
       </div>
 

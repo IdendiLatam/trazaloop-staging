@@ -44,6 +44,10 @@ export default async function MaterialsPage({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Materiales</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+          Para que un material reciclado cuente en el cálculo, debe tener una
+          evidencia de origen asociada y validada.
+        </p>
+        <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           La clasificación de origen define qué podrá contarse como reciclado en
           el cálculo (Sprint 4). El material recuperado en el mismo proceso nunca
           cuenta; el postindustrial no cuenta por defecto y solo puede

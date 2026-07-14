@@ -63,7 +63,7 @@ export default async function CalculationDetailPage({
             <Link href="/recycled-content" className="hover:underline">Contenido reciclado</Link>{" "}
             ·{" "}
             <Link href="/recycled-content/output-batches" className="hover:underline">
-              Lotes de salida
+              Lotes producidos / lotes finales
             </Link>
           </p>
           <h1 className="flex flex-wrap items-center gap-3 text-2xl font-semibold tracking-tight">
@@ -88,6 +88,15 @@ export default async function CalculationDetailPage({
           disabledReason="Sin composición registrada no se puede calcular."
         />
       </header>
+
+      <div className="flex justify-end">
+        <Link
+          href={`/implementation/feedback?module=recycled_content&related_entity_type=output_batch&related_entity_id=${batch.id}`}
+          className="text-sm text-loop hover:underline"
+        >
+          Registrar feedback sobre este cálculo
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <section className="rounded-lg border border-hairline bg-surface p-4">
@@ -160,6 +169,17 @@ export default async function CalculationDetailPage({
             <h2 className="text-sm font-semibold">Último cálculo</h2>
             <DefensibilityBadge level={latest.defensibility_level} />
           </div>
+          {latest.defensibility_level === "preliminary" ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              Este cálculo es preliminar.{" "}
+              <Link
+                href={`/audit-support/output-batches/${batch.id}/evidence-matrix`}
+                className="font-medium text-loop hover:underline"
+              >
+                Ver causas en Soporte técnico
+              </Link>
+            </p>
+          ) : null}
 
           <dl className="mt-4 grid grid-cols-2 gap-4 text-center sm:grid-cols-5">
             <div>

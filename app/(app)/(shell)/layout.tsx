@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
+import { APP_VERSION_LABEL } from "@/lib/version";
 import { isStagingEnvironment } from "@/lib/env";
 import { requireSession } from "@/lib/auth/require-session";
 import { getActiveOrganization } from "@/lib/db/organizations";
@@ -31,7 +32,13 @@ export default async function ShellLayout({
       <aside className="no-print hidden flex-col gap-8 bg-loop-deep p-5 lg:flex">
         <Wordmark inverted />
         <AppNav />
-        <div className="mt-auto">
+        <div className="mt-auto space-y-3">
+          <div className="text-xs text-emerald-100/60">
+            <p>{APP_VERSION_LABEL}</p>
+            <Link href="/legal" className="hover:text-white hover:underline">
+              Acerca de Trazaloop
+            </Link>
+          </div>
           <form action={signOutAction}>
             <button
               type="submit"

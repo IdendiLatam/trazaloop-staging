@@ -102,6 +102,12 @@ export default async function EvidencesPage() {
           Aquí vive el soporte documental: declaraciones de proveedor, registros
           y fichas. Una evidencia solo la valida administrador o calidad.
         </p>
+        <Link
+          href="/implementation/feedback?module=evidences"
+          className="inline-block pt-1 text-sm text-loop hover:underline"
+        >
+          Registrar feedback sobre evidencias
+        </Link>
       </header>
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
@@ -110,7 +116,15 @@ export default async function EvidencesPage() {
       </section>
 
       {(evidences ?? []).length === 0 ? (
-        <p className="text-sm text-ink-soft">Aún no hay evidencias registradas.</p>
+        <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
+          <p className="text-sm font-medium">Aún no tienes evidencias registradas.</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
+            Carga los soportes de origen y demás documentos, valídalos
+            (admin o calidad) y asócialos: sin evidencia de origen validada,
+            los materiales reciclados no cuentan en el cálculo. El formulario
+            está arriba en esta misma página.
+          </p>
+        </div>
       ) : (
         <ul className="divide-y divide-hairline rounded-lg border border-hairline bg-surface">
           {(evidences ?? []).map((e) => {

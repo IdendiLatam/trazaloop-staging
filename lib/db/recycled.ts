@@ -199,7 +199,7 @@ export type AggregateRow = {
   recycled_percent: number | null;
   /** null = sin cálculos en el alcance (Sprint 4.1). */
   defensibility_level: DefensibilityLevel | null;
-  /** Lotes de salida en el alcance del agregado (Sprint 4.1). */
+  /** Lotes producidos / lotes finales en el alcance del agregado (Sprint 4.1). */
   total_batches_count: number;
   calculated_batches_count: number;
   uncalculated_batches_count: number;

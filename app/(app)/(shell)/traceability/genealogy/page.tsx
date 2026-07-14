@@ -66,7 +66,7 @@ export default async function GenealogyPage({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Genealogía de lotes</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Reconstruye la cadena hacia atrás (desde un lote de salida) o hacia
+          Reconstruye la cadena hacia atrás (desde un lote producido / lote final) o hacia
           adelante (desde un lote de entrada).
         </p>
       </header>
@@ -74,7 +74,7 @@ export default async function GenealogyPage({
       <div className="grid gap-4 sm:grid-cols-2">
         <form method="get" className="rounded-lg border border-hairline bg-surface p-4">
           <label className="block text-sm">
-            <span className="mb-1 block font-medium">Hacia atrás: lote de salida</span>
+            <span className="mb-1 block font-medium">Hacia atrás: lote producido / lote final</span>
             <select name="output" defaultValue={params.output ?? ""} className="mb-3 block w-full rounded-md border border-hairline bg-surface px-2 py-1.5 text-sm">
               <option value="">— Selecciona —</option>
               {outputBatches.map((b) => (
@@ -112,7 +112,7 @@ export default async function GenealogyPage({
         <section className="space-y-2">
           <h2 className="eyebrow">Cadena hacia atrás</h2>
           <ChainCard
-            eyebrow="Producto terminado / lote de salida"
+            eyebrow="Producto terminado / lote producido / lote final"
             title={selectedOutput.batch_code}
             lines={[
               selectedOutput.product_label ?? "Sin producto asociado",
@@ -123,7 +123,7 @@ export default async function GenealogyPage({
           />
           <Arrow />
           <ChainCard
-            eyebrow="Orden de producción"
+            eyebrow="Orden / corrida de producción"
             title={backward[0]?.production_order_code ?? "Sin orden"}
             lines={[]}
           />
@@ -184,7 +184,7 @@ export default async function GenealogyPage({
                       <>
                         <Arrow />
                         <ChainCard
-                          eyebrow="Lote de salida generado"
+                          eyebrow="Lote producido / lote final generado"
                           title={r.output_batch_code ?? "—"}
                           lines={[
                             r.product_code

@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { NEXT_STEP_LABEL } from "@/lib/domain/guided-flow";
 import { notFound } from "next/navigation";
 import { getOutputBatchGuidedDetailAction } from "@/server/actions/guided-flow";
 import { ReadinessBadge } from "@/components/domain/guided-flow/readiness-badge";
@@ -53,20 +54,20 @@ export default async function GuidedBatchDetailPage({
         <p className="text-sm text-ink-soft">
           Siguiente paso:{" "}
           <Link href={r.next_step_href} className="font-medium text-loop hover:underline">
-            {r.next_step_label}
+            {(NEXT_STEP_LABEL[r.next_step_code] ?? r.next_step_label)}
           </Link>
         </p>
       </header>
 
       <div className="space-y-4">
-        {/* Paso 1 — Lote de salida */}
+        {/* Paso 1 — Lote producido / lote final */}
         <GuidedStep
           number={1}
-          title="Lote de salida"
+          title="Lote producido / lote final"
           state="completo"
           actions={
             <>
-              <Link href="/traceability/output-batches" className={linkClass}>Editar lote de salida</Link>
+              <Link href="/traceability/output-batches" className={linkClass}>Editar lote producido / lote final</Link>
               {!r.has_product ? (
                 <Link href="/traceability/output-batches" className={linkClass}>Asociar producto</Link>
               ) : null}
@@ -80,10 +81,10 @@ export default async function GuidedBatchDetailPage({
           </dl>
         </GuidedStep>
 
-        {/* Paso 2 — Orden de producción */}
+        {/* Paso 2 — Orden / corrida de producción */}
         <GuidedStep
           number={2}
-          title="Orden de producción"
+          title="Orden / corrida de producción"
           state={r.has_production_order ? "completo" : "pendiente"}
           actions={
             <Link href="/traceability/production-orders" className={linkClass}>
@@ -97,7 +98,7 @@ export default async function GuidedBatchDetailPage({
             </p>
           ) : (
             <p className="text-sm text-ink-soft">
-              Este lote no tiene orden de producción asociada. Sin orden no hay
+              Este lote no tiene orden / corrida de producción asociada. Sin orden no hay
               consumos ni trazabilidad hacia atrás.
             </p>
           )}
