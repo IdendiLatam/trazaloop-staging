@@ -57,6 +57,12 @@ export default async function TeamPage() {
           >
             Ir a Trazabilidad
           </Link>
+          <Link
+            href="/settings/profile"
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
+          >
+            Mi perfil
+          </Link>
         </div>
       </header>
 

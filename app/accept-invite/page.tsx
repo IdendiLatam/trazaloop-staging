@@ -5,6 +5,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { getInvitationPreviewAction } from "@/server/actions/team";
 import { ROLE_LABEL, normalizeEmail, isExpired } from "@/lib/domain/team";
@@ -37,6 +38,12 @@ export default async function AcceptInvitePage({
     );
   }
 
+  // El destino a preservar en login/registro es ESTE mismo enlace (Partes
+  // 4 y 5 de la corrección de onboarding): así, tras iniciar sesión o
+  // crear la cuenta, la persona vuelve directo aquí en vez de terminar en
+  // "crear empresa".
+  const returnHere = `/accept-invite?token=${encodeURIComponent(token)}`;
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -50,20 +57,20 @@ export default async function AcceptInvitePage({
         </p>
         <div className="flex gap-3">
           <Link
-            href="/login"
+            href={`/login?next=${encodeURIComponent(returnHere)}`}
             className="rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:bg-loop-deep"
           >
             Iniciar sesión
           </Link>
           <Link
-            href="/register"
+            href={`/register?next=${encodeURIComponent(returnHere)}`}
             className="rounded-md border border-hairline bg-surface px-4 py-2 text-sm font-medium hover:border-loop"
           >
             Crear cuenta
           </Link>
         </div>
         <p className="text-xs text-ink-soft">
-          Después de iniciar sesión, vuelve a abrir este mismo enlace para aceptar la invitación.
+          Después de iniciar sesión, volverás automáticamente a esta invitación.
         </p>
       </div>
     );
@@ -79,9 +86,16 @@ export default async function AcceptInvitePage({
     );
   }
 
+  // Ya fue aceptada (por ejemplo, se reabrió el enlace después de
+  // aceptarla, o se aceptó en otra pestaña): se redirige con un mensaje
+  // claro en vez de dejar a la persona en una pantalla sin salida.
+  if (preview.status === "accepted") {
+    redirect("/select-org?notice=invitation-already-accepted");
+  }
+
   const emailMismatch = normalizeEmail(user.email ?? "") !== preview.email;
   const expired = preview.status === "expired" || isExpired(preview.expiresAt);
-  const notPending = preview.status !== "pending";
+  const revoked = preview.status === "revoked";
 
   return shell(
     <div className="space-y-4">
@@ -98,13 +112,13 @@ export default async function AcceptInvitePage({
 
       {emailMismatch ? (
         <p className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-          Esta invitación fue enviada a {preview.email}, pero tu cuenta es {user.email}. Inicia
-          sesión con la cuenta correcta para aceptarla.
+          Esta invitación fue enviada a otro correo. Inicia sesión con el correo invitado o
+          solicita una nueva invitación.
         </p>
-      ) : notPending || expired ? (
+      ) : expired || revoked ? (
         <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink-soft">
-          Esta invitación ya no está disponible
-          {expired ? " (expiró)" : ` (estado: ${preview.status})`}.
+          Esta invitación ya no está disponible ({expired ? "expiró" : "fue revocada"}). Pide a un
+          administrador de la empresa que envíe una nueva.
         </p>
       ) : (
         <AcceptInviteForm token={token} />

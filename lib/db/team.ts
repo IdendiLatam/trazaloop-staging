@@ -265,3 +265,31 @@ export async function acceptInvitationByToken(
   }
   return { organizationId: data as string, error: null };
 }
+
+// ---------------------------------------------------------------------------
+// Corrección de onboarding: invitaciones pendientes del usuario actual, SIN
+// necesitar conocer el token de antemano (0038). Nunca las de otro
+// usuario: la RPC resuelve auth.uid() → profiles.email internamente.
+// ---------------------------------------------------------------------------
+export type MyPendingInvitation = {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  roleCode: TeamRoleCode;
+  token: string;
+  expiresAt: string;
+};
+
+export async function listMyPendingInvitations(): Promise<MyPendingInvitation[]> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("list_my_pending_invitations");
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map((r) => ({
+    id: r.invitation_id as string,
+    organizationId: r.organization_id as string,
+    organizationName: r.organization_name as string,
+    roleCode: r.role_code as TeamRoleCode,
+    token: r.token as string,
+    expiresAt: r.expires_at as string,
+  }));
+}

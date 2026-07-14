@@ -19,18 +19,20 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
 [ ] npm run test:implementation pasa
 [ ] npm run test:imports pasa
 [ ] npm run test:team pasa
+[ ] npm run test:settings pasa
 [ ] npm run test:smoke pasa contra staging
 [ ] npm run test:rls pasa contra staging o local (obligatorio antes de producción real)
 [ ] .env.local no está en Git
 [ ] tsconfig.tsbuildinfo no está en Git
-[ ] Supabase migrations aplicadas (0001 … 0037)
+[ ] Supabase migrations aplicadas (0001 … 0039)
 [ ] Bucket evidences existe y NO es público
 [ ] Auth redirect URLs configuradas (Site URL + Additional Redirect URLs)
 [ ] Vercel env vars configuradas (las 5 de .env.example, más
     NEXT_TELEMETRY_DISABLED=1 recomendada) y redeploy hecho
 [ ] Flujo manual probado (login → organización → catálogos → evidencias →
     trazabilidad → cálculo → soporte técnico → flujo guiado →
-    implementación → feedback → importaciones CSV → equipo/invitaciones)
+    implementación → feedback → importaciones CSV → equipo/invitaciones →
+    configuración de empresa/perfil)
 ```
 
 Notas:

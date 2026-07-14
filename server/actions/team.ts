@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { writeActiveOrgCookie } from "@/lib/auth/active-organization";
+import { getUserOrganizations, getActiveOrganization } from "@/lib/db/organizations";
 import {
   listMembers,
   listInvitations,
@@ -17,9 +18,11 @@ import {
   updateMemberStatus,
   getInvitationPreview,
   acceptInvitationByToken,
+  listMyPendingInvitations,
   type MemberRow,
   type InvitationRow,
   type InvitationPreview,
+  type MyPendingInvitation,
 } from "@/lib/db/team";
 import {
   validateInviteDraft,
@@ -29,7 +32,9 @@ import {
   buildInvitationInsertPayload,
   isTeamRole,
   resolveTeamChecklistStatus,
+  resolvePostAuthDestination,
   type TeamChecklistStatus,
+  type PostAuthDestination,
 } from "@/lib/domain/team";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +86,37 @@ export async function getInvitationPreviewAction(
   const data = await getInvitationPreview(token);
   if (!data) return { data: null, error: "La invitación no existe o el enlace no es válido." };
   return { data, error: null };
+}
+
+/** Invitaciones pendientes y vigentes para el correo del usuario actual —
+ *  sin necesitar conocer el token de antemano (0038). Corrige el bug de
+ *  onboarding: es lo que permite avisarle a alguien invitado ANTES de
+ *  mandarlo a crear empresa. */
+export async function listMyPendingInvitationsAction(): Promise<MyPendingInvitation[]> {
+  await requireSession();
+  return listMyPendingInvitations();
+}
+
+/**
+ * Corrección de onboarding: decide a dónde mandar a alguien justo después
+ * de iniciar sesión o registrarse (Partes 1-2). Nunca envía a crear
+ * empresa si ya tiene membership o invitación pendiente — exactamente la
+ * regla que faltaba. Compone datos ya existentes (getActiveOrganization,
+ * getUserOrganizations, listMyPendingInvitations) y delega la decisión a
+ * la función pura resolvePostAuthDestination (testeable sin BD).
+ */
+export async function getPostAuthDestinationAction(): Promise<PostAuthDestination> {
+  const [activeOrg, organizations, invitations] = await Promise.all([
+    getActiveOrganization(),
+    getUserOrganizations(),
+    listMyPendingInvitations(),
+  ]);
+
+  return resolvePostAuthDestination({
+    hasResolvedActiveOrg: activeOrg !== null,
+    membershipCount: organizations.length,
+    pendingInvitationTokens: invitations.map((i) => i.token),
+  });
 }
 
 // ---------------------------------------------------------------------------

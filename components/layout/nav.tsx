@@ -16,6 +16,7 @@ const ITEMS: { label: string; href: string | null }[] = [
   { label: "Implementación", href: "/implementation" },
   { label: "Importaciones", href: "/imports" },
   { label: "Equipo", href: "/team" },
+  { label: "Configuración", href: "/settings/company" },
 ];
 
 export function AppNav() {

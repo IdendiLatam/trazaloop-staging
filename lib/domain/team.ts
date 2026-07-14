@@ -276,3 +276,80 @@ export function resolveTeamChecklistStatus(
 ): TeamChecklistStatus {
   return memberCount > 1 || pendingInvitationCount > 0 ? "completo" : "pendiente";
 }
+
+// ---------------------------------------------------------------------------
+// Corrección de onboarding: a dónde mandar a alguien justo después de
+// iniciar sesión o registrarse. Espejo puro de la corrección (bug:
+// usuarios invitados terminaban forzados a crear empresa). Testeable sin
+// BD con `npm run test:team`.
+// ---------------------------------------------------------------------------
+export type PostAuthDestination =
+  | { kind: "dashboard" }
+  | { kind: "select-org" }
+  | { kind: "accept-invite"; token: string }
+  | { kind: "create-org" };
+
+export type PostAuthFacts = {
+  /** true si ya hay una empresa activa resuelta (cookie válida O una sola
+   *  membership, que getActiveOrganization ya auto-selecciona). */
+  hasResolvedActiveOrg: boolean;
+  membershipCount: number;
+  /** Tokens de invitaciones pendientes y VIGENTES para el correo del
+   *  usuario (ya filtradas: status='pending', no expiradas, email
+   *  coincide) — tal como las devuelve list_my_pending_invitations (0038). */
+  pendingInvitationTokens: string[];
+};
+
+/**
+ * Decide el destino post-login/registro.
+ *
+ * Caso A — una o más memberships activas: nunca a crear empresa.
+ * Caso B — sin membership, con invitación(es) pendiente(s): nunca a crear
+ *          empresa; una sola invitación va directo a aceptarla, varias van
+ *          a elegir en /select-org.
+ * Caso C — sin membership ni invitación: a crear empresa.
+ */
+export function resolvePostAuthDestination(f: PostAuthFacts): PostAuthDestination {
+  if (f.hasResolvedActiveOrg) return { kind: "dashboard" };
+  if (f.membershipCount === 1) return { kind: "dashboard" }; // auto-selección ya existente (getActiveOrganization).
+  if (f.membershipCount > 1) return { kind: "select-org" };
+
+  // membershipCount === 0 a partir de aquí.
+  if (f.pendingInvitationTokens.length === 1) {
+    return { kind: "accept-invite", token: f.pendingInvitationTokens[0] };
+  }
+  if (f.pendingInvitationTokens.length > 1) return { kind: "select-org" };
+  return { kind: "create-org" };
+}
+
+/**
+ * Valida un parámetro `next` recibido en login/registro ANTES de usarlo en
+ * un redirect (Parte 4/5; Parte 8 en espíritu — nunca confiar un destino
+ * arbitrario del cliente). Lista blanca deliberadamente angosta: solo
+ * rutas internas que empiecen por "/accept-invite", nunca una URL
+ * completa ni "//" (truco clásico de open redirect).
+ */
+export function isSafeAcceptInviteNext(next: string | null | undefined): next is string {
+  if (!next) return false;
+  if (!next.startsWith("/accept-invite")) return false;
+  if (next.startsWith("//")) return false;
+  return true;
+}
+
+/** Convierte un PostAuthDestination en una ruta interna para redirect().
+ *  Función pura y SÍNCRONA a propósito: vive aquí (no en
+ *  server/actions/team.ts) porque todo export de un archivo "use server"
+ *  debe ser async — esta no necesita serlo. */
+export function postAuthDestinationPath(dest: PostAuthDestination): string {
+  switch (dest.kind) {
+    case "dashboard":
+      return "/dashboard";
+    case "select-org":
+      return "/select-org";
+    case "accept-invite":
+      return `/accept-invite?token=${encodeURIComponent(dest.token)}`;
+    case "create-org":
+      return "/select-org";
+  }
+}
+

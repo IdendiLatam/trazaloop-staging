@@ -30,7 +30,14 @@ encontrando durante la prueba.
   abajo funcionan igual si prefieres crear los registros a mano en la UI.
 - **Equipo (Sprint 8):** define quién de tu equipo y del equipo del
   cliente usará la cuenta e invítalos desde `/team` con el rol que les
-  corresponda — ver `docs/TEAM_MANAGEMENT_GUIDE.md`.
+  corresponda — ver `docs/TEAM_MANAGEMENT_GUIDE.md`. Una persona invitada
+  que inicia sesión o se registra **nunca termina en "crear empresa"**:
+  Trazaloop la lleva directo a aceptar su invitación (o a elegir, si tiene
+  varias).
+- **Configuración (Sprint 8.3):** antes de avanzar, completa los datos
+  reales de la empresa (NIT, correo de contacto, ciudad, país) desde
+  `/settings/company` (solo admin), y pide a cada persona que complete su
+  «Mi perfil» (`/settings/profile`) — ver `docs/SETTINGS_GUIDE.md`.
 
 ## Los 17 pasos
 

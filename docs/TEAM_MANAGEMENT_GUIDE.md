@@ -53,21 +53,46 @@ Reglas aplicadas (servidor + base de datos, doble validación):
 
 1. Abre el enlace `/accept-invite?token=...`.
 2. Si no tienes sesión, Trazaloop te pide iniciar sesión o crear una
-   cuenta — después, **vuelve a abrir el mismo enlace** para continuar
-   (no se modifica el flujo de login/registro existente).
+   cuenta, **preservando el enlace de invitación** (`?next=/accept-invite?token=...`):
+   después de iniciar sesión o registrarte, vuelves automáticamente a la
+   misma invitación — nunca a "crear empresa".
 3. Con sesión iniciada, verás a qué empresa y con qué rol te invitaron.
 4. Si tu cuenta tiene un correo distinto al invitado, Trazaloop lo avisa
    claramente y no permite continuar con esa cuenta.
 5. «Aceptar invitación» crea tu membership con el rol invitado y te deja
    con esa empresa como activa.
+6. Si vuelves a abrir un enlace que ya aceptaste antes, Trazaloop te
+   redirige a `/select-org` con un aviso claro en vez de dejarte en una
+   pantalla sin salida.
 
 Una invitación deja de poder aceptarse si: ya fue aceptada, fue revocada,
-o expiró (7 días por defecto).
+o expiró (7 días por defecto). En esos casos ves un mensaje claro (sin
+redirigir), con la sugerencia de pedir una invitación nueva.
+
+## 4.1 Qué pasa si inicias sesión SIN el enlace de invitación
+
+Si ya tienes una invitación pendiente y simplemente inicias sesión de
+forma normal (sin pasar por `/accept-invite`), Trazaloop la detecta por tu
+correo — **nunca te manda a crear una empresa nueva**:
+
+- **Una sola invitación pendiente**: te lleva directo a aceptarla.
+- **Varias invitaciones pendientes**: te muestra la lista en
+  `/select-org` para que elijas cuál aceptar primero.
+- **Ya perteneces a una o más empresas**: entras normalmente a tu empresa
+  (o a elegir cuál, si tienes varias); las invitaciones nuevas igual
+  quedan visibles en `/select-org` para que las veas cuando quieras.
+- **Sin membership ni invitación**: ahí sí, `/select-org` te ofrece crear
+  tu primera empresa.
 
 ## 5. Cómo cambiar roles
 
 En `/team` → tabla de **Miembros actuales**, el selector de rol junto a
 cada persona (solo admin). El cambio se aplica de inmediato.
+
+> Nota: cambiar el ROL de un miembro se hace aquí, en `/team`. Editar los
+> DATOS de una persona (nombre, cargo, teléfono) se hace desde su propio
+> «Mi perfil» (`/settings/profile`) — nadie edita el perfil de otra
+> persona en este sprint. Ver `docs/SETTINGS_GUIDE.md`.
 
 ## 6. Cómo retirar acceso
 
@@ -109,6 +134,12 @@ real:
   (`accept_team_invitation`) que valida token, estado, expiración y
   coincidencia de correo — nunca por un INSERT/UPDATE directo desde el
   cliente.
+- Descubrir las propias invitaciones pendientes (sin conocer el token de
+  antemano) pasa por `list_my_pending_invitations`, otra función
+  seguridad-definidor que resuelve el correo desde la sesión — nunca
+  devuelve invitaciones de otro usuario, y el parámetro `next` de
+  login/registro solo acepta rutas que empiecen por `/accept-invite`
+  (nunca una URL completa: se evita así un "open redirect").
 - RLS aísla invitaciones y miembros por empresa; nadie ve ni modifica el
   equipo de otra organización.
 - No se usa `service_role` en ninguna acción de negocio de este sprint.

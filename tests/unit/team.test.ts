@@ -17,8 +17,11 @@ import {
   isTeamRole,
   isExpired,
   resolveTeamChecklistStatus,
+  resolvePostAuthDestination,
+  isSafeAcceptInviteNext,
   type MembershipFacts,
   type InvitationFacts,
+  type PostAuthFacts,
 } from "../../lib/domain/team";
 
 let failures = 0;
@@ -204,6 +207,121 @@ check("Extra: checklist de equipo en Implementación (Parte 9)", () => {
   assert(resolveTeamChecklistStatus(1, 0) === "pendiente", "solo el propio usuario → pendiente");
   assert(resolveTeamChecklistStatus(2, 0) === "completo", "más de un miembro → completo");
   assert(resolveTeamChecklistStatus(1, 1) === "completo", "con invitación pendiente → completo");
+});
+
+console.log("\nTrazaloop · onboarding: a dónde va alguien después de iniciar sesión o registrarse\n");
+
+function facts(overrides: Partial<PostAuthFacts>): PostAuthFacts {
+  return {
+    hasResolvedActiveOrg: false,
+    membershipCount: 0,
+    pendingInvitationTokens: [],
+    ...overrides,
+  };
+}
+
+check("1. Usuario con membership(s) activa(s) → dashboard/select-org, NUNCA create-org", () => {
+  const withCookie = resolvePostAuthDestination(facts({ hasResolvedActiveOrg: true, membershipCount: 1 }));
+  assert(withCookie.kind === "dashboard", `esperaba dashboard, fue ${withCookie.kind}`);
+
+  const severalNoCookie = resolvePostAuthDestination(facts({ membershipCount: 2 }));
+  assert(severalNoCookie.kind === "select-org", `esperaba select-org, fue ${severalNoCookie.kind}`);
+  assert(
+    (severalNoCookie.kind as string) !== "create-org",
+    "un usuario con memberships nunca debía terminar en create-org"
+  );
+});
+
+check("2. Usuario con UNA membership activa → se activa automáticamente (dashboard)", () => {
+  const r = resolvePostAuthDestination(facts({ membershipCount: 1 }));
+  assert(r.kind === "dashboard", `esperaba dashboard (auto-selección), fue ${r.kind}`);
+});
+
+check("3. Usuario sin membership pero con invitación pendiente → accept-invite, no create-org", () => {
+  const r = resolvePostAuthDestination(facts({ pendingInvitationTokens: ["tok-123"] }));
+  assert(r.kind === "accept-invite", `esperaba accept-invite, fue ${r.kind}`);
+  assert(r.kind === "accept-invite" && r.token === "tok-123", "debía preservar el token de la invitación");
+});
+
+check("4. Usuario sin membership ni invitación → create-org", () => {
+  const r = resolvePostAuthDestination(facts({}));
+  assert(r.kind === "create-org", `esperaba create-org, fue ${r.kind}`);
+});
+
+check("5. Login con next=/accept-invite?token=... preserva el destino", () => {
+  const next = "/accept-invite?token=abc123";
+  assert(isSafeAcceptInviteNext(next), "un next hacia /accept-invite debía aceptarse");
+  assert(!isSafeAcceptInviteNext(null), "sin next no hay destino que preservar");
+  assert(!isSafeAcceptInviteNext(""), "next vacío no debía aceptarse");
+  assert(!isSafeAcceptInviteNext("/dashboard"), "un next fuera de /accept-invite no debía aceptarse");
+  assert(!isSafeAcceptInviteNext("https://evil.example.com"), "una URL completa no debía aceptarse (open redirect)");
+  assert(!isSafeAcceptInviteNext("//evil.example.com"), "un protocol-relative URL no debía aceptarse (open redirect)");
+});
+
+check("6. Register con next=/accept-invite?token=... preserva el destino (misma guarda que login)", () => {
+  // signUpAction reutiliza literalmente isSafeAcceptInviteNext: una sola
+  // función, una sola prueba de la regla, usada en los dos flujos.
+  const next = "/accept-invite?token=xyz789";
+  assert(isSafeAcceptInviteNext(next), "el next de un registro con invitación debía preservarse");
+});
+
+check("7. Invitación con email distinto se rechaza (no se puede aceptar en nombre de otro)", () => {
+  const inv: InvitationFacts = {
+    status: "pending",
+    email: "invitado@empresa.dev",
+    expiresAt: new Date("2027-01-01T00:00:00Z"),
+  };
+  const r = validateAcceptance(inv, "otro@correo.dev", now);
+  assert(r.error !== null, "debía rechazar un correo que no coincide");
+});
+
+check("8. Invitación expirada se rechaza", () => {
+  const inv: InvitationFacts = {
+    status: "pending",
+    email: "persona@empresa.dev",
+    expiresAt: new Date("2026-01-01T00:00:00Z"),
+  };
+  const r = validateAcceptance(inv, "persona@empresa.dev", now);
+  assert(r.error !== null, "debía rechazar una invitación expirada");
+});
+
+check("9. Invitación revoked se rechaza", () => {
+  const inv: InvitationFacts = {
+    status: "revoked",
+    email: "persona@empresa.dev",
+    expiresAt: new Date("2027-01-01T00:00:00Z"),
+  };
+  const r = validateAcceptance(inv, "persona@empresa.dev", now);
+  assert(r.error !== null, "debía rechazar una invitación revocada");
+});
+
+check("10. Invitación accepted no duplica membership (ni se vuelve a aceptar)", () => {
+  const inv: InvitationFacts = {
+    status: "accepted",
+    email: "persona@empresa.dev",
+    expiresAt: new Date("2027-01-01T00:00:00Z"),
+  };
+  const r = validateAcceptance(inv, "persona@empresa.dev", now);
+  assert(r.error !== null, "una invitación ya aceptada no debía volver a aceptarse");
+  // list_my_pending_invitations (0038) solo devuelve status='pending': una
+  // invitación aceptada nunca aparece en pendingInvitationTokens, así que
+  // resolvePostAuthDestination tampoco puede volver a mandarla a aceptar.
+});
+
+check("11. Usuario ya miembro no genera un intento de aceptar invitación (la membership manda)", () => {
+  // Aunque tenga una invitación pendiente a OTRA empresa, si ya tiene
+  // membership no se le fuerza por el camino de aceptar invitación: eso
+  // sigue disponible desde /select-org, sin bloquear su acceso normal.
+  const r = resolvePostAuthDestination(
+    facts({ membershipCount: 1, pendingInvitationTokens: ["tok-otra-empresa"] })
+  );
+  assert(r.kind === "dashboard", `esperaba dashboard (la membership existente manda), fue ${r.kind}`);
+});
+
+check("12. Varias invitaciones pendientes no envían a create-org (van a elegir en select-org)", () => {
+  const r = resolvePostAuthDestination(facts({ pendingInvitationTokens: ["tok-1", "tok-2", "tok-3"] }));
+  assert(r.kind === "select-org", `esperaba select-org, fue ${r.kind}`);
+  assert((r.kind as string) !== "create-org", "varias invitaciones nunca debían terminar en create-org");
 });
 
 if (failures > 0) {

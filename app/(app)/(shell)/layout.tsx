@@ -73,9 +73,17 @@ export default async function ShellLayout({
             {activeOrg.organizationName}
             <span className="text-xs font-normal text-ink-soft">cambiar</span>
           </Link>
-          <span className="eyebrow hidden sm:block">
-            NTC 6632 · UNE-EN 15343
-          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/settings/company"
+              className="text-sm text-ink-soft hover:text-loop hover:underline"
+            >
+              Configuración
+            </Link>
+            <span className="eyebrow hidden sm:block">
+              NTC 6632 · UNE-EN 15343
+            </span>
+          </div>
         </header>
 
         <main className="flex-1 p-6">{children}</main>

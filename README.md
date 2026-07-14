@@ -722,6 +722,117 @@ mitigación oficial de Next.js para un teardown defectuoso conocido de
 Turbopack en builds de producción de la serie 16.2.x, documentado aparte
 del ajuste de rastreo de este sprint.
 
+## Corrección de onboarding · Usuarios invitados ya no son forzados a crear empresa
+
+Bug encontrado tras el Sprint 8: `signInAction`/`signUpAction` redirigían
+siempre a `/dashboard`/`/select-org` sin revisar si la persona ya tenía
+membership o invitación pendiente; y `/select-org`, con cero memberships,
+solo mostraba "Crea tu primera empresa" — **sin mencionar la invitación
+pendiente en absoluto** si el usuario no conservaba el enlace. Sin módulos
+nuevos; sin caso piloto ni datos demo; sin cambios de cálculo ni
+metodología.
+
+**Migración `0038_my_pending_invitations.sql`**: agrega la pieza que
+faltaba — `list_my_pending_invitations()` (RPC `security definer`, solo
+`authenticated`), que resuelve `auth.uid() → profiles.email`
+internamente y devuelve las invitaciones pendientes y vigentes **del
+propio usuario**, sin necesitar conocer el token de antemano (la única
+vía existente, `get_invitation_preview`, exige ya tener el token). No
+cambia `team_invitations` ni su RLS. Verificado sobre PostgreSQL 16 real:
+un usuario sin membership en ninguna empresa ve sus invitaciones de
+**dos** empresas distintas; un usuario no invitado ve cero; una invitación
+expirada no aparece.
+
+**Lógica pura** (`lib/domain/team.ts`): `resolvePostAuthDestination` —
+espejo puro de la decisión de a dónde ir después de autenticarse (Caso A:
+con membership → nunca a crear empresa; Caso B: sin membership pero con
+invitación → a aceptarla, o a elegir si hay varias; Caso C: sin nada → a
+crear empresa) — e `isSafeAcceptInviteNext`, una lista blanca angosta
+(solo rutas que empiecen por `/accept-invite`) para el parámetro `next`
+de login/registro, evitando un open redirect.
+
+**`server/actions/auth.ts`**: `signInAction`/`signUpAction` ahora aceptan
+`next` (preservado end to end desde `/accept-invite` → login/registro →
+de vuelta), y cuando no hay `next` calculan el destino con
+`getPostAuthDestinationAction` (nuevo, en `server/actions/team.ts`) en
+vez de redirigir a ciegas.
+
+**UI**: `/select-org` ya no dice "crea tu primera empresa" cuando hay una
+invitación pendiente — la muestra con un botón «Aceptar invitación»
+directo (reutilizando `AcceptInviteForm` del Sprint 8), y con exactamente
+una invitación y cero empresas manda directo a `/accept-invite`. Los
+enlaces de login/registro dentro de `/accept-invite` ahora sí preservan el
+destino (antes solo pedían "vuelve a abrir este enlace" sin mecanismo
+real). `/accept-invite` redirige con aviso claro si la invitación ya se
+había aceptado antes, en vez de dejar a la persona en una pantalla sin
+salida.
+
+**Pruebas**: `npm run test:team` suma 12 casos nuevos (30 en total) sobre
+la resolución de destino post-auth y la lista blanca de `next` — sin BD,
+mismo patrón que el resto del sprint.
+
+## Sprint 8.3 · Configuración de empresa y perfil de usuario
+
+Usuarios autorizados pueden editar datos básicos de la empresa activa, y
+cada usuario puede editar su propio perfil — sin tocar Supabase
+manualmente. Sin caso piloto, sin datos demo, sin cambios de cálculo ni
+metodología.
+
+**Hallazgo clave al revisar la estructura existente**: `organizations`
+(name, tax_id, country) y `profiles` (full_name, email) ya tenían la RLS
+correcta desde el Sprint 1 — `organizations_update` exige
+`is_org_admin(id)`, `profiles_update` exige `id = auth.uid()`. Este sprint
+**no crea ninguna política ni trigger nuevo**: solo agrega las columnas
+que faltaban con `ALTER TABLE`, que las políticas y el trigger de
+auditoría (`audit_row_change`, ya adjunto a `organizations`) cubren
+automáticamente por ser genéricos (RLS es por fila, no por columna;
+`audit_row_change` serializa con `to_jsonb()`).
+
+**Migración `0039_company_and_profile_settings.sql`**: agrega a
+`organizations` → `legal_name`, `contact_email`, `phone`, `address`,
+`city`, `website` (no duplica `name`, `tax_id`, `country`, que ya
+existían); agrega a `profiles` → `phone`, `position` (no duplica
+`full_name`, `email`). Sin `avatar_url`: no hay soporte de carga de
+archivos todavía, no se implementó a propósito. Verificado sobre
+PostgreSQL 16 real: admin edita la empresa, consultant queda bloqueado por
+RLS, un usuario edita su propio perfil, el mismo usuario NO puede editar
+el de otro, y `audit_log` recoge las columnas nuevas sin cambios.
+
+**Lógica pura** (`lib/domain/settings.ts`): `canEditCompany` (solo admin),
+`canEditProfile` (solo el propio), `validateCompanySettings` /
+`validateProfileSettings`, y `buildCompanySettingsUpdatePayload` /
+`buildProfileUpdatePayload` — mismo patrón que
+`buildInvitationInsertPayload` (Sprint 8): el tipo de entrada ni siquiera
+declara un campo de identidad (`organization_id`/`id`/`user_id`/`email`),
+así que no hay forma de que un intento de manipularlo llegue a alguna
+parte que lo use. Reutiliza `isValidEmail`/`normalizeEmail` de
+`lib/domain/team.ts` en vez de duplicarlos.
+
+**Server Actions** (`server/actions/settings.ts` + `lib/db/settings.ts`):
+`getCompanySettingsAction`, `updateCompanySettingsAction`,
+`getMyProfileAction`, `updateMyProfileAction` — el `organization_id` del
+UPDATE de empresa siempre sale de `requireActiveOrg()`, el id de perfil
+siempre de `requireSession()`; ninguno de los dos se lee jamás de un
+campo del formulario. Sin `service_role`.
+
+**UI**: `/settings/company` («Datos de empresa», editable solo por admin;
+quality/consultant ven un resumen de solo lectura con el aviso
+correspondiente) y `/settings/profile` («Mi perfil», con el correo de
+autenticación en solo lectura y su aviso). Enlaces cruzados desde la barra
+superior del shell, la navegación principal, `/team` («Mi perfil») e
+internamente entre ambas pantallas de configuración.
+
+**Documentación**: nueva `docs/SETTINGS_GUIDE.md`.
+`docs/TEAM_MANAGEMENT_GUIDE.md`, `docs/COMPANY_TESTING_GUIDE.md` y
+`docs/PREDEPLOY_CHECKLIST.md` actualizados con `test:settings` y el rango
+de migraciones `0001` … `0039`.
+
+**Pruebas**: `npm run test:settings` (`tests/unit/settings.test.ts`) cubre
+los 12 casos mínimos del sprint (más 2 adicionales) sobre permisos,
+validación de datos de empresa/perfil y la garantía estructural de que
+ningún payload construido puede transportar `organization_id`, `id`,
+`user_id` ni `email`.
+
 ## Decisiones y riesgos pendientes
 
 0. **`test:rls` requiere Supabase local con Docker** (no ejecutable en todo entorno; ver sección de pruebas).
