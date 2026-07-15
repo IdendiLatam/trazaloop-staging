@@ -19,6 +19,7 @@ const ITEMS: { label: string; href: string | null }[] = [
   { label: "Soporte técnico", href: "/audit-support" },
   { label: "Implementación", href: "/implementation" },
   { label: "Importaciones", href: "/imports" },
+  { label: "TrazaDocs", href: "/trazadocs" },
   { label: "Equipo", href: "/team" },
   { label: "Configuración", href: "/settings/company" },
 ];

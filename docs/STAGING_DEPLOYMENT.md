@@ -91,7 +91,7 @@ npx supabase db push
 ```
 
 `TU_PROJECT_REF` es el identificador del proyecto (Settings → General). Deben
-aplicarse las migraciones `0001` … `0042` en orden.
+aplicarse las migraciones `0001` … `0047` en orden.
 
 Verifica las semillas en el SQL Editor de Supabase:
 

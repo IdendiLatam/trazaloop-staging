@@ -12,6 +12,7 @@ import {
 } from "@/server/actions/implementation";
 import { listLatestCalculations } from "@/lib/db/recycled";
 import { getTeamOverviewAction } from "@/server/actions/team";
+import { getTrazadocsChecklistOverviewAction } from "@/server/actions/trazadocs";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import {
   ChecklistStatusBadge,
@@ -24,7 +25,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 export default async function ImplementationPage() {
   const org = await requireActiveOrg();
 
-  const [dashboard, checklist, nextActions, calculations, recentFeedback, teamOverview] =
+  const [dashboard, checklist, nextActions, calculations, recentFeedback, teamOverview, trazadocsOverview] =
     await Promise.all([
       getImplementationDashboardAction(),
       getImplementationChecklistAction(),
@@ -32,6 +33,7 @@ export default async function ImplementationPage() {
       listLatestCalculations(org.organizationId, 8),
       listImplementationFeedbackAction(),
       getTeamOverviewAction(),
+      getTrazadocsChecklistOverviewAction(),
     ]);
 
   const topAction = nextActions[0] ?? null;
@@ -184,6 +186,26 @@ export default async function ImplementationPage() {
           </div>
           <Link href="/team" className="shrink-0 text-sm text-loop hover:underline">
             Ir a Equipo →
+          </Link>
+        </div>
+      </section>
+
+      {/* Sprint 9: Documentos técnicos mínimos creados (tarjeta aparte,
+          no bloquea el cálculo — solo informativa). */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">TrazaDocs</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-hairline bg-surface px-4 py-3">
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Documentos técnicos mínimos creados</span>
+              <ChecklistStatusBadge status={trazadocsOverview.status} />
+            </p>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              {trazadocsOverview.totalDocuments} documento(s) · {trazadocsOverview.approvedCount} aprobado(s).
+            </p>
+          </div>
+          <Link href="/trazadocs" className="shrink-0 text-sm text-loop hover:underline">
+            Ir a TrazaDocs →
           </Link>
         </div>
       </section>

@@ -21,11 +21,12 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
 [ ] npm run test:team pasa
 [ ] npm run test:settings pasa
 [ ] npm run test:platform pasa
+[ ] npm run test:trazadocs pasa
 [ ] npm run test:smoke pasa contra staging
 [ ] npm run test:rls pasa contra staging o local (obligatorio antes de producción real)
 [ ] .env.local no está en Git
 [ ] tsconfig.tsbuildinfo no está en Git
-[ ] Supabase migrations aplicadas (0001 … 0042)
+[ ] Supabase migrations aplicadas (0001 … 0047)
 [ ] Bucket evidences existe y NO es público
 [ ] Auth redirect URLs configuradas (Site URL + Additional Redirect URLs)
 [ ] Vercel env vars configuradas (las 5 de .env.example, más
@@ -34,7 +35,8 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
     trazabilidad → cálculo → soporte técnico → flujo guiado →
     implementación → feedback → importaciones CSV → equipo/invitaciones →
     configuración de empresa/perfil → consola de plataforma con superadmin
-    bootstrapeado por SQL)
+    bootstrapeado por SQL → TrazaDocs: crear desde estructura sugerida,
+    diligenciar, enviar a revisión, aprobar, versiones, imprimir)
 ```
 
 Notas:

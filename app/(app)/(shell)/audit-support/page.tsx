@@ -43,6 +43,12 @@ export default async function AuditSupportPage() {
             Completar evidencias
           </Link>
           <Link
+            href="/trazadocs"
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
+          >
+            Ir a TrazaDocs
+          </Link>
+          <Link
             href="/recycled-content/output-batches"
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >

@@ -987,6 +987,170 @@ y `traceability_6632`.
 sobre estas tres correcciones — sin BD, mismo patrón que el resto del
 sprint.
 
+## Sprint 9 · TrazaDocs MVP — documentos vivos guiados por secciones
+
+Primer sprint de TrazaDocs: cada empresa puede construir, diligenciar,
+guardar, editar, versionar, aprobar y consultar documentos técnicos
+**dentro** de Trazaloop. Nunca es una biblioteca de Word/PDF
+descargables, ni obliga a bajar un archivo para editarlo fuera de la
+plataforma. Sin caso piloto, sin datos demo, sin cambios de cálculo ni
+metodología, sin PDF server-side, sin ISO 9001 completo, sin módulo
+formal de auditorías.
+
+**Migraciones**:
+
+- **`0043_trazadocs_core.sql`**: 6 tablas — `trazadoc_blueprints` /
+  `trazadoc_blueprint_sections` (estructuras sugeridas GLOBALES, solo
+  editables por `platform_superadmin`) y `trazadoc_documents` /
+  `trazadoc_document_sections` / `trazadoc_document_versions` /
+  `trazadoc_status_history` (documentos de cada empresa, org-scoped, con
+  FK compuesta a `trazadoc_documents(organization_id, id)`). RLS con la
+  MISMA regla de rol por estado en 4 tablas a la vez: admin/quality sin
+  restricción; consultant solo mientras el documento está
+  draft/in_review, nunca aprueba ni marca obsoleto ni toca un documento ya
+  aprobado directamente.
+- **`0044_trazadocs_seed_blueprints.sql`**: **11 estructuras sugeridas**
+  (manual técnico, 8 procedimientos, 2 instructivos) con **110 secciones**
+  y sus tips — generado con un script temporal (borrado tras producir el
+  SQL) para evitar errores de transcripción en ~120 filas. No es un caso
+  piloto ni datos demo: son estructuras y ayudas de plataforma, sin
+  contenido diligenciado de ninguna empresa.
+- **`0045_trazadocs_views.sql`**: `v_trazadoc_document_summary` y
+  `v_trazadoc_blueprint_summary`, ambas `security_invoker = true` (heredan
+  la RLS real, a diferencia de `v_platform_organizations`). Solo cuentan y
+  resumen: no recalculan nada del motor de contenido reciclado.
+- **`0046_trazadocs_status_transitions.sql`**: `change_trazadoc_document_status`,
+  RPC `security definer` que hace atómico lo que necesita 3 tablas a la
+  vez (snapshot de versión + historial de estado + actualización del
+  documento) — mismo patrón que `create_organization` /
+  `accept_team_invitation` / `create_platform_organization`. Valida rol
+  por dentro además de la RLS (defensa en profundidad: un consultant no
+  puede aprobar ni por RLS ni por la RPC).
+
+Verificado exhaustivamente contra PostgreSQL 16 real: documento creado
+desde blueprint con sus secciones copiadas vacías; consultant edita
+contenido en borrador pero es bloqueado (por RLS Y por la RPC) al intentar
+aprobar; admin aprueba y el snapshot de versión captura el contenido real;
+consultant queda bloqueado de editar un documento ya aprobado; admin puede
+marcarlo obsoleto; aislamiento cruzado de empresa confirmado en
+documentos, secciones y versiones; superadmin edita blueprints/tips
+globales, un admin de empresa normal NO puede. Un bug real de ambigüedad
+de columna en la RPC (`organization_id` colisionaba con el parámetro de
+salida) se encontró y corrigió durante esta verificación, igual que un
+falso positivo de compliance (“estuviera” contiene la subcadena “tuv”) en
+uno de los 110 hints generados.
+
+**Lógica pura** (`lib/domain/trazadocs.ts`): permisos por rol y estado
+(`canEditDocument`, `canApproveDocument`, `canMarkObsolete`,
+`canReactivateDocument` — más estricta que la RLS en un punto a propósito:
+ni admin edita un documento obsoleto directamente sin reactivarlo
+primero), construcción de secciones desde blueprint siempre con
+contenido vacío, validación de documento/sección libres,
+`resolveNextVersionNumber` (siempre creciente, nunca reutiliza), permisos
+de plataforma (`canEditBlueprint`, solo superadmin) y el checklist de
+Implementación — reutiliza el mismo `ChecklistStatusBadge` del Sprint 6
+(mismos 3 valores exactos, no se crea un badge nuevo para lo mismo).
+
+**Server Actions** (`server/actions/trazadocs.ts` + `lib/db/trazadocs.ts`
++ `lib/db/trazadocs-platform.ts`): lado empresa (listar, crear desde
+blueprint o libre, editar secciones, agregar sección, transiciones de
+estado, versiones) y lado plataforma (listar/crear/editar blueprints y
+sus secciones/hints) — `requireActiveOrg()` para lo primero,
+`requirePlatformStaff()` + superadmin para lo segundo. `organization_id`
+nunca sale del cliente al crear un documento.
+
+**UI empresa**: `/trazadocs` (listado con estados y accesos rápidos),
+`/trazadocs/new` (estructuras sugeridas — nunca llamadas "plantillas
+descargables" — o documento libre), `/trazadocs/[id]` (vista + botones de
+transición de estado), `/trazadocs/[id]/edit` (editor por secciones: cada
+una con título, textarea, botón **i** con su tip, e indicador de
+obligatoria/vacía), `/trazadocs/[id]/versions` (historial, cada versión
+un snapshot inmutable) y `/trazadocs/[id]/print` (vista limpia
+imprimible, botón "Imprimir / guardar como PDF" vía `window.print()` —
+reutiliza el mismo `PrintButton` del Sprint 5A, bajo el mismo grupo de
+rutas `(print)` ya establecido, sin PDF server-side). Tarjeta "Documentos
+técnicos mínimos creados" agregada en `/implementation` de forma aditiva
+(sin tocar el checklist de 17 pasos del Sprint 6); nunca bloquea el
+cálculo.
+
+**UI plataforma**: `/platform/trazadocs` (listar/crear estructuras) y
+`/platform/trazadocs/[id]` (editar estructura + secciones + tips,
+activar/desactivar) — dentro de `app/(app)/platform/`, con el mismo
+layout sin dependencia de empresa activa establecido en la corrección
+post Sprint 8.4.
+
+**Documentación**: nueva `docs/TRAZADOCS_GUIDE.md`. `docs/PLATFORM_ADMIN_GUIDE.md`,
+`docs/COMPANY_TESTING_GUIDE.md` y `docs/PREDEPLOY_CHECKLIST.md`
+actualizados con `test:trazadocs` y el rango de migraciones `0001` …
+`0046`.
+
+**Pruebas**: `npm run test:trazadocs` (`tests/unit/trazadocs.test.ts`)
+cubre los 17 casos mínimos del sprint más 4 adicionales.
+`tests/rls/isolation.test.ts` suma 9 casos (60-68, con bootstrap directo
+de superadmin) sobre aislamiento de documentos/secciones/versiones entre
+empresas, bloqueo de aprobación por consultant (RLS y RPC), aprobación por
+admin, y edición de blueprints/tips global solo por superadmin.
+
+## Sprint 9.1 · Corrección de control documental TrazaDocs
+
+Cuatro brechas de control documental encontradas y corregidas antes de
+integrar el Sprint 9. Sin módulos nuevos, sin caso piloto, sin datos demo,
+sin PDF server-side, sin ISO 9001 completo, sin cambios de cálculo ni
+metodología.
+
+**Bloqueante 1 — Sin versión inicial real.** Un documento nuevo quedaba
+con `current_version = 1` en su propia fila, pero **sin ninguna fila real**
+en `trazadoc_document_versions`. Corregido: `insertInitialVersion`
+(`lib/db/trazadocs.ts`) inserta "v1 — Borrador inicial" justo después de
+crear el documento y sus secciones — para ambos caminos
+(`createDocumentFromBlueprintAction` y `createCustomDocumentAction`), con
+secciones vacías incluidas en el snapshot cuando vienen de un blueprint, o
+un arreglo vacío para un documento libre recién creado. Idempotente: si v1
+ya existe (`unique(document_id, version_number)`), el conflicto se trata
+como éxito silencioso, no como error.
+
+**Bloqueante 2 — "Guardar nueva versión" no estaba en la UI.** La acción
+(`createDocumentVersionAction`) ya existía desde el Sprint 9 pero no había
+ningún botón que la llamara. Se agregó un formulario en
+`DocumentStatusActions` con una nota de cambio opcional, visible mientras
+el documento es editable — mantiene el estado actual y solo agrega un
+snapshot nuevo.
+
+**Bloqueante 3 — Documentos aprobados se editaban directamente.** Este
+era el hallazgo más serio: `trazadoc_documents_update` y
+`trazadoc_document_sections_update` (0043) dejaban a admin/quality editar
+el contenido de un documento **aprobado** sin pasar por una versión nueva.
+Corregido en `0047_trazadocs_version_control.sql`: ambas políticas ahora
+exigen `status in ('draft','in_review')` para los TRES roles por igual —
+sin excepción para admin/quality. Al revisar el flujo completo, además
+encontré un segundo gap real en la RPC `change_trazadoc_document_status`:
+el guarda de `consultant` solo miraba el estado **destino**
+(`p_to_status not in ('draft','in_review')`), nunca el estado **de
+origen** — así que un consultant SÍ podía "reabrir" un documento ya
+aprobado moviéndolo a `draft`, porque `draft` es un destino permitido.
+Verificado con datos reales antes y después del fix. Se agregó
+`canCreateDraftVersionFromApproved` (solo admin/quality) y la acción
+`createDraftVersionFromApprovedAction`: la única vía para volver a tocar
+un documento aprobado es crear una versión nueva en borrador a partir de
+él — nunca editarlo in place.
+
+**Bloqueante 4 — Documento obsoleto (mantenido).** Ya bloqueaba edición
+directa desde el Sprint 9; se confirmó que reactivar (`obsolete` → `draft`)
+sigue generando un snapshot de versión claro vía la misma RPC.
+
+Verificado end-to-end contra PostgreSQL 16 real con una corrida completa
+de 8 versiones (v1 borrador inicial → v2 guardar cambios → v3 enviar a
+revisión → v4 aprobar → v5 nueva versión en borrador desde aprobado → v6
+aprobar de nuevo → v7 obsoleto → v8 reactivar): ninguna versión se
+sobrescribió, el historial de estados coincide exactamente, y el
+documento final quedó con el estado y la versión correctos.
+
+**Pruebas**: `npm run test:trazadocs` suma 10 casos nuevos (31 en total).
+`tests/rls/isolation.test.ts` suma 2 casos (69-70) confirmando que ni
+admin puede editar un aprobado directamente ni consultant puede reabrirlo
+por ninguna vía, con admin creando la nueva versión en borrador
+correctamente.
+
 ## Decisiones y riesgos pendientes
 
 0. **`test:rls` requiere Supabase local con Docker** (no ejecutable en todo entorno; ver sección de pruebas).

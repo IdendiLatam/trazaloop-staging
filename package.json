@@ -19,10 +19,11 @@
     "test:team": "tsx tests/unit/team.test.ts",
     "test:settings": "tsx tests/unit/settings.test.ts",
     "test:platform": "tsx tests/unit/platform.test.ts",
+    "test:trazadocs": "tsx tests/unit/trazadocs.test.ts",
     "test:smoke": "tsx scripts/smoke-staging.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "test:all": "npm run typecheck && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided && npm run test:implementation && npm run test:imports && npm run test:team && npm run test:settings && npm run test:platform",
-    "predeploy": "npm run typecheck && npm run build && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided && npm run test:implementation && npm run test:imports && npm run test:team && npm run test:settings && npm run test:platform",
+    "test:all": "npm run typecheck && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided && npm run test:implementation && npm run test:imports && npm run test:team && npm run test:settings && npm run test:platform && npm run test:trazadocs",
+    "predeploy": "npm run typecheck && npm run build && npm run lint && npm run test:diagnostic && npm run test:compliance && npm run test:csv && npm run test:guided && npm run test:implementation && npm run test:imports && npm run test:team && npm run test:settings && npm run test:platform && npm run test:trazadocs",
     "repair:seeds": "tsx scripts/repair-staging-seeds.ts",
     "verify:prod": "tsx scripts/verify-production.ts",
     "diagnose:org": "tsx scripts/diagnose-org.ts"

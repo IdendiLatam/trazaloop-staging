@@ -69,6 +69,10 @@ ejecuta solo.
   agregados.
 - Agregar o desactivar personal de plataforma (`support`).
 - Crear más de una empresa (a diferencia de un usuario normal, §7).
+- Administrar las estructuras sugeridas y tips de **TrazaDocs** desde
+  `/platform/trazadocs` (Sprint 9) — crear, editar, activar/desactivar
+  estructuras y secciones; los tips son globales, nunca los edita una
+  empresa. Ver `docs/TRAZADOCS_GUIDE.md`.
 
 ## 4. Qué puede hacer support (si se usa ese rol)
 
@@ -77,6 +81,8 @@ ejecuta solo.
 crear empresas ni administrar personal de plataforma (agregar o cambiar el
 estado de otros registros de `platform_staff`) — esas dos acciones exigen
 `is_platform_superadmin()` específicamente, no solo `is_platform_staff()`.
+Tampoco puede editar estructuras ni tips de TrazaDocs (§3, Sprint 9): ve
+`/platform/trazadocs` en modo solo lectura.
 
 ## 5. Cómo crear empresas desde consola de plataforma
 

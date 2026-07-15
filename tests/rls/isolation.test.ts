@@ -2029,7 +2029,7 @@ async function main() {
       assert(threw, "el trigger forbid_mutation no bloqueó el UPDATE directo");
     });
 
-    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8 + 8.4) tienen RLS activo", async () => {
+    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8 + 8.4 + 9) tienen RLS activo", async () => {
       const expected = [
         // Sprint 1
         "profiles",
@@ -2072,6 +2072,13 @@ async function main() {
         "team_invitations",
         // Sprint 8.4
         "platform_staff",
+        // Sprint 9
+        "trazadoc_blueprints",
+        "trazadoc_blueprint_sections",
+        "trazadoc_documents",
+        "trazadoc_document_sections",
+        "trazadoc_document_versions",
+        "trazadoc_status_history",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name, c.relrowsecurity as rls
@@ -2112,6 +2119,9 @@ async function main() {
         "implementation_feedback",
         "import_job_rows",
         "team_invitations",
+        "trazadoc_documents",
+        "trazadoc_document_sections",
+        "trazadoc_document_versions",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name
@@ -2197,16 +2207,218 @@ async function main() {
       assert(threw, "memberships aceptó 'superadmin' como role_code (debía rechazarlo: no es un rol de empresa)");
     });
 
+    // =========================================================================
+    // Sprint 9 · TrazaDocs: aislamiento multiempresa de documentos/secciones/
+    // versiones, permisos por rol, y administración global de blueprints.
+    // A (userA) sigue siendo superadmin (bootstrap del caso 55, restaurado a
+    // 'active' al final del caso 58).
+    // =========================================================================
+    let trazadocA = "";
+    let trazadocSectionA = "";
+
+    await check("60. Empresa A no ve documentos de Empresa B (y viceversa)", async () => {
+      const { data: bpRows } = await userA.client
+        .from("trazadoc_blueprints")
+        .select("id")
+        .eq("code", "instructivo_carga_evidencias")
+        .limit(1);
+      const blueprintId = bpRows?.[0]?.id as string;
+
+      const { data: docA, error: docErr } = await userA.client
+        .from("trazadoc_documents")
+        .insert({
+          organization_id: orgA,
+          blueprint_id: blueprintId,
+          source_type: "suggested",
+          title: "Instructivo de carga de evidencias",
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      assert(!docErr && docA, `A no pudo crear un documento TrazaDocs: ${docErr?.message}`);
+      trazadocA = docA!.id;
+
+      const { data: bSeesA } = await userB.client.from("trazadoc_documents").select("id").eq("id", trazadocA);
+      assert((bSeesA ?? []).length === 0, "B pudo ver un documento TrazaDocs de la organización A");
+    });
+
+    await check("61. Empresa A no ve secciones de Empresa B (y viceversa)", async () => {
+      const { data: section, error: secErr } = await userA.client
+        .from("trazadoc_document_sections")
+        .insert({
+          organization_id: orgA,
+          document_id: trazadocA,
+          section_key: "objetivo",
+          title: "Objetivo",
+          content: "Contenido de prueba RLS",
+          sort_order: 1,
+          is_required: true,
+        })
+        .select("id")
+        .single();
+      assert(!secErr && section, `A no pudo crear una sección: ${secErr?.message}`);
+      trazadocSectionA = section!.id;
+
+      const { data: bSeesSection } = await userB.client
+        .from("trazadoc_document_sections")
+        .select("id")
+        .eq("id", trazadocSectionA);
+      assert((bSeesSection ?? []).length === 0, "B pudo ver una sección de un documento de la organización A");
+    });
+
+    await check("62. Empresa A no ve versiones de Empresa B (y viceversa)", async () => {
+      const { data: version, error: verErr } = await userA.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "in_review",
+        p_change_note: "Prueba RLS de versiones",
+      });
+      assert(!verErr && version != null, `A no pudo generar una versión: ${verErr?.message}`);
+
+      const { data: bSeesVersions } = await userB.client
+        .from("trazadoc_document_versions")
+        .select("id")
+        .eq("document_id", trazadocA);
+      assert((bSeesVersions ?? []).length === 0, "B pudo ver versiones de un documento de la organización A");
+    });
+
+    await check("63. Usuario no miembro no accede a documentos TrazaDocs de ninguna empresa", async () => {
+      const outsider = await newUser("s9-outsider");
+      const { data } = await outsider.client.from("trazadoc_documents").select("id").eq("id", trazadocA);
+      assert((data ?? []).length === 0, "un usuario ajeno pudo ver un documento TrazaDocs");
+    });
+
+    await check("64. Consultant no aprueba un documento TrazaDocs (ni por UPDATE directo ni por la RPC)", async () => {
+      const { data: updByC } = await userC.client
+        .from("trazadoc_documents")
+        .update({ status: "approved" })
+        .eq("id", trazadocA)
+        .select();
+      assert((updByC ?? []).length === 0, "un consultant pudo aprobar un documento por UPDATE directo");
+
+      const { error: rpcErr } = await userC.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "approved",
+        p_change_note: "intento no autorizado",
+      });
+      assert(rpcErr, "un consultant pudo aprobar un documento vía la RPC");
+    });
+
+    await check("65. Admin aprueba un documento TrazaDocs", async () => {
+      const { data: newVersion, error } = await userA.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "approved",
+        p_change_note: "Aprobado en prueba RLS",
+      });
+      assert(!error && newVersion != null, `admin debía poder aprobar: ${error?.message}`);
+
+      const { data: doc } = await userA.client.from("trazadoc_documents").select("status").eq("id", trazadocA).single();
+      assert(doc?.status === "approved", "el documento debía quedar aprobado");
+    });
+
+    await check("66. Superadmin edita blueprints globales", async () => {
+      const { data: bpRows } = await userA.client
+        .from("trazadoc_blueprints")
+        .select("id, description")
+        .eq("code", "instructivo_carga_evidencias")
+        .limit(1);
+      const blueprintId = bpRows?.[0]?.id as string;
+
+      const { data: updated, error } = await userA.client
+        .from("trazadoc_blueprints")
+        .update({ description: "Descripción actualizada en prueba RLS" })
+        .eq("id", blueprintId)
+        .select();
+      assert(!error && (updated ?? []).length === 1, `superadmin debía poder editar un blueprint global: ${error?.message}`);
+    });
+
+    await check("67. Usuario normal (no platform_staff) no edita blueprints globales", async () => {
+      const { data: bpRows } = await userB.client
+        .from("trazadoc_blueprints")
+        .select("id")
+        .eq("code", "instructivo_carga_evidencias")
+        .limit(1);
+      const blueprintId = bpRows?.[0]?.id as string;
+
+      const { data: updated } = await userB.client
+        .from("trazadoc_blueprints")
+        .update({ name: "Nombre hackeado" })
+        .eq("id", blueprintId)
+        .select();
+      assert((updated ?? []).length === 0, "un usuario normal (admin de empresa, no platform_staff) pudo editar un blueprint global");
+    });
+
+    await check("68. Tips globales (hints) no son editables por una empresa", async () => {
+      const { data: sectionRows } = await userB.client
+        .from("trazadoc_blueprint_sections")
+        .select("id")
+        .limit(1);
+      const sectionId = sectionRows?.[0]?.id as string;
+
+      const { data: updated } = await userB.client
+        .from("trazadoc_blueprint_sections")
+        .update({ hint: "tip hackeado por una empresa" })
+        .eq("id", sectionId)
+        .select();
+      assert((updated ?? []).length === 0, "una empresa pudo editar el tip/hint de una sección de blueprint global");
+    });
+
+    // =========================================================================
+    // Sprint 9.1 · Bloqueante 3: un documento aprobado nunca se edita
+    // directamente, ni siquiera admin/quality — y consultant nunca puede
+    // reabrirlo (ni por UPDATE directo, ya cubierto en el caso 64, ni por
+    // la RPC intentando otro estado destino). trazadocA sigue 'approved'
+    // desde el caso 65.
+    // =========================================================================
+    await check("69. Admin no puede editar directamente un documento aprobado (Sprint 9.1)", async () => {
+      const { data: updated } = await userA.client
+        .from("trazadoc_documents")
+        .update({ title: "Título editado sin pasar por una versión nueva" })
+        .eq("id", trazadocA)
+        .select();
+      assert((updated ?? []).length === 0, "un admin pudo editar el título de un documento aprobado directamente");
+
+      const { data: sectionUpdated } = await userA.client
+        .from("trazadoc_document_sections")
+        .update({ content: "contenido editado sin nueva versión" })
+        .eq("id", trazadocSectionA)
+        .select();
+      assert((sectionUpdated ?? []).length === 0, "un admin pudo editar el contenido de una sección de un documento aprobado directamente");
+    });
+
+    await check("70. Consultant no puede reabrir un documento aprobado (ni siquiera hacia draft/in_review)", async () => {
+      const { error: toDraft } = await userC.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "draft",
+        p_change_note: "intento de reapertura no autorizado",
+      });
+      assert(toDraft, "un consultant pudo reabrir (approved → draft) un documento aprobado");
+
+      const { error: toInReview } = await userC.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "in_review",
+        p_change_note: "intento de reapertura no autorizado",
+      });
+      assert(toInReview, "un consultant pudo reabrir (approved → in_review) un documento aprobado");
+
+      // admin SÍ puede: "Crear nueva versión en borrador" (Bloqueante 3).
+      const { data: newVersion, error: adminErr } = await userA.client.rpc("change_trazadoc_document_status", {
+        p_document_id: trazadocA,
+        p_to_status: "draft",
+        p_change_note: "Nueva versión en borrador creada a partir de documento aprobado.",
+      });
+      assert(!adminErr && newVersion != null, `admin debía poder crear una nueva versión en borrador desde un aprobado: ${adminErr?.message}`);
+    });
+
     await pg.end();
   } else {
     console.log(
       "  ⚠ SUPABASE_DB_URL no definido: se omite la inspección DIRECTA de la base"
     );
     console.log(
-      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 33 tablas, 23 triggers de"
+      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 39 tablas, 23 triggers de"
     );
     console.log(
-      "    inmutabilidad, y 55-59 platform_staff/v_platform_organizations con bootstrap directo)."
+      "    inmutabilidad, y 55-70 platform_staff/v_platform_organizations/TrazaDocs con bootstrap directo)."
     );
     console.log(
       "    Las pruebas por cliente (1-9 y 11-54) sí corren con Supabase local."
