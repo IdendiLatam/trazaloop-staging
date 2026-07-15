@@ -7,6 +7,7 @@ import { APP_VERSION_LABEL } from "@/lib/version";
 import { isStagingEnvironment } from "@/lib/env";
 import { requireSession } from "@/lib/auth/require-session";
 import { getActiveOrganization } from "@/lib/db/organizations";
+import { checkPlatformStatus } from "@/lib/db/platform";
 import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
@@ -21,7 +22,10 @@ export default async function ShellLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   await requireSession();
-  const activeOrg = await getActiveOrganization();
+  const [activeOrg, platformStatus] = await Promise.all([
+    getActiveOrganization(),
+    checkPlatformStatus(),
+  ]);
 
   if (!activeOrg) {
     redirect("/select-org");
@@ -31,7 +35,7 @@ export default async function ShellLayout({
     <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
       <aside className="no-print hidden flex-col gap-8 bg-loop-deep p-5 lg:flex">
         <Wordmark inverted />
-        <AppNav />
+        <AppNav showPlatform={platformStatus.isStaff} />
         <div className="mt-auto space-y-3">
           <div className="text-xs text-emerald-100/60">
             <p>{APP_VERSION_LABEL}</p>

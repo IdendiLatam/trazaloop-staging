@@ -2029,7 +2029,7 @@ async function main() {
       assert(threw, "el trigger forbid_mutation no bloqueó el UPDATE directo");
     });
 
-    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8) tienen RLS activo", async () => {
+    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8 + 8.4) tienen RLS activo", async () => {
       const expected = [
         // Sprint 1
         "profiles",
@@ -2070,6 +2070,8 @@ async function main() {
         "import_job_rows",
         // Sprint 8
         "team_invitations",
+        // Sprint 8.4
+        "platform_staff",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name, c.relrowsecurity as rls
@@ -2129,13 +2131,82 @@ async function main() {
       );
     });
 
+    // =========================================================================
+    // Sprint 8.4 · platform_staff / v_platform_organizations: requieren
+    // bootstrap directo (ningún cliente autenticado puede insertarse a sí
+    // mismo como platform_staff — es la garantía de diseño, ver 0040). Se
+    // bootstrapea A como superadmin exactamente como en producción: SQL
+    // directo, nunca a través de la app.
+    // =========================================================================
+    await check("55. Bootstrap directo de superadmin + un usuario normal NO lee platform_staff", async () => {
+      await pg.query(
+        `insert into platform_staff (user_id, role_code, status) values ($1, 'superadmin', 'active')
+         on conflict (user_id) do update set role_code = 'superadmin', status = 'active'`,
+        [userA.id]
+      );
+
+      const { data: bSees } = await userB.client.from("platform_staff").select("id");
+      assert((bSees ?? []).length === 0, "un usuario normal pudo leer platform_staff");
+    });
+
+    await check("56. Superadmin lee v_platform_organizations (TODAS las empresas); usuario normal lee cero", async () => {
+      const { data: superSees } = await userA.client
+        .from("v_platform_organizations")
+        .select("organization_id");
+      const ids = (superSees ?? []).map((r: { organization_id: string }) => r.organization_id);
+      assert(ids.includes(orgA), "el superadmin debía ver orgA en la vista de plataforma");
+      assert(ids.includes(orgB), "el superadmin debía ver orgB (de OTRA empresa) en la vista de plataforma");
+
+      const { data: normalSees } = await userB.client
+        .from("v_platform_organizations")
+        .select("organization_id");
+      assert((normalSees ?? []).length === 0, "un usuario normal (no platform_staff) pudo leer la vista de plataforma");
+    });
+
+    await check("57. Usuario normal con empresa no puede crear una segunda (RPC create_organization)", async () => {
+      // B ya es admin de orgB desde casos anteriores.
+      const { error } = await userB.client.rpc("create_organization", {
+        p_name: "Segunda Empresa De B",
+        p_tax_id: null,
+        p_country: null,
+      });
+      assert(error, "B pudo crear una segunda empresa (debía estar bloqueado)");
+    });
+
+    await check("58. superadmin accede solo por rutas/acciones de plataforma: revocar y perder acceso", async () => {
+      await pg.query(`update platform_staff set status = 'revoked' where user_id = $1`, [userA.id]);
+      const { data: afterRevoke } = await userA.client
+        .from("v_platform_organizations")
+        .select("organization_id");
+      assert((afterRevoke ?? []).length === 0, "un superadmin revocado seguía viendo la vista de plataforma");
+      // Se deja como estaba para no afectar otros checks si se reordenan.
+      await pg.query(`update platform_staff set status = 'active' where user_id = $1`, [userA.id]);
+    });
+
+    await check("59. Roles de plataforma no funcionan como memberships (FK/check de role_code)", async () => {
+      let threw = false;
+      try {
+        await pg.query(
+          `insert into memberships (organization_id, user_id, role_code, status)
+           values ($1, $2, 'superadmin', 'active')`,
+          [orgA, userC.id]
+        );
+      } catch {
+        threw = true;
+      }
+      assert(threw, "memberships aceptó 'superadmin' como role_code (debía rechazarlo: no es un rol de empresa)");
+    });
+
     await pg.end();
   } else {
     console.log(
       "  ⚠ SUPABASE_DB_URL no definido: se omite la inspección DIRECTA de la base"
     );
     console.log(
-      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 32 tablas y 23 triggers de inmutabilidad)."
+      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 33 tablas, 23 triggers de"
+    );
+    console.log(
+      "    inmutabilidad, y 55-59 platform_staff/v_platform_organizations con bootstrap directo)."
     );
     console.log(
       "    Las pruebas por cliente (1-9 y 11-54) sí corren con Supabase local."

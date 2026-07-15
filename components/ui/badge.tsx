@@ -1,13 +1,9 @@
-const ROLE_LABEL: Record<string, string> = {
-  admin: "Administrador",
-  quality: "Responsable de calidad",
-  consultant: "Consultor externo",
-};
+import { ROLE_LABEL } from "@/lib/domain/team";
 
 export function RoleBadge({ role }: { role: string }) {
   return (
     <span className="inline-flex items-center rounded-full border border-hairline bg-surface px-2.5 py-0.5 text-xs font-medium text-ink-soft">
-      {ROLE_LABEL[role] ?? role}
+      {ROLE_LABEL[role as keyof typeof ROLE_LABEL] ?? role}
     </span>
   );
 }

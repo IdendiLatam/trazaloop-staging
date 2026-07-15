@@ -20,7 +20,7 @@ los datos, y eso no bloquea nada del resto de Trazaloop.
 ## 2. Qué roles pueden editar
 
 - **Admin**: puede ver y editar los datos de empresa.
-- **Quality** y **consultant**: pueden **ver** los datos de empresa
+- **Quality** (Supervisor) y **consultant** (Consultor): pueden **ver** los datos de empresa
   (`/settings/company` es de lectura para ellos), pero no editarlos —
   verán el aviso «Tu rol permite consultar estos datos, pero no
   modificarlos.».

@@ -21,12 +21,14 @@ export type TeamRoleCode = (typeof TEAM_ROLES)[number];
 
 export const ROLE_LABEL: Record<TeamRoleCode, string> = {
   admin: "Administrador",
-  quality: "Responsable de calidad",
-  consultant: "Consultor externo",
+  quality: "Supervisor",
+  consultant: "Consultor",
 };
 
 /** Texto de ayuda por rol (Parte 3 del Sprint 8), ajustado a los roles
- *  REALES del sistema — sin 'user' ni 'viewer', que no existen. */
+ *  REALES del sistema — sin 'user' ni 'viewer', que no existen. Sprint 8.4:
+ *  el rol interno sigue llamándose `quality` (no se renombra la columna ni
+ *  el valor almacenado); solo la ETIQUETA visible cambia a "Supervisor". */
 export const ROLE_DESCRIPTION: Record<TeamRoleCode, string> = {
   admin:
     "Gestiona la empresa, usuarios, datos, evidencias, importaciones y configuración.",

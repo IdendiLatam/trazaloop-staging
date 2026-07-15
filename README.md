@@ -833,6 +833,160 @@ validación de datos de empresa/perfil y la garantía estructural de que
 ningún payload construido puede transportar `organization_id`, `id`,
 `user_id` ni `email`.
 
+## Sprint 8.4 · Superadministrador de plataforma y restricción de creación de empresas
+
+Separa dos niveles de administración que antes no existían como conceptos
+distintos: administración de UNA empresa (ya cubierta por `memberships` y
+`/team` desde el Sprint 8) y administración INTERNA de la plataforma
+Trazaloop (nueva, `platform_staff`). Sin caso piloto, sin datos demo, sin
+cambios de cálculo ni metodología.
+
+**Decisión de arquitectura (Parte 1)**: `platform_staff` es una tabla
+**completamente separada** de `memberships` — nunca `memberships.role_code
+= 'superadmin'`. `PLATFORM_ROLES` (`superadmin`, `support`) y `TEAM_ROLES`
+(`admin`, `quality`, `consultant`) son conjuntos disjuntos a propósito,
+verificado tanto en TypeScript (`PLATFORM_AND_TEAM_ROLES_ARE_DISJOINT`)
+como en la base (el `role_code` de `memberships` referencia la tabla
+`roles`, que solo tiene los 3 roles de empresa; el de `platform_staff`
+tiene su propio CHECK con solo `superadmin`/`support`). Se aprovechó para
+renombrar la ETIQUETA visible de `quality` → **Supervisor** (antes
+"Responsable de calidad") y `consultant` → **Consultor** (antes "Consultor
+externo") — el `role_code` interno no cambió, se deduplicó además el mapa
+de etiquetas (`RoleBadge` en `components/ui/badge.tsx` ahora importa
+`ROLE_LABEL` de `lib/domain/team.ts` en vez de mantener su propia copia).
+
+**Migraciones**:
+
+- **`0040_platform_staff.sql`**: tabla `platform_staff` (RLS: el propio
+  registro o cualquiera si eres superadmin; insert/update solo superadmin;
+  sin delete), helpers `is_platform_staff()`/`is_platform_superadmin()`
+  (mismo patrón que `is_org_member`/`is_org_admin` del Sprint 1), y
+  `add_platform_staff(email, role)` (RPC `security definer`: el superadmin
+  normalmente NO comparte ninguna empresa con la persona que agrega —es
+  personal interno, no de un cliente— así que la RLS normal de `profiles`
+  no le dejaría resolver el correo; la RPC sí, tras validar
+  `is_platform_superadmin()`). **Bootstrap intencional**: la política de
+  INSERT exige ya ser superadmin, así que NADIE puede autoasignarse el
+  primer registro desde la app — se documenta el único camino real (SQL
+  directo) en `docs/PLATFORM_ADMIN_GUIDE.md`.
+- **`0041_platform_views.sql`**: `v_platform_organizations`, la única vista
+  del proyecto que se deja **sin** `security_invoker` a propósito (corre
+  con privilegios de definidor para poder ver TODAS las empresas a la
+  vez), con su propia guarda `where is_platform_staff()` — un usuario
+  normal obtiene cero filas, nunca una fuga parcial. Solo cuenta y resume
+  (miembros, materiales, evidencias, lotes producidos, cálculos, feedback
+  abierto/crítico): no recalcula contenido reciclado.
+- **`0042_restrict_organization_creation.sql`**: reemplaza
+  `create_organization` (0006) agregando 3 guardas — ya tiene membership
+  activa, ya creó una empresa antes, o tiene invitación pendiente — que
+  bloquean a un usuario normal (nunca a un `platform_superadmin`, Caso D).
+  Agrega `create_platform_organization(...)`, la RPC que usa la consola de
+  plataforma: crea la empresa y, según si el correo del administrador
+  inicial ya tiene cuenta o no, vincula la membership de inmediato o crea
+  una invitación pendiente (mismo mecanismo del Sprint 8, nunca envía
+  correo real).
+
+Verificado sobre PostgreSQL 16 real: bootstrap del primer superadmin
+bloqueado por RLS para cualquier usuario normal y solo posible por SQL
+directo; superadmin ve TODAS las empresas vía la vista, un usuario normal
+ve cero; usuario normal crea su primera empresa, la segunda queda
+bloqueada con el mensaje correcto, una invitación pendiente también la
+bloquea; ambas ramas de `create_platform_organization` (administrador ya
+existía → membership creada; no existía → invitación con token generado)
+confirmadas con datos reales; superadmin revocado pierde acceso a la vista
+de inmediato; `memberships` rechaza `role_code = 'superadmin'` por FK. Un
+bug real de ambigüedad de columna (`organization_id` colisionaba con el
+nombre de la columna de salida de la RPC) se encontró y corrigió durante
+esta verificación.
+
+**Server Actions** (`server/actions/platform.ts` + `lib/db/platform.ts`
++ `lib/auth/require-platform-staff.ts`): `getPlatformOverviewAction`,
+`listPlatformOrganizationsAction`, `getPlatformOrganizationDetailAction`,
+`createPlatformOrganizationAction`, `listPlatformStaffAction`,
+`addPlatformStaffAction`, `updatePlatformStaffStatusAction` —
+`requirePlatformStaff()` (mismo patrón que `requireActiveOrg`) exige
+sesión + `platform_staff` activo antes de cualquier cosa; las acciones de
+escritura además exigen superadmin. `organization_id` nunca sale del
+cliente al crear una empresa: la RPC la genera y devuelve su id real.
+
+**UI**: `/platform` (resumen, empresas registradas con sus métricas,
+personal de plataforma), `/platform/organizations/new` (crear empresa,
+solo superadmin) y `/platform/organizations/[id]` (resumen de
+implementación de solo lectura — "Parte 7, opción aceptable": nunca cambia
+la organización activa del superadmin, no hay "entrar como soporte" en
+este sprint, opción avanzada explícitamente pospuesta). "Plataforma" en la
+navegación aparece **solo** si `is_platform_staff()` es verdadero —
+calculado en el layout del shell, nunca de forma estática.
+
+**Documentación**: nueva `docs/PLATFORM_ADMIN_GUIDE.md` (diferencia entre
+los dos niveles de administración, cómo crear el primer superadmin,
+qué puede hacer cada rol de plataforma, riesgos de acceso y auditoría).
+`docs/TEAM_MANAGEMENT_GUIDE.md`, `docs/SETTINGS_GUIDE.md`,
+`docs/COMPANY_TESTING_GUIDE.md` y `docs/PREDEPLOY_CHECKLIST.md`
+actualizados con las nuevas etiquetas de rol, `test:platform` y el rango
+de migraciones `0001` … `0042`.
+
+**Pruebas**: `npm run test:platform` (`tests/unit/platform.test.ts`) cubre
+los 14 casos mínimos del sprint más 2 adicionales. `tests/rls/isolation.test.ts`
+suma 5 casos (55-59) que bootstrapean un superadmin por SQL directo — igual
+que en producción — y verifican aislamiento de `platform_staff`,
+visibilidad total vs. cero filas de `v_platform_organizations`, bloqueo de
+segunda empresa, pérdida de acceso al revocar, y rechazo de `superadmin`
+como `role_code` de membership.
+
+## Corrección de arquitectura de plataforma (post Sprint 8.4)
+
+Dos bloqueantes encontrados antes de integrar el Sprint 8.4, corregidos.
+Sin módulos nuevos, sin caso piloto, sin datos demo, sin cambios de
+cálculo ni metodología.
+
+**Bloqueante 1 — `/platform` dependía de empresa activa.** Vivía dentro de
+`app/(app)/(shell)/platform`, y ese shell exige `getActiveOrganization()`
++ redirect a `/select-org` si no hay empresa activa — un superadmin sin
+ninguna empresa quedaba bloqueado antes de que su propia
+`requirePlatformStaff()` llegara a ejecutarse. Corregido moviendo las 3
+rutas a `app/(app)/platform/` (fuera del shell de empresa, mismas URLs:
+los grupos de rutas de Next.js no cambian la URL) con un layout propio
+(`app/(app)/platform/layout.tsx`) que exige solo sesión + `platform_staff`
+activo — nunca organización activa. Verificado con un build real: las 3
+rutas siguen resolviendo igual, ahora sin la dependencia.
+
+**Bloqueante 2 — `/select-org` ofrecía "Crear empresa" a quien ya no
+podía.** El formulario se mostraba siempre, sin importar si el usuario ya
+tenía empresas o invitaciones pendientes — contradecía la restricción del
+propio Sprint 8.4. Corregido con una función pura nueva
+(`resolveSelectOrgDisplay`, `lib/domain/platform.ts`, testeada): el
+formulario solo aparece sin organizaciones y sin invitaciones; con
+organizaciones se muestra el mensaje `ALREADY_HAS_ORG_MESSAGE`; con
+invitación pendiente (y sin organizaciones), `HAS_PENDING_INVITATION_MESSAGE`
+— ambas constantes ya existentes, una sola fuente de verdad compartida con
+`create_organization`. El enlace "Ir a administración de plataforma" ahora
+aparece para cualquier `platform_staff`, tenga o no empresa.
+
+**Bloqueante 3 — `createOrganizationAction` ocultaba los errores de
+negocio.** Todo error de la RPC `create_organization` cambiaba a "No fue
+posible crear la empresa. Intenta de nuevo.", incluidos los dos mensajes
+de negocio reales que el propio Sprint 8.4 agregó. Corregido con
+`toSafeOrgCreationError` (`lib/domain/platform.ts`, testeada): una lista
+**blanca** de exactamente los 2 mensajes de negocio conocidos — cualquier
+otro texto (técnico, interno, desconocido) sigue cayendo al mensaje
+genérico, nunca se reenvía texto de error arbitrario de la base.
+
+**Observación — módulo `docs` activado por defecto.** `create_organization`
+y `create_platform_organization` activaban `core`, `traceability_6632` y
+`docs` para toda empresa nueva; el dashboard muestra un badge por cada
+módulo activo, así que `docs` aparecía como si "Trazaloop Docs" fuera una
+función real. Se quitó `docs` de la lista de módulos base en ambas
+funciones (`0042_restrict_organization_creation.sql`, la migración que ya
+las reemplaza) — la fila del catálogo `modules` sigue existiendo, solo ya
+no se activa automáticamente. Verificado con datos reales contra
+PostgreSQL: ambos caminos de creación de empresa ahora solo activan `core`
+y `traceability_6632`.
+
+**Pruebas**: `npm run test:platform` suma 10 casos nuevos (26 en total)
+sobre estas tres correcciones — sin BD, mismo patrón que el resto del
+sprint.
+
 ## Decisiones y riesgos pendientes
 
 0. **`test:rls` requiere Supabase local con Docker** (no ejecutable en todo entorno; ver sección de pruebas).

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/require-session";
 import { getUserOrganizations } from "@/lib/db/organizations";
+import { checkPlatformStatus } from "@/lib/db/platform";
 import {
   selectActiveOrganizationAction,
 } from "@/server/actions/organizations";
@@ -17,6 +18,7 @@ import { Wordmark } from "@/components/layout/logo";
 import { RoleBadge } from "@/components/ui/badge";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { ROLE_LABEL } from "@/lib/domain/team";
+import { ALREADY_HAS_ORG_MESSAGE, HAS_PENDING_INVITATION_MESSAGE, resolveSelectOrgDisplay } from "@/lib/domain/platform";
 
 export default async function SelectOrgPage({
   searchParams,
@@ -24,9 +26,10 @@ export default async function SelectOrgPage({
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   await requireSession();
-  const [organizations, pendingInvitations] = await Promise.all([
+  const [organizations, pendingInvitations, platformStatus] = await Promise.all([
     getUserOrganizations(),
     listMyPendingInvitationsAction(),
+    checkPlatformStatus(),
   ]);
   const { error, notice } = await searchParams;
 
@@ -43,6 +46,19 @@ export default async function SelectOrgPage({
 
   const hasOrganizations = organizations.length > 0;
   const hasInvitations = pendingInvitations.length > 0;
+  // BLOQUEANTE 2 (corrección post Sprint 8.4): el formulario de crear
+  // empresa solo se muestra cuando NO hay ni organizaciones ni
+  // invitaciones pendientes — las mismas 3 reglas que ya exige
+  // create_organization en la base (0042), reflejadas aquí en la UI (vía
+  // la función pura resolveSelectOrgDisplay, testeada en
+  // tests/unit/platform.test.ts) para no ni siquiera OFRECER un
+  // formulario que la RPC va a rechazar.
+  const display = resolveSelectOrgDisplay({
+    hasOrganizations,
+    hasInvitations,
+    isPlatformStaff: platformStatus.isStaff,
+  });
+
   const heading = hasOrganizations
     ? "Selecciona tu empresa"
     : hasInvitations
@@ -66,6 +82,18 @@ export default async function SelectOrgPage({
         <ErrorAlert message="No perteneces a esa empresa. Selecciona una de tu lista." />
       ) : null}
 
+      {/* Regla 4/5: visible SIEMPRE que sea platform_staff, tenga o no
+          empresa activa — nunca se le obliga a crear una para poder
+          entrar a la consola de plataforma. */}
+      {display.showPlatformLink ? (
+        <Link
+          href="/platform"
+          className="inline-flex items-center justify-between rounded-lg border border-loop/30 bg-loop/5 px-4 py-3 text-sm font-semibold text-loop-deep hover:border-loop"
+        >
+          Ir a administración de plataforma →
+        </Link>
+      ) : null}
+
       {hasOrganizations ? (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">Tus empresas</h2>
@@ -85,6 +113,8 @@ export default async function SelectOrgPage({
               </li>
             ))}
           </ul>
+          {/* Regla 1: mensaje claro, SIN formulario de crear empresa. */}
+          <InfoAlert message={ALREADY_HAS_ORG_MESSAGE} />
         </section>
       ) : null}
 
@@ -112,25 +142,20 @@ export default async function SelectOrgPage({
               </li>
             ))}
           </ul>
+          {/* Regla 2: mensaje claro, SIN formulario de crear empresa —
+              aunque el usuario también tenga 0 organizaciones. */}
+          {!hasOrganizations ? <InfoAlert message={HAS_PENDING_INVITATION_MESSAGE} /> : null}
         </section>
       ) : null}
 
-      {!hasOrganizations && !hasInvitations ? (
-        <InfoAlert message="No perteneces todavía a ninguna empresa. Puedes crear una empresa o aceptar una invitación pendiente." />
+      {/* Regla 3: el formulario de crear empresa SOLO aparece sin
+          organizaciones y sin invitaciones pendientes. */}
+      {display.showCreateForm ? (
+        <section className="rounded-lg border border-hairline bg-surface p-5">
+          <h2 className="mb-4 text-sm font-semibold">Nueva empresa</h2>
+          <CreateOrgForm />
+        </section>
       ) : null}
-
-      {!hasOrganizations && !hasInvitations ? null : (
-        <p className="text-xs text-ink-soft">
-          Antes de crear una empresa, revisa si ya fuiste invitado a una organización existente.
-        </p>
-      )}
-
-      <section className="rounded-lg border border-hairline bg-surface p-5">
-        <h2 className="mb-4 text-sm font-semibold">
-          {hasOrganizations || hasInvitations ? "O crea una empresa nueva" : "Nueva empresa"}
-        </h2>
-        <CreateOrgForm />
-      </section>
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <Link href="/settings/profile" className="text-loop hover:underline">

@@ -9,26 +9,38 @@ una invitación, cómo cambiar roles y cómo retirar acceso.
 Trazaloop tiene exactamente **tres roles reales** (catálogo `roles`,
 Sprint 1). No existen roles "user" ni "viewer": no se inventan aquí.
 
-| Rol | Nombre visible |
+> **Sprint 8.4:** el código interno (`role_code`) de cada rol NO cambia —
+> sigue siendo `admin` / `quality` / `consultant`, y así se guarda en la
+> base de datos. Lo que cambia es únicamente la ETIQUETA visible: `quality`
+> ahora se muestra como **Supervisor** (antes "Responsable de calidad") y
+> `consultant` como **Consultor** (antes "Consultor externo"). Ningún dato
+> existente se migra ni se renombra.
+
+| Rol interno (`role_code`) | Nombre visible |
 |---|---|
 | `admin` | Administrador |
-| `quality` | Responsable de calidad |
-| `consultant` | Consultor externo |
+| `quality` | Supervisor |
+| `consultant` | Consultor |
 
 ## 2. Qué puede hacer cada rol
 
 - **Administrador**: gestiona la empresa, usuarios, datos, evidencias,
   importaciones y configuración. Es el único rol que puede invitar,
   cambiar roles y desactivar/reactivar accesos.
-- **Responsable de calidad**: puede validar evidencias, revisar cálculos y
+- **Supervisor** (`quality`): puede validar evidencias, revisar cálculos y
   apoyar la preparación técnica.
-- **Consultor externo**: puede cargar y organizar información, importar
-  datos y registrar feedback, pero no valida evidencias (esa regla del
-  motor de evidencias no cambia en este sprint).
+- **Consultor** (`consultant`): puede cargar y organizar información,
+  importar datos y registrar feedback, pero no valida evidencias (esa
+  regla del motor de evidencias no cambia en este sprint).
 
 Los tres roles pueden **ver** `/team` (miembros e invitaciones); solo
 **admin** ve los controles para invitar, cambiar rol, desactivar o
 reactivar.
+
+> Estos son los ÚNICOS roles seleccionables al invitar a alguien a una
+> empresa. Los roles de **plataforma** (superadmin, support) son un
+> concepto completamente aparte — nunca aparecen en este formulario ni en
+> ningún selector de rol de empresa. Ver `docs/PLATFORM_ADMIN_GUIDE.md`.
 
 ## 3. Cómo invitar usuarios
 

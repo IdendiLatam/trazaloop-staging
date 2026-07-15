@@ -7,6 +7,7 @@ import {
   getUserOrganizations,
   getRoleInOrganization,
 } from "@/lib/db/organizations";
+import { toSafeOrgCreationError } from "@/lib/domain/platform";
 
 export type OrgActionState = { error: string | null };
 
@@ -14,6 +15,14 @@ export type OrgActionState = { error: string | null };
  * Crea la organización mediante la RPC create_organization (SECURITY DEFINER):
  * organización + primera membership admin + módulos base, atómico y auditado.
  * Va con la SESIÓN DEL USUARIO: jamás con service_role.
+ *
+ * BLOQUEANTE 3 (corrección post Sprint 8.4): create_organization (0042)
+ * ahora puede rechazar con reglas de NEGOCIO reales — ya tiene empresa, ya
+ * creó una antes, o tiene invitación pendiente — y esos mensajes SÍ deben
+ * llegar al usuario tal cual. toSafeOrgCreationError (lib/domain/platform.ts)
+ * es una lista BLANCA: solo dos mensajes de negocio ya controlados pasan
+ * tal cual: todo lo demás (errores técnicos, de conexión, o cualquier
+ * mensaje no reconocido) cae al mensaje genérico.
  */
 export async function createOrganizationAction(
   _prev: OrgActionState,
@@ -35,7 +44,7 @@ export async function createOrganizationAction(
   });
 
   if (error || !data) {
-    return { error: "No fue posible crear la empresa. Intenta de nuevo." };
+    return { error: toSafeOrgCreationError(error?.message) };
   }
 
   await writeActiveOrgCookie(data as string);

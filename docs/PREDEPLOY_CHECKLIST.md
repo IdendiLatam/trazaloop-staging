@@ -20,11 +20,12 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
 [ ] npm run test:imports pasa
 [ ] npm run test:team pasa
 [ ] npm run test:settings pasa
+[ ] npm run test:platform pasa
 [ ] npm run test:smoke pasa contra staging
 [ ] npm run test:rls pasa contra staging o local (obligatorio antes de producción real)
 [ ] .env.local no está en Git
 [ ] tsconfig.tsbuildinfo no está en Git
-[ ] Supabase migrations aplicadas (0001 … 0039)
+[ ] Supabase migrations aplicadas (0001 … 0042)
 [ ] Bucket evidences existe y NO es público
 [ ] Auth redirect URLs configuradas (Site URL + Additional Redirect URLs)
 [ ] Vercel env vars configuradas (las 5 de .env.example, más
@@ -32,7 +33,8 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
 [ ] Flujo manual probado (login → organización → catálogos → evidencias →
     trazabilidad → cálculo → soporte técnico → flujo guiado →
     implementación → feedback → importaciones CSV → equipo/invitaciones →
-    configuración de empresa/perfil)
+    configuración de empresa/perfil → consola de plataforma con superadmin
+    bootstrapeado por SQL)
 ```
 
 Notas:
@@ -40,3 +42,7 @@ Notas:
 - `predeploy` NO incluye `test:rls` a propósito (requiere Supabase con
   credenciales); documentado como obligatorio antes de producción real.
 - `test:rls` crea usuarios y datos de prueba: solo staging o local.
+- El primer superadmin de plataforma (`platform_staff`) se crea por SQL
+  directo, fuera de la aplicación — ver `docs/PLATFORM_ADMIN_GUIDE.md` §2.
+  No hay seed automático: sin ese paso manual, `/platform` existe pero
+  nadie puede entrar todavía.

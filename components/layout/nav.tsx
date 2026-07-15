@@ -2,7 +2,11 @@ import Link from "next/link";
 
 /**
  * Navegación. Sprint 5A habilita Soporte técnico (dossiers imprimibles,
- * matriz de evidencias y brechas).
+ * matriz de evidencias y brechas). Sprint 8.4: "Plataforma" NUNCA aparece
+ * aquí de forma estática — se agrega en tiempo de render solo si
+ * `showPlatform` es true (is_platform_staff() del usuario actual),
+ * calculado en el layout del shell. No es un rol de empresa: no depende
+ * de memberships ni de la organización activa.
  */
 const ITEMS: { label: string; href: string | null }[] = [
   { label: "Dashboard", href: "/dashboard" },
@@ -19,10 +23,11 @@ const ITEMS: { label: string; href: string | null }[] = [
   { label: "Configuración", href: "/settings/company" },
 ];
 
-export function AppNav() {
+export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}) {
+  const items = showPlatform ? [...ITEMS, { label: "Plataforma", href: "/platform" }] : ITEMS;
   return (
     <nav aria-label="Navegación principal" className="space-y-1">
-      {ITEMS.map((item) =>
+      {items.map((item) =>
         item.href ? (
           <Link
             key={item.label}

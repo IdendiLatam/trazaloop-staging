@@ -38,6 +38,15 @@ encontrando durante la prueba.
   reales de la empresa (NIT, correo de contacto, ciudad, país) desde
   `/settings/company` (solo admin), y pide a cada persona que complete su
   «Mi perfil» (`/settings/profile`) — ver `docs/SETTINGS_GUIDE.md`.
+- **Cómo se crea la empresa la primera vez (Sprint 8.4):** si la empresa
+  todavía no existe en Trazaloop, cualquier persona puede crearla una vez
+  desde `/select-org` (queda como su única empresa — no puede crear una
+  segunda desde ahí). Si el equipo interno de Trazaloop necesita crearla
+  por ella (por ejemplo, durante un piloto acompañado), un superadmin de
+  plataforma puede hacerlo desde `/platform/organizations/new` y vincular
+  o invitar al administrador inicial — ver `docs/PLATFORM_ADMIN_GUIDE.md`.
+  Esto NO es un caso piloto ni datos de demostración: sigue siendo la
+  empresa real con sus datos reales.
 
 ## Los 17 pasos
 
