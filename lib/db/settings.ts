@@ -22,10 +22,16 @@ export type CompanySettings = {
   city: string | null;
   country: string | null;
   website: string | null;
+  logoStoragePath: string | null;
+  /** URL firmada, generada bajo demanda (bucket privado organization-assets,
+   *  0049) — nunca se persiste una URL pública. null si no hay logo. */
+  logoUrl: string | null;
 };
 
 const COMPANY_SELECT =
-  "id, name, legal_name, tax_id, contact_email, phone, address, city, country, website";
+  "id, name, legal_name, tax_id, contact_email, phone, address, city, country, website, logo_storage_path";
+
+const LOGO_SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hora: suficiente para ver/imprimir en una sesión.
 
 export async function getCompanySettings(orgId: string): Promise<CompanySettings | null> {
   const supabase = await createServerClient();
@@ -35,6 +41,8 @@ export async function getCompanySettings(orgId: string): Promise<CompanySettings
     .eq("id", orgId)
     .maybeSingle();
   if (error || !data) return null;
+  const logoStoragePath = (data.logo_storage_path as string | null) ?? null;
+  const logoUrl = logoStoragePath ? await getCompanyLogoSignedUrl(logoStoragePath) : null;
   return {
     organizationId: data.id as string,
     name: data.name as string,
@@ -46,7 +54,24 @@ export async function getCompanySettings(orgId: string): Promise<CompanySettings
     city: (data.city as string | null) ?? null,
     country: (data.country as string | null) ?? null,
     website: (data.website as string | null) ?? null,
+    logoStoragePath,
+    logoUrl,
   };
+}
+
+/** URL firmada de un logo ya conocido — usada también desde la impresión
+ *  de TrazaDocs (Parte 8), que solo necesita la ruta guardada en
+ *  organizations.logo_storage_path, sin volver a traer toda la ficha de
+ *  empresa. Devuelve null en vez de lanzar si algo falla: sin logo, la
+ *  impresión sigue mostrando solo el nombre de la empresa (Parte 8: "si no
+ *  hay logo, no mostrar imagen rota"). */
+export async function getCompanyLogoSignedUrl(storagePath: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.storage
+    .from("organization-assets")
+    .createSignedUrl(storagePath, LOGO_SIGNED_URL_TTL_SECONDS);
+  if (error || !data) return null;
+  return data.signedUrl;
 }
 
 /** UPDATE acotado SIEMPRE por `.eq("id", orgId)`, donde orgId viene de la
@@ -68,6 +93,60 @@ export async function updateCompanySettings(
   if ((data ?? []).length === 0) {
     return { error: "Tu rol no permite editar los datos de esta empresa." };
   }
+  return { error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Logo de empresa (Sprint 9.2, Parte 6/7). Bucket privado
+// `organization-assets` (0049), separado de `evidences`. Ruta fija por
+// empresa —{organization_id}/logo/logo.{ext}— con upsert: subir un logo
+// nuevo REEMPLAZA el archivo anterior en la misma ruta, sin dejar
+// archivos huérfanos que limpiar aparte.
+// ---------------------------------------------------------------------------
+export async function uploadCompanyLogo(
+  orgId: string,
+  bytes: ArrayBuffer,
+  contentType: string,
+  extension: string
+): Promise<{ error: string | null; storagePath: string | null }> {
+  const supabase = await createServerClient();
+  const path = `${orgId}/logo/logo.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("organization-assets")
+    .upload(path, bytes, { contentType, upsert: true });
+  if (uploadError) {
+    return { error: "No fue posible subir el logo. Intenta de nuevo.", storagePath: null };
+  }
+
+  const { data, error } = await supabase
+    .from("organizations")
+    .update({ logo_storage_path: path, logo_updated_at: new Date().toISOString() })
+    .eq("id", orgId)
+    .select("id");
+  if (error) return { error: "El logo se subió, pero no fue posible guardarlo en la empresa.", storagePath: null };
+  if ((data ?? []).length === 0) {
+    return { error: "Tu rol no permite editar el logo de esta empresa.", storagePath: null };
+  }
+  return { error: null, storagePath: path };
+}
+
+export async function removeCompanyLogo(orgId: string, storagePath: string): Promise<{ error: string | null }> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("organizations")
+    .update({ logo_storage_path: null, logo_updated_at: new Date().toISOString() })
+    .eq("id", orgId)
+    .select("id");
+  if (error) return { error: "No fue posible quitar el logo." };
+  if ((data ?? []).length === 0) return { error: "Tu rol no permite editar el logo de esta empresa." };
+
+  // Limpieza del archivo: si falla, no es un error de negocio — el logo
+  // ya quedó desvinculado de la empresa (no vuelve a mostrarse en ningún
+  // lado); el archivo huérfano se sobrescribirá solo si se sube uno nuevo
+  // (misma ruta fija, upsert).
+  await supabase.storage.from("organization-assets").remove([storagePath]);
   return { error: null };
 }
 

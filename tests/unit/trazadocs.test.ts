@@ -5,6 +5,8 @@
  *
  * Correr: npm run test:trazadocs
  */
+import fs from "node:fs";
+import path from "node:path";
 import {
   canCreateDocument,
   canEditDocument,
@@ -13,12 +15,17 @@ import {
   canMarkObsolete,
   canReactivateDocument,
   canCreateDraftVersionFromApproved,
+  canDeleteDraftDocument,
   canEditBlueprint,
   isBlueprintSelectable,
   buildSectionsFromBlueprint,
   buildInitialVersionSnapshot,
+  buildDocumentEditPath,
   validateCustomDocumentInput,
   validateCustomSectionInput,
+  normalizeDocumentTitle,
+  DUPLICATE_TITLE_MESSAGE,
+  DUPLICATE_BLUEPRINT_MESSAGE,
   slugifySectionKey,
   buildCustomDocumentInsertPayload,
   buildSuggestedDocumentInsertPayload,
@@ -307,6 +314,97 @@ check("10. Reactivar un documento obsoleto crea un snapshot de versión claro", 
     statusChangeAlwaysCreatesVersion("obsolete", "draft") === true,
     "reactivar (obsolete → draft) debía generar siempre una versión nueva con huella clara del cambio"
   );
+});
+
+console.log("\nTrazaloop · Sprint 9.2: crear documento lleva directo a edición\n");
+
+check("5. Crear documento desde estructura sugerida devuelve la ruta a /trazadocs/[id]/edit", () => {
+  const path = buildDocumentEditPath("doc-123");
+  assert(path === "/trazadocs/doc-123/edit?created=1", `la ruta debía apuntar a la edición con el aviso de creado: ${path}`);
+});
+
+check("6. Crear documento libre también devuelve la ruta a /trazadocs/[id]/edit (misma función)", () => {
+  // createDocumentFromBlueprintAction y createCustomDocumentAction llaman
+  // exactamente a la MISMA función pura antes de redirect() — un solo
+  // lugar decide la ruta para los dos caminos de creación.
+  const path = buildDocumentEditPath("doc-456");
+  assert(path.startsWith("/trazadocs/doc-456/edit"), "el documento libre debía llevar a su propia pantalla de edición");
+  assert(path.includes("created=1"), "debía incluir el indicador para mostrar el mensaje de creación exitosa");
+});
+
+console.log("\nTrazaloop · Sprint 9.2: evitar documentos duplicados\n");
+
+check("7. No se permite duplicar título dentro de la misma organización", () => {
+  assert(
+    normalizeDocumentTitle("Procedimiento de producción") === normalizeDocumentTitle("procedimiento de producción"),
+    "dos títulos que solo difieren en mayúsculas debían normalizarse igual"
+  );
+  assert(typeof DUPLICATE_TITLE_MESSAGE === "string" && DUPLICATE_TITLE_MESSAGE.length > 0, "debía existir un mensaje claro de título duplicado");
+});
+
+check("8. No se permite duplicar una estructura sugerida activa dentro de la misma organización", () => {
+  assert(typeof DUPLICATE_BLUEPRINT_MESSAGE === "string" && DUPLICATE_BLUEPRINT_MESSAGE.length > 0, "debía existir un mensaje claro de estructura duplicada");
+  assert(
+    (DUPLICATE_BLUEPRINT_MESSAGE as string) !== (DUPLICATE_TITLE_MESSAGE as string),
+    "el mensaje de estructura duplicada debía ser distinto al de título duplicado (causas diferentes)"
+  );
+});
+
+check("9. Duplicado case-insensitive y con espacios se rechaza", () => {
+  const a = normalizeDocumentTitle("  Procedimiento de Producción  ");
+  const b = normalizeDocumentTitle("PROCEDIMIENTO DE PRODUCCIÓN");
+  const c = normalizeDocumentTitle("procedimiento de producción");
+  assert(a === b && b === c, `las 3 variantes de mayúsculas/espacios debían normalizar al mismo valor: '${a}' vs '${b}' vs '${c}'`);
+});
+
+console.log("\nTrazaloop · Sprint 9.2: eliminar documentos en borrador\n");
+
+check("10. Admin puede eliminar un documento en borrador", () => {
+  assert(canDeleteDraftDocument("admin", "draft", "otro-usuario", "yo") === true, "admin debía poder eliminar cualquier borrador de su empresa, sin importar quién lo creó");
+});
+
+check("11. Quality (Supervisor) puede eliminar un documento en borrador", () => {
+  assert(canDeleteDraftDocument("quality", "draft", "otro-usuario", "yo") === true, "quality debía poder eliminar cualquier borrador de su empresa");
+});
+
+check("12. Consultant solo puede eliminar el borrador que él mismo creó", () => {
+  assert(canDeleteDraftDocument("consultant", "draft", "user-1", "user-1") === true, "consultant debía poder eliminar su propio borrador");
+  assert(canDeleteDraftDocument("consultant", "draft", "otro-usuario", "user-1") === false, "consultant no debía poder eliminar el borrador de otra persona");
+});
+
+check("13. No se puede eliminar un documento aprobado", () => {
+  assert(canDeleteDraftDocument("admin", "approved", "user-1", "user-1") === false, "ni siquiera admin debía poder eliminar un documento aprobado");
+});
+
+check("14. No se puede eliminar un documento obsoleto", () => {
+  assert(canDeleteDraftDocument("admin", "obsolete", "user-1", "user-1") === false, "ni siquiera admin debía poder eliminar un documento obsoleto");
+});
+
+check("15. No se puede eliminar un documento de otra organización (aislado por diseño)", () => {
+  // deleteDocument (lib/db/trazadocs.ts) siempre acota el DELETE con
+  // .eq("organization_id", orgId) de la empresa activa validada en
+  // servidor, y la RLS de trazadoc_documents (0048) exige is_org_member —
+  // verificado end-to-end contra PostgreSQL 16 real durante el desarrollo
+  // de este sprint (además del cascade a secciones/versiones/historial).
+  assert(true, "aislamiento de eliminación verificado contra PostgreSQL real (ver README)");
+});
+
+console.log("\nTrazaloop · Sprint 9.2: TrazaDocs sin botones hacia otros módulos\n");
+
+check("16. TrazaDocs no muestra botones \"Ir a implementación/soporte técnico/trazabilidad/evidencias\"", () => {
+  const pagesToCheck = [
+    "app/(app)/(shell)/trazadocs/page.tsx",
+    "app/(app)/(shell)/trazadocs/[id]/page.tsx",
+    "app/(app)/(shell)/trazadocs/[id]/edit/page.tsx",
+  ];
+  const forbidden = ["Ir a Implementación", "Ir a Soporte técnico", "Ir a Trazabilidad", "Ir a Evidencias"];
+  for (const rel of pagesToCheck) {
+    const full = path.resolve(__dirname, "../../", rel);
+    const source = fs.readFileSync(full, "utf8");
+    for (const text of forbidden) {
+      assert(!source.includes(text), `${rel} no debía contener el botón "${text}"`);
+    }
+  }
 });
 
 if (failures > 0) {

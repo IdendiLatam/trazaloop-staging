@@ -118,6 +118,48 @@ export function canDeleteSection(role: TeamRoleCode | null | undefined): boolean
 }
 
 // ---------------------------------------------------------------------------
+// Sprint 9.2 · Evitar documentos duplicados (Parte 3) y eliminar borradores
+// (Parte 4).
+// ---------------------------------------------------------------------------
+
+/** Mismo criterio que el índice único (0048): trim + minúsculas — para que
+ *  la validación en servidor (mensaje claro) y la restricción real de base
+ *  de datos comparen títulos exactamente de la misma forma. */
+export function normalizeDocumentTitle(title: string): string {
+  return title.trim().toLowerCase();
+}
+
+export const DUPLICATE_TITLE_MESSAGE =
+  "Ya existe un documento con este nombre en la empresa. Abre el documento existente o usa un nombre diferente.";
+export const DUPLICATE_BLUEPRINT_MESSAGE =
+  "Ya existe un documento de esta estructura sugerida en la empresa. Ábrelo en vez de crear uno nuevo.";
+
+/** Ruta a la que se redirige justo después de crear un documento (Sprint
+ *  9.2, Parte 2): siempre la edición, con el aviso de "recién creado" —
+ *  nunca se deja al usuario en una pantalla donde parezca que no pasó
+ *  nada. Función pura para poder probar la ruta exacta sin un request de
+ *  Next.js real. */
+export function buildDocumentEditPath(documentId: string): string {
+  return `/trazadocs/${documentId}/edit?created=1`;
+}
+
+/** Eliminar un documento en BORRADOR (Parte 4): admin/quality siempre;
+ *  consultant SOLO si fue quien lo creó. Nunca approved/obsolete (eso ya
+ *  lo exige la RLS con status='draft'; esta función es la misma regla en
+ *  servidor, para un mensaje claro antes de intentar el DELETE). */
+export function canDeleteDraftDocument(
+  role: TeamRoleCode | null | undefined,
+  status: DocumentStatus,
+  createdBy: string | null,
+  userId: string
+): boolean {
+  if (status !== "draft") return false;
+  if (role === "admin" || role === "quality") return true;
+  if (role === "consultant") return createdBy === userId;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Permisos de plataforma (blueprints/hints). Nunca se mezclan con los
 // roles de empresa: PlatformRoleCode viene de lib/domain/platform.ts.
 // ---------------------------------------------------------------------------

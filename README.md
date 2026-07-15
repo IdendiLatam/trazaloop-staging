@@ -1151,6 +1151,89 @@ admin puede editar un aprobado directamente ni consultant puede reabrirlo
 por ninguna vía, con admin creando la nueva versión en borrador
 correctamente.
 
+## Sprint 9.2 · Pulido UX, navegación y control documental de TrazaDocs
+
+Ocho mejoras de experiencia antes de probar TrazaDocs con empresas
+reales. Sin módulos nuevos grandes, sin caso piloto, sin datos demo, sin
+PDF server-side, sin ISO 9001 completo, sin auditorías ni acciones
+correctivas, sin cambios de cálculo ni metodología.
+
+**Migraciones**:
+
+- **`0048_trazadocs_ux_hardening.sql`**: 2 índices únicos parciales
+  (`organization_id, lower(trim(title))` y `organization_id, blueprint_id
+  where blueprint_id is not null`) — seguro de aplicar porque no existe
+  ningún dato de empresa real en `trazadoc_documents` todavía. Además
+  agrega la política `trazadoc_documents_delete` que faltaba (0043 decía
+  "preferir no permitir delete"): ahora sí, acotada a `status = 'draft'`,
+  con admin/quality sin restricción y consultant solo sobre su propio
+  `created_by`. Las FK compuestas a secciones/versiones/historial ya
+  tenían `on delete cascade` desde 0043, así que un solo `DELETE` se
+  lleva todo.
+- **`0049_organization_assets_storage.sql`**: bucket privado nuevo
+  `organization-assets` (separado de `evidences`, 0015 — un logo no es
+  una evidencia técnica), mismo patrón exacto de políticas por
+  `(storage.foldername(name))[1]` como organization_id. Lectura para
+  cualquier miembro de la empresa (y platform_staff, soporte);
+  subir/reemplazar/eliminar solo admin. `organizations` gana
+  `logo_storage_path` y `logo_updated_at` — nunca se persiste una URL
+  pública, la URL firmada se genera bajo demanda en servidor.
+
+Verificado contra PostgreSQL 16 real: título duplicado (case/espacio-
+insensitive) rechazado dentro de la misma empresa pero permitido en otra;
+blueprint duplicado rechazado; consultant borra solo su propio draft,
+bloqueado en el de un admin; documento aprobado/obsoleto protegido de
+DELETE; cascada confirmada (secciones y versiones desaparecen con el
+documento). **Hallazgo real de infraestructura de pruebas**: el mock local
+de `storage.objects` nunca tenía RLS habilitada (a diferencia de un
+proyecto Supabase real, donde ya viene activada) — mis primeras pruebas
+de las políticas de `organization-assets` pasaban de forma falsa. Corregido
+el script de prueba (`alter table storage.objects enable row level
+security`) y reverificado: admin sube, consultant bloqueado pero puede
+ver, aislamiento cross-tenant confirmado. Esta misma corrección de
+infraestructura también habría afectado (sin detectarlo) las pruebas
+directas del bucket `evidences` desde el Sprint 1.
+
+**Menú lateral agrupado** (`components/layout/nav.tsx`): 4 grupos
+plegables con `<details>` nativo (sin JS de cliente) — Trazabilidad,
+TrazaDocs, Sistema, y Plataforma (solo si `showPlatform`). Los grupos se
+exportan como constantes (`TRAZABILIDAD_GROUP`, etc.) para poder
+verificarlos con pruebas puras. Ninguna ruta cambió.
+
+**Crear documento → edición directa**: `createDocumentFromBlueprintAction`
+y `createCustomDocumentAction` ahora usan `redirect()` con
+`buildDocumentEditPath` (función pura,
+`/trazadocs/[id]/edit?created=1`) en vez de devolver el id al cliente — la
+página de edición muestra «Documento creado. Puedes empezar a
+diligenciarlo.» al llegar.
+
+**Anti-duplicados**: `findDocumentByNormalizedTitle` /
+`findDocumentByBlueprint` (`lib/db/trazadocs.ts`) validan ANTES del
+insert, con mensaje claro y enlace "Abrir documento existente" en la UI;
+el índice único (0048) es el respaldo real ante una condición de carrera.
+
+**Eliminar borrador**: `deleteDraftTrazadocDocumentAction` + botón
+«Eliminar borrador» (confirmación con `window.confirm`, sin librería
+nueva) en detalle, edición y listado — visible solo si
+`canDeleteDraftDocument` lo permite para ese rol/documento/usuario.
+
+**TrazaDocs sin botones hacia otros módulos**: se quitaron "Ir a
+Implementación / Soporte técnico / Evidencias / Trazabilidad" de
+`/trazadocs`; esa navegación ahora vive solo en el menú lateral.
+
+**Logo de empresa**: sección nueva en `/settings/company` (solo admin) —
+subir/reemplazar/eliminar, PNG/JPG/JPEG/WebP hasta 2 MB (SVG excluido a
+propósito: riesgo de script embebido sin sanear). Aparece en el
+encabezado de `/trazadocs/[id]/print` junto con razón social y NIT si
+existen; sin logo, la impresión no se rompe, solo omite la imagen.
+
+**Pruebas**: 22 casos repartidos donde corresponde por tema —
+`test:platform` (menú, 4 casos), `test:trazadocs` (creación/redirect,
+anti-duplicados, eliminar borrador, botones, 16 casos) y `test:settings`
+(logo, 6 casos) — incluidos 2 casos que leen el código fuente de las
+páginas como guarda de regresión (nunca vuelve a aparecer un botón
+cross-módulo, el logo siempre queda detrás de un condicional).
+
 ## Decisiones y riesgos pendientes
 
 0. **`test:rls` requiere Supabase local con Docker** (no ejecutable en todo entorno; ver sección de pruebas).

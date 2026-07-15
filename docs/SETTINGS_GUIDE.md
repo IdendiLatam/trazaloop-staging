@@ -17,6 +17,18 @@ Todos los campos son opcionales excepto el **nombre comercial**: una
 empresa recién creada puede no tener todavía NIT, sitio web ni el resto de
 los datos, y eso no bloquea nada del resto de Trazaloop.
 
+### Logo de empresa (Sprint 9.2)
+
+En la misma pantalla, arriba de los datos de empresa, está **«Logo de
+empresa»**: sube una imagen (PNG, JPG/JPEG o WebP — SVG no se admite por
+ahora), hasta 2 MB, idealmente con al menos 300 px de ancho y proporción
+horizontal o cuadrada. El logo se guarda en un espacio de almacenamiento
+privado propio de la empresa (nunca junto a las evidencias técnicas) y se
+puede reemplazar o eliminar en cualquier momento. **Este logo aparece en
+los documentos TrazaDocs al imprimir o guardar como PDF** desde el
+navegador (`/trazadocs/[id]/print`) — si no hay logo cargado, la
+impresión simplemente no muestra ninguno, nunca una imagen rota.
+
 ## 2. Qué roles pueden editar
 
 - **Admin**: puede ver y editar los datos de empresa.
@@ -29,6 +41,10 @@ Esto ya lo garantizaba la política de base de datos `organizations_update`
 desde el Sprint 1 (exige ser admin de la empresa); este sprint solo agrega
 la pantalla y valida lo mismo en servidor para dar un mensaje claro antes
 de que la base rechace el cambio.
+
+El logo de empresa usa el mismo permiso: solo admin puede subir,
+reemplazar o eliminar el logo; quality y consultant pueden verlo, no
+cambiarlo.
 
 ## 3. Cómo editar mi perfil
 

@@ -8,15 +8,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTrazadocDocumentAction, listTrazadocsAction } from "@/server/actions/trazadocs";
+import { getCompanySettingsAction } from "@/server/actions/settings";
 import { DOCUMENT_STATUS_LABEL } from "@/lib/domain/trazadocs";
 import { PrintButton } from "@/components/domain/audit-support/print-button";
 
 export default async function TrazaDocPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const org = await requireActiveOrg();
   const { id } = await params;
-  const [{ data: doc }, summaries] = await Promise.all([
+  const [{ data: doc }, summaries, { data: company }] = await Promise.all([
     getTrazadocDocumentAction(id),
     listTrazadocsAction(),
+    getCompanySettingsAction(),
   ]);
   if (!doc) notFound();
   const summary = summaries.find((s) => s.documentId === id);
@@ -30,29 +32,40 @@ export default async function TrazaDocPrintPage({ params }: { params: Promise<{ 
         <PrintButton />
       </div>
 
-      <header className="space-y-1 border-b border-hairline pb-4">
-        <p className="text-xs text-ink-soft">{org.organizationName}</p>
-        <h1 className="text-xl font-semibold">{doc.title}</h1>
-        {doc.code ? <p className="code text-xs text-ink-soft">{doc.code}</p> : null}
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 pt-2 text-xs text-ink-soft sm:grid-cols-4">
-          <div>
-            <dt className="font-medium text-ink">Estado</dt>
-            <dd>{DOCUMENT_STATUS_LABEL[doc.status]}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink">Versión</dt>
-            <dd>v{doc.currentVersion}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink">Responsable</dt>
-            <dd>{summary?.ownerName ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="font-medium text-ink">Actualizado</dt>
-            <dd>{new Date(doc.updatedAt).toLocaleDateString("es-CO")}</dd>
-          </div>
-        </dl>
+      <header className="flex items-start justify-between gap-4 border-b border-hairline pb-4">
+        <div className="space-y-1">
+          <p className="text-xs text-ink-soft">{org.organizationName}</p>
+          {company?.legalName ? <p className="text-xs text-ink-soft">{company.legalName}</p> : null}
+          {company?.taxId ? <p className="code text-xs text-ink-soft">NIT {company.taxId}</p> : null}
+          <h1 className="text-xl font-semibold">{doc.title}</h1>
+          {doc.code ? <p className="code text-xs text-ink-soft">{doc.code}</p> : null}
+        </div>
+        {/* Sprint 9.2 (Parte 8): logo si existe; si no hay, nunca se
+            muestra una imagen rota — el bloque simplemente no se renderiza. */}
+        {company?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={company.logoUrl} alt={`Logo de ${org.organizationName}`} className="max-h-16 max-w-[10rem] object-contain" />
+        ) : null}
       </header>
+
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-ink-soft sm:grid-cols-4">
+        <div>
+          <dt className="font-medium text-ink">Estado</dt>
+          <dd>{DOCUMENT_STATUS_LABEL[doc.status]}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-ink">Versión</dt>
+          <dd>v{doc.currentVersion}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-ink">Responsable</dt>
+          <dd>{summary?.ownerName ?? "—"}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-ink">Actualizado</dt>
+          <dd>{new Date(doc.updatedAt).toLocaleDateString("es-CO")}</dd>
+        </div>
+      </dl>
 
       <section className="space-y-4">
         {doc.sections.map((s) => (

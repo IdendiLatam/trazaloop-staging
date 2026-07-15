@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
@@ -13,6 +14,9 @@ import {
   insertDocument,
   insertDocumentSections,
   insertInitialVersion,
+  findDocumentByNormalizedTitle,
+  findDocumentByBlueprint,
+  deleteDocument,
   updateDocumentMetadata,
   updateSectionContent,
   insertCustomSection,
@@ -49,13 +53,18 @@ import {
   canReactivateDocument,
   canCreateDraftVersionFromApproved,
   canDeleteSection,
+  canDeleteDraftDocument,
   canEditBlueprint,
   buildSectionsFromBlueprint,
   buildInitialVersionSnapshot,
+  buildDocumentEditPath,
   buildCustomDocumentInsertPayload,
   buildSuggestedDocumentInsertPayload,
   validateCustomDocumentInput,
   validateCustomSectionInput,
+  normalizeDocumentTitle,
+  DUPLICATE_TITLE_MESSAGE,
+  DUPLICATE_BLUEPRINT_MESSAGE,
   slugifySectionKey,
   isDocumentStatus,
   isBlueprintStatus,
@@ -162,7 +171,25 @@ export async function createDocumentFromBlueprintAction(
     return { error: "La estructura sugerida no existe o ya no está disponible." };
   }
 
+  // Sprint 9.2 (Parte 3, regla 4): si ya existe un documento de esta
+  // estructura en la empresa (sin importar su estado), no se crea otro —
+  // se ofrece abrir el existente.
+  const existingFromBlueprint = await findDocumentByBlueprint(org.organizationId, blueprint.id);
+  if (existingFromBlueprint) {
+    return { error: DUPLICATE_BLUEPRINT_MESSAGE, documentId: existingFromBlueprint.id };
+  }
+
   const payload = buildSuggestedDocumentInsertPayload(blueprint.id, blueprint.name, user.id);
+
+  // Regla 1-3: título duplicado (normalizado) dentro de la misma empresa.
+  // El nombre del documento sugerido es el nombre del blueprint — chequeo
+  // preventivo con mensaje claro; el índice único (0048) es el respaldo
+  // real ante una condición de carrera.
+  const existingByTitle = await findDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(payload.title));
+  if (existingByTitle) {
+    return { error: DUPLICATE_TITLE_MESSAGE, documentId: existingByTitle.id };
+  }
+
   const { id: documentId, error: docError } = await insertDocument(org.organizationId, payload);
   if (docError || !documentId) return { error: docError ?? "No fue posible crear el documento." };
 
@@ -187,7 +214,10 @@ export async function createDocumentFromBlueprintAction(
   if (versionError) return { error: versionError };
 
   revalidateTrazadocs();
-  return { error: null, success: true, documentId };
+  // Sprint 9.2 (Parte 2): llevar directo a la edición, con un aviso claro
+  // — nunca dejar al usuario en una pantalla donde parezca que no pasó
+  // nada.
+  redirect(buildDocumentEditPath(documentId));
 }
 
 export async function createCustomDocumentAction(
@@ -209,6 +239,15 @@ export async function createCustomDocumentAction(
   const validation = validateCustomDocumentInput(input);
   if (validation.error) return { error: validation.error };
 
+  // Sprint 9.2 (Parte 3, reglas 1-3): título duplicado (trim +
+  // minúsculas) dentro de la misma empresa. Chequeo preventivo con
+  // mensaje claro; el índice único (0048) es el respaldo real ante una
+  // condición de carrera.
+  const existingByTitle = await findDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(input.title));
+  if (existingByTitle) {
+    return { error: DUPLICATE_TITLE_MESSAGE, documentId: existingByTitle.id };
+  }
+
   const payload = buildCustomDocumentInsertPayload({ ...input, ownerId: user.id });
   const { id: documentId, error } = await insertDocument(org.organizationId, payload);
   if (error || !documentId) return { error: error ?? "No fue posible crear el documento." };
@@ -224,7 +263,8 @@ export async function createCustomDocumentAction(
   if (versionError) return { error: versionError };
 
   revalidateTrazadocs();
-  return { error: null, success: true, documentId };
+  // Sprint 9.2 (Parte 2): llevar directo a la edición, con un aviso claro.
+  redirect(buildDocumentEditPath(documentId));
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +357,56 @@ export async function deleteDocumentSectionAction(
 
   revalidateTrazadocs(documentId);
   return { ...okState, documentId };
+}
+
+/**
+ * Sprint 9.2 (Parte 4): eliminar un documento en BORRADOR — hard delete
+ * real, las secciones/versiones/historial se van por cascade (0043).
+ * Admin/quality: cualquier borrador de la empresa. Consultant: solo el
+ * que él mismo creó. Nunca approved/obsolete (ni la RLS de 0048 ni esta
+ * validación lo permiten).
+ */
+export async function deleteDraftTrazadocDocumentAction(
+  _prev: TrazadocsActionState,
+  formData: FormData
+): Promise<TrazadocsActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+  const documentId = String(formData.get("document_id") ?? "");
+
+  const doc = await getDocument(org.organizationId, documentId);
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+
+  if (!canDeleteDraftDocument(org.roleCode, doc.status, doc.createdBy, user.id)) {
+    return {
+      error:
+        doc.status !== "draft"
+          ? "Solo se pueden eliminar documentos en borrador."
+          : "Solo puedes eliminar un borrador que tú mismo creaste, o ser administrador/supervisor.",
+    };
+  }
+
+  const { error } = await deleteDocument(org.organizationId, documentId);
+  if (error) return { error };
+
+  revalidatePath("/trazadocs");
+  revalidatePath("/implementation");
+  return okState;
+}
+
+/** Sprint 9.2 (Parte 3): validación previa de disponibilidad de título,
+ *  reutilizable desde formularios de creación/edición. */
+export async function validateTrazadocTitleAvailabilityAction(
+  title: string,
+  excludeDocumentId?: string
+): Promise<{ available: boolean; existingDocumentId: string | null }> {
+  const org = await requireActiveOrg();
+  const existing = await findDocumentByNormalizedTitle(
+    org.organizationId,
+    normalizeDocumentTitle(title),
+    excludeDocumentId
+  );
+  return { available: !existing, existingDocumentId: existing?.id ?? null };
 }
 
 /** Reordenar de forma sencilla: mover una sección un puesto arriba o abajo

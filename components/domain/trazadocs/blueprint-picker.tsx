@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import {
   createDocumentFromBlueprintAction,
@@ -13,6 +14,23 @@ import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
 const initial: TrazadocsActionState = { error: null };
+
+/** Cuando el server action devuelve error + documentId (Parte 3, regla 4:
+ *  ya existe un documento de esa estructura, o un título duplicado), se
+ *  ofrece abrir el existente en vez de solo mostrar el error. */
+function DuplicateNotice({ state }: { state: TrazadocsActionState }) {
+  if (!state.error) return null;
+  return (
+    <div className="space-y-1">
+      <ErrorAlert message={state.error} />
+      {state.documentId ? (
+        <Link href={`/trazadocs/${state.documentId}`} className="text-xs text-loop hover:underline">
+          Abrir documento existente →
+        </Link>
+      ) : null}
+    </div>
+  );
+}
 
 /** Elegir estructura sugerida o crear documento libre (Parte 8). Nunca se
  *  llaman "plantillas descargables": son estructuras sugeridas dentro de
@@ -29,7 +47,7 @@ export function BlueprintPicker({ blueprints }: { blueprints: BlueprintSummaryRo
           Estructuras sugeridas por Trazaloop, con secciones y ayudas ya definidas. Tú diligencias
           el contenido de cada empresa.
         </p>
-        <ErrorAlert message={state.error} />
+        <DuplicateNotice state={state} />
         <div className="grid gap-3 sm:grid-cols-2">
           {blueprints.map((bp) => (
             <form key={bp.blueprintId} action={formAction}>
@@ -55,7 +73,7 @@ export function BlueprintPicker({ blueprints }: { blueprints: BlueprintSummaryRo
           Crea un documento con el nombre que quieras y arma tus propias secciones.
         </p>
         <form action={customFormAction} className="space-y-4">
-          <ErrorAlert message={customState.error} />
+          <DuplicateNotice state={customState} />
           <Field
             label="Nombre del documento"
             name="title"

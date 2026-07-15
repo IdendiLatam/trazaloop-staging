@@ -212,6 +212,66 @@ export async function getBlueprintByIdForCompany(
 }
 
 // ---------------------------------------------------------------------------
+// Sprint 9.2 · Evitar duplicados (Parte 3) — verificación PREVIA al INSERT,
+// para un mensaje claro; el índice único (0048) es el respaldo real ante
+// una condición de carrera.
+// ---------------------------------------------------------------------------
+export async function findDocumentByNormalizedTitle(
+  orgId: string,
+  normalizedTitle: string,
+  excludeDocumentId?: string
+): Promise<{ id: string; title: string; status: string } | null> {
+  const supabase = await createServerClient();
+  let query = supabase
+    .from("trazadoc_documents")
+    .select("id, title, status")
+    .eq("organization_id", orgId);
+  if (excludeDocumentId) query = query.neq("id", excludeDocumentId);
+  const { data } = await query;
+  const match = ((data ?? []) as { id: string; title: string; status: string }[]).find(
+    (d) => d.title.trim().toLowerCase() === normalizedTitle
+  );
+  return match ?? null;
+}
+
+export async function findDocumentByBlueprint(
+  orgId: string,
+  blueprintId: string
+): Promise<{ id: string; title: string; status: string } | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("trazadoc_documents")
+    .select("id, title, status")
+    .eq("organization_id", orgId)
+    .eq("blueprint_id", blueprintId)
+    .maybeSingle();
+  return data ? (data as { id: string; title: string; status: string }) : null;
+}
+
+/** Eliminar un documento en BORRADOR (Parte 4): hard delete real — las FK
+ *  compuestas a secciones/versiones/historial ya tienen "on delete
+ *  cascade" desde 0043, así que una sola sentencia se lleva todo. La RLS
+ *  (0048) ya exige status='draft' y el rol correcto; aquí solo se
+ *  distingue "no encontrado / no autorizado" de "no estaba en borrador"
+ *  para dar un mensaje más útil. */
+export async function deleteDocument(orgId: string, documentId: string): Promise<{ error: string | null }> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("trazadoc_documents")
+    .delete()
+    .eq("organization_id", orgId)
+    .eq("id", documentId)
+    .select("id");
+  if (error) return { error: "No fue posible eliminar el documento." };
+  if ((data ?? []).length === 0) {
+    return {
+      error: "Solo se pueden eliminar documentos en borrador que tú creaste o que administras.",
+    };
+  }
+  return { error: null };
+}
+
+// ---------------------------------------------------------------------------
 // Creación de documentos.
 // ---------------------------------------------------------------------------
 export async function insertDocument(

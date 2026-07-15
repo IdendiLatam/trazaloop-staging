@@ -30,30 +30,6 @@ export default async function TrazaDocsPage() {
           >
             Nuevo documento
           </Link>
-          <Link
-            href="/implementation"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Implementación
-          </Link>
-          <Link
-            href="/audit-support"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Soporte técnico
-          </Link>
-          <Link
-            href="/evidences"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Evidencias
-          </Link>
-          <Link
-            href="/traceability"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Trazabilidad
-          </Link>
         </div>
       </header>
 

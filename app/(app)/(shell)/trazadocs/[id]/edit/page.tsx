@@ -4,14 +4,28 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/auth/require-session";
+import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTrazadocDocumentAction } from "@/server/actions/trazadocs";
 import { getBlueprintSections } from "@/lib/db/trazadocs";
+import { canDeleteDraftDocument } from "@/lib/domain/trazadocs";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
 import { DocumentEditor } from "@/components/domain/trazadocs/document-editor";
+import { DeleteDraftButton } from "@/components/domain/trazadocs/delete-draft-button";
+import { InfoAlert } from "@/components/ui/alert";
 
-export default async function TrazaDocEditPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TrazaDocEditPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ created?: string }>;
+}) {
   const { id } = await params;
+  const { created } = await searchParams;
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
   const {
     data: doc,
     canEdit,
@@ -21,6 +35,7 @@ export default async function TrazaDocEditPage({ params }: { params: Promise<{ i
     canCreateDraftVersion,
   } = await getTrazadocDocumentAction(id);
   if (!doc) notFound();
+  const canDeleteDraft = canDeleteDraftDocument(org.roleCode, doc.status, doc.createdBy, user.id);
 
   // Los hints viven en las secciones del blueprint, no en las del
   // documento (que solo guardan contenido vivo) — se resuelven aparte
@@ -51,6 +66,11 @@ export default async function TrazaDocEditPage({ params }: { params: Promise<{ i
         ) : null}
       </header>
 
+      {/* Sprint 9.2 (Parte 2): "no dejar al usuario en una pantalla donde
+          parezca que no ocurrió nada" — mensaje claro justo después de
+          crear, ya dentro de la propia edición. */}
+      {created === "1" ? <InfoAlert message="Documento creado. Puedes empezar a diligenciarlo." /> : null}
+
       {/* Sprint 9.1 (Bloqueante 3): un documento aprobado u obsoleto no se
           edita directamente aquí — se muestran los botones de transición
           (crear versión en borrador / reactivar) en vez del editor
@@ -69,6 +89,10 @@ export default async function TrazaDocEditPage({ params }: { params: Promise<{ i
       ) : null}
 
       <DocumentEditor document={doc} hints={hints} readOnly={!canEdit} />
+
+      {/* Sprint 9.2 (Parte 4): eliminar borrador — solo visible cuando
+          aplica, con confirmación clara. */}
+      {canDeleteDraft ? <DeleteDraftButton documentId={doc.id} redirectAfterDelete /> : null}
     </div>
   );
 }

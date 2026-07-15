@@ -32,14 +32,27 @@ Trazaloop.
    trazabilidad de material reciclado»).
 3. Trazaloop crea el documento con sus secciones sugeridas **vacías** —
    nunca con contenido de relleno.
-4. Diligencia cada sección y guarda.
+4. **Se abre de inmediato la edición** del documento recién creado, con el
+   aviso «Documento creado. Puedes empezar a diligenciarlo.» — nunca hace
+   falta ir a buscarlo al listado.
+
+Si la empresa **ya tiene** un documento creado desde esa misma estructura,
+Trazaloop no crea uno nuevo: muestra el existente con la opción de
+abrirlo. Una empresa solo puede tener un documento por estructura
+sugerida a la vez.
 
 ## 4. Cómo crear un documento libre
 
 1. `/trazadocs` → **Nuevo documento** → sección **Documento libre**.
 2. Escribe el nombre que quieras, un código interno opcional y una
    descripción opcional.
-3. Una vez creado, agrega tus propias secciones desde el editor.
+3. Igual que con las estructuras sugeridas, se abre de inmediato la
+   edición del documento — agrega tus propias secciones desde ahí.
+
+No se permiten dos documentos con el **mismo nombre** dentro de la misma
+empresa (la comparación ignora mayúsculas/minúsculas y espacios al
+principio o al final). Si el nombre ya existe, Trazaloop lo indica y
+ofrece abrir el documento existente en vez de crear uno repetido.
 
 ## 5. Cómo diligenciar secciones
 
@@ -88,11 +101,14 @@ historial completo está en `/trazadocs/[id]/versions`.
 
 ## 10. Cómo imprimir o guardar como PDF desde el navegador
 
-`/trazadocs/[id]/print` da una vista limpia e imprimible con el nombre de
-la empresa, título, código, estado, versión, responsable, fecha y el
-contenido de cada sección. El botón **«Imprimir / guardar como PDF»** usa
-la impresión del propio navegador — Trazaloop no genera el PDF en el
-servidor todavía.
+`/trazadocs/[id]/print` da una vista limpia e imprimible con el **logo de
+la empresa** (si se cargó uno en Configuración → Datos de empresa),
+nombre de la empresa, razón social y NIT (si existen), título, código,
+estado, versión, responsable, fecha y el contenido de cada sección. Si la
+empresa no tiene logo cargado, la impresión sigue mostrando el nombre de
+la empresa con normalidad — nunca aparece una imagen rota. El botón
+**«Imprimir / guardar como PDF»** usa la impresión del propio navegador —
+Trazaloop no genera el PDF en el servidor todavía.
 
 ## 11. Cómo el superadmin administra estructuras y tips
 
@@ -109,6 +125,27 @@ Desde `/platform/trazadocs` (solo superadministrador de plataforma):
 
 Los tips son globales: los administra solo el superadministrador de
 plataforma, no cada empresa por separado.
+
+## 12. Eliminar un documento en borrador (Sprint 9.2)
+
+Un documento en **borrador** (nunca en revisión, aprobado u obsoleto) se
+puede eliminar desde su detalle, su edición, o desde el listado —
+«Eliminar borrador» pide confirmación («Esta acción eliminará el
+documento en borrador y sus secciones. No se puede deshacer.») antes de
+borrarlo. Administrador y Supervisor pueden eliminar cualquier borrador
+de la empresa; un Consultor solo puede eliminar el que él mismo creó.
+
+## 13. Menú lateral agrupado (Sprint 9.2)
+
+La navegación está organizada en grupos plegables: **Trazabilidad**
+(diagnóstico, catálogos, evidencias, trazabilidad, contenido reciclado,
+soporte técnico, implementación, importaciones), **TrazaDocs**
+(documentos, nuevo documento), **Sistema** (equipo, datos de empresa, mi
+perfil) y, solo para personal de plataforma, **Plataforma**
+(administración, nueva empresa, estructuras TrazaDocs). Ninguna ruta
+cambió — solo cómo se agrupan visualmente. Dentro de TrazaDocs ya no hay
+botones hacia otros módulos («Ir a Implementación», etc.): esos accesos
+viven únicamente en el menú lateral.
 
 ## Seguridad multiempresa
 

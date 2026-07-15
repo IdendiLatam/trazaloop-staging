@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { DocumentSummaryRow } from "@/lib/db/trazadocs";
 import { DocumentStatusBadge } from "./document-status-badge";
+import { DeleteDraftButton } from "./delete-draft-button";
 import { EmptyState } from "@/components/ui/empty-state";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -72,6 +73,9 @@ export function DocumentList({ documents }: { documents: DocumentSummaryRow[] })
                   <Link href={`/trazadocs/${d.documentId}/print`} className="text-loop hover:underline">
                     Imprimir
                   </Link>
+                  {d.status === "draft" ? (
+                    <DeleteDraftButton documentId={d.documentId} compact />
+                  ) : null}
                 </div>
               </td>
             </tr>

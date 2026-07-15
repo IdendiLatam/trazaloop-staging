@@ -91,7 +91,7 @@ npx supabase db push
 ```
 
 `TU_PROJECT_REF` es el identificador del proyecto (Settings → General). Deben
-aplicarse las migraciones `0001` … `0047` en orden.
+aplicarse las migraciones `0001` … `0049` en orden.
 
 Verifica las semillas en el SQL Editor de Supabase:
 
@@ -101,12 +101,16 @@ select count(*) from diagnostic_questions;       -- 52
 select count(*) from material_classifications;   -- 10
 select count(*) from calculation_methodologies;  -- ≥ 1 (RC-6632-15343 activa)
 select id, public from storage.buckets where id = 'evidences';  -- public = false
+select id, public from storage.buckets where id = 'organization-assets';  -- public = false
 ```
 
 ## 9. Configurar bucket y Auth
 
 - **Bucket**: la migración `0015` crea `evidences` privado con políticas por
   organización. Confírmalo con la consulta anterior (`public = false`).
+- **Bucket (Sprint 9.2)**: la migración `0049` crea `organization-assets`
+  privado (logo de empresa) — separado de `evidences` a propósito.
+  Confírmalo con la consulta anterior.
 - **Auth**: Authentication → URL Configuration:
   - *Site URL*: `https://tu-proyecto.vercel.app`
   - *Additional Redirect URLs*: agrega `http://localhost:3000/**` para
@@ -284,6 +288,14 @@ desarrollo, `http://localhost:3000/**`).
 - ¿Es privado? (debe serlo)
 - ¿Las storage policies están aplicadas? (mismas migraciones)
 - ¿El archivo excede el límite del plan?
+
+### 18.6 El logo de empresa no sube o no se ve en la impresión (Sprint 9.2)
+
+- ¿Existe el bucket `organization-assets`? (migración 0049 — separado de `evidences`)
+- ¿Es privado? (debe serlo)
+- ¿Quien intenta subirlo es admin de esa empresa? (quality/consultant solo pueden ver)
+- La vista previa y la impresión usan una URL firmada generada en cada
+  carga de página — si expiró (1 hora), recargar la página la renueva sola.
 - ¿Hay sesión de usuario activa?
 
 ### 18.6 La app no muestra datos

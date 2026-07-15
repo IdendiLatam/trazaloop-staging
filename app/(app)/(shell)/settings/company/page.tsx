@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCompanySettingsAction } from "@/server/actions/settings";
 import { CompanySettingsForm } from "@/components/domain/settings/company-settings-form";
+import { LogoUploadForm } from "@/components/domain/settings/logo-upload-form";
 
 export default async function CompanySettingsPage() {
   const { data: company, canManage } = await getCompanySettingsAction();
@@ -38,6 +39,10 @@ export default async function CompanySettingsPage() {
           </Link>
         </div>
       </header>
+
+      <section className="rounded-lg border border-hairline bg-surface p-5">
+        <LogoUploadForm logoUrl={company.logoUrl} logoStoragePath={company.logoStoragePath} canManage={canManage} />
+      </section>
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
         <CompanySettingsForm company={company} canManage={canManage} />

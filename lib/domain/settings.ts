@@ -164,3 +164,44 @@ export function buildProfileUpdatePayload(input: ProfileSettingsInput): TrustedP
     position: normalizeOptionalText(input.position),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Logo de empresa (Sprint 9.2, Parte 6). Bucket privado `organization-assets`
+// (0049) — separado de `evidences`: un logo no es una evidencia técnica.
+// ---------------------------------------------------------------------------
+export const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+export const LOGO_TOO_LARGE_MESSAGE = "El logo no puede pesar más de 2 MB.";
+export const LOGO_INVALID_TYPE_MESSAGE =
+  "Formato no admitido. Usa PNG, JPG/JPEG o WebP (SVG no se admite por ahora).";
+
+/** Validación de negocio (Parte 6/9): tamaño máximo 2 MB, solo
+ *  PNG/JPG/JPEG/WebP — SVG excluido a propósito ("si no se maneja de
+ *  forma segura, no permitir SVG por ahora": un SVG puede llevar
+ *  script embebido, y este sprint no agrega saneamiento para eso). */
+export function validateLogoFile(file: { size: number; type: string }): SettingsValidation {
+  if (file.size <= 0) {
+    return { error: "Selecciona un archivo de imagen." };
+  }
+  if (file.size > MAX_LOGO_SIZE_BYTES) {
+    return { error: LOGO_TOO_LARGE_MESSAGE };
+  }
+  if (!(ALLOWED_LOGO_TYPES as readonly string[]).includes(file.type)) {
+    return { error: LOGO_INVALID_TYPE_MESSAGE };
+  }
+  return { error: null };
+}
+
+/** Extensión segura a partir del tipo MIME validado (nunca del nombre
+ *  original del archivo, que el cliente controla). */
+export function logoExtensionForType(type: string): string {
+  switch (type) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    default:
+      return "jpg";
+  }
+}

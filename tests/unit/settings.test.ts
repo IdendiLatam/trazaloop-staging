@@ -6,6 +6,8 @@
  *
  * Correr: npm run test:settings
  */
+import fs from "node:fs";
+import path from "node:path";
 import {
   canEditCompany,
   canEditProfile,
@@ -14,6 +16,10 @@ import {
   validateProfileSettings,
   buildProfileUpdatePayload,
   isValidWebsite,
+  validateLogoFile,
+  logoExtensionForType,
+  MAX_LOGO_SIZE_BYTES,
+  ALLOWED_LOGO_TYPES,
   type CompanySettingsInput,
   type ProfileSettingsInput,
 } from "../../lib/domain/settings";
@@ -146,6 +152,56 @@ check("8. Email de auth no se modifica desde perfil (el payload nunca lo declara
     !("id" in payload) && !("user_id" in payload),
     "el payload de perfil no debía tener ningún campo de identidad de usuario"
   );
+});
+
+console.log("\nTrazaloop · Sprint 9.2: logo de empresa\n");
+
+check("17. Admin puede subir un logo válido (permiso + validación pasan)", () => {
+  assert(canEditCompany("admin") === true, "admin debía poder gestionar el logo (mismo permiso que 'Datos de empresa')");
+  const r = validateLogoFile({ size: 500 * 1024, type: "image/png" });
+  assert(r.error === null, `un PNG de 500 KB debía ser válido: ${r.error}`);
+});
+
+check("18. Consultant no puede subir logo", () => {
+  assert(canEditCompany("consultant") === false, "consultant no debía poder gestionar el logo de la empresa");
+  assert(canEditCompany("quality") === false, "quality tampoco debía poder gestionar el logo (mismo permiso que 'Datos de empresa': solo admin)");
+});
+
+check("19. Archivo demasiado grande se rechaza", () => {
+  const r = validateLogoFile({ size: MAX_LOGO_SIZE_BYTES + 1, type: "image/png" });
+  assert(r.error !== null, "un archivo de más de 2 MB debía rechazarse");
+  const ok = validateLogoFile({ size: MAX_LOGO_SIZE_BYTES, type: "image/png" });
+  assert(ok.error === null, "un archivo de exactamente 2 MB debía aceptarse (límite inclusive)");
+});
+
+check("20. Tipo de archivo inválido se rechaza (incluido SVG, a propósito)", () => {
+  const svg = validateLogoFile({ size: 1024, type: "image/svg+xml" });
+  assert(svg.error !== null, "un SVG no debía aceptarse por ahora (riesgo de script embebido sin sanear)");
+  const pdf = validateLogoFile({ size: 1024, type: "application/pdf" });
+  assert(pdf.error !== null, "un PDF no debía aceptarse como logo");
+  for (const type of ALLOWED_LOGO_TYPES) {
+    const r = validateLogoFile({ size: 1024, type });
+    assert(r.error === null, `${type} debía ser un tipo admitido: ${r.error}`);
+  }
+});
+
+check("21. La ficha de empresa expone un campo de logo para que la impresión de TrazaDocs lo use", () => {
+  const printPage = fs.readFileSync(
+    path.resolve(__dirname, "../../app/(app)/(print)/trazadocs/[id]/print/page.tsx"),
+    "utf8"
+  );
+  assert(printPage.includes("company?.logoUrl") || printPage.includes("company.logoUrl"), "la impresión de TrazaDocs debía leer el logo de la empresa");
+  assert(logoExtensionForType("image/png") === "png" && logoExtensionForType("image/webp") === "webp", "la extensión guardada debía salir del tipo MIME validado, nunca del nombre de archivo del cliente");
+});
+
+check("22. Si no hay logo, la impresión no se rompe (sin <img> con src vacío)", () => {
+  const printPage = fs.readFileSync(
+    path.resolve(__dirname, "../../app/(app)/(print)/trazadocs/[id]/print/page.tsx"),
+    "utf8"
+  );
+  // El logo debe estar detrás de un condicional (renderizado solo si
+  // existe) — nunca un <img> incondicional que rompería con src vacío.
+  assert(/company\?\.logoUrl\s*\?/.test(printPage), "el <img> del logo debía estar condicionado a que company.logoUrl exista");
 });
 
 if (failures > 0) {

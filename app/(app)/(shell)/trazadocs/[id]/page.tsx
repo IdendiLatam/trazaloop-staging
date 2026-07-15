@@ -5,10 +5,12 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTrazadocDocumentAction } from "@/server/actions/trazadocs";
-import { canEditDocument } from "@/lib/domain/trazadocs";
+import { canEditDocument, canDeleteDraftDocument } from "@/lib/domain/trazadocs";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireSession } from "@/lib/auth/require-session";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
+import { DeleteDraftButton } from "@/components/domain/trazadocs/delete-draft-button";
 
 const SOURCE_LABEL: Record<string, string> = {
   suggested: "Estructura sugerida",
@@ -18,6 +20,7 @@ const SOURCE_LABEL: Record<string, string> = {
 export default async function TrazaDocViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const org = await requireActiveOrg();
+  const { user } = await requireSession();
   const {
     data: doc,
     canApprove,
@@ -27,6 +30,7 @@ export default async function TrazaDocViewPage({ params }: { params: Promise<{ i
   } = await getTrazadocDocumentAction(id);
   if (!doc) notFound();
   const canSaveNewVersion = canEditDocument(org.roleCode, doc.status);
+  const canDeleteDraft = canDeleteDraftDocument(org.roleCode, doc.status, doc.createdBy, user.id);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -96,6 +100,8 @@ export default async function TrazaDocViewPage({ params }: { params: Promise<{ i
           </div>
         ))}
       </section>
+
+      {canDeleteDraft ? <DeleteDraftButton documentId={doc.id} redirectAfterDelete /> : null}
     </div>
   );
 }

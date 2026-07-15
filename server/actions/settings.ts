@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/auth/require-session";
 import {
   getCompanySettings,
   updateCompanySettings,
+  uploadCompanyLogo,
+  removeCompanyLogo,
   getMyProfile,
   updateMyProfile,
   type CompanySettings,
@@ -17,6 +19,8 @@ import {
   buildCompanySettingsUpdatePayload,
   validateProfileSettings,
   buildProfileUpdatePayload,
+  validateLogoFile,
+  logoExtensionForType,
 } from "@/lib/domain/settings";
 
 /**
@@ -80,6 +84,55 @@ export async function updateCompanySettingsAction(
   revalidatePath("/settings/company");
   revalidatePath("/implementation");
   revalidatePath("/team");
+  return okState;
+}
+
+// ---------------------------------------------------------------------------
+// Logo de empresa (Sprint 9.2, Parte 6). Solo admin — mismo guarda que el
+// resto de "Datos de empresa" (canEditCompany, organizations_update).
+// ---------------------------------------------------------------------------
+export async function uploadCompanyLogoAction(
+  _prev: SettingsActionState,
+  formData: FormData
+): Promise<SettingsActionState> {
+  const org = await requireActiveOrg();
+  if (!canEditCompany(org.roleCode)) {
+    return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
+  }
+
+  const file = formData.get("logo") as File | null;
+  if (!file || file.size === 0) {
+    return { error: "Selecciona un archivo de imagen." };
+  }
+
+  const validation = validateLogoFile({ size: file.size, type: file.type });
+  if (validation.error) return { error: validation.error };
+
+  const bytes = await file.arrayBuffer();
+  const extension = logoExtensionForType(file.type);
+  const { error } = await uploadCompanyLogo(org.organizationId, bytes, file.type, extension);
+  if (error) return { error };
+
+  revalidatePath("/settings/company");
+  return okState;
+}
+
+export async function removeCompanyLogoAction(
+  _prev: SettingsActionState,
+  formData: FormData
+): Promise<SettingsActionState> {
+  const org = await requireActiveOrg();
+  if (!canEditCompany(org.roleCode)) {
+    return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
+  }
+
+  const storagePath = String(formData.get("storage_path") ?? "");
+  if (!storagePath) return { error: "No hay logo para quitar." };
+
+  const { error } = await removeCompanyLogo(org.organizationId, storagePath);
+  if (error) return { error };
+
+  revalidatePath("/settings/company");
   return okState;
 }
 

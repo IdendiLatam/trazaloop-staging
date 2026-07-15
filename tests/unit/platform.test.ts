@@ -24,6 +24,7 @@ import {
   type PlatformOrgDraftInput,
 } from "../../lib/domain/platform";
 import { TEAM_ROLES, isTeamRole } from "../../lib/domain/team";
+import { TRAZABILIDAD_GROUP, TRAZADOCS_GROUP, SISTEMA_GROUP, PLATFORM_GROUP } from "../../components/layout/nav";
 
 let failures = 0;
 function check(name: string, fn: () => void) {
@@ -265,6 +266,56 @@ check("9. Roles de plataforma siguen separados de memberships tras la correcció
 check("10. Superadmin sigue sin aparecer como role_code de membership", () => {
   assert(!isTeamRole("superadmin"), "superadmin seguía sin ser un role_code de membership válido");
   assert(!isTeamRole("support"), "support seguía sin ser un role_code de membership válido");
+});
+
+console.log("\nTrazaloop · Sprint 9.2: menú lateral agrupado\n");
+
+check("1. Usuario normal ve los grupos Trazabilidad, TrazaDocs y Sistema", () => {
+  assert(TRAZABILIDAD_GROUP.title === "Trazabilidad", "el grupo Trazabilidad debía existir con ese título exacto");
+  assert(TRAZADOCS_GROUP.title === "TrazaDocs", "el grupo TrazaDocs debía existir con ese título exacto");
+  assert(SISTEMA_GROUP.title === "Sistema", "el grupo Sistema debía existir con ese título exacto");
+  assert(
+    TRAZABILIDAD_GROUP.items.some((i) => i.href === "/evidences") &&
+      TRAZABILIDAD_GROUP.items.some((i) => i.href === "/implementation"),
+    "Trazabilidad debía incluir Evidencias e Implementación, entre otras"
+  );
+  assert(
+    TRAZADOCS_GROUP.items.some((i) => i.href === "/trazadocs"),
+    "TrazaDocs debía incluir el listado de documentos de empresa"
+  );
+  assert(
+    SISTEMA_GROUP.items.some((i) => i.href === "/team") && SISTEMA_GROUP.items.some((i) => i.href === "/settings/company"),
+    "Sistema debía incluir Equipo y Datos de empresa"
+  );
+});
+
+check("2. Usuario normal no ve el grupo Plataforma", () => {
+  // AppNav solo agrega PLATFORM_GROUP cuando showPlatform es true — un
+  // usuario normal nunca calcula ese flag en true (is_platform_staff()
+  // resuelto en el layout del shell). Se deja constancia de la garantía
+  // estructural: PLATFORM_GROUP nunca aparece entre los 4 grupos base.
+  const baseGroups = [TRAZABILIDAD_GROUP, TRAZADOCS_GROUP, SISTEMA_GROUP];
+  assert(
+    !baseGroups.some((g) => g.title === "Plataforma"),
+    "el grupo Plataforma no debía estar entre los grupos base siempre visibles"
+  );
+});
+
+check("3. Platform_staff ve el grupo Plataforma, con administración global de TrazaDocs aparte", () => {
+  assert(PLATFORM_GROUP.title === "Plataforma", "el grupo Plataforma debía existir con ese título exacto");
+  assert(
+    PLATFORM_GROUP.items.some((i) => i.href === "/platform/trazadocs"),
+    "Plataforma debía incluir la administración global de estructuras TrazaDocs"
+  );
+  // La administración global NUNCA vive en el grupo empresarial TrazaDocs.
+  assert(
+    !TRAZADOCS_GROUP.items.some((i) => i.href === "/platform/trazadocs"),
+    "la administración global de estructuras/hints no debía mezclarse en el grupo TrazaDocs de empresa"
+  );
+});
+
+check("4. Roles de plataforma no aparecen como roles de empresa (referencia cruzada con el menú)", () => {
+  assert(PLATFORM_AND_TEAM_ROLES_ARE_DISJOINT === true, "PLATFORM_ROLES y TEAM_ROLES seguían debiendo ser disjuntos");
 });
 
 if (failures > 0) {

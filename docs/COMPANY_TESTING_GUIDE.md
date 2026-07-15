@@ -47,11 +47,14 @@ encontrando durante la prueba.
   o invitar al administrador inicial — ver `docs/PLATFORM_ADMIN_GUIDE.md`.
   Esto NO es un caso piloto ni datos de demostración: sigue siendo la
   empresa real con sus datos reales.
-- **TrazaDocs (Sprint 9):** documenta los procedimientos reales de la
-  empresa desde `/trazadocs` — a partir de una estructura sugerida (por
-  ejemplo, «Procedimiento de trazabilidad de material reciclado») o como
-  documento libre. Nunca son archivos externos: se diligencian, guardan y
-  versionan dentro de la plataforma — ver `docs/TRAZADOCS_GUIDE.md`.
+- **TrazaDocs (Sprint 9 / 9.1 / 9.2):** documenta los procedimientos
+  reales de la empresa desde `/trazadocs` — a partir de una estructura
+  sugerida (por ejemplo, «Procedimiento de trazabilidad de material
+  reciclado») o como documento libre; al crear uno se abre directo a
+  diligenciarlo. Nunca son archivos externos: se diligencian, guardan y
+  versionan dentro de la plataforma — ver `docs/TRAZADOCS_GUIDE.md`. Antes
+  de imprimir un documento, vale la pena cargar el logo real de la
+  empresa desde `/settings/company` para que aparezca en el encabezado.
 
 ## Los 17 pasos
 
