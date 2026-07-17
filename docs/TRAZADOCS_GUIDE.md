@@ -25,6 +25,17 @@ la plataforma.
 Ninguno de los dos es un archivo — ambos son documentos vivos dentro de
 Trazaloop.
 
+> **Límite de plan (Sprint 10A):** el plan **Demo** permite hasta **2**
+> documentos TrazaDocs por empresa (sugeridos y libres cuentan juntos).
+> Los planes **Full** y **Extra** no tienen límite. Ver
+> `docs/PLANS_AND_LIMITS_GUIDE.md`.
+
+> **Maestro de documentos (Sprint 10B):** `/trazadocs/master` reúne en
+> una sola vista todos los documentos vivos (esta guía) junto con los
+> documentos descargables (archivos controlados como PDF/Word/Excel que
+> la empresa sube tal cual). El límite de 2 documentos en Demo cuenta
+> ambos tipos juntos. Ver `docs/DOCUMENT_MASTER_GUIDE.md`.
+
 ## 3. Cómo crear un documento desde estructura sugerida
 
 1. `/trazadocs` → **Nuevo documento**.

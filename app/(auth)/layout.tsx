@@ -24,7 +24,7 @@ export default function AuthLayout({
           </p>
         </div>
         <p className="code text-xs text-emerald-200/60">
-          trazaloop · núcleo v0.1
+          Trazaloop CPR · beta controlada
         </p>
       </aside>
 

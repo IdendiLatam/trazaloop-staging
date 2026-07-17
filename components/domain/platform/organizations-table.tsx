@@ -1,13 +1,23 @@
 import Link from "next/link";
 import type { PlatformOrganizationRow } from "@/lib/db/platform";
+import { PLAN_LABEL, type PlanCode } from "@/lib/plans/types";
 import { EmptyState } from "@/components/ui/empty-state";
+
+type PlanInfo = { planCode: PlanCode; storagePercentUsed: number };
 
 /** Tabla de empresas registradas (Parte 6). No hay "entrar como soporte"
  *  en este sprint (Parte 7: opción avanzada, explícitamente opcional) —
  *  "Ver implementación" abre un resumen de solo lectura DENTRO de la
  *  consola de plataforma, sin cambiar la organización activa del
- *  superadmin ni crear ningún acceso silencioso. */
-export function OrganizationsTable({ organizations }: { organizations: PlatformOrganizationRow[] }) {
+ *  superadmin ni crear ningún acceso silencioso.
+ *  Sprint 10A: columna de Plan, con el % de almacenamiento usado. */
+export function OrganizationsTable({
+  organizations,
+  planByOrgId = {},
+}: {
+  organizations: PlatformOrganizationRow[];
+  planByOrgId?: Record<string, PlanInfo>;
+}) {
   if (organizations.length === 0) {
     return (
       <EmptyState
@@ -23,6 +33,7 @@ export function OrganizationsTable({ organizations }: { organizations: PlatformO
         <thead>
           <tr className="border-b border-hairline text-left text-xs text-ink-soft">
             <th className="px-3 py-2 font-medium">Empresa</th>
+            <th className="px-3 py-2 font-medium">Plan</th>
             <th className="px-3 py-2 font-medium">Razón social</th>
             <th className="px-3 py-2 font-medium">NIT</th>
             <th className="px-3 py-2 font-medium">País / ciudad</th>
@@ -31,15 +42,27 @@ export function OrganizationsTable({ organizations }: { organizations: PlatformO
             <th className="px-3 py-2 font-medium">Evidencias</th>
             <th className="px-3 py-2 font-medium">Lotes producidos</th>
             <th className="px-3 py-2 font-medium">Cálculos</th>
-            <th className="px-3 py-2 font-medium">Feedback abierto</th>
+            <th className="px-3 py-2 font-medium">Solicitudes históricas</th>
             <th className="px-3 py-2 font-medium">Creada</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
         <tbody>
-          {organizations.map((org) => (
+          {organizations.map((org) => {
+            const plan = planByOrgId[org.organizationId];
+            return (
             <tr key={org.organizationId} className="border-b border-hairline last:border-0 align-top">
               <td className="px-3 py-2 font-medium">{org.organizationName}</td>
+              <td className="px-3 py-2 text-xs">
+                {plan ? (
+                  <span className="inline-flex flex-col">
+                    <span className="font-medium">{PLAN_LABEL[plan.planCode]}</span>
+                    <span className="text-ink-soft">{plan.storagePercentUsed}% almacenamiento</span>
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </td>
               <td className="px-3 py-2 text-xs text-ink-soft">{org.legalName ?? "—"}</td>
               <td className="code px-3 py-2 text-xs">{org.taxId ?? "—"}</td>
               <td className="px-3 py-2 text-xs text-ink-soft">
@@ -74,7 +97,8 @@ export function OrganizationsTable({ organizations }: { organizations: PlatformO
                 </Link>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

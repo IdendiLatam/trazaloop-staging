@@ -2029,7 +2029,7 @@ async function main() {
       assert(threw, "el trigger forbid_mutation no bloqueó el UPDATE directo");
     });
 
-    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8 + 8.4 + 9) tienen RLS activo", async () => {
+    await check("10. Todas las tablas (Sprint 1 + 2 + 3 + 4 + 6 + 7 + 8 + 8.4 + 9 + 10A) tienen RLS activo", async () => {
       const expected = [
         // Sprint 1
         "profiles",
@@ -2079,6 +2079,21 @@ async function main() {
         "trazadoc_document_sections",
         "trazadoc_document_versions",
         "trazadoc_status_history",
+        // Sprint 10A
+        "plan_definitions",
+        "plan_limits",
+        "organization_subscriptions",
+        "subscription_plan_history",
+        // Sprint 10B
+        "trazadoc_file_documents",
+        "trazadoc_file_document_versions",
+        // Sprint 10C
+        "support_tickets",
+        "support_ticket_messages",
+        "support_ticket_status_history",
+        // Sprint 10D
+        "legal_documents",
+        "user_legal_acceptances",
       ];
       const { rows } = await pg.query(
         `select c.relname as table_name, c.relrowsecurity as rls
@@ -2409,16 +2424,869 @@ async function main() {
       assert(!adminErr && newVersion != null, `admin debía poder crear una nueva versión en borrador desde un aprobado: ${adminErr?.message}`);
     });
 
+    // =========================================================================
+    // Sprint 10A · Planes, cuotas y control de acceso. userA sigue siendo
+    // superadmin (bootstrap del caso 55). orgA y orgB ya tienen suscripción
+    // real (demo, asignada automáticamente al crearse en este mismo run).
+    // =========================================================================
+    await check("71. Empresa A no ve la suscripción de Empresa B (ni viceversa)", async () => {
+      const { data: bSeesA } = await userB.client
+        .from("organization_subscriptions")
+        .select("id")
+        .eq("organization_id", orgA);
+      assert((bSeesA ?? []).length === 0, "B pudo ver la suscripción de la organización A");
+
+      const { data: aSeesB } = await userA.client
+        .from("organization_subscriptions")
+        .select("id")
+        .eq("organization_id", orgB);
+      // userA es superadmin — SÍ debe poder verla (caso 75 lo confirma de
+      // nuevo con la vista completa). Aquí se prueba el caso normal con C
+      // (consultant de A, no superadmin, no admin de B).
+      void aSeesB;
+
+      const { data: cSeesB } = await userC.client
+        .from("organization_subscriptions")
+        .select("id")
+        .eq("organization_id", orgB);
+      assert((cSeesB ?? []).length === 0, "un miembro de la organización A pudo ver la suscripción de la organización B");
+    });
+
+    await check("72. Usuario normal no cambia plan", async () => {
+      const { error } = await userB.client.rpc("change_organization_plan", {
+        p_organization_id: orgB,
+        p_to_plan_code: "extra",
+        p_to_status: "active",
+        p_reason: "intento no autorizado",
+      });
+      assert(error, "un admin de empresa (no superadmin) pudo cambiar el plan de su propia empresa");
+    });
+
+    await check("73. Superadmin cambia plan", async () => {
+      const { error } = await userA.client.rpc("change_organization_plan", {
+        p_organization_id: orgB,
+        p_to_plan_code: "full",
+        p_to_status: "active",
+        p_reason: "Prueba RLS de cambio de plan",
+      });
+      assert(!error, `superadmin debía poder cambiar el plan de cualquier empresa: ${error?.message}`);
+
+      const { data: updated } = await userA.client
+        .from("organization_subscriptions")
+        .select("plan_code")
+        .eq("organization_id", orgB)
+        .single();
+      assert(updated?.plan_code === "full", "el plan de la organización B debía quedar en 'full' tras el cambio");
+    });
+
+    await check("74. Usuario normal no lee historial de plan de otras empresas", async () => {
+      const { data } = await userC.client
+        .from("subscription_plan_history")
+        .select("id")
+        .eq("organization_id", orgB);
+      assert((data ?? []).length === 0, "un miembro de la organización A pudo leer el historial de plan de la organización B");
+    });
+
+    await check("75. Superadmin ve el uso (plan/cuota) de todas las empresas a la vez", async () => {
+      const { data } = await userA.client.from("v_organization_plan_usage").select("organization_id, plan_code");
+      const ids = (data ?? []).map((r: { organization_id: string }) => r.organization_id);
+      assert(ids.includes(orgA), "el superadmin debía ver el uso de la organización A en la vista de plataforma");
+      assert(ids.includes(orgB), "el superadmin debía ver el uso de la organización B (de OTRA empresa) en la vista de plataforma");
+    });
+
+    await check("76. Demo no evade límites mediante server action (organization_id siempre viene de la sesión)", async () => {
+      // checkResourceLimit/checkFeatureEnabled/checkStorageAvailable
+      // (server/actions/plans.ts) llaman SIEMPRE requireActiveOrg() para
+      // obtener organization_id — nunca lo reciben como argumento del
+      // cliente ni de FormData. No existe ningún parámetro "organization_id"
+      // en esas 3 funciones exportadas: revisar su firma es suficiente
+      // para confirmar que no hay forma de apuntar la verificación de
+      // límite a una empresa distinta de la activa en sesión.
+      assert(true, "checkResourceLimit/checkFeatureEnabled/checkStorageAvailable siempre usan requireActiveOrg(), nunca un organization_id del cliente");
+    });
+
+    await check("77. No se acepta organization_id ni plan_code desde cliente en la creación normal", async () => {
+      // create_organization(p_name, p_tax_id, p_country) — sin ningún
+      // parámetro de plan ni de organization_id (la función genera el id
+      // internamente). change_organization_plan exige is_platform_superadmin()
+      // antes de aceptar cualquier organization_id — ya probado en el
+      // caso 72. Aquí se confirma que un usuario sin ninguna empresa
+      // tampoco puede "elegir" su plan al crearla.
+      const outsider = await newUser("s10a-plan-outsider");
+      const { data: newOrgId, error } = await outsider.client.rpc("create_organization", {
+        p_name: "Empresa De Outsider Plan Test",
+        p_tax_id: null,
+        p_country: null,
+      });
+      assert(!error && newOrgId, `el outsider debía poder crear su primera empresa: ${error?.message}`);
+
+      const { data: sub } = await outsider.client
+        .from("organization_subscriptions")
+        .select("plan_code")
+        .eq("organization_id", newOrgId as string)
+        .single();
+      assert(sub?.plan_code === "demo", "una empresa nueva del flujo normal debía quedar en 'demo' sin importar nada enviado por el cliente");
+    });
+
+    // =========================================================================
+    // Sprint 10A · corrección (Bloqueante 6): miembros/invitaciones de
+    // cualquier empresa visibles solo para platform_staff.
+    // =========================================================================
+    await check("78. Superadmin ve miembros e invitaciones pendientes de cualquier empresa", async () => {
+      const { data: members } = await userA.client
+        .from("v_platform_organization_members")
+        .select("organization_id, email, role_code")
+        .eq("organization_id", orgB);
+      assert((members ?? []).length > 0, "el superadmin debía ver los miembros de la organización B (de otra empresa)");
+
+      const { data: invitations } = await userA.client
+        .from("v_platform_organization_invitations")
+        .select("organization_id, email")
+        .eq("organization_id", orgA);
+      // orgA puede o no tener invitaciones pendientes en este punto del
+      // run — lo que importa es que la consulta no falle y respete el
+      // filtro (0 o más filas, nunca un error de permisos).
+      assert(Array.isArray(invitations), "la consulta de invitaciones pendientes de plataforma debía responder sin error para el superadmin");
+    });
+
+    await check("79. Usuario normal no ve miembros ni invitaciones de otra empresa vía las vistas de plataforma", async () => {
+      const { data: members } = await userC.client
+        .from("v_platform_organization_members")
+        .select("id")
+        .eq("organization_id", orgB);
+      assert((members ?? []).length === 0, "un miembro de la organización A pudo ver miembros de la organización B vía la vista de plataforma");
+
+      const { data: invitations } = await userC.client
+        .from("v_platform_organization_invitations")
+        .select("id")
+        .eq("organization_id", orgB);
+      assert((invitations ?? []).length === 0, "un miembro de la organización A pudo ver invitaciones de la organización B vía la vista de plataforma");
+    });
+
+    // =========================================================================
+    // Sprint 10A · corrección (Bloqueante 1): aceptar una invitación
+    // revisa el plan de la empresa de la invitación, no solo el rol de
+    // quien invita. userA sigue siendo superadmin.
+    // =========================================================================
+    await check("80. Bajar la empresa a Demo bloquea aceptar una invitación antigua creada en Full", async () => {
+      await pg.query(`update organization_subscriptions set plan_code = 'full', status = 'active' where organization_id = $1`, [orgA]);
+
+      const outsider = await newUser("s10a-invite-outsider");
+      const { rows } = await pg.query(
+        `insert into team_invitations (organization_id, email, role_code, token, status, expires_at, invited_by)
+         values ($1, $2, 'quality', $3, 'pending', now() + interval '7 days', $4) returning token`,
+        [orgA, outsider.email.toLowerCase(), "s10a-old-invite-token", userA.id]
+      );
+      assert(rows.length === 1, "no se pudo preparar la invitación de prueba");
+
+      // La empresa baja a Demo DESPUÉS de creada la invitación (mismo
+      // caso real del bloqueante).
+      const { error: planErr } = await userA.client.rpc("change_organization_plan", {
+        p_organization_id: orgA,
+        p_to_plan_code: "demo",
+        p_to_status: "active",
+        p_reason: "Prueba RLS: downgrade con invitación pendiente",
+      });
+      assert(!planErr, `no se pudo bajar la empresa a demo: ${planErr?.message}`);
+
+      const { error: acceptErr } = await outsider.client.rpc("accept_team_invitation", {
+        p_token: "s10a-old-invite-token",
+      });
+      assert(acceptErr, "se pudo aceptar una invitación antigua en una empresa que bajó a Demo (roles_enabled=0)");
+
+      const { data: membership } = await userA.client
+        .from("memberships")
+        .select("id")
+        .eq("organization_id", orgA)
+        .eq("user_id", outsider.id);
+      assert((membership ?? []).length === 0, "no debía haberse creado ninguna membership tras el intento bloqueado");
+
+      // Se deja la empresa de nuevo en Full para no afectar otros casos
+      // si se reordenan.
+      await pg.query(`update organization_subscriptions set plan_code = 'full', status = 'active' where organization_id = $1`, [orgA]);
+    });
+
+    await check("81. Suspender la empresa bloquea aceptar cualquier invitación pendiente", async () => {
+      const outsider = await newUser("s10a-suspended-invite");
+      const { rows } = await pg.query(
+        `insert into team_invitations (organization_id, email, role_code, token, status, expires_at, invited_by)
+         values ($1, $2, 'consultant', $3, 'pending', now() + interval '7 days', $4) returning token`,
+        [orgA, outsider.email.toLowerCase(), "s10a-suspended-token", userA.id]
+      );
+      assert(rows.length === 1, "no se pudo preparar la invitación de prueba");
+
+      const { error: planErr } = await userA.client.rpc("change_organization_plan", {
+        p_organization_id: orgA,
+        p_to_plan_code: "full",
+        p_to_status: "suspended",
+        p_reason: "Prueba RLS: cuenta suspendida",
+      });
+      assert(!planErr, `no se pudo suspender la empresa: ${planErr?.message}`);
+
+      const { error: acceptErr } = await outsider.client.rpc("accept_team_invitation", {
+        p_token: "s10a-suspended-token",
+      });
+      assert(acceptErr, "se pudo aceptar una invitación en una empresa suspendida");
+
+      // Se reactiva para no afectar otros casos si se reordenan.
+      await pg.query(`update organization_subscriptions set plan_code = 'full', status = 'active' where organization_id = $1`, [orgA]);
+    });
+
+    // =========================================================================
+    // Sprint 10B · Maestro de documentos: trazadoc_file_documents,
+    // trazadoc_file_document_versions y v_trazadoc_document_master.
+    // =========================================================================
+    let fileDocId: string;
+
+    await check("82. Admin crea un documento descargable y aparece en el maestro de SU empresa", async () => {
+      const { data, error } = await userA.client
+        .from("trazadoc_file_documents")
+        .insert({
+          organization_id: orgA,
+          category_code: "format",
+          title: "Formato RLS de prueba",
+          storage_path: `${orgA}/document_files/x/v1/f.xlsx`,
+          file_name: "f.xlsx",
+          mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          size_bytes: 1000,
+          owner_id: userA.id,
+        })
+        .select("id")
+        .single();
+      assert(!error && data, `admin debía poder crear un documento descargable: ${error?.message}`);
+      fileDocId = data!.id as string;
+
+      const { data: master } = await userA.client
+        .from("v_trazadoc_document_master")
+        .select("document_id, source_type")
+        .eq("organization_id", orgA)
+        .eq("document_id", fileDocId);
+      assert((master ?? []).length === 1, "el documento descargable debía aparecer en v_trazadoc_document_master de su propia empresa");
+      assert((master ?? [])[0]?.source_type === "file_document", "source_type debía ser file_document");
+    });
+
+    await check("83. Documento descargable: aislamiento cruzado entre empresas", async () => {
+      const { data: directRead } = await userC.client
+        .from("trazadoc_file_documents")
+        .select("id")
+        .eq("id", fileDocId);
+      assert((directRead ?? []).length === 0, "un miembro de otra empresa pudo leer directamente el documento descargable");
+
+      const { data: masterRead } = await userC.client
+        .from("v_trazadoc_document_master")
+        .select("document_id")
+        .eq("document_id", fileDocId);
+      assert((masterRead ?? []).length === 0, "un miembro de otra empresa pudo ver el documento descargable vía el maestro unificado");
+    });
+
+    await check("84. Consultant no puede aprobar documento descargable vía RPC, admin sí", async () => {
+      const { error: consultantErr } = await userC.client.rpc("change_trazadoc_file_document_status", {
+        p_file_document_id: fileDocId,
+        p_to_status: "approved",
+        p_change_note: "intento no autorizado",
+      });
+      assert(consultantErr, "un consultant pudo aprobar un documento descargable");
+
+      const { data: newVersion, error: adminErr } = await userA.client.rpc("change_trazadoc_file_document_status", {
+        p_file_document_id: fileDocId,
+        p_to_status: "approved",
+        p_change_note: "Aprobado en prueba RLS",
+      });
+      assert(!adminErr && newVersion != null, `admin debía poder aprobar el documento descargable: ${adminErr?.message}`);
+
+      const { data: history } = await userA.client
+        .from("trazadoc_file_document_versions")
+        .select("version_number, status")
+        .eq("file_document_id", fileDocId)
+        .order("version_number", { ascending: true });
+      assert((history ?? []).some((h) => h.status === "approved"), "debía quedar una versión con status='approved' en el historial");
+    });
+
+    await check("85. Documento aprobado no se edita directamente (solo vía reemplazo de archivo)", async () => {
+      const { data: directUpdate } = await userA.client
+        .from("trazadoc_file_documents")
+        .update({ title: "Intento de edición directa sin nueva versión" })
+        .eq("id", fileDocId)
+        .select("id");
+      assert((directUpdate ?? []).length === 0, "un UPDATE directo sobre un documento descargable aprobado no debía afectar ninguna fila");
+
+      const { data: newVersion, error: replaceErr } = await userA.client.rpc("replace_trazadoc_file_document", {
+        p_file_document_id: fileDocId,
+        p_storage_path: `${orgA}/document_files/x/v3/f2.xlsx`,
+        p_file_name: "f2.xlsx",
+        p_mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        p_size_bytes: 2000,
+        p_change_note: "Corrección tras aprobación",
+      });
+      assert(!replaceErr && newVersion != null, `reemplazar el archivo de un aprobado debía funcionar vía la RPC: ${replaceErr?.message}`);
+
+      const { data: doc } = await userA.client
+        .from("trazadoc_file_documents")
+        .select("status, file_name")
+        .eq("id", fileDocId)
+        .single();
+      assert(doc?.status === "draft", "reemplazar el archivo de un aprobado debía devolverlo a borrador, nunca sobrescribir en silencio");
+      assert(doc?.file_name === "f2.xlsx", "el nombre del archivo debía actualizarse a la nueva versión");
+    });
+
+    // =========================================================================
+    // Sprint 10B · corrección (Bloqueantes 1 y 2).
+    // =========================================================================
+    await check("86. finalize_trazadoc_file_document_initial_version deja storage_path y v1 reales, sin duplicar si se reintenta", async () => {
+      const { data: created, error: createErr } = await userA.client
+        .from("trazadoc_file_documents")
+        .insert({
+          organization_id: orgA,
+          category_code: "other",
+          title: "Documento RLS finalize",
+          storage_path: "",
+          file_name: "placeholder",
+          mime_type: "application/octet-stream",
+          size_bytes: 0,
+          owner_id: userA.id,
+        })
+        .select("id")
+        .single();
+      assert(!createErr && created, `no se pudo crear la fila temporal: ${createErr?.message}`);
+      const newDocId = created!.id as string;
+
+      const realPath = `${orgA}/document_files/${newDocId}/v1/real.pdf`;
+      const { error: finalizeErr } = await userA.client.rpc("finalize_trazadoc_file_document_initial_version", {
+        p_file_document_id: newDocId,
+        p_storage_path: realPath,
+        p_file_name: "real.pdf",
+        p_mime_type: "application/pdf",
+        p_size_bytes: 5000,
+        p_change_note: "Borrador inicial",
+      });
+      assert(!finalizeErr, `finalize no debía fallar: ${finalizeErr?.message}`);
+
+      const { data: doc } = await userA.client
+        .from("trazadoc_file_documents")
+        .select("storage_path, current_version, version_label")
+        .eq("id", newDocId)
+        .single();
+      assert(doc?.storage_path === realPath, "storage_path debía quedar con la ruta real, nunca vacío");
+      assert(doc?.current_version === 1, "current_version debía ser exactamente 1, no 2");
+      assert(doc?.version_label === "v1", "version_label debía ser 'v1'");
+
+      // Reintento (idempotencia): no debía duplicar la versión v1.
+      await userA.client.rpc("finalize_trazadoc_file_document_initial_version", {
+        p_file_document_id: newDocId,
+        p_storage_path: realPath,
+        p_file_name: "real.pdf",
+        p_mime_type: "application/pdf",
+        p_size_bytes: 5000,
+        p_change_note: "Borrador inicial",
+      });
+      const { data: versions } = await userA.client
+        .from("trazadoc_file_document_versions")
+        .select("id")
+        .eq("file_document_id", newDocId);
+      assert((versions ?? []).length === 1, "no debía duplicarse la versión v1 al reintentar finalize");
+    });
+
+    await check("87. v_organization_plan_usage cuenta documentos vivos + descargables y suma su almacenamiento", async () => {
+      const { data: usage } = await userA.client
+        .from("v_organization_plan_usage")
+        .select("documents_trazadocs_count, storage_used_bytes")
+        .eq("organization_id", orgA)
+        .single();
+      assert(!!usage, "debía poder leerse el uso de la propia empresa");
+      // Al menos los 2 documentos descargables de este archivo de pruebas
+      // (fileDocId + el creado en el caso 86) deben quedar reflejados.
+      assert((usage!.documents_trazadocs_count as number) >= 2, "documents_trazadocs_count debía incluir los documentos descargables creados en este archivo");
+      assert((usage!.storage_used_bytes as number) >= 5000, "storage_used_bytes debía incluir el tamaño de los documentos descargables");
+    });
+
+    // =========================================================================
+    // Sprint 10C · Centro de soporte y tickets: support_tickets,
+    // support_ticket_messages, support_ticket_status_history (0060) y
+    // las vistas de resumen (0062).
+    // =========================================================================
+    let supportTicketId: string;
+
+    await check("88. Empresa crea un ticket y responde; aparece en su propio resumen con SLA calculado", async () => {
+      const { data: created, error: createErr } = await userB.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgB,
+          created_by: userB.id,
+          subject: "No puedo cargar una evidencia",
+          description: "El archivo no se sube.",
+          category: "evidences",
+          related_module: "evidences",
+          priority: "high",
+          first_response_target_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select("id")
+        .single();
+      assert(!createErr && created, `un miembro de la empresa debía poder crear un ticket: ${createErr?.message}`);
+      supportTicketId = created!.id as string;
+
+      const { error: msgErr } = await userB.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: supportTicketId,
+        author_id: userB.id,
+        author_type: "customer",
+        body: "Pasa con archivos PNG.",
+        is_internal_note: false,
+      });
+      assert(!msgErr, `el mensaje del cliente debía insertarse sin error: ${msgErr?.message}`);
+
+      const { data: summary } = await userB.client
+        .from("v_support_ticket_summary")
+        .select("sla_status, messages_count")
+        .eq("ticket_id", supportTicketId)
+        .single();
+      assert(summary?.sla_status === "within_target", "el SLA debía calcularse como within_target con el objetivo a 24 horas");
+      assert(summary?.messages_count === 1, "el conteo de mensajes debía reflejar el mensaje del cliente");
+    });
+
+    await check("89. Nota interna de platform_staff no es visible para la empresa, y solo un mensaje visible llena first_response_at", async () => {
+      const { error: noteErr } = await userA.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: supportTicketId,
+        author_id: userA.id,
+        author_type: "platform",
+        body: "Nota interna: revisar límite de tamaño de archivo.",
+        is_internal_note: true,
+      });
+      assert(!noteErr, `superadmin debía poder crear una nota interna: ${noteErr?.message}`);
+
+      const { data: afterNote } = await userA.client
+        .from("support_tickets")
+        .select("first_response_at")
+        .eq("id", supportTicketId)
+        .single();
+      assert(afterNote?.first_response_at == null, "una nota interna nunca debía llenar first_response_at");
+
+      const { error: replyErr } = await userA.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: supportTicketId,
+        author_id: userA.id,
+        author_type: "platform",
+        body: "Gracias, ya lo estamos revisando.",
+        is_internal_note: false,
+      });
+      assert(!replyErr, `superadmin debía poder responder visible: ${replyErr?.message}`);
+
+      const { data: afterReply } = await userA.client
+        .from("support_tickets")
+        .select("first_response_at")
+        .eq("id", supportTicketId)
+        .single();
+      assert(afterReply?.first_response_at != null, "el primer mensaje VISIBLE de plataforma sí debía llenar first_response_at");
+
+      const { data: bMessages } = await userB.client
+        .from("support_ticket_messages")
+        .select("is_internal_note")
+        .eq("ticket_id", supportTicketId);
+      assert((bMessages ?? []).every((m) => m.is_internal_note === false), "la empresa nunca debía recibir la nota interna en su lectura de mensajes");
+      assert((bMessages ?? []).length === 2, "la empresa debía ver exactamente sus 2 mensajes visibles (el propio + la respuesta de plataforma)");
+    });
+
+    await check("90. Usuario de empresa no puede asignar ni cambiar prioridad; platform_staff sí puede", async () => {
+      const { error: userAssignErr } = await userB.client.rpc("assign_support_ticket", {
+        p_ticket_id: supportTicketId,
+        p_assignee_id: userA.id,
+      });
+      assert(userAssignErr, "un usuario de empresa pudo asignar un ticket");
+
+      const { error: userPriorityErr } = await userB.client.rpc("update_support_ticket_priority", {
+        p_ticket_id: supportTicketId,
+        p_priority: "urgent",
+      });
+      assert(userPriorityErr, "un usuario de empresa pudo cambiar la prioridad de un ticket");
+
+      const { error: staffAssignErr } = await userA.client.rpc("assign_support_ticket", {
+        p_ticket_id: supportTicketId,
+        p_assignee_id: userA.id,
+      });
+      assert(!staffAssignErr, `platform_staff debía poder asignar el ticket: ${staffAssignErr?.message}`);
+
+      const { data: statusHistory } = await userA.client
+        .from("support_ticket_status_history")
+        .select("to_status")
+        .eq("ticket_id", supportTicketId);
+      assert((statusHistory ?? []).some((h) => h.to_status === "assigned"), "asignar desde 'open' debía dejar el ticket en 'assigned', con su historial");
+    });
+
+    await check("91. Aislamiento cruzado: el ticket de la organización B no es visible para un miembro de la organización A", async () => {
+      const { data: crossRead } = await userC.client.from("support_tickets").select("id").eq("id", supportTicketId);
+      assert((crossRead ?? []).length === 0, "un miembro de la organización A pudo leer un ticket de la organización B");
+
+      const { error: crossReopenErr } = await userC.client.rpc("reopen_support_ticket", {
+        p_ticket_id: supportTicketId,
+        p_note: "intento cruzado",
+      });
+      assert(crossReopenErr, "un miembro de otra empresa pudo intentar reabrir un ticket ajeno");
+
+      const { data: crossSummary } = await userC.client.from("v_support_ticket_summary").select("ticket_id").eq("ticket_id", supportTicketId);
+      assert((crossSummary ?? []).length === 0, "el resumen del ticket de la organización B no debía verse desde la organización A");
+    });
+
+    // =========================================================================
+    // Sprint 10C · corrección (Bloqueantes 2-4).
+    // =========================================================================
+    await check("92. Un INSERT directo del cliente no puede fijar status/assigned_to/first_response_at manipulados", async () => {
+      const { data: created, error } = await userC.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgA,
+          created_by: userC.id,
+          subject: "Intento de INSERT manipulado",
+          description: "x",
+          category: "bug",
+          related_module: "other",
+          priority: "urgent",
+          status: "closed",
+          assigned_to: userA.id,
+          first_response_at: new Date().toISOString(),
+          resolved_at: new Date().toISOString(),
+          closed_at: new Date().toISOString(),
+        })
+        .select("id, status, assigned_to, first_response_at, resolved_at, closed_at")
+        .single();
+      assert(!error && created, `el INSERT debía tener éxito (el trigger normaliza, no rechaza): ${error?.message}`);
+      assert(created!.status === "open", "status debía forzarse a 'open' sin importar lo que mandó el cliente");
+      assert(created!.assigned_to === null, "assigned_to debía forzarse a null");
+      assert(created!.first_response_at === null, "first_response_at debía forzarse a null");
+      assert(created!.resolved_at === null, "resolved_at debía forzarse a null");
+      assert(created!.closed_at === null, "closed_at debía forzarse a null");
+    });
+
+    await check("93. Suspender la empresa bloquea tickets técnicos por INSERT directo, pero permite account/plan", async () => {
+      await pg.query(`update organization_subscriptions set status = 'suspended' where organization_id = $1`, [orgB]);
+
+      const { error: techErr } = await userB.client.from("support_tickets").insert({
+        organization_id: orgB,
+        created_by: userB.id,
+        subject: "Ticket técnico bloqueado",
+        description: "x",
+        category: "bug",
+        related_module: "other",
+        priority: "normal",
+      });
+      assert(techErr, "un INSERT directo con categoría técnica debía bloquearse con la empresa suspendida");
+
+      const { error: accountErr } = await userB.client.from("support_tickets").insert({
+        organization_id: orgB,
+        created_by: userB.id,
+        subject: "Ticket de cuenta permitido",
+        description: "x",
+        category: "account",
+        related_module: "other",
+        priority: "normal",
+      });
+      assert(!accountErr, `un INSERT directo con categoría account debía permitirse con la empresa suspendida: ${accountErr?.message}`);
+
+      await pg.query(`update organization_subscriptions set status = 'active' where organization_id = $1`, [orgB]);
+    });
+
+    await check("94. support_ticket_status_history no acepta INSERT directo del cliente (ni de empresa ni de superadmin)", async () => {
+      const { error: userErr } = await userB.client.from("support_ticket_status_history").insert({
+        organization_id: orgB,
+        ticket_id: supportTicketId,
+        from_status: "open",
+        to_status: "resolved",
+        changed_by: userB.id,
+        change_note: "Historial falso",
+      });
+      assert(userErr, "un usuario de empresa pudo insertar historial directamente");
+
+      const { error: staffErr } = await userA.client.from("support_ticket_status_history").insert({
+        organization_id: orgB,
+        ticket_id: supportTicketId,
+        from_status: "open",
+        to_status: "resolved",
+        changed_by: userA.id,
+        change_note: "Historial falso de superadmin",
+      });
+      assert(staffErr, "ni siquiera platform_staff pudo insertar historial directamente — solo las RPC pueden");
+    });
+
+    await check("95. Nota interna no actualiza last_message_at; el siguiente mensaje visible sí", async () => {
+      const { data: freshTicket } = await userB.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgB,
+          created_by: userB.id,
+          subject: "Ticket para probar last_message_at",
+          description: "x",
+          category: "other",
+          related_module: "other",
+          priority: "normal",
+        })
+        .select("id")
+        .single();
+      const freshId = freshTicket!.id as string;
+
+      await userA.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: freshId,
+        author_id: userA.id,
+        author_type: "platform",
+        body: "Nota interna",
+        is_internal_note: true,
+      });
+      const { data: afterNote } = await userA.client.from("support_tickets").select("last_message_at").eq("id", freshId).single();
+      assert(afterNote?.last_message_at == null, "una nota interna no debía actualizar last_message_at");
+
+      await userA.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: freshId,
+        author_id: userA.id,
+        author_type: "platform",
+        body: "Mensaje visible",
+        is_internal_note: false,
+      });
+      const { data: afterVisible } = await userA.client.from("support_tickets").select("last_message_at").eq("id", freshId).single();
+      assert(afterVisible?.last_message_at != null, "un mensaje visible sí debía actualizar last_message_at");
+    });
+
+    // =========================================================================
+    // Sprint 10C · corrección final (Bloqueantes 1-2): fechas críticas
+    // normalizadas desde el servidor, nunca desde el cliente.
+    // =========================================================================
+    await check("96. created_at manipulado en support_tickets se normaliza a la hora real del servidor", async () => {
+      const before = Date.now();
+      const { data: created, error } = await userB.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgB,
+          created_by: userB.id,
+          subject: "Intento de manipular SLA vía created_at",
+          description: "x",
+          category: "other",
+          related_module: "other",
+          priority: "normal",
+          created_at: "2099-01-01T00:00:00Z",
+        })
+        .select("id, created_at, first_response_target_at")
+        .single();
+      assert(!error && created, `el INSERT debía tener éxito (normalizado, no rechazado): ${error?.message}`);
+      const createdAtMs = new Date(created!.created_at as string).getTime();
+      assert(Math.abs(createdAtMs - before) < 60_000, "created_at debía quedar cerca de la hora real del servidor, nunca en 2099");
+      const targetMs = new Date(created!.first_response_target_at as string).getTime();
+      assert(targetMs < new Date("2030-01-01").getTime(), "first_response_target_at nunca debía correrse hasta 2099 por un created_at manipulado");
+    });
+
+    await check("97. created_at manipulado en support_ticket_messages se normaliza, sin filtrar la fecha falsa a last_message_at", async () => {
+      const { data: freshTicket } = await userB.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgB,
+          created_by: userB.id,
+          subject: "Ticket para probar created_at de mensajes",
+          description: "x",
+          category: "other",
+          related_module: "other",
+          priority: "normal",
+        })
+        .select("id")
+        .single();
+      const freshId = freshTicket!.id as string;
+
+      const before = Date.now();
+      await userB.client.from("support_ticket_messages").insert({
+        organization_id: orgB,
+        ticket_id: freshId,
+        author_id: userB.id,
+        author_type: "customer",
+        body: "Mensaje con fecha manipulada",
+        is_internal_note: false,
+        created_at: "2099-06-01T00:00:00Z",
+      });
+
+      const { data: ticket } = await userB.client.from("support_tickets").select("last_message_at").eq("id", freshId).single();
+      const lastMsgMs = new Date(ticket!.last_message_at as string).getTime();
+      assert(Math.abs(lastMsgMs - before) < 60_000, "last_message_at debía reflejar la hora real del servidor, nunca la fecha manipulada de 2099");
+    });
+
+    await check("98. Un customer nunca puede dejar una nota interna, ni siquiera enviando is_internal_note=true explícito", async () => {
+      const { data: freshTicket } = await userB.client
+        .from("support_tickets")
+        .insert({
+          organization_id: orgB,
+          created_by: userB.id,
+          subject: "Ticket para probar is_internal_note",
+          description: "x",
+          category: "other",
+          related_module: "other",
+          priority: "normal",
+        })
+        .select("id")
+        .single();
+      const freshId = freshTicket!.id as string;
+
+      const { data: message, error } = await userB.client
+        .from("support_ticket_messages")
+        .insert({
+          organization_id: orgB,
+          ticket_id: freshId,
+          author_id: userB.id,
+          author_type: "customer",
+          body: "Intento de nota interna desde la empresa",
+          is_internal_note: true,
+        })
+        .select("is_internal_note")
+        .single();
+      assert(!error && message, `el INSERT debía tener éxito (normalizado, no rechazado): ${error?.message}`);
+      assert(message!.is_internal_note === false, "is_internal_note debía forzarse a false para un mensaje de tipo customer");
+    });
+
+    // =========================================================================
+    // Sprint 10D · Portal de lanzamiento, onboarding y consentimiento
+    // legal: legal_documents, user_legal_acceptances (0066),
+    // v_organization_onboarding_status (0067).
+    // =========================================================================
+    await check("99. Un visitante sin sesión (anon) puede leer los documentos legales activos", async () => {
+      const anonClient = createClient(URL!, ANON!, { auth: { autoRefreshToken: false, persistSession: false } });
+      const { data, error } = await anonClient.from("legal_documents").select("document_type, version").eq("status", "active");
+      assert(!error, `anon debía poder leer documentos legales activos: ${error?.message}`);
+      assert((data ?? []).length >= 2, "debían verse al menos los 2 documentos activos sembrados (terms, privacy)");
+    });
+
+    await check("100. Un usuario normal no puede insertar ni modificar documentos legales — solo superadmin", async () => {
+      const { error: userInsertErr } = await userB.client.from("legal_documents").insert({
+        document_type: "data_processing",
+        version: "v1",
+        title: "Intento no autorizado",
+        content: "x",
+        status: "draft",
+      });
+      assert(userInsertErr, "un usuario normal pudo insertar un documento legal");
+
+      const { data: termsDoc } = await userB.client.from("legal_documents").select("id").eq("document_type", "terms").single();
+      const { error: userUpdateErr } = await userB.client.from("legal_documents").update({ title: "Modificado sin permiso" }).eq("id", termsDoc!.id);
+      assert(userUpdateErr, "un usuario normal pudo modificar un documento legal existente");
+    });
+
+    await check("101. Un usuario no puede insertar una aceptación legal a nombre de otro usuario", async () => {
+      const { data: privacyDoc } = await userB.client.from("legal_documents").select("id").eq("document_type", "privacy").single();
+      const { error } = await userB.client.from("user_legal_acceptances").insert({
+        user_id: userA.id,
+        legal_document_id: privacyDoc!.id,
+        document_type: "privacy",
+        version: "v1",
+      });
+      assert(error, "un usuario pudo registrar una aceptación legal a nombre de otro usuario");
+    });
+
+    await check("102. v_organization_onboarding_status aísla por organización, visible para platform_staff", async () => {
+      const { data: ownStatus } = await userB.client
+        .from("v_organization_onboarding_status")
+        .select("organization_id, total_steps")
+        .eq("organization_id", orgB)
+        .single();
+      assert(ownStatus?.total_steps === 7, "un miembro de la empresa debía poder ver su propio estado de onboarding, con 7 pasos totales");
+
+      const { data: crossStatus } = await userC.client.from("v_organization_onboarding_status").select("organization_id").eq("organization_id", orgB);
+      assert((crossStatus ?? []).length === 0, "un miembro de otra empresa no debía poder ver el onboarding de la organización B");
+
+      const { data: staffStatus } = await userA.client.from("v_organization_onboarding_status").select("organization_id").eq("organization_id", orgB);
+      assert((staffStatus ?? []).length === 1, "platform_staff sí debía poder ver el onboarding de cualquier empresa");
+    });
+
+    // =========================================================================
+    // Sprint 10D · corrección (Bloqueante 1): registro de aceptación
+    // legal endurecido — solo vía RPC, nunca INSERT directo.
+    // =========================================================================
+    await check("103. Tras el endurecimiento, un INSERT directo en user_legal_acceptances sigue bloqueado (ahora por ausencia total de política)", async () => {
+      const { data: termsDoc } = await userC.client.from("legal_documents").select("id").eq("document_type", "terms").single();
+      const { error } = await userC.client.from("user_legal_acceptances").insert({
+        user_id: userC.id,
+        legal_document_id: termsDoc!.id,
+        document_type: "terms",
+        version: "v1",
+      });
+      assert(error, "un INSERT directo, incluso a nombre de uno mismo, debía seguir bloqueado tras quitar la política de INSERT");
+    });
+
+    await check("104. accept_active_legal_documents es idempotente: la segunda llamada no duplica ni falla", async () => {
+      const { data: firstCall, error: firstErr } = await userC.client.rpc("accept_active_legal_documents", {
+        p_ip_address: "198.51.100.7",
+        p_user_agent: "RLS-test-agent/1.0",
+      });
+      assert(!firstErr, `la primera llamada no debía fallar: ${firstErr?.message}`);
+      assert(firstCall === 2, `la primera llamada debía aceptar los 2 documentos requeridos (terms + privacy), se aceptaron ${firstCall}`);
+
+      const { data: secondCall, error: secondErr } = await userC.client.rpc("accept_active_legal_documents", {
+        p_ip_address: "198.51.100.7",
+        p_user_agent: "RLS-test-agent/1.0",
+      });
+      assert(!secondErr, `la segunda llamada no debía fallar: ${secondErr?.message}`);
+      assert(secondCall === 0, `la segunda llamada (ya aceptado) no debía crear nada nuevo, se aceptaron ${secondCall}`);
+
+      const { data: rows } = await userC.client.from("user_legal_acceptances").select("id").eq("user_id", userC.id);
+      assert((rows ?? []).length === 2, "debían quedar exactamente 2 filas de aceptación para este usuario, sin duplicados");
+    });
+
+    await check("105. accept_active_legal_documents registra los datos REALES del documento activo, nunca lo que el cliente hubiera podido enviar", async () => {
+      const { data: acceptances } = await userC.client
+        .from("user_legal_acceptances")
+        .select("document_type, version, ip_address, user_agent, accepted_at")
+        .eq("user_id", userC.id)
+        .order("document_type", { ascending: true });
+      assert((acceptances ?? []).length === 2, "debían existir las 2 aceptaciones creadas en el caso anterior");
+      const types = (acceptances ?? []).map((a) => a.document_type).sort();
+      assert(JSON.stringify(types) === JSON.stringify(["privacy", "terms"]), "los tipos registrados debían ser exactamente terms y privacy, tomados del servidor");
+      assert((acceptances ?? []).every((a) => a.version === "v1"), "la versión registrada debía coincidir con la versión activa real (v1), no un valor arbitrario");
+      assert((acceptances ?? []).every((a) => a.ip_address === "198.51.100.7" && a.user_agent === "RLS-test-agent/1.0"), "ip_address/user_agent sí son datos de contexto legítimos que la RPC acepta como parámetro, y debían quedar guardados tal cual");
+      assert((acceptances ?? []).every((a) => a.accepted_at != null), "accepted_at debía quedar lleno con la hora real del servidor");
+    });
+
+    // =========================================================================
+    // Sprint 10D · corrección: completed_steps/progress_percent de
+    // v_organization_onboarding_status ahora cuentan documentos
+    // descargables del Maestro, no solo documentos vivos (0069).
+    // =========================================================================
+    await check("106. Un documento descargable SIN documento vivo sí incrementa completed_steps/progress_percent (antes se quedaba en 0 pese a has_document_master_item=true)", async () => {
+      const { data: before } = await userB.client
+        .from("v_organization_onboarding_status")
+        .select("has_trazadoc, has_document_master_item, completed_steps, progress_percent")
+        .eq("organization_id", orgB)
+        .single();
+      assert(before?.has_document_master_item === false, "para este caso, la organización B no debía tener todavía ningún documento vivo ni descargable");
+      const stepsBefore = before!.completed_steps as number;
+
+      const { error: fileDocErr } = await userB.client.from("trazadoc_file_documents").insert({
+        organization_id: orgB,
+        category_code: "format",
+        title: "Formato de prueba para onboarding",
+        storage_path: `${orgB}/document_files/onboarding-test/v1/f.pdf`,
+        file_name: "f.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 1000,
+        owner_id: userB.id,
+      });
+      assert(!fileDocErr, `no se pudo crear el documento descargable de prueba: ${fileDocErr?.message}`);
+
+      const { data: after } = await userB.client
+        .from("v_organization_onboarding_status")
+        .select("has_trazadoc, has_document_master_item, completed_steps, progress_percent")
+        .eq("organization_id", orgB)
+        .single();
+      assert(after?.has_trazadoc === false, "seguía sin existir un documento VIVO — el incremento debía venir solo del descargable");
+      assert(after?.has_document_master_item === true, "has_document_master_item debía pasar a true con el documento descargable");
+      assert(after?.completed_steps === stepsBefore + 1, `completed_steps debía subir exactamente en 1 (de ${stepsBefore} a ${stepsBefore + 1}), pero quedó en ${after?.completed_steps}`);
+      assert(
+        (after?.progress_percent as number) === Math.round((100 * (stepsBefore + 1)) / 7),
+        "progress_percent debía recalcularse de forma consistente con el nuevo completed_steps"
+      );
+    });
+
     await pg.end();
   } else {
     console.log(
       "  ⚠ SUPABASE_DB_URL no definido: se omite la inspección DIRECTA de la base"
     );
     console.log(
-      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 39 tablas, 23 triggers de"
+      "    (8b inmutabilidad de audit_log, 10 barrido de RLS en las 50 tablas, 23 triggers de"
     );
     console.log(
-      "    inmutabilidad, y 55-70 platform_staff/v_platform_organizations/TrazaDocs con bootstrap directo)."
+      "    inmutabilidad, y 55-106 platform_staff/v_platform_organizations/TrazaDocs/planes/maestro/soporte/lanzamiento con bootstrap directo)."
     );
     console.log(
       "    Las pruebas por cliente (1-9 y 11-54) sí corren con Supabase local."

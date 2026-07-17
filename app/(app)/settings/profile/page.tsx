@@ -14,10 +14,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMyProfileAction } from "@/server/actions/settings";
 import { signOutAction } from "@/server/actions/auth";
+import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { ProfileSettingsForm } from "@/components/domain/settings/profile-settings-form";
 import { Wordmark } from "@/components/layout/logo";
 
 export default async function ProfileSettingsPage() {
+  await requireLegalAcceptance("/settings/profile");
   const profile = await getMyProfileAction();
   if (!profile) notFound();
 

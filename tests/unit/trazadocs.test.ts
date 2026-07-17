@@ -156,7 +156,7 @@ check("13. No se acepta organization_id desde cliente al crear un documento", ()
     "el payload de documento no debía tener ningún campo de identidad de organización"
   );
 
-  const suggestedPayload = buildSuggestedDocumentInsertPayload("blueprint-1", "Nombre", "user-1");
+  const suggestedPayload = buildSuggestedDocumentInsertPayload("blueprint-1", "Nombre", "user-1", "procedure");
   assert(
     !("organization_id" in suggestedPayload),
     "tampoco el payload de documento desde blueprint debía declarar organization_id"

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkOrganizationCanMutate } from "@/server/actions/plans";
 import {
   getActiveQuestions,
   getDiagnosticAnswers,
@@ -15,6 +16,13 @@ export type DiagnosticActionState = { error: string | null };
 /** Inicia un diagnóstico si no hay uno en progreso. */
 export async function startDiagnosticAction(): Promise<DiagnosticActionState> {
   const org = await requireActiveOrg();
+
+  // Sprint 10A (Bloqueante 3): una suscripción suspended/cancelled deja a
+  // la empresa en modo SOLO LECTURA — nunca bloquea ver el diagnóstico,
+  // solo iniciar/guardar/completar uno nuevo.
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const supabase = await createServerClient();
 
   const latest = await getLatestDiagnostic(org.organizationId);
@@ -48,6 +56,9 @@ export async function saveDiagnosticAnswersAction(
   const org = await requireActiveOrg();
   if (answers.length === 0) return { error: null };
 
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const supabase = await createServerClient();
   const rows = answers.map((a) => ({
     organization_id: org.organizationId,
@@ -77,6 +88,10 @@ export async function completeDiagnosticAction(
   diagnosticId: string
 ): Promise<DiagnosticActionState> {
   const org = await requireActiveOrg();
+
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const supabase = await createServerClient();
 
   const questions = await getActiveQuestions();

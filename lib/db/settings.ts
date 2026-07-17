@@ -119,9 +119,11 @@ export async function uploadCompanyLogo(
     return { error: "No fue posible subir el logo. Intenta de nuevo.", storagePath: null };
   }
 
+  // Sprint 10A (Parte 6): tamaño real del archivo, para medir uso de
+  // almacenamiento contra la cuota del plan.
   const { data, error } = await supabase
     .from("organizations")
-    .update({ logo_storage_path: path, logo_updated_at: new Date().toISOString() })
+    .update({ logo_storage_path: path, logo_updated_at: new Date().toISOString(), logo_size_bytes: bytes.byteLength })
     .eq("id", orgId)
     .select("id");
   if (error) return { error: "El logo se subió, pero no fue posible guardarlo en la empresa.", storagePath: null };
@@ -136,7 +138,7 @@ export async function removeCompanyLogo(orgId: string, storagePath: string): Pro
 
   const { data, error } = await supabase
     .from("organizations")
-    .update({ logo_storage_path: null, logo_updated_at: new Date().toISOString() })
+    .update({ logo_storage_path: null, logo_updated_at: new Date().toISOString(), logo_size_bytes: null })
     .eq("id", orgId)
     .select("id");
   if (error) return { error: "No fue posible quitar el logo." };

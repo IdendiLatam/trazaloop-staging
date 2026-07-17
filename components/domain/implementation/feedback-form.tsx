@@ -131,7 +131,7 @@ export function FeedbackForm({
       </div>
 
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Guardando…" : "Registrar feedback"}
+        {pending ? "Guardando…" : "Crear ticket de soporte"}
       </Button>
     </form>
   );

@@ -103,10 +103,10 @@ export default async function EvidencesPage() {
           y fichas. Una evidencia solo la valida administrador o calidad.
         </p>
         <Link
-          href="/implementation/feedback?module=evidences"
+          href="/support/new?module=evidences"
           className="inline-block pt-1 text-sm text-loop hover:underline"
         >
-          Registrar feedback sobre evidencias
+          Crear ticket de soporte sobre evidencias
         </Link>
       </header>
 

@@ -24,9 +24,9 @@ punto en staging con un usuario real.
 [ ] Abrir /implementation y verificar que las tarjetas muestran conteos
     reales (nunca datos inventados) y que el checklist de 17 pasos refleja
     el estado real de la empresa
-[ ] Registrar un feedback de prueba en /implementation/feedback, filtrarlo
-    por módulo/categoría/severidad/estado, cambiar su estado y confirmar que
-    una segunda organización NO lo ve
+[ ] Crear un ticket de soporte de prueba en /support, filtrarlo por
+    estado/categoría/prioridad, responderlo y confirmar que una segunda
+    organización NO lo ve
 [ ] Confirmar que ningún texto de /implementation promete certificación ni
     nombra organismos certificadores (ver npm run test:compliance)
 ```

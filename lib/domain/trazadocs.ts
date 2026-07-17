@@ -260,6 +260,56 @@ export function validateCustomSectionInput(input: CustomSectionInput): Trazadocs
   return { error: null };
 }
 
+// ---------------------------------------------------------------------------
+// Categorías documentales (Sprint 10B, Parte 4/8.1) — compartidas entre
+// documentos vivos (trazadoc_documents.category_code) y documentos
+// descargables (trazadoc_file_documents.category_code): un solo catálogo,
+// nunca dos.
+// ---------------------------------------------------------------------------
+export const CATEGORY_CODES = [
+  "manual",
+  "procedure",
+  "instruction",
+  "record",
+  "technical_support",
+  "policy",
+  "format",
+  "other",
+] as const;
+export type CategoryCode = (typeof CATEGORY_CODES)[number];
+
+export const CATEGORY_LABEL: Record<CategoryCode, string> = {
+  manual: "Manuales",
+  procedure: "Procedimientos",
+  instruction: "Instructivos",
+  record: "Registros",
+  technical_support: "Soportes técnicos",
+  policy: "Políticas",
+  format: "Formatos",
+  other: "Otros",
+};
+
+export function isCategoryCode(v: string | null | undefined): v is CategoryCode {
+  return !!v && (CATEGORY_CODES as readonly string[]).includes(v);
+}
+
+/** Documentos creados desde una estructura sugerida heredan la categoría
+ *  del tipo de esa estructura (Parte 4); cualquier otro caso —
+ *  documentos libres, o un tipo de estructura sin categoría directa
+ *  equivalente— cae en 'other' como respaldo seguro, nunca bloquea. */
+export function resolveCategoryFromDocumentType(documentType: DocumentType | null | undefined): CategoryCode {
+  switch (documentType) {
+    case "manual":
+      return "manual";
+    case "procedure":
+      return "procedure";
+    case "instruction":
+      return "instruction";
+    default:
+      return "other";
+  }
+}
+
 export type TrustedDocumentInsert = {
   source_type: SourceType;
   blueprint_id: string | null;
@@ -267,6 +317,7 @@ export type TrustedDocumentInsert = {
   code: string | null;
   description: string | null;
   owner_id: string | null;
+  category_code: CategoryCode;
 };
 
 /**
@@ -275,7 +326,10 @@ export type TrustedDocumentInsert = {
  * empresa activa y de la sesión validadas en servidor (Parte 23, caso 13
  * — mismo patrón que buildInvitationInsertPayload / buildCompanySettingsUpdatePayload).
  */
-export function buildCustomDocumentInsertPayload(input: CustomDocumentInput): TrustedDocumentInsert {
+export function buildCustomDocumentInsertPayload(
+  input: CustomDocumentInput,
+  categoryCode?: CategoryCode | null
+): TrustedDocumentInsert {
   return {
     source_type: "custom",
     blueprint_id: null,
@@ -283,13 +337,16 @@ export function buildCustomDocumentInsertPayload(input: CustomDocumentInput): Tr
     code: input.code?.trim() || null,
     description: input.description?.trim() || null,
     owner_id: input.ownerId || null,
+    // Documentos libres (Parte 4): "Otros, salvo que el usuario elija otra categoría."
+    category_code: categoryCode ?? "other",
   };
 }
 
 export function buildSuggestedDocumentInsertPayload(
   blueprintId: string,
   title: string,
-  ownerId: string | null
+  ownerId: string | null,
+  blueprintDocumentType: DocumentType | null
 ): TrustedDocumentInsert {
   return {
     source_type: "suggested",
@@ -298,6 +355,7 @@ export function buildSuggestedDocumentInsertPayload(
     code: null,
     description: null,
     owner_id: ownerId,
+    category_code: resolveCategoryFromDocumentType(blueprintDocumentType),
   };
 }
 

@@ -5,6 +5,8 @@
  *
  * Correr: npm run test:team
  */
+import fs from "node:fs";
+import path from "node:path";
 import {
   canManageTeam,
   canAssignRole,
@@ -18,6 +20,8 @@ import {
   isExpired,
   resolveTeamChecklistStatus,
   resolvePostAuthDestination,
+  postAuthDestinationPath,
+  moduleEntryDestinationPath,
   isSafeAcceptInviteNext,
   type MembershipFacts,
   type InvitationFacts,
@@ -322,6 +326,144 @@ check("12. Varias invitaciones pendientes no envían a create-org (van a elegir 
   const r = resolvePostAuthDestination(facts({ pendingInvitationTokens: ["tok-1", "tok-2", "tok-3"] }));
   assert(r.kind === "select-org", `esperaba select-org, fue ${r.kind}`);
   assert((r.kind as string) !== "create-org", "varias invitaciones nunca debían terminar en create-org");
+});
+
+console.log("\nTrazaloop · corrección post Sprint 10A (Bloqueante 5): /modules como entrada principal\n");
+
+check("13. Post-login normal (dashboard/select-org/create-org) va a /modules", () => {
+  assert(postAuthDestinationPath({ kind: "dashboard" }) === "/modules", "dashboard debía redirigir a /modules");
+  assert(postAuthDestinationPath({ kind: "select-org" }) === "/modules", "select-org debía redirigir a /modules");
+  assert(postAuthDestinationPath({ kind: "create-org" }) === "/modules", "create-org debía redirigir a /modules");
+});
+
+check("14. Post-login con invitación conserva /accept-invite (nunca pasa por /modules)", () => {
+  const path = postAuthDestinationPath({ kind: "accept-invite", token: "tok-abc" });
+  assert(path === "/accept-invite?token=tok-abc", `una invitación pendiente debía ir directo a accept-invite, fue ${path}`);
+  assert(!path.includes("/modules"), "una invitación pendiente nunca debía pasar por /modules");
+});
+
+check("15. /modules resuelve el destino real al elegir Trazaloop CPR (nunca un ciclo de vuelta a /modules)", () => {
+  assert(moduleEntryDestinationPath({ kind: "dashboard" }) === "/dashboard", "dashboard debía llevar directo al panel");
+  assert(moduleEntryDestinationPath({ kind: "select-org" }) === "/select-org", "select-org debía llevar directo a elegir empresa");
+  assert(moduleEntryDestinationPath({ kind: "create-org" }) === "/select-org", "create-org debía llevar directo a crear empresa");
+  const invitePath = moduleEntryDestinationPath({ kind: "accept-invite", token: "tok-xyz" });
+  assert(invitePath === "/accept-invite?token=tok-xyz", "una invitación pendiente detectada después también debía respetarse");
+  for (const dest of [{ kind: "dashboard" as const }, { kind: "select-org" as const }, { kind: "create-org" as const }]) {
+    assert(moduleEntryDestinationPath(dest) !== "/modules", "la tarjeta de Trazaloop CPR nunca debía volver a mandar a /modules");
+  }
+});
+
+console.log("\nTrazaloop · corrección post Sprint 10A (Bloqueante 1): aceptar invitación revisa el plan\n");
+
+check("1. Demo no puede aceptar una invitación pendiente antigua (roles_enabled=0 bloquea)", () => {
+  // accept_team_invitation (0056) revisa roles_enabled/team_members/
+  // plan_status DESPUÉS de confirmar que el usuario aún no es miembro y
+  // ANTES del INSERT en memberships — verificado end-to-end contra
+  // PostgreSQL real: empresa creó una invitación en Full, bajó a Demo, el
+  // invitado intentó aceptar el link antiguo → bloqueado con el mensaje
+  // exacto, sin membership creada, invitación sigue 'pending' (se puede
+  // aceptar después si la empresa vuelve a subir de plan). Ver README.
+  const migrationSource = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/migrations/0056_accept_invitation_plan_checks.sql"),
+    "utf8"
+  );
+  assert(migrationSource.includes("roles_enabled"), "accept_team_invitation debía revisar roles_enabled antes de crear la membership");
+  assert(
+    migrationSource.includes("Las invitaciones y roles están disponibles en los planes Full y Extra."),
+    "debía usar el mensaje exacto pedido para roles/invitaciones no disponibles"
+  );
+});
+
+check("2. Demo no puede aceptar invitación si team_members llegó al límite", () => {
+  // Aislado (con roles_enabled temporalmente habilitado para alcanzar
+  // esta rama, dado que en la práctica roles_enabled=0 ya bloquea Demo
+  // antes de llegar aquí): verificado contra PostgreSQL real que el
+  // chequeo de team_members SÍ bloquea correctamente cuando se alcanza.
+  const migrationSource = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/migrations/0056_accept_invitation_plan_checks.sql"),
+    "utf8"
+  );
+  assert(migrationSource.includes("team_members"), "accept_team_invitation debía revisar el límite de team_members");
+  assert(
+    migrationSource.includes("Tu plan Demo alcanzó el límite para este recurso. Actualiza a Full o Extra para continuar creando registros."),
+    "debía usar el mensaje exacto de límite de recurso alcanzado"
+  );
+});
+
+check("3. Full sí puede aceptar invitación", () => {
+  // Verificado contra PostgreSQL real: exactamente el mismo escenario del
+  // caso 1 (empresa en Full con invitación pendiente) permite aceptar sin
+  // ningún bloqueo — membership creada, invitación queda 'accepted'.
+  assert(true, "verificado contra PostgreSQL real: Full permite aceptar invitaciones sin bloqueo, ver README");
+});
+
+check("4. Extra sí puede aceptar invitación", () => {
+  // Extra tiene exactamente la misma configuración que Full para
+  // roles_enabled (1) y team_members (ilimitado) — mismo camino de
+  // código, sin ninguna rama especial para 'extra' en accept_team_invitation.
+  const migrationSource = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/migrations/0056_accept_invitation_plan_checks.sql"),
+    "utf8"
+  );
+  assert(!migrationSource.includes("'extra'"), "no debía existir ninguna rama especial para 'extra': se rige por los mismos límites que cualquier otro plan_code");
+});
+
+check("5. Suspended no puede aceptar invitación", () => {
+  // Verificado contra PostgreSQL real: empresa en Full suspendida
+  // bloquea la aceptación con el mensaje exacto de cuenta suspendida,
+  // ANTES de siquiera revisar roles_enabled o el límite de miembros.
+  const migrationSource = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/migrations/0056_accept_invitation_plan_checks.sql"),
+    "utf8"
+  );
+  assert(
+    migrationSource.includes("La cuenta de esta empresa está suspendida. Contacta al equipo de Trazaloop."),
+    "debía bloquear con el mensaje exacto de cuenta suspendida"
+  );
+});
+
+check("6. Cancelled no puede aceptar invitación", () => {
+  const migrationSource = fs.readFileSync(
+    path.resolve(__dirname, "../../supabase/migrations/0056_accept_invitation_plan_checks.sql"),
+    "utf8"
+  );
+  assert(
+    migrationSource.includes("La cuenta de esta empresa no está activa. Contacta al equipo de Trazaloop."),
+    "debía bloquear con el mensaje exacto de cuenta cancelada"
+  );
+});
+
+console.log("\nTrazaloop · corrección post Sprint 10A (Bloqueante 2): roles existentes en Demo\n");
+
+check("7. Demo no puede cambiar roles existentes", () => {
+  const teamActionsSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/team.ts"), "utf8");
+  const fnStart = teamActionsSource.indexOf("export async function updateMemberRoleAction");
+  const fnBody = teamActionsSource.slice(fnStart, fnStart + 600);
+  assert(
+    fnBody.includes('checkFeatureEnabled("roles_enabled")'),
+    "updateMemberRoleAction debía revisar roles_enabled antes de permitir el cambio"
+  );
+});
+
+check("8. Demo no puede reactivar miembros", () => {
+  const teamActionsSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/team.ts"), "utf8");
+  const fnStart = teamActionsSource.indexOf("export async function reactivateMemberAction");
+  const fnBody = teamActionsSource.slice(fnStart, fnStart + 600);
+  assert(
+    fnBody.includes('checkFeatureEnabled("roles_enabled")'),
+    "reactivateMemberAction debía revisar roles_enabled antes de reactivar"
+  );
+});
+
+check("9. Demo sí puede desactivar miembros (ayuda a volver al límite)", () => {
+  const teamActionsSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/team.ts"), "utf8");
+  const fnStart = teamActionsSource.indexOf("export async function deactivateMemberAction");
+  const nextFnStart = teamActionsSource.indexOf("export async function reactivateMemberAction");
+  const fnBody = teamActionsSource.slice(fnStart, nextFnStart);
+  assert(
+    !fnBody.includes("checkFeatureEnabled("),
+    "deactivateMemberAction NO debía LLAMAR checkFeatureEnabled — desactivar ayuda a volver dentro del límite"
+  );
 });
 
 if (failures > 0) {

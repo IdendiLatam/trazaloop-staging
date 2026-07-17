@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/require-session";
+import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getUserOrganizations } from "@/lib/db/organizations";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import {
@@ -26,6 +27,7 @@ export default async function SelectOrgPage({
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   await requireSession();
+  await requireLegalAcceptance("/select-org");
   const [organizations, pendingInvitations, platformStatus] = await Promise.all([
     getUserOrganizations(),
     listMyPendingInvitationsAction(),

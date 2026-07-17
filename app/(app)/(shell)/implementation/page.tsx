@@ -58,8 +58,8 @@ export default async function ImplementationPage() {
     { label: "Cálculos con advertencias", value: dashboard.warningCalculationsCount },
     { label: "Cálculos preliminares", value: dashboard.preliminaryCalculationsCount },
     { label: "Brechas críticas abiertas", value: dashboard.criticalGapsCount },
-    { label: "Feedback abierto", value: dashboard.openFeedbackCount },
-    { label: "Feedback crítico", value: dashboard.criticalFeedbackCount },
+    { label: "Solicitudes históricas abiertas", value: dashboard.openFeedbackCount },
+    { label: "Tickets históricos de alta prioridad", value: dashboard.criticalFeedbackCount },
   ];
 
   const hasCompanyData =
@@ -76,8 +76,8 @@ export default async function ImplementationPage() {
         <p className="eyebrow">Implementación</p>
         <h1 className="text-2xl font-semibold tracking-tight">Implementación con empresa</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Revisa el avance de datos reales, detecta brechas y registra
-          feedback durante la prueba de Trazaloop.
+          Revisa el avance de datos reales, detecta brechas y crea tickets de
+          soporte durante la prueba de Trazaloop.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Link
@@ -87,10 +87,10 @@ export default async function ImplementationPage() {
             Importar datos reales
           </Link>
           <Link
-            href="/implementation/feedback"
+            href="/support/new"
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >
-            Registrar feedback
+            Crear ticket de soporte
           </Link>
           <Link
             href="/guided-flow"
@@ -290,10 +290,10 @@ export default async function ImplementationPage() {
                       </Link>
                       {" · "}
                       <Link
-                        href={`/implementation/feedback?module=recycled_content&related_entity_type=calculation&related_entity_id=${c.calculation_id}`}
+                        href="/support/new"
                         className="text-loop hover:underline"
                       >
-                        Registrar feedback
+                        Crear ticket de soporte
                       </Link>
                     </td>
                   </tr>
@@ -304,18 +304,18 @@ export default async function ImplementationPage() {
         )}
       </section>
 
-      {/* 5. Feedback reciente */}
+      {/* 5. Histórico de soporte anterior */}
       <section className="rounded-lg border border-hairline bg-surface">
         <h2 className="eyebrow flex items-center justify-between border-b border-hairline px-4 py-3">
-          <span>Feedback reciente</span>
-          <Link href="/implementation/feedback" className="text-xs font-normal text-loop hover:underline">
-            Ver todo
+          <span>Histórico de soporte anterior</span>
+          <Link href="/support" className="text-xs font-normal text-loop hover:underline">
+            Ir al Centro de soporte
           </Link>
         </h2>
         {recentFeedback.length === 0 ? (
           <p className="px-4 py-6 text-sm text-ink-soft">
-            Todavía no hay feedback registrado. Usa el botón «Registrar
-            feedback» para dejar el primer hallazgo de la prueba.
+            Todavía no hay solicitudes históricas registradas. Usa «Crear ticket de
+            soporte» para dejar el primer hallazgo de la prueba.
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
@@ -335,12 +335,6 @@ export default async function ImplementationPage() {
                     </span>
                   </p>
                 </div>
-                <Link
-                  href="/implementation/feedback"
-                  className="shrink-0 text-xs text-loop hover:underline"
-                >
-                  Ver / editar
-                </Link>
               </li>
             ))}
           </ul>

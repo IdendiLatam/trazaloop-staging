@@ -30,8 +30,8 @@ Sprint 1). No existen roles "user" ni "viewer": no se inventan aquí.
 - **Supervisor** (`quality`): puede validar evidencias, revisar cálculos y
   apoyar la preparación técnica.
 - **Consultor** (`consultant`): puede cargar y organizar información,
-  importar datos y registrar feedback, pero no valida evidencias (esa
-  regla del motor de evidencias no cambia en este sprint).
+  importar datos y crear tickets de soporte, pero no valida evidencias
+  (esa regla del motor de evidencias no cambia en este sprint).
 
 Los tres roles pueden **ver** `/team` (miembros e invitaciones); solo
 **admin** ve los controles para invitar, cambiar rol, desactivar o

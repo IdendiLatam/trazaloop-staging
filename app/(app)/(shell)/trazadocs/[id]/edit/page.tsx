@@ -12,6 +12,7 @@ import { canDeleteDraftDocument } from "@/lib/domain/trazadocs";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
 import { DocumentEditor } from "@/components/domain/trazadocs/document-editor";
+import { LiveDocumentCategoryForm } from "@/components/domain/trazadocs/live-document-category-form";
 import { DeleteDraftButton } from "@/components/domain/trazadocs/delete-draft-button";
 import { InfoAlert } from "@/components/ui/alert";
 
@@ -89,6 +90,10 @@ export default async function TrazaDocEditPage({
       ) : null}
 
       <DocumentEditor document={doc} hints={hints} readOnly={!canEdit} />
+
+      {/* Sprint 10B (Parte 17): categoría en el Maestro de documentos —
+          misma regla de estado que el resto del documento. */}
+      {canEdit ? <LiveDocumentCategoryForm documentId={doc.id} categoryCode={doc.categoryCode} /> : null}
 
       {/* Sprint 9.2 (Parte 4): eliminar borrador — solo visible cuando
           aplica, con confirmación clara. */}

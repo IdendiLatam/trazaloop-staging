@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { APP_VERSION_LABEL } from "@/lib/version";
 import { isStagingEnvironment } from "@/lib/env";
 import { requireSession } from "@/lib/auth/require-session";
+import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { signOutAction } from "@/server/actions/auth";
@@ -22,6 +23,7 @@ export default async function ShellLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   await requireSession();
+  await requireLegalAcceptance();
   const [activeOrg, platformStatus] = await Promise.all([
     getActiveOrganization(),
     checkPlatformStatus(),

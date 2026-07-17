@@ -8,6 +8,8 @@ import {
   getRoleInOrganization,
 } from "@/lib/db/organizations";
 import { toSafeOrgCreationError } from "@/lib/domain/platform";
+import { assertMyLegalAcceptance } from "@/server/actions/legal";
+import { LEGAL_ACCEPTANCE_REQUIRED_MESSAGE } from "@/lib/domain/legal";
 
 export type OrgActionState = { error: string | null };
 
@@ -36,6 +38,13 @@ export async function createOrganizationAction(
     return { error: "El nombre de la empresa no puede estar vacío." };
   }
 
+  // Sprint 10D (Bloqueante 2): nunca confiar solo en que la UI haya
+  // redirigido a tiempo a /legal/accept — la acción misma lo revisa.
+  const { hasAccepted } = await assertMyLegalAcceptance();
+  if (!hasAccepted) {
+    return { error: LEGAL_ACCEPTANCE_REQUIRED_MESSAGE };
+  }
+
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("create_organization", {
     p_name: name,
@@ -48,7 +57,11 @@ export async function createOrganizationAction(
   }
 
   await writeActiveOrgCookie(data as string);
-  redirect("/dashboard");
+  // Sprint 10D (Parte 4/7): una empresa RECIÉN CREADA va a onboarding,
+  // nunca directo al dashboard — nadie empieza confundido sin saber qué
+  // hacer primero. Seleccionar una empresa YA EXISTENTE (abajo) sigue
+  // yendo directo a /dashboard.
+  redirect("/onboarding");
 }
 
 /**

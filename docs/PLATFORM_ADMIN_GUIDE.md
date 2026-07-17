@@ -72,7 +72,33 @@ ejecuta solo.
 - Administrar las estructuras sugeridas y tips de **TrazaDocs** desde
   `/platform/trazadocs` (Sprint 9) — crear, editar, activar/desactivar
   estructuras y secciones; los tips son globales, nunca los edita una
-  empresa. Ver `docs/TRAZADOCS_GUIDE.md`.
+  empresa. Ver `docs/TRAZADOCS_GUIDE.md`. El Maestro de documentos
+  (Sprint 10B, `/trazadocs/master`) es enteramente de empresa — no tiene
+  administración desde la consola de plataforma, se gobierna con los
+  mismos roles admin/quality/consultant de siempre.
+- Cambiar el **plan** (Demo/Full/Extra) y el estado de la suscripción
+  (Activo/Suspendido/Cancelado) de cualquier empresa, desde
+  `/platform/organizations/[id]` (Sprint 10A) — ver también el uso de
+  almacenamiento y recursos de cada una. Suspender o cancelar deja a la
+  empresa en modo **solo lectura completo** en toda la plataforma (nunca
+  se borra nada); reactivarla (volver a Activo) devuelve la operación
+  normal de inmediato. Ver `docs/PLANS_AND_LIMITS_GUIDE.md`.
+- Ver y gestionar **todos los tickets de soporte de todas las empresas**
+  desde `/platform/support` (Sprint 10C) — asignar, cambiar estado y
+  prioridad, responder, y agregar notas internas (nunca visibles para la
+  empresa). El Centro de soporte es el flujo vigente; la ruta
+  `/implementation/feedback` queda solo como compatibilidad histórica.
+  Ver `docs/SUPPORT_TICKETS_GUIDE.md`.
+- Ver el **progreso de onboarding** y **quién aceptó qué documento
+  legal, en qué versión y cuándo** de cualquier empresa, desde
+  `/platform/organizations/[id]` (Sprint 10D). Ver
+  `docs/LAUNCH_PORTAL_AND_ONBOARDING_GUIDE.md`.
+- Ver el **administrador principal, miembros con su correo y rol, e
+  invitaciones pendientes** de cualquier empresa desde
+  `/platform/organizations/[id]` — nunca visible para un usuario normal,
+  ni siquiera un admin de esa misma empresa lo ve para OTRAS empresas.
+  Cuando un dato no existe, la pantalla dice «No disponible» en vez de
+  inventar algo.
 
 ## 4. Qué puede hacer support (si se usa ese rol)
 

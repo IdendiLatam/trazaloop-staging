@@ -40,6 +40,7 @@ export const TRAZADOCS_GROUP: NavGroup = {
   items: [
     { label: "Documentos", href: "/trazadocs" },
     { label: "Nuevo documento", href: "/trazadocs/new" },
+    { label: "Maestro de documentos", href: "/trazadocs/master" },
   ],
 };
 
@@ -49,6 +50,8 @@ export const SISTEMA_GROUP: NavGroup = {
     { label: "Equipo", href: "/team" },
     { label: "Datos de empresa", href: "/settings/company" },
     { label: "Mi perfil", href: "/settings/profile" },
+    { label: "Centro de soporte", href: "/support" },
+    { label: "Onboarding", href: "/onboarding" },
   ],
 };
 
@@ -58,6 +61,7 @@ export const PLATFORM_GROUP: NavGroup = {
     { label: "Administración de plataforma", href: "/platform" },
     { label: "Nueva empresa", href: "/platform/organizations/new" },
     { label: "Estructuras TrazaDocs", href: "/platform/trazadocs" },
+    { label: "Tickets de soporte", href: "/platform/support" },
   ],
 };
 

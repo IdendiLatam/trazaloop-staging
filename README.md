@@ -1234,6 +1234,961 @@ anti-duplicados, eliminar borrador, botones, 16 casos) y `test:settings`
 páginas como guarda de regresión (nunca vuelve a aparecer un botón
 cross-módulo, el logo siempre queda detrás de un condicional).
 
+## Sprint 10A · Planes, cuotas, modo Demo y control de acceso por plan
+
+Base de planes de acceso para preparar una beta/lanzamiento controlado:
+Demo (asignado automáticamente), Full y Extra, con límites reales
+aplicados en servidor. Sin pasarela de pagos, sin facturación, sin
+marketplace, sin CRM, sin IA, sin Textil/Quality/Construcción
+funcionales, sin PDF server-side, sin cambios de cálculo ni metodología.
+
+**Migraciones**:
+
+- **`0050_plans_and_usage.sql`**: 4 tablas — `plan_definitions` /
+  `plan_limits` (catálogo global, solo editable por superadmin, mismo
+  patrón RLS que `trazadoc_blueprints`) y `organization_subscriptions` /
+  `subscription_plan_history` (por empresa, append-only la segunda).
+  Seed: 3 planes, 39 límites (13 recursos × 3 planes). **Bug real
+  encontrado y corregido**: `plan_limits.limit_value` se había declarado
+  `integer`, que desborda con el límite de almacenamiento de Extra
+  (5.368.709.120 bytes > máximo de `integer`) — cambiado a `bigint`,
+  reverificado con los 3 planes insertados sin error.
+- **`0051_storage_size_tracking.sql`**: `evidences.size_bytes` y
+  `organizations.logo_size_bytes`, nullable — no rompe archivos ya
+  subidos (cuentan como 0 en la suma de uso).
+- **`0052_organization_usage_views.sql`**: `v_organization_plan_usage`,
+  mismo patrón que `v_platform_organizations` (0041, la otra única
+  excepción a `security_invoker` del proyecto) — sirve a la vez a un
+  miembro de empresa viendo su propio uso y al superadmin viendo el de
+  todas, con la guarda embebida en la vista misma.
+- **`0053_organization_plan_assignment.sql`**: reemplaza
+  `create_organization` y `create_platform_organization` (última vez:
+  0042) para insertar `organization_subscriptions` + su primera fila de
+  historial dentro de la MISMA transacción — nunca una segunda llamada
+  desde el cliente. Nueva RPC `change_organization_plan` (solo
+  superadmin), cubre Demo/Full/Extra + Suspender/Reactivar como
+  combinaciones de `(plan_code, status)`. **Riesgo real evitado**: al
+  reescribir estas 2 funciones desde memoria para agregar los INSERT de
+  suscripción, la primera versión introdujo 3 regresiones silenciosas
+  frente al código ya probado (orden de parámetros de `log_event`
+  invertido, lógica de invitación pendiente reescrita de forma distinta a
+  la original, y un `on conflict` en memberships que no existía antes) —
+  detectadas comparando línea por línea contra el `0042` real antes de
+  aplicar nada, y corregidas preservando el cuerpo exacto ya probado,
+  solo agregando las líneas nuevas.
+
+Verificado contra PostgreSQL 16 real: empresa normal creada por
+`create_organization` queda en demo con historial correcto; empresa
+creada por `create_platform_organization` con plan explícito ('full')
+queda en ese plan; admin normal bloqueado de `change_organization_plan`,
+superadmin puede cambiar de plan y suspender, con el historial completo y
+exacto (demo→extra→suspendido); aislamiento cruzado confirmado en
+`organization_subscriptions`/`subscription_plan_history`; restricción de
+una sola empresa por usuario normal sigue intacta (sin regresión).
+**Hallazgo de infraestructura de pruebas** (reaprovechado del Sprint 9.2):
+se reutilizó el fix de RLS en el mock de `storage.objects`.
+
+**Lógica pura** (`lib/plans/types.ts`, `lib/plans/limits.ts`,
+`lib/plans/usage.ts`): catálogo de planes/recursos, `canCreateResource`
+(conteo vs. límite), `isPlanFeatureEnabled` (interruptores 0/1),
+`resolveUsageSeverity` (normal/advertencia 70%/crítico 90%/bloqueado
+100%), `canChangeOrganizationPlan` (solo superadmin), sin ningún import
+de Supabase/servidor/Next — misma capa que `lib/domain/*`.
+
+**Server Actions** (`server/actions/plans.ts` + `lib/db/plans.ts`):
+`checkResourceLimit` / `checkFeatureEnabled` / `checkStorageAvailable` son
+el **helper central** (Parte 7) reutilizado desde otros server actions —
+nunca cada acción reimplementa su propio conteo. Aplicado en:
+TrazaDocs (`createDocumentFromBlueprintAction`, `createCustomDocumentAction`),
+catálogos (`upsertSupplierAction`, `upsertMaterialAction`,
+`upsertProductAction` — solo en la rama de CREAR, nunca al editar),
+evidencias (`createEvidenceAction`, conteo + cuota de almacenamiento +
+`size_bytes` real del archivo), trazabilidad (`createInputBatchAction`,
+`createProductionOrderAction`, `createOutputBatchAction`), equipo
+(`createTeamInvitationAction`, interruptor `roles_enabled` + conteo
+`team_members`) e importaciones (`commitImportAction`, **en los dos
+mecanismos de importación que coexisten en el código** —
+`server/actions/imports.ts` e `server/actions/import.ts` — ambos
+verificados como rutas realmente alcanzables desde la UI antes de
+decidir cubrir los dos). El logo de empresa también quedó sujeto a la
+cuota de almacenamiento.
+
+**UI empresa**: `PlanUsageCard` (plan, barra de almacenamiento con
+severidad, conteos por recurso) en `/dashboard`. **UI plataforma**: la
+misma tarjeta + `PlanChangeForm` + `PlanHistoryList` en
+`/platform/organizations/[id]`; columna de plan añadida a la tabla de
+empresas en `/platform`; selector de plan inicial (por defecto Demo) al
+crear una empresa desde `/platform/organizations/new`.
+
+**Portal de módulos**: `/modules` — Trazaloop CPR disponible, Trazaloop
+Textil / Quality (gestión de calidad e ISO 9001) / Construcción
+"Próximamente", deshabilitados, sin ninguna funcionalidad interna creada
+para ellos. Una sola sesión de Trazaloop para todos.
+
+**Documentación**: nueva `docs/PLANS_AND_LIMITS_GUIDE.md` (incluye cómo
+activar `Confirm email` en Supabase Auth). `docs/PLATFORM_ADMIN_GUIDE.md`,
+`docs/COMPANY_TESTING_GUIDE.md`, `docs/TRAZADOCS_GUIDE.md`,
+`docs/SETTINGS_GUIDE.md`, `docs/PREDEPLOY_CHECKLIST.md` y
+`docs/STAGING_DEPLOYMENT.md` actualizados.
+
+**Pruebas**: `npm run test:plans` (`tests/unit/plans.test.ts`) cubre los
+25 casos mínimos del sprint más 3 adicionales.
+`tests/rls/isolation.test.ts` suma 7 casos (71-77): aislamiento de
+suscripciones/historial entre empresas, admin normal bloqueado de cambiar
+plan, superadmin sí puede y ve el uso de todas las empresas, y una
+empresa nueva de un usuario cualquiera (`newUser`) queda en demo sin
+importar nada enviado desde el cliente.
+
+**Alcance no cubierto en esta entrega, documentado explícitamente**: el
+renombrado cosmético de "Feedback" a "Tickets/Soporte" (Parte 15) se dejó
+sin tocar — el propio sprint lo marca como prioridad baja frente a
+planes/límites, y no aparece en los 20 criterios de aceptación. La
+diagnóstico "recomendaciones avanzadas" (Parte 10/Parte 8) no tiene
+todavía una sección propia en la UI de diagnóstico para ocultar — el
+interruptor de plan (`diagnostic_recommendations_enabled`) y el helper
+`checkFeatureEnabled` ya están listos para cuando esa sección se
+construya; tomar el diagnóstico en sí nunca estuvo bloqueado.
+
+## Corrección post Sprint 10A — 6 bloqueantes de planes y control de acceso
+
+Seis bloqueantes encontrados y corregidos antes de integrar el Sprint
+10A. Sin facturación, sin pasarela de pagos, sin módulos Textil/Quality/
+Construcción funcionales, sin PDF server-side, sin caso piloto, sin datos
+demo, sin cambios de cálculo ni metodología.
+
+**Bloqueante 1 — Demo seguía mostrando recomendaciones del diagnóstico.**
+`app/(app)/(shell)/diagnostic/page.tsx` mostraba `q.recommendedAction`
+sin revisar el plan. Corregido: la página consulta
+`checkFeatureEnabled("diagnostic_recommendations_enabled")` y solo
+muestra el texto de acción recomendada si está habilitado — el resultado
+del diagnóstico (respuestas "No", nivel de preparación) sigue siempre
+visible, Demo incluido. Con la función apagada, se muestra «Las
+recomendaciones avanzadas están disponibles en los planes Full y Extra.»
+
+**Bloqueante 2 — Demo podía validar importaciones.** `commitImportAction`
+ya estaba bloqueado, pero `validateImportCsvAction`
+(`server/actions/imports.ts`) — que SÍ escribe filas reales en
+`import_jobs`/`import_job_rows` al validar — no tenía ningún chequeo.
+Corregido con `checkFeatureEnabled("imports_enabled")` justo al principio
+de la función, ANTES del primer INSERT. Se revisó también el importador
+anterior que sigue coexistiendo (`server/actions/import.ts`,
+`validateImportAction`, usado por `/catalog/import` y embebido en
+`/traceability/input-batches`) y se bloqueó igual — ambos mecanismos de
+importación quedan cubiertos.
+
+**Bloqueante 3 — Suspender/cancelar plan no bloqueaba creaciones.** Los 3
+helpers centrales (`checkResourceLimit`/`checkFeatureEnabled`/
+`checkStorageAvailable`, `server/actions/plans.ts`) nunca revisaban
+`planStatus`. Corregido centralizando el chequeo UNA sola vez
+(`checkPlanStatusBlocking`, llamado desde las 3 funciones): una
+suscripción `suspended`/`cancelled` bloquea cualquier creación/carga con
+su propio mensaje, sin importar si estaría dentro del límite normal del
+plan — la empresa sigue pudiendo leer todo lo que ya tenía.
+
+**Bloqueante 4 — Empresas existentes sin suscripción real.**
+`v_organization_plan_usage` usaba `coalesce(sub.plan_code, 'demo')` como
+respaldo de LECTURA, así que empresas creadas antes de 0053 parecían
+"demo" sin tener ninguna fila real ni historial. Nueva migración
+**`0054_backfill_existing_organization_subscriptions.sql`**: idempotente,
+sin ningún DELETE, asigna `demo` + primera fila de historial solo donde
+no existía ya. Verificado con una empresa "legacy" simulada (creada por
+INSERT directo, sin pasar por `create_organization`): antes del backfill,
+0 filas de suscripción; después, 1 fila `demo` + 1 de historial; al
+volver a correr la migración, 0 filas nuevas (idempotencia confirmada).
+
+**Bloqueante 5 — `/modules` no era una entrada real.** `app/page.tsx`
+seguía mandando a `/dashboard`, y el post-login no pasaba por el selector
+de módulos. Corregido: `app/page.tsx` redirige a `/modules`;
+`postAuthDestinationPath` (`lib/domain/team.ts`) ahora manda TODOS los
+destinos normales (dashboard/select-org/create-org) a `/modules` en vez
+de a su ruta específica — una invitación pendiente (`next` explícito o
+detectada automáticamente) sigue yendo directo a `/accept-invite`, nunca
+pasa por el portal. Nueva función `moduleEntryDestinationPath` resuelve
+el destino real cuando el usuario elige "Trazaloop CPR" desde `/modules`
+— reutiliza la MISMA lógica de estado, sin duplicarla, y nunca vuelve a
+mandar a `/modules` (sin ciclos).
+
+**Bloqueante 6 — Consola de plataforma con poca información de
+empresa.** `memberships_select` (0006) solo permite `user_id =
+auth.uid()` o `is_org_admin(organization_id)`: un superadmin que no es
+miembro de una empresa quedaba bloqueado de ver sus miembros por la RLS
+normal. Nueva migración **`0055_platform_organization_members_view.sql`**:
+2 vistas nuevas (`v_platform_organization_members`,
+`v_platform_organization_invitations`) con el MISMO patrón exacto que
+`v_platform_organizations` (0041) — guarda `is_platform_staff()` embebida
+en la vista misma, nunca `security_invoker`. La migración también
+extiende `v_platform_organizations` (CREATE OR REPLACE, agregando
+`contact_email`/`phone` al final, sin quitar ni reordenar columnas
+existentes) para no tener que crear una tercera vista solo por 2 campos.
+Verificado contra PostgreSQL real: superadmin ve miembros+invitación
+pendiente de una empresa de la que NO es miembro; un admin de otra
+empresa obtiene 0 filas en ambas vistas. El detalle de empresa ahora
+muestra administrador principal, miembros con correo/rol, invitaciones
+pendientes, correo de contacto y teléfono — "No disponible" cuando algo
+falta, nunca datos inventados.
+
+**Pruebas**: `npm run test:plans` suma 8 casos de corrección nuevos.
+`npm run test:team` suma 3 casos sobre `/modules` como entrada real.
+`tests/rls/isolation.test.ts` suma 2 casos (78-79) sobre las vistas de
+miembros/invitaciones de plataforma.
+
+## Corrección post Sprint 10A (2) — brechas de plan en Equipo y cuentas suspendidas
+
+Tres bloqueantes de control de acceso por plan encontrados y corregidos.
+Sin facturación, sin pasarela de pagos, sin módulos Textil/Quality/
+Construcción funcionales, sin PDF server-side, sin caso piloto, sin datos
+demo, sin cambios de cálculo ni metodología.
+
+**Bloqueante 1 — invitaciones antiguas se podían aceptar sin revisar
+plan.** Caso real: una empresa en Full crea invitaciones pendientes; el
+superadmin la baja a Demo; alguien acepta el enlace antiguo semanas
+después — `accept_team_invitation` (0037) creaba la membership sin
+revisar nada de plan. **Decisión de arquitectura**: el chequeo se agregó
+en SQL (`accept_team_invitation`, `0056_accept_invitation_plan_checks.sql`),
+no en TypeScript antes de llamar la RPC, porque quien acepta una
+invitación normalmente NO es todavía miembro de esa empresa —
+`v_organization_plan_usage` exige `is_org_member(organization_id)` para
+poder leerse, así que un chequeo previo con la sesión del invitado
+siempre habría visto cero filas por RLS y nunca habría podido bloquear
+nada de verdad. Se preservó el cuerpo EXACTO ya probado de 0037,
+agregando los 3 chequeos (roles_enabled, límite de team_members,
+plan_status) justo después de confirmar que el usuario aún no es miembro
+y antes del INSERT en memberships.
+
+Verificado contra PostgreSQL real, reproduciendo el caso exacto del
+bloqueante: empresa en Full crea invitación → baja a Demo → el invitado
+intenta aceptar el link antiguo → bloqueado con «Las invitaciones y roles
+están disponibles en los planes Full y Extra.», sin membership creada, la
+invitación queda `pending` (se puede aceptar después si la empresa vuelve
+a subir de plan). Confirmado también: Full permite aceptar sin ningún
+bloqueo (sin regresión); el límite de `team_members` bloquea de forma
+aislada cuando se alcanza; suspendida y cancelada bloquean con sus
+mensajes exactos.
+
+**Bloqueante 2 — Demo podía cambiar roles de miembros existentes.**
+`updateMemberRoleAction` y `reactivateMemberAction`
+(`server/actions/team.ts`) no revisaban `roles_enabled`. Corregido con
+`checkFeatureEnabled("roles_enabled")` en ambas — que ya revisa el estado
+de la suscripción primero, así que también cubre suspended/cancelled sin
+código adicional. `deactivateMemberAction` se dejó **sin** el chequeo a
+propósito: desactivar ayuda a una empresa a volver dentro de su límite,
+nunca debería estar bloqueado.
+
+**Bloqueante 3 — suspended/cancelled no bloqueaban mutaciones fuera de
+los helpers de recursos.** Diagnóstico (`startDiagnosticAction`,
+`saveDiagnosticAnswersAction`, `completeDiagnosticAction`), configuración
+de empresa (`updateCompanySettingsAction`, `removeCompanyLogoAction`) y
+TrazaDocs (metadatos, contenido de secciones, agregar/eliminar/reordenar
+sección, y las 6 transiciones de estado a través de un único helper
+compartido `transition()`) no pasaban por ningún chequeo de plan. Nuevo
+helper central **`checkOrganizationCanMutate()`**
+(`server/actions/plans.ts`) — mismo `checkPlanStatusBlocking` ya usado por
+los otros 3 helpers, reutilizado sin duplicar lógica. Nunca bloquea
+lectura ni borra datos: una empresa suspendida sigue pudiendo consultar
+todo lo que ya tenía.
+
+**Pruebas**: `npm run test:team` suma 9 casos (invitaciones/roles en
+Demo/suspended/cancelled). `npm run test:plans` suma 4 casos (modo solo
+lectura ampliado a diagnóstico, configuración, logo y TrazaDocs).
+`tests/rls/isolation.test.ts` suma 2 casos (80-81) reproduciendo el caso
+exacto del Bloqueante 1 contra PostgreSQL real.
+
+## Corrección final — modo solo lectura completo para suspended/cancelled
+
+Última brecha de control de acceso por plan: `checkOrganizationCanMutate()`
+se aplicó a **35 acciones de escritura restantes** que todavía no lo
+usaban, repartidas en 6 archivos. Sin facturación, sin pasarela de pagos,
+sin módulos Textil/Quality/Construcción funcionales, sin PDF server-side,
+sin caso piloto, sin datos demo, sin cambios de cálculo ni metodología —
+esta ronda no cambió ninguna lógica de negocio ni ningún permiso
+existente, solo agregó la barrera de `plan_status` antes de escribir.
+
+**Acciones que quedaban sin protección** (confirmado con una lista
+explícita en `tests/unit/plans.test.ts`, que además verifica que ninguna
+acción de SOLO LECTURA la lleve):
+
+- `server/actions/catalog.ts` (9): `upsertSupplierAction`,
+  `deleteSupplierAction`, `upsertFamilyAction`, `deleteFamilyAction`,
+  `upsertProductAction`, `deleteProductAction`, `upsertMaterialAction`,
+  `deleteMaterialAction`, `reclassifyMaterialAction`.
+- `server/actions/evidences.ts` (4): `createEvidenceAction` (chequeo
+  explícito agregado por claridad, ya cubierto indirectamente por
+  `checkResourceLimit`/`checkStorageAvailable`), `validateEvidenceAction`,
+  `deleteEvidenceAction`, `linkEvidenceAction`.
+- `server/actions/traceability.ts` (15): las 3 acciones de lotes de
+  entrada, las 3 de órdenes/corridas, las 3 de consumo, las 3 de lotes
+  producidos y las 3 de composición — create/update/delete de cada una.
+  Las acciones de solo lectura (`listInputBatchesAction`,
+  `getBackwardTraceabilityAction`, etc.) se dejaron intactas a propósito.
+- `server/actions/recycled.ts` (1): `calculateRecycledContentAction` —
+  sin tocar la RPC `calculate_recycled_content` ni la metodología: una
+  empresa suspendida sigue viendo sus cálculos existentes, solo no puede
+  generar uno nuevo.
+- `server/actions/implementation.ts` (4):
+  `createImplementationFeedbackAction`,
+  `updateImplementationFeedbackAction`,
+  `updateImplementationFeedbackStatusAction`,
+  `deleteImplementationFeedbackAction`.
+- `server/actions/team.ts` (2): `revokeTeamInvitationAction` y
+  `deactivateMemberAction` — esta última con una distinción deliberada:
+  usa `checkOrganizationCanMutate()` (solo estado de la suscripción), NO
+  `checkFeatureEnabled("roles_enabled")` — Demo **activo** debía seguir
+  pudiendo desactivar miembros (ayuda a volver dentro del límite), pero
+  Demo **suspendido/cancelado** no.
+- `server/actions/import.ts` / `imports.ts`: ya quedaron cubiertos en la
+  corrección anterior (`checkFeatureEnabled("imports_enabled")` ya revisa
+  el estado del plan primero) — se confirmó que no existe ningún otro
+  camino de escritura en esos 2 archivos sin ese guarda.
+
+**Cómo quedó aplicada la regla**: siempre el mismo patrón — `const
+mutateCheck = await checkOrganizationCanMutate(); if
+(!mutateCheck.allowed) return { error: mutateCheck.error };` — colocado
+después de las validaciones de forma más básicas (campos obligatorios) y
+antes de cualquier operación de base de datos o de los chequeos de límite
+de recurso (`checkResourceLimit`), para no gastar una consulta de
+conteo si la empresa ya está bloqueada por estado.
+
+**Dos bugs de test (no de implementación) encontrados y corregidos** al
+escribir las pruebas de esta ronda: (1) un `assert(!fnBody.includes(...))`
+demasiado ingenuo daba falso positivo porque el propio comentario
+explicativo que agregué dentro de `deactivateMemberAction` contenía la
+palabra `checkFeatureEnabled` en prosa — corregido a buscar la llamada
+real (`checkFeatureEnabled(`, con el paréntesis) en vez de la subcadena
+suelta, y se corrigió el mismo patrón en un test equivalente de la ronda
+anterior; (2) un conteo esperado de "34 acciones" que en realidad eran
+35 — la lista completa ya tenía el número correcto, solo la aserción
+sobre su longitud estaba mal.
+
+**Pruebas**: `npm run test:plans` suma 16 casos (14 pedidos + 2 extra),
+incluida una lista exhaustiva y nombrada de las 35 acciones cubiertas y
+una verificación explícita de que ninguna acción de lectura quedó
+bloqueada.
+
+## Sprint 10B — Maestro de documentos TrazaDocs
+
+Registro documental centralizado dentro de TrazaDocs, uniendo documentos
+vivos (ya existentes) con un tipo nuevo — documentos descargables:
+archivos controlados (PDF/Word/Excel/CSV/imagen) que la empresa sube tal
+cual y versiona, sin editarlos en línea. Sin PDF server-side, sin
+tickets completos, sin facturación, sin pasarela de pagos, sin módulos
+Textil/Quality/Construcción funcionales, sin cambios de cálculo ni
+metodología.
+
+**Migraciones**:
+
+- **`0057_trazadocs_document_master.sql`**: `category_code` en
+  `trazadoc_documents` (backfill seguro desde el `document_type` del
+  blueprint, `other` como respaldo — nunca rompe datos existentes);
+  tablas nuevas `trazadoc_file_documents` / `trazadoc_file_document_versions`
+  con el MISMO patrón de RLS/triggers que `trazadoc_documents` (0043,
+  corregido en 0047) — edición directa de metadatos solo en
+  draft/in_review, para los 3 roles por igual; vista unificada
+  `v_trazadoc_document_master` (`security_invoker=true`, UNION de ambas
+  fuentes); 2 RPC nuevas SECURITY DEFINER —
+  `change_trazadoc_file_document_status` (transición atómica con
+  snapshot de versión, mismas reglas de rol/estado que
+  `change_trazadoc_document_status`) y `replace_trazadoc_file_document`
+  (sube un archivo nuevo como nueva versión; si el documento estaba
+  aprobado, la nueva versión SIEMPRE queda en borrador — nunca se
+  sobrescribe un aprobado en silencio).
+- **`0058_trazadocs_documents_storage.sql`**: bucket privado
+  `trazadocs-documents`, separado de `evidences` y de
+  `organization-assets` — mismo patrón de políticas por
+  `organization_id` en la ruta que los otros 2 buckets del proyecto.
+
+**Bug real encontrado y corregido durante el desarrollo**: al probar
+`change_trazadoc_file_document_status` vía RPC, primero intenté simular
+una aprobación con un `UPDATE` directo — falló con una violación de RLS.
+Esto confirmó (no reveló un bug) que la política de UPDATE exige
+draft/in_review tanto antes como después del cambio, por diseño — la
+única vía real para cambiar el estado es la RPC SECURITY DEFINER, igual
+que en documentos vivos. Verificado exhaustivamente contra PostgreSQL
+real: consultant bloqueado de aprobar, admin aprueba correctamente,
+reemplazar el archivo de un aprobado lo regresa a borrador conservando
+la versión anterior intacta en el historial, aislamiento cruzado
+confirmado en la tabla y en la vista unificada.
+
+**Lógica pura** (`lib/domain/trazadocs-master.ts`): reutiliza
+`CATEGORY_CODES`/`CATEGORY_LABEL` y TODAS las reglas de rol/estado ya
+definidas en `lib/domain/trazadocs.ts` (`canApproveDocument`,
+`canMarkObsolete`, `canReactivateDocument`,
+`canCreateDraftVersionFromApproved`, `canDeleteDraftDocument`,
+`canEditDocument`) — un documento descargable se aprueba/edita con
+EXACTAMENTE las mismas reglas que uno vivo, nunca una segunda
+especificación paralela. Nueva validación de archivo
+(`validateFileDocumentUpload`): tipos permitidos (PDF/Word/Excel/CSV/PNG/
+JPG/WebP, nunca ejecutables/ZIP/SVG), tamaño máximo por archivo (10 MB
+Demo, 25 MB Full/Extra) independiente de la cuota total de
+almacenamiento del plan.
+
+**Server actions** (`server/actions/trazadocs-master.ts`): el límite
+`documents_trazadocs` (Sprint 10A) es UN SOLO recurso que cuenta
+documentos vivos y descargables juntos —
+`uploadFileDocumentAction` llama a `checkResourceLimit("documents_trazadocs")`,
+el mismo chequeo que ya usan `createDocumentFromBlueprintAction`/
+`createCustomDocumentAction`. Todas las mutaciones (subir, editar
+metadatos, reemplazar archivo, eliminar borrador) pasan por
+`checkOrganizationCanMutate()` — una empresa suspendida/cancelada puede
+seguir viendo el maestro, descargando e imprimiendo, nunca escribir.
+**Anti-duplicado cruzado (Parte 18)**: un título ya usado por un
+documento vivo bloquea crear un descargable con el mismo nombre, y
+viceversa — `createDocumentFromBlueprintAction`/`createCustomDocumentAction`
+ahora también revisan `trazadoc_file_documents`
+(`findFileDocumentByNormalizedTitle`, nueva función), además de su
+chequeo existente contra otros documentos vivos.
+
+**UI**: `/trazadocs/master` (filtros por búsqueda/categoría/estado/tipo
+vía querystring, tabla agrupada por categoría, exportar CSV, vista de
+impresión, indicadores de conteo); `/trazadocs/master/print` (mismo
+patrón que la impresión de documentos vivos — logo de empresa, razón
+social, NIT, sin PDF server-side); `/trazadocs/files/new` (subir);
+`/trazadocs/files/[id]` (detalle: metadatos, reemplazar archivo,
+transiciones de estado, historial de versiones, eliminar borrador).
+Categoría editable en documentos vivos desde su pantalla de edición
+existente (`/trazadocs/[id]/edit`), con la misma restricción de estado
+que el resto del documento. Exportar CSV y descargar reutilizan el
+patrón ya establecido (`components/domain/audit-support/export-buttons.tsx`,
+Sprint 6) de Blob + `URL.createObjectURL`, sin librerías nuevas.
+
+**Integración**: enlace «Maestro de documentos» agregado al grupo de
+navegación TrazaDocs y a la página principal `/trazadocs`, sin quitar
+nada existente.
+
+**Pruebas**: `npm run test:document-master` (`tests/unit/document-master.test.ts`)
+cubre los 25 casos mínimos del sprint más 2 adicionales.
+`tests/rls/isolation.test.ts` suma 4 casos (82-85) verificando contra
+PostgreSQL real: aislamiento cruzado del documento descargable y de la
+vista unificada, consultant bloqueado/admin aprueba vía RPC, y que
+reemplazar el archivo de un aprobado lo regresa a borrador sin perder el
+historial.
+
+**Documentación**: nueva `docs/DOCUMENT_MASTER_GUIDE.md`.
+`docs/TRAZADOCS_GUIDE.md`, `docs/PLANS_AND_LIMITS_GUIDE.md`,
+`docs/COMPANY_TESTING_GUIDE.md`, `docs/PLATFORM_ADMIN_GUIDE.md`,
+`docs/PREDEPLOY_CHECKLIST.md` y `docs/STAGING_DEPLOYMENT.md` actualizados.
+
+## Corrección post Sprint 10B — versión inicial, uso de plan y archivos huérfanos
+
+Tres bloqueantes reales encontrados y corregidos antes de integrar el
+Maestro de documentos. Sin facturación, sin pasarela de pagos, sin
+módulos Textil/Quality/Construcción funcionales, sin PDF server-side, sin
+tickets completos, sin IA, sin caso piloto, sin datos demo, sin cambios
+de cálculo ni metodología.
+
+**Bloqueante 1 — documento descargable quedaba con `storage_path`
+vacío.** `uploadFileDocumentAction` creaba la fila, subía el archivo, y
+luego usaba `changeFileDocumentStatus` para "cerrar" la creación — pero
+esa función nunca actualiza `storage_path` con la ruta real, y además
+SIEMPRE incrementa `current_version` (un documento recién creado quedaba
+en v2, no v1). Corregido con una RPC nueva y dedicada,
+**`finalize_trazadoc_file_document_initial_version`**
+(`0059_document_master_usage_fix.sql`) — única vía para cerrar la
+creación inicial: fija `storage_path`/`file_name`/`mime_type`/
+`size_bytes` reales, deja `current_version=1`/`version_label='v1'`
+explícitos (nunca incrementados), e inserta la versión v1 con la ruta
+real — idempotente si se reintenta (no duplica v1 si ya existe).
+`uploadFileDocumentAction` ya no usa `changeFileDocumentStatus` para
+este paso; esa función queda exclusivamente para transiciones
+posteriores (enviar a revisión, aprobar, marcar obsoleto, reactivar).
+
+Verificado contra PostgreSQL real: tras `finalize`, la fila principal y
+la versión v1 quedan con la ruta real idéntica; reintentar `finalize` no
+duplica la versión.
+
+**Bloqueante 2 — `v_organization_plan_usage` no contaba documentos
+descargables.** `documents_trazadocs_count` seguía leyendo solo
+`trazadoc_documents`, y `storage_used_bytes` no incluía
+`trazadoc_file_documents.size_bytes`. Migración `0059` reemplaza la
+vista (mismas columnas, mismo orden, misma guarda `is_org_member(...) or
+is_platform_staff()`) sumando ambas fuentes en un solo origen de verdad:
+`documents_trazadocs_count` = vivos + descargables;
+`storage_used_bytes` = evidencias + logo + descargables. Verificado
+contra PostgreSQL real: con 1 documento vivo + 1 descargable de 200 KB,
+la vista reporta `documents_trazadocs_count=2` y
+`storage_used_bytes=204800` exactos.
+
+**Bloqueante 3 — riesgo de archivos huérfanos al reemplazar.**
+`replaceFileDocumentFileAction` subía el archivo nuevo ANTES de saber si
+la RPC lo aceptaría. Reordenado: ahora valida documento/rol/estado
+(`canReplaceFileDocumentFile`, nueva función pura que espeja
+EXACTAMENTE la regla ya escrita en la RPC SQL — draft/in_review para los
+3 roles, approved solo admin/quality, obsolete nunca) **antes** de subir
+cualquier byte; si la RPC falla después de subir, se intenta borrar el
+objeto recién subido (`deleteFileDocumentStorageObject`, best-effort).
+`uploadFileDocumentAction` también se corrigió (**Bloqueante 4**): si la
+subida inicial falla, la fila borrador recién creada se elimina
+automáticamente (`deleteFileDocumentRow`), con mensaje claro si ni
+siquiera eso fuera posible.
+
+**Pruebas**: `npm run test:document-master` suma 12 casos de corrección.
+`tests/rls/isolation.test.ts` suma 2 casos (86-87) verificando contra
+PostgreSQL real la ruta/versión reales tras `finalize` (con reintento
+idempotente) y el conteo/almacenamiento combinado de la vista corregida.
+
+## Sprint 10C — Centro de soporte y tickets
+
+Reemplaza visualmente el antiguo «Feedback» por un sistema formal de
+tickets de soporte: creación por empresa, conversación, notas internas
+(solo plataforma), estados, prioridad, asignación y objetivo de primera
+respuesta. Sin CRM, sin chat en tiempo real, sin notificaciones por
+email, sin adjuntos, sin bot de IA, sin base de conocimiento, sin SLA
+contractual con festivos, sin facturación, sin pasarela de pagos, sin
+PDF server-side, sin módulos Textil/Quality/Construcción funcionales,
+sin cambios de cálculo ni metodología.
+
+**Migraciones**:
+
+- **`0060_support_tickets.sql`**: 3 tablas — `support_tickets`,
+  `support_ticket_messages`, `support_ticket_status_history`
+  (append-only). Ninguna transición de estado (reabrir, asignar, cambiar
+  estado, cambiar prioridad) admite un `UPDATE` directo desde el cliente
+  — MISMO patrón que `change_trazadoc_document_status`/
+  `change_organization_plan`: 4 RPC SECURITY DEFINER
+  (`reopen_support_ticket`, `assign_support_ticket`,
+  `update_support_ticket_status`, `update_support_ticket_priority`), cada
+  una con su propio chequeo de rol y su propia entrada de historial. Los
+  MENSAJES sí se insertan directamente vía RLS normal — un trigger
+  `AFTER INSERT` (`touch_support_ticket_on_message`, SECURITY DEFINER)
+  actualiza `last_message_at` siempre y `first_response_at` solo la
+  primera vez que llega un mensaje visible (`is_internal_note=false`) de
+  plataforma — nunca desde una nota interna, nunca una segunda vez. Un
+  CHECK a nivel de datos (no solo RLS) impide que un cliente marque
+  `is_internal_note=true`.
+- **`0061_migrate_feedback_to_support_tickets.sql`**: preserva
+  `implementation_feedback` (nunca la toca ni la borra) creando un
+  ticket equivalente por cada fila **con autor conocido** — las filas
+  sin `created_by` se omiten a propósito (la migración nunca inventa un
+  autor). Idempotente vía `ON CONFLICT (source_type, source_id) DO
+  NOTHING`, respaldado por un índice único parcial real
+  (`support_tickets_source_uniq`).
+- **`0062_support_ticket_views.sql`**: `v_support_ticket_summary`
+  (`security_invoker=true`, con SLA calculado) y
+  `v_platform_support_ticket_summary` (envuelve a la primera, agrega
+  datos de empresa/plan, con la guarda `is_platform_staff()` embebida —
+  mismo patrón que `v_platform_organizations`).
+
+**Hallazgo interesante durante el desarrollo**: al anidar
+`v_platform_support_ticket_summary` (sin `security_invoker`) sobre
+`v_support_ticket_summary` (con `security_invoker=true`), confirmé
+empíricamente contra PostgreSQL real que la propiedad `security_invoker`
+de la vista interna se sigue aplicando con la identidad del usuario que
+hizo la consulta ORIGINAL, sin importar cuántas vistas intermedias haya
+— un usuario de empresa consultando la vista de plataforma (bloqueado
+por su guarda externa) habría visto, de todas formas, un conteo de
+mensajes correctamente filtrado (sin notas internas) si hubiera
+alcanzado la vista interna; un superadmin ve el conteo completo. Ambos
+casos y el bloqueo cruzado se verificaron con las 4 combinaciones
+posibles.
+
+**Lógica pura** (`lib/domain/support.ts`): catálogos de estado/
+prioridad/categoría/módulo, `computeFirstResponseTargetAt` (siguiente
+día hábil, verificado con los 4 ejemplos exactos del brief: lunes→martes,
+viernes→lunes, sábado→lunes, domingo→lunes), `resolveSlaStatus` (misma
+lógica exacta que la vista SQL, testeada aquí sin BD), y
+**`canCreateSupportTicket`** — la excepción controlada de Parte 12: NUNCA
+usa `checkOrganizationCanMutate()` (bloquearía todos los tickets); una
+empresa suspendida/cancelada solo puede crear tickets de categoría
+cuenta/acceso o plan/límites, mientras que responder un ticket existente
+(`canReplySupportTicket`) siempre está permitido sin importar el estado
+del plan.
+
+**Server actions** (`server/actions/support.ts`): acciones de empresa
+(`listSupportTicketsAction`, `getSupportTicketAction`,
+`createSupportTicketAction`, `replySupportTicketAction`,
+`reopenSupportTicketAction`) y de plataforma
+(`listPlatformSupportTicketsAction`, `getPlatformSupportTicketAction`,
+`assignSupportTicketAction` + atajo `assignSupportTicketToMeAction`,
+`updateSupportTicketStatusAction`, `updateSupportTicketPriorityAction`,
+`replyPlatformSupportTicketAction`, `addInternalSupportNoteAction`,
+`getOrganizationSupportSummaryAction`). `organization_id` nunca sale del
+cliente en las acciones de empresa.
+
+**UI**: `/support` (lista con filtros, mensaje del objetivo de primera
+respuesta), `/support/new`, `/support/[id]` (conversación, responder o
+reabrir); `/platform/support` (todos los tickets, filtrable por empresa
+vía `?org=`), `/platform/support/[id]` (asignar, estado, prioridad,
+responder, nota interna, historial). Bloque de tickets agregado a
+`/platform/organizations/[id]` (Parte 17).
+
+**Integración con Implementación**: `/implementation/feedback` se
+reemplazó por un aviso («El feedback ahora se gestiona desde el Centro
+de soporte» + botón) — la ruta se conserva para no romper enlaces
+existentes. Los botones «Registrar feedback» en `/implementation` ahora
+dicen «Crear ticket de soporte» y llevan a `/support/new`; la sección de
+feedback histórico se conserva, reetiquetada como tal, apuntando al
+nuevo Centro de soporte.
+
+**Nav**: «Centro de soporte» agregado al grupo Sistema; «Tickets de
+soporte» agregado al grupo Plataforma.
+
+**Compliance**: se agregaron 2 patrones nuevos al barrido
+(`tests/compliance/no-certifier-names.test.ts`) — «respuesta
+garantizada» y «garantía de respuesta» — verificados con casos positivos
+y negativos antes de confirmar que el texto real del producto
+(«Tiempo objetivo de primera respuesta: 1 día hábil.») no los dispara.
+
+**Pruebas**: `npm run test:support` (`tests/unit/support.test.ts`) cubre
+los 24 casos mínimos del sprint más varios adicionales.
+`tests/rls/isolation.test.ts` suma 4 casos (88-91) verificando contra
+PostgreSQL real: creación y respuesta de la empresa con SLA calculado,
+nota interna invisible para la empresa y `first_response_at` llenado
+solo por el primer mensaje visible, permisos asimétricos empresa vs.
+plataforma en las 4 RPC, y aislamiento cruzado completo (tabla, RPC y
+vista de resumen).
+
+## Corrección post Sprint 10C — descripción visible, RLS reforzada y última actividad
+
+Cinco bloqueantes encontrados y corregidos antes de integrar el Centro
+de soporte. Sin CRM, sin chat en tiempo real, sin adjuntos, sin IA, sin
+facturación, sin pasarela de pagos, sin PDF server-side, sin módulos
+Textil/Quality/Construcción funcionales, sin cambios de cálculo ni
+metodología, sin promesa de certificación ni de respuesta garantizada.
+
+**Bloqueante 1 — la descripción inicial no aparecía en el detalle.**
+`v_support_ticket_summary` no traía `description`. Corregido con
+`CREATE OR REPLACE VIEW` (migración `0063`) agregando la columna **al
+final** — aprendiendo de un error real cometido primero al intentar
+insertarla en medio de la lista de columnas, lo que `CREATE OR REPLACE
+VIEW` rechaza (mismo principio ya aplicado en `0059`, esta vez vuelto a
+verificar contra el error real de Postgres antes de corregirlo). Ambos
+detalles (`/support/[id]` y `/platform/support/[id]`) ahora muestran una
+sección «Descripción inicial» dedicada.
+
+**Bloqueante 2 — RLS de creación permitía campos manipulados.**
+`support_tickets_insert` (0060) solo exigía membresía y `created_by`,
+sin restringir `status`/`assigned_to`/`first_response_at`/`resolved_at`/
+`closed_at`/`source_type`/`source_id`, ni reforzar en base de datos la
+excepción de planes suspendidos. Doble defensa nueva: un trigger `BEFORE
+INSERT` (`normalize_support_ticket_insert`) que fuerza SIEMPRE estos
+campos a sus valores seguros y recalcula `first_response_target_at` con
+la misma lógica de siguiente día hábil (nunca confía en lo que mande el
+cliente), más una función `can_create_support_ticket_for_org` (espejo
+exacto de `canCreateSupportTicket` en TypeScript, ahora también exigida
+en SQL) y una política de INSERT más estricta que vuelve a exigir todo
+lo que el trigger ya garantiza — si el trigger alguna vez se cayera, la
+política seguiría bloqueando. Verificado contra PostgreSQL real: un
+INSERT directo con `status='closed'`, `assigned_to` y las 3 fechas ya
+llenas tuvo éxito pero quedó completamente normalizado; con la empresa
+suspendida, una categoría técnica se bloqueó y `account`/`plan`
+siguieron permitidos.
+
+**Bloqueante 3 — el historial aceptaba INSERT directo.**
+`support_ticket_status_history_insert` (0060) permitía a cualquier
+miembro de empresa insertar una fila de historial sin que el estado
+real hubiera cambiado. Se eliminó esa política — deny-by-default real,
+sin ninguna política de INSERT para clientes. Verificado que esto NO
+rompe las 4 RPC (`reopen_support_ticket`/`assign_support_ticket`/
+`update_support_ticket_status`/`update_support_ticket_priority`): todas siguen escribiendo su historial porque son
+SECURITY DEFINER y bypasean la RLS de la tabla por completo — probado en
+secuencia sobre el mismo ticket (asignar → resolver → reabrir) con el
+historial completo y correcto.
+
+**Bloqueante 4 — las notas internas actualizaban la última actividad
+visible.** `touch_support_ticket_on_message()` tocaba `last_message_at`
+con cualquier mensaje, incluidas notas internas — la empresa veía
+"última actividad" cambiar sin ningún mensaje que pudiera leer.
+Corregido: `last_message_at` ahora solo se actualiza cuando
+`is_internal_note = false`; `first_response_at` sigue exactamente igual
+(ya exigía lo mismo). Verificado: una nota interna dejó `last_message_at`
+sin cambios; el siguiente mensaje visible sí lo actualizó.
+
+**Bloqueante 5 — lenguaje visible de "Feedback" seguía apareciendo.**
+Barrido completo en evidencias, trazabilidad, flujo guiado, dossiers
+técnicos, cálculo de contenido reciclado, implementación y toda la
+consola de plataforma (resumen general, tabla de empresas, detalle de
+empresa) — "Registrar feedback" → "Crear ticket de soporte";
+"Feedback abierto"/"crítico" en la consola de plataforma se
+**reemplazaron por conteos reales de tickets** (`totalOpenTickets`/
+`totalUrgentTickets`, calculados desde `support_tickets`, no solo
+relabeled) con enlace a `/platform/support`; las mismas etiquetas en
+paneles que siguen mostrando datos históricos de
+`implementation_feedback` se relabelaron como "Feedback histórico" para
+no confundirlos con tickets reales. `/support/new` ahora acepta
+`?module=` para preseleccionar el módulo relacionado, y los enlaces
+específicos de cada pantalla lo usan. Un test automatizado
+(`tests/unit/support.test.ts`, caso 15) encontró un enlace real que se
+me había pasado — "Ver / editar" en el feedback histórico de
+`/implementation`, todavía apuntando a la ruta ya reemplazada — corregido
+quitando ese enlace (ya no lleva a ningún sitio editable).
+
+**Pruebas**: `npm run test:support` suma 15 casos de corrección más 1
+extra. `tests/rls/isolation.test.ts` suma 4 casos (92-95) verificando
+contra PostgreSQL real: normalización de campos manipulados, bloqueo de
+categoría técnica en suspendida con `account`/`plan` permitidos,
+bloqueo de INSERT directo de historial (para empresa y para superadmin
+por igual), y el comportamiento correcto de `last_message_at` con notas
+internas vs. mensajes visibles.
+
+## Corrección final Sprint 10C — fechas normalizadas y último barrido de lenguaje
+
+Últimos 3 detalles antes de integrar el Centro de soporte. Sin CRM, sin
+chat en tiempo real, sin adjuntos, sin IA, sin facturación, sin pasarela
+de pagos, sin PDF server-side, sin módulos Textil/Quality/Construcción
+funcionales, sin cambios de cálculo ni metodología, sin promesa de
+certificación ni de respuesta garantizada.
+
+**Bloqueante 1 — `created_at` de `support_tickets` podía manipular el
+SLA indirectamente.** `normalize_support_ticket_insert()` (0063)
+calculaba `first_response_target_at` a partir de `new.created_at`, pero
+nunca forzaba ese `created_at` — un INSERT directo con
+`created_at='2099-01-01'` habría corrido el objetivo de primera
+respuesta a esa misma fecha lejana. Migración `0064` agrega
+`new.created_at := now()` / `new.updated_at := now()` **antes** del
+cálculo del objetivo. Verificado contra PostgreSQL real con fechas
+manipuladas tanto al futuro (2099) como al pasado (2000): en ambos
+casos `created_at` quedó en la hora real del servidor y
+`first_response_target_at` se calculó correctamente sobre esa hora real.
+
+**Bloqueante 2 — `created_at` de `support_ticket_messages` podía
+manipular `last_message_at`.** Mismo problema, en la tabla de mensajes.
+Nuevo trigger `normalize_support_ticket_message_insert` (0064): fuerza
+`created_at`/`updated_at` al reloj del servidor, y además fuerza
+`is_internal_note := false` cuando `author_type = 'customer'` — una
+TERCERA capa de defensa independiente del CHECK de datos (0060) y de la
+política de RLS (ninguna depende de las otras). Verificado: un mensaje
+con `created_at='2099-06-01'` dejó `last_message_at` en la hora real;
+con el CHECK de datos temporalmente eliminado (solo para aislar la
+prueba), el trigger por sí solo siguió bloqueando una nota interna de
+un customer.
+
+**Bloqueante 3 — quedaba lenguaje de "Feedback" en varios lugares.**
+Barrido completo de las etiquetas restantes ("Feedback histórico
+abierto/crítico" → "Solicitudes históricas abiertas"/"Tickets
+históricos de alta prioridad", "Feedback anterior (histórico)" →
+"Histórico de soporte anterior") y de la documentación operativa
+(`docs/COMPANY_TESTING_GUIDE.md`, `docs/PILOT_QA_CHECKLIST.md`,
+`docs/TEAM_MANAGEMENT_GUIDE.md`) que todavía orientaba a
+`/implementation/feedback` como flujo principal.
+
+Se agregaron 3 patrones nuevos al barrido de compliance (`tests/compliance`)
+para blindar esto contra regresión — y al correrlo, **encontraron 2 bugs
+reales que ningún barrido manual anterior había detectado**: (1) la fila
+de prioridad 12 de `v_implementation_next_actions` (la vista SQL detrás
+de "Siguiente acción recomendada" en `/implementation`, Sprint 6)
+todavía devolvía el texto y el enlace del flujo de feedback reemplazado
+— corregida con `CREATE OR REPLACE VIEW` (migración `0065`, cuerpo
+idéntico a `0034` salvo esa única fila, verificado con
+`pg_get_viewdef`); (2) el ítem 17 del checklist de 17 pasos de
+implementación (`lib/domain/implementation.ts`) tenía el mismo problema
+en un objeto TypeScript totalmente aparte — dos capas independientes
+con el mismo bug, corregidas por separado. La migración histórica `0034`
+se dejó intacta a propósito (las migraciones ya aplicadas nunca se
+editan retroactivamente) y se excluyó explícitamente, un archivo a la
+vez, del nuevo patrón de compliance — con un comentario que explica por
+qué, no un directorio completo.
+
+**Pruebas**: `npm run test:support` suma 9 casos de corrección más 2
+extra (los 2 bugs recién encontrados, ahora con guarda de regresión
+propia). `tests/rls/isolation.test.ts` suma 3 casos (96-98) verificando
+contra PostgreSQL real la normalización de fechas manipuladas en ambas
+tablas y el bloqueo de notas internas por parte de un customer.
+
+## Sprint 10D — Portal de lanzamiento, onboarding Demo y consentimiento legal
+
+Reemplaza el redirect simple de `/` por un portal público real, exige
+aceptación de términos/privacidad antes de entrar a cualquier parte
+protegida, y guía a una empresa recién creada con un checklist de
+onboarding calculado 100% desde datos reales. Sin CRM, sin verificación
+de correo adicional a Supabase Auth, sin CAPTCHA, sin pasarela de pagos,
+sin PDF server-side adicional, sin módulos Textil/Quality/Construcción
+funcionales, sin cambios de cálculo ni metodología.
+
+**Migraciones**:
+
+- **`0066_legal_documents_and_acceptances.sql`**: `legal_documents`
+  (catálogo versionado; índice único parcial garantiza como máximo UN
+  documento `active` por tipo — "el documento vigente" nunca es
+  ambiguo) y `user_legal_acceptances` (histórico append-only, único
+  `(user_id, legal_document_id)`). **Única tabla del proyecto con SELECT
+  público** (`to anon, authenticated`) — necesario porque `/terms` y
+  `/privacy` son páginas públicas; verificado contra PostgreSQL real
+  consultando explícitamente `set role anon`. Semilla de 2 documentos
+  `v1` (`terms`, `privacy`) marcados como versión preliminar, sin
+  promesa de certificación, explicando en lenguaje llano para qué se
+  usan los datos.
+- **`0067_onboarding_status_views.sql`**: `v_organization_onboarding_status`
+  — calculada 100% desde tablas de negocio existentes, sin ninguna tabla
+  ni flag nuevo que "recordar" (mismo patrón que
+  `v_organization_plan_usage`: guarda `is_org_member(...) or
+  is_platform_staff()` embebida, no `security_invoker`, para servir a la
+  vez a la empresa y al superadmin). 7 pasos calculables cuentan hacia
+  `progress_percent`; el diagnóstico distingue explícitamente
+  iniciado-sin-terminar de completado (`diagnostic_started` aparte de
+  `diagnostic_completed`) porque esa granularidad SÍ existe en los datos
+  reales — a diferencia del paso 8 ("revisar límites del plan"), que
+  nunca se cuenta porque no hay ningún dato de negocio que indique si
+  alguien "revisó" una pantalla.
+
+**Lógica pura**: `lib/domain/legal.ts` —
+`hasAcceptedAllRequiredDocuments` compara por `legal_document_id`, no
+solo por tipo: si se publica una versión nueva, el documento activo
+tiene un id distinto, así que una aceptación de la versión anterior dejó
+de contar automáticamente, sin lógica de "comparar versiones" aparte.
+`lib/domain/onboarding.ts` — `resolveOnboardingStepStatus` da 3 estados
+reales (pendiente/en progreso/completado) donde los datos lo permiten
+(datos de empresa, diagnóstico) y binario donde no aplica un estado
+intermedio genuino (¿tienes al menos un proveedor? sí o no).
+
+**Guardas de acceso**: `requireLegalAcceptance()`
+(`lib/auth/require-legal-acceptance.ts`) se agregó a `(shell)/layout.tsx`,
+`platform/layout.tsx` (platform_staff también acepta, sin excepción de
+rol), `/modules`, `/select-org` y `/accept-invite` (esta última solo
+para quien YA tiene sesión abierta — nunca bloquea el estado "inicia
+sesión primero" que necesita seguir funcionando sin auth).
+`redirectPostAuth` (`server/actions/auth.ts`) revisa aceptación legal
+**antes** de honrar un `next` de invitación — el destino de la
+invitación se preserva como parámetro de `/legal/accept`, para volver
+ahí automáticamente después de aceptar.
+
+**Flujo de creación de empresa**: `createOrganizationAction` ahora
+redirige a `/onboarding` (antes iba directo a `/dashboard`) — nunca deja
+a alguien confundido sin saber qué hacer primero. Seleccionar una
+empresa YA EXISTENTE sigue yendo directo a `/dashboard`, sin pasar por
+onboarding cada vez.
+
+**UI**: portal público en `/` (módulo CPR disponible, Textil/Quality/
+Construcción marcados "Próximamente", sin funcionalidad); `/terms` y
+`/privacy` (públicas, muestran el documento activo); `/legal/accept`
+(checklist de pendientes + casilla de aceptación); `/onboarding`
+(checklist de 7 pasos + paso 8 de navegación pura + banner Demo/cuenta
+no activa). Dashboard ampliado con progreso de onboarding, tickets
+abiertos y conteo del Maestro de documentos. Detalle de empresa en la
+consola de plataforma ampliado con progreso de onboarding y tabla de
+quién aceptó qué documento legal, en qué versión y cuándo.
+
+**Pruebas**: `npm run test:launch` (`tests/unit/launch.test.ts`) cubre
+los 22 casos mínimos del sprint más varios adicionales — incluida una
+prueba explícita de que una versión nueva del mismo tipo de documento
+invalida automáticamente una aceptación anterior.
+`tests/rls/isolation.test.ts` suma 4 casos (99-102) verificando contra
+PostgreSQL real: lectura pública de documentos legales activos vía
+`anon`, bloqueo de escritura para usuarios normales, bloqueo de
+aceptación a nombre de otro usuario, y aislamiento + visibilidad de
+plataforma en la vista de onboarding. Se actualizó un test heredado de
+Sprint 10A (`tests/unit/plans.test.ts`, Corrección 9) que esperaba que
+`app/page.tsx` redirigiera literalmente a `/modules` — ya no aplica
+porque `/` es ahora una página pública real, no un redirect.
+
+## Corrección post Sprint 10D — aceptación legal endurecida y último barrido de lanzamiento
+
+Cuatro bloqueantes cerrados antes de integrar. Sin facturación, sin
+pasarela de pagos, sin IA, sin CRM, sin chat en tiempo real, sin PDF
+server-side, sin módulos Textil/Quality/Construcción funcionales, sin
+cambios de cálculo ni metodología, sin promesa de certificación ni de
+respuesta garantizada.
+
+**Bloqueante 1 — registro de aceptación legal manipulable.**
+`user_legal_acceptances_insert` (0066) solo exigía `user_id =
+auth.uid()`, sin restringir `document_type`/`version`/
+`legal_document_id`/`accepted_at`/`ip_address`/`user_agent` — un usuario
+autenticado podía insertar una fila con datos falsificados sin pasar por
+`/legal/accept`. Migración `0068`: se elimina esa política por completo
+(deny-by-default real) y se reemplaza por
+**`accept_active_legal_documents`** (RPC SECURITY DEFINER) — MISMO
+patrón que `change_trazadoc_document_status`/`reopen_support_ticket`:
+lee ella misma los documentos `terms`/`privacy` activos, inserta con
+`ON CONFLICT (user_id, legal_document_id) DO NOTHING`, y usa `FOUND`
+para contar exactamente cuántas aceptaciones fueron realmente nuevas.
+Verificado contra PostgreSQL real: primera llamada devuelve `2`
+(ambos documentos), la segunda (reintento/doble clic) devuelve `0` sin
+duplicar ni fallar; un INSERT directo, incluso a nombre de uno mismo,
+queda bloqueado. `server/actions/legal.ts` y `lib/db/legal.ts` se
+actualizaron para delegar en la RPC en vez de construir el INSERT.
+
+**Bloqueante 2 — acciones críticas sin revisión legal en servidor.**
+`createOrganizationAction`, `acceptTeamInvitationAction` y
+`updateMyProfileAction` no revisaban aceptación legal directamente —
+dependían solo de que la UI hubiera redirigido a tiempo. Nuevo helper
+**`assertMyLegalAcceptance()`** (`server/actions/legal.ts`) — a
+diferencia de `requireLegalAcceptance()` (que siempre redirige), este
+solo INFORMA si falta aceptar, dejando que cada acción decida: las 2
+primeras devuelven un error de formulario claro; `acceptTeamInvitationAction`
+redirige a `/legal/accept?next=...` preservando el token de invitación
+para volver ahí después de aceptar. `/settings/profile` también se
+protegió explícitamente (`requireLegalAcceptance("/settings/profile")`)
+porque vive **fuera** de `(shell)` a propósito (debe funcionar para
+alguien sin empresa todavía) y por eso nunca heredaba el guard del
+layout.
+
+Un detalle real de Next.js encontrado al validar con
+`timeout 300s npm run build`: un archivo `"use server"` **solo puede
+exportar funciones async** — la primera versión de
+`LEGAL_ACCEPTANCE_REQUIRED_MESSAGE` vivía como constante en
+`server/actions/legal.ts` y rompía el build. Se movió a
+`lib/domain/legal.ts` (junto a `LEGAL_ACCEPT_CHECKBOX_TEXT`, que ya
+vivía ahí correctamente desde el principio) y se reconfirmó el build
+limpio.
+
+**Bloqueante 3 — onboarding ignoraba documentos descargables.**
+`v_organization_onboarding_status` (0067) ya calculaba
+`has_document_master_item = has_trazadoc OR has_file_document`, pero
+`lib/domain/onboarding.ts` seguía leyendo solo `hasTrazadoc` para
+resolver el paso — un documento descargable subido al Maestro nunca
+marcaba el paso como completo. Corregido: el paso ahora lee
+`hasDocumentMasterItem` (se agregó a `OnboardingStatusFacts`,
+conservando `hasTrazadoc` aparte por su valor informativo propio, sin
+usarlo ya para esta decisión). Título/descripción del paso actualizados
+para reflejar ambas rutas.
+
+**Bloqueante 4 — lenguaje de lanzamiento desactualizado.** El dashboard
+seguía diciendo *"Trazaloop — núcleo activo"* y *"el cálculo de
+contenido reciclado llega en el siguiente sprint"* (ya existe desde
+hace varios sprints); el layout de autenticación seguía mostrando
+*"trazaloop · núcleo v0.1"*. Actualizados a *"Trazaloop CPR"* /
+*"Gestiona diagnóstico, catálogos, evidencias, trazabilidad, cálculo de
+contenido reciclado, TrazaDocs, maestro documental y soporte"* y
+*"Trazaloop CPR · beta controlada"* respectivamente.
+
+**Pruebas**: `npm run test:launch` suma 15 casos de corrección — una de
+ellas (11-13) reveló un bug real en mi propio test al escribirla (el
+límite de búsqueda de texto cortaba antes del cuerpo real del `case`),
+corregido antes de dar el caso por válido.
+`tests/rls/isolation.test.ts` suma 3 casos (103-105) verificando contra
+PostgreSQL real: INSERT directo sigue bloqueado tras el endurecimiento,
+idempotencia real de la RPC (2 luego 0, sin duplicar), y que los datos
+guardados (tipo/versión/fecha) son siempre los reales del servidor, no
+lo que un cliente hubiera podido enviar.
+
+## Corrección final Sprint 10D — completed_steps/progress_percent cuentan documentos descargables
+
+Último bloqueante antes de integrar. Sin facturación, sin pasarela de
+pagos, sin IA, sin CRM, sin chat en tiempo real, sin PDF server-side,
+sin módulos Textil/Quality/Construcción funcionales, sin cambios de
+cálculo ni metodología, sin promesa de certificación ni de respuesta
+garantizada.
+
+**Causa del desfase**: la ronda anterior corrigió `has_document_master_item`
+en `v_organization_onboarding_status` (0067) para combinar documento
+vivo y descargable, y también corrigió `lib/domain/onboarding.ts` para
+que el CHECKLIST visual leyera esa columna combinada — pero
+`completed_steps` y `progress_percent`, dentro de la MISMA vista SQL,
+seguían sumando el paso documental con la expresión aislada
+`coalesce(td.has_trazadoc, false)`, sin combinarla con
+`fd.has_file_document`. El checklist podía mostrar el paso como
+completado mientras el contador numérico y el porcentaje lo seguían
+contando como pendiente — un desfase visible en `/onboarding`,
+`/dashboard` y `/platform/organizations/[id]` a la vez, porque los 3
+leen la misma vista.
+
+**Migración `0069_onboarding_document_master_progress_fix.sql`**:
+`CREATE OR REPLACE VIEW` con el cuerpo exacto de 0067 — mismas columnas,
+mismo orden — corrigiendo únicamente las 2 expresiones internas de
+`completed_steps` y `progress_percent` para usar
+`coalesce(td.has_trazadoc, false) or coalesce(fd.has_file_document, false)`,
+igual que `has_document_master_item`. Verificado contra PostgreSQL real
+con los 3 escenarios sobre la misma organización: sin ningún documento
+(`completed_steps=0`), con solo un documento descargable
+(`has_trazadoc=false`, `has_document_master_item=true`,
+`completed_steps` sube en exactamente 1 — el caso que antes se quedaba
+mal contado en 0), y con solo un documento vivo (mismo incremento,
+confirmando que no hubo regresión).
+
+**Pruebas**: `npm run test:launch` suma 5 casos de corrección.
+`tests/rls/isolation.test.ts` suma 1 caso (106) verificando contra
+PostgreSQL real el incremento exacto de `completed_steps`/
+`progress_percent` al agregar un documento descargable sin documento
+vivo, sobre una organización confirmada sin ningún documento previo.
+
 ## Decisiones y riesgos pendientes
 
 0. **`test:rls` requiere Supabase local con Docker** (no ejecutable en todo entorno; ver sección de pruebas).

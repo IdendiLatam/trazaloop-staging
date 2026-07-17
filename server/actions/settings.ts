@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
 import { requireSession } from "@/lib/auth/require-session";
+import { assertMyLegalAcceptance } from "@/server/actions/legal";
+import { LEGAL_ACCEPTANCE_REQUIRED_MESSAGE } from "@/lib/domain/legal";
 import {
   getCompanySettings,
   updateCompanySettings,
@@ -59,6 +62,11 @@ export async function updateCompanySettingsAction(
     return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
   }
 
+  // Sprint 10A (Bloqueante 3): empresa suspended/cancelled queda en modo
+  // solo lectura.
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const input = {
     name: String(formData.get("name") ?? ""),
     legalName: String(formData.get("legal_name") ?? ""),
@@ -108,6 +116,10 @@ export async function uploadCompanyLogoAction(
   const validation = validateLogoFile({ size: file.size, type: file.type });
   if (validation.error) return { error: validation.error };
 
+  // Sprint 10A (Parte 8): cuota de almacenamiento del plan.
+  const storageCheck = await checkStorageAvailable(file.size);
+  if (!storageCheck.allowed) return { error: storageCheck.error };
+
   const bytes = await file.arrayBuffer();
   const extension = logoExtensionForType(file.type);
   const { error } = await uploadCompanyLogo(org.organizationId, bytes, file.type, extension);
@@ -125,6 +137,9 @@ export async function removeCompanyLogoAction(
   if (!canEditCompany(org.roleCode)) {
     return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
   }
+
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const storagePath = String(formData.get("storage_path") ?? "");
   if (!storagePath) return { error: "No hay logo para quitar." };
@@ -149,6 +164,13 @@ export async function updateMyProfileAction(
   formData: FormData
 ): Promise<SettingsActionState> {
   const { user } = await requireSession();
+
+  // Sprint 10D (Bloqueante 2): nunca confiar solo en que la UI haya
+  // redirigido a tiempo a /legal/accept.
+  const { hasAccepted } = await assertMyLegalAcceptance();
+  if (!hasAccepted) {
+    return { error: LEGAL_ACCEPTANCE_REQUIRED_MESSAGE };
+  }
 
   const input = {
     fullName: String(formData.get("full_name") ?? ""),

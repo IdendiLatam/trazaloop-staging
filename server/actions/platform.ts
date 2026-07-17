@@ -2,17 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
+import { isPlanCode } from "@/lib/plans/types";
 import {
   checkPlatformStatus,
   listPlatformOrganizations,
   getPlatformOrganizationDetail,
+  getPlatformOrganizationMembers,
+  getPlatformOrganizationPendingInvitations,
   createPlatformOrganization,
   listPlatformStaff,
   addPlatformStaff,
   updatePlatformStaffStatus,
   type PlatformOrganizationRow,
+  type PlatformOrganizationMemberRow,
+  type PlatformOrganizationInvitationRow,
   type PlatformStaffRow,
 } from "@/lib/db/platform";
+import { listPlatformSupportTickets } from "@/lib/db/support";
+import { listOrganizationMembersLegalAcceptances, type UserLegalAcceptanceSummary } from "@/lib/db/legal";
+import { getOrganizationOnboardingStatus, type OnboardingStatusRow } from "@/lib/db/onboarding";
 import {
   canCreatePlatformOrganization,
   canManagePlatformStaff,
@@ -42,6 +50,13 @@ export type PlatformOverview = {
   totalMembers: number;
   totalOpenFeedback: number;
   totalCriticalFeedback: number;
+  // Sprint 10C (Bloqueante 5): estadísticas reales del Centro de
+  // soporte — reemplazan a totalOpenFeedback/totalCriticalFeedback como
+  // lo que se MUESTRA en pantalla; los 2 campos anteriores se conservan
+  // (datos históricos de implementation_feedback), pero ya no son lo
+  // que ve el superadmin en el resumen principal.
+  totalOpenTickets: number;
+  totalUrgentTickets: number;
   organizationsWithImplementationActivity: number;
 };
 
@@ -55,13 +70,16 @@ function hasImplementationActivity(org: PlatformOrganizationRow): boolean {
 
 export async function getPlatformOverviewAction(): Promise<PlatformOverview> {
   const { isSuperadmin } = await requirePlatformStaff();
-  const orgs = await listPlatformOrganizations();
+  const [orgs, tickets] = await Promise.all([listPlatformOrganizations(), listPlatformSupportTickets()]);
+  const openTicketStatuses = new Set(["open", "assigned", "waiting_customer", "in_progress"]);
   return {
     isSuperadmin,
     organizationsCount: orgs.length,
     totalMembers: orgs.reduce((sum, o) => sum + o.membersCount, 0),
     totalOpenFeedback: orgs.reduce((sum, o) => sum + o.openFeedbackCount, 0),
     totalCriticalFeedback: orgs.reduce((sum, o) => sum + o.criticalFeedbackCount, 0),
+    totalOpenTickets: tickets.filter((t) => openTicketStatuses.has(t.status)).length,
+    totalUrgentTickets: tickets.filter((t) => t.priority === "urgent" && openTicketStatuses.has(t.status)).length,
     organizationsWithImplementationActivity: orgs.filter(hasImplementationActivity).length,
   };
 }
@@ -71,11 +89,24 @@ export async function listPlatformOrganizationsAction(): Promise<PlatformOrganiz
   return listPlatformOrganizations();
 }
 
-export async function getPlatformOrganizationDetailAction(
-  organizationId: string
-): Promise<PlatformOrganizationRow | null> {
+export async function getPlatformOrganizationDetailAction(organizationId: string): Promise<{
+  org: PlatformOrganizationRow | null;
+  members: PlatformOrganizationMemberRow[];
+  invitations: PlatformOrganizationInvitationRow[];
+  legalAcceptances: UserLegalAcceptanceSummary[];
+  onboarding: OnboardingStatusRow | null;
+}> {
   await requirePlatformStaff();
-  return getPlatformOrganizationDetail(organizationId);
+  const [org, members, invitations] = await Promise.all([
+    getPlatformOrganizationDetail(organizationId),
+    getPlatformOrganizationMembers(organizationId),
+    getPlatformOrganizationPendingInvitations(organizationId),
+  ]);
+  const [legalAcceptances, onboarding] = await Promise.all([
+    listOrganizationMembersLegalAcceptances(members.map((m) => m.userId)),
+    getOrganizationOnboardingStatus(organizationId),
+  ]);
+  return { org, members, invitations, legalAcceptances, onboarding };
 }
 
 export async function listPlatformStaffAction(): Promise<{
@@ -114,6 +145,7 @@ export async function createPlatformOrganizationAction(
     return { error: "Solo un superadministrador de plataforma puede crear empresas desde esta consola." };
   }
 
+  const planCodeRaw = String(formData.get("plan_code") ?? "demo");
   const input = {
     name: String(formData.get("name") ?? ""),
     legalName: String(formData.get("legal_name") ?? ""),
@@ -123,6 +155,7 @@ export async function createPlatformOrganizationAction(
     contactEmail: String(formData.get("contact_email") ?? ""),
     adminName: String(formData.get("admin_name") ?? ""),
     adminEmail: String(formData.get("admin_email") ?? ""),
+    planCode: isPlanCode(planCodeRaw) ? planCodeRaw : "demo",
   };
 
   const validation = validatePlatformOrgDraft(input);

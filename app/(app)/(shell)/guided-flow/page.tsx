@@ -177,10 +177,10 @@ export default async function GuidedFlowPage() {
 
       <div className="flex justify-end">
         <Link
-          href="/implementation/feedback?module=guided_flow"
+          href="/support/new?module=traceability"
           className="text-sm text-loop hover:underline"
         >
-          Registrar feedback
+          Crear ticket de soporte
         </Link>
       </div>
 

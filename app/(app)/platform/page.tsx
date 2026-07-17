@@ -11,16 +11,21 @@ import {
   listPlatformOrganizationsAction,
   listPlatformStaffAction,
 } from "@/server/actions/platform";
+import { listAllOrganizationUsage } from "@/lib/db/plans";
 import { OrganizationsTable } from "@/components/domain/platform/organizations-table";
 import { PlatformStaffList } from "@/components/domain/platform/staff-list";
 
 export default async function PlatformPage() {
   await requirePlatformStaff();
-  const [overview, organizations, staff] = await Promise.all([
+  const [overview, organizations, staff, usage] = await Promise.all([
     getPlatformOverviewAction(),
     listPlatformOrganizationsAction(),
     listPlatformStaffAction(),
+    listAllOrganizationUsage(),
   ]);
+  const planByOrgId = Object.fromEntries(
+    usage.map((u) => [u.organizationId, { planCode: u.planCode, storagePercentUsed: u.storagePercentUsed }])
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -57,8 +62,8 @@ export default async function PlatformPage() {
             { label: "Empresas registradas", value: overview.organizationsCount },
             { label: "Empresas con implementación activa", value: overview.organizationsWithImplementationActivity },
             { label: "Miembros totales", value: overview.totalMembers },
-            { label: "Feedback abierto", value: overview.totalOpenFeedback },
-            { label: "Feedback crítico", value: overview.totalCriticalFeedback },
+            { label: "Tickets abiertos", value: overview.totalOpenTickets },
+            { label: "Tickets urgentes", value: overview.totalUrgentTickets },
           ].map((c) => (
             <div key={c.label} className="rounded-lg border border-hairline bg-surface p-4">
               <dd className="code text-xl font-semibold">{c.value}</dd>
@@ -66,18 +71,21 @@ export default async function PlatformPage() {
             </div>
           ))}
         </dl>
+        <Link href="/platform/support" className="text-sm text-loop hover:underline">
+          Ver todos los tickets de soporte →
+        </Link>
       </section>
 
       {/* 2 y 3. Empresas registradas (con su actividad de implementación en
           las mismas columnas: materiales/evidencias/lotes/cálculos). */}
       <section className="space-y-3">
         <h2 className="eyebrow">Empresas registradas</h2>
-        <OrganizationsTable organizations={organizations} />
+        <OrganizationsTable organizations={organizations} planByOrgId={planByOrgId} />
       </section>
 
-      {/* 4. Feedback abierto — ya resumido arriba; el detalle vive en cada
-          empresa (Ver implementación) para no duplicar el motor de
-          feedback del Sprint 6. */}
+      {/* 4. Tickets de soporte — ya resumidos arriba (Sprint 10C); el
+          detalle vive en /platform/support y en cada empresa (Ver
+          implementación) para no duplicar el motor de tickets. */}
 
       {/* 5. Accesos rápidos + personal de plataforma. */}
       <section className="space-y-3">

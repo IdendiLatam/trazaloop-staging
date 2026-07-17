@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkOrganizationCanMutate } from "@/server/actions/plans";
 import {
   listLatestCalculations,
   listCalculationsForBatch,
@@ -33,6 +34,14 @@ export async function calculateRecycledContentAction(
   outputBatchId: string
 ): Promise<{ error: string | null }> {
   const org = await requireActiveOrg();
+
+  // Sprint 10A (corrección final): empresa suspended/cancelled puede ver
+  // cálculos existentes, pero no generar nuevos. No cambia la RPC
+  // calculate_recycled_content ni la metodología: solo agrega esta
+  // barrera antes de invocarla.
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const supabase = await createServerClient();
 
   // Defensa previa: el lote debe pertenecer a la empresa activa (la RPC

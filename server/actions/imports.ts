@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkFeatureEnabled } from "@/server/actions/plans";
 import { createServerClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/csv";
 import {
@@ -109,6 +110,12 @@ export async function validateImportCsvAction(
   if (!IMPORT_ROLES.includes(org.roleCode as (typeof IMPORT_ROLES)[number])) {
     return { ...emptyPreview, error: "Tu rol no permite importar datos en esta empresa." };
   }
+
+  // Sprint 10A (Bloqueante 2): Demo bloquea importaciones desde el PRIMER
+  // paso — validar ya crea import_jobs/import_job_rows reales, no es un
+  // paso "sin efecto" que se pueda dejar pasar.
+  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  if (!featureCheck.allowed) return { ...emptyPreview, error: featureCheck.error };
 
   const entityRaw = String(formData.get("entity_type") ?? "");
   if (!isImportEntity(entityRaw)) {
@@ -226,6 +233,10 @@ export async function commitImportAction(
   if (!IMPORT_ROLES.includes(org.roleCode as (typeof IMPORT_ROLES)[number])) {
     return { ...emptyCommit, error: "Tu rol no permite confirmar importaciones en esta empresa." };
   }
+
+  // Sprint 10A (Parte 8): Demo no incluye importaciones.
+  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  if (!featureCheck.allowed) return { ...emptyCommit, error: featureCheck.error };
 
   const jobId = String(formData.get("import_job_id") ?? "");
   if (!jobId) return { ...emptyCommit, error: "Falta el identificador de la importación a confirmar." };

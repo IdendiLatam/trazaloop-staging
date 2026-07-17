@@ -91,10 +91,10 @@ export default async function CalculationDetailPage({
 
       <div className="flex justify-end">
         <Link
-          href={`/implementation/feedback?module=recycled_content&related_entity_type=output_batch&related_entity_id=${batch.id}`}
+          href="/support/new?module=recycled_content"
           className="text-sm text-loop hover:underline"
         >
-          Registrar feedback sobre este cálculo
+          Crear ticket de soporte sobre este cálculo
         </Link>
       </div>
 

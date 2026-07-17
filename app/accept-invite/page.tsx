@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
+import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getInvitationPreviewAction } from "@/server/actions/team";
 import { ROLE_LABEL, normalizeEmail, isExpired } from "@/lib/domain/team";
 import { AcceptInviteForm } from "@/components/domain/team/accept-invite-form";
@@ -75,6 +76,12 @@ export default async function AcceptInvitePage({
       </div>
     );
   }
+
+  // Sprint 10D (Parte 6): alguien con sesión ya abierta que navega
+  // DIRECTO a un enlace de invitación (sin pasar por el login normal)
+  // también debe aceptar términos/política primero — mismo criterio que
+  // el resto del espacio protegido.
+  await requireLegalAcceptance(returnHere);
 
   const { data: preview, error } = await getInvitationPreviewAction(token);
 

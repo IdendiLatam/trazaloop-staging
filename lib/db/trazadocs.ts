@@ -86,6 +86,7 @@ export type DocumentDetail = {
   organizationId: string;
   blueprintId: string | null;
   sourceType: SourceType;
+  categoryCode: string;
   code: string | null;
   title: string;
   description: string | null;
@@ -123,6 +124,7 @@ export async function getDocument(orgId: string, documentId: string): Promise<Do
     organizationId: doc.organization_id as string,
     blueprintId: (doc.blueprint_id as string | null) ?? null,
     sourceType: doc.source_type as SourceType,
+    categoryCode: (doc.category_code as string) ?? "other",
     code: (doc.code as string | null) ?? null,
     title: doc.title as string,
     description: (doc.description as string | null) ?? null,
@@ -200,15 +202,17 @@ export async function getBlueprintSections(blueprintId: string): Promise<Bluepri
 
 export async function getBlueprintByIdForCompany(
   blueprintId: string
-): Promise<{ id: string; name: string } | null> {
+): Promise<{ id: string; name: string; documentType: DocumentType } | null> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("trazadoc_blueprints")
-    .select("id, name")
+    .select("id, name, document_type")
     .eq("id", blueprintId)
     .eq("status", "active")
     .maybeSingle();
-  return data ? { id: data.id as string, name: data.name as string } : null;
+  return data
+    ? { id: data.id as string, name: data.name as string, documentType: data.document_type as DocumentType }
+    : null;
 }
 
 // ---------------------------------------------------------------------------

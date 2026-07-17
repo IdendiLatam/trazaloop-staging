@@ -91,7 +91,7 @@ npx supabase db push
 ```
 
 `TU_PROJECT_REF` es el identificador del proyecto (Settings → General). Deben
-aplicarse las migraciones `0001` … `0049` en orden.
+aplicarse las migraciones `0001` … `0069` en orden.
 
 Verifica las semillas en el SQL Editor de Supabase:
 
@@ -111,10 +111,19 @@ select id, public from storage.buckets where id = 'organization-assets';  -- pub
 - **Bucket (Sprint 9.2)**: la migración `0049` crea `organization-assets`
   privado (logo de empresa) — separado de `evidences` a propósito.
   Confírmalo con la consulta anterior.
+- **Bucket (Sprint 10B)**: la migración `0058` crea `trazadocs-documents`
+  privado (documentos descargables del Maestro de documentos) — separado
+  de `evidences` y de `organization-assets`. Confírmalo con la consulta
+  anterior.
 - **Auth**: Authentication → URL Configuration:
   - *Site URL*: `https://tu-proyecto.vercel.app`
   - *Additional Redirect URLs*: agrega `http://localhost:3000/**` para
     desarrollo y `https://tu-proyecto.vercel.app/**`.
+- **Confirmación de correo (Sprint 10A)**: Authentication → Providers →
+  Email → **Confirm email = enabled**. Sin esto, un registro público
+  entraría con sesión completa sin haber confirmado el correo — Trazaloop
+  no implementa un sistema propio de confirmación, depende por completo
+  de este ajuste de Supabase.
 
 ## 10. Crear el proyecto en Vercel
 

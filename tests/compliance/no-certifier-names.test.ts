@@ -48,9 +48,33 @@ const BANNED: { pattern: RegExp; label: string }[] = [
   // certificación" como promesa (ya cubierto arriba para "obtener/garantizar",
   // aquí se cubre específicamente el adjetivo "listo").
   { pattern: /list[oa]s?\s+para\s+(la\s+)?certificaci[oó]n/i, label: "promesa fuerte de certificación" },
+  // Sprint 10C: el Centro de soporte tiene un tiempo OBJETIVO de primera
+  // respuesta (1 día hábil) — nunca una respuesta garantizada ni un SLA
+  // contractual.
+  { pattern: /respuesta\s+garantizada/i, label: "promesa de respuesta garantizada (usar \"tiempo objetivo\")" },
+  { pattern: /garant[ií]a\s+de\s+respuesta/i, label: "promesa de respuesta garantizada (usar \"tiempo objetivo\")" },
+  // Sprint 10C (Bloqueante 3): "Feedback" ya no es el flujo principal
+  // visible — el Centro de soporte lo reemplazó. Estos patrones evitan
+  // que el lenguaje antiguo vuelva a colarse en pantalla o en
+  // documentación operativa. Nombres internos de código
+  // (implementation_feedback, FeedbackRow, FeedbackStatusBadge, etc.)
+  // no llevan espacio entre palabras, así que estos patrones —que
+  // exigen espacio— nunca los alcanzan.
+  { pattern: /[Rr]egistrar\s+feedback/, label: "lenguaje de feedback (usar \"crear ticket de soporte\")" },
+  { pattern: /[Ff]eedback\s+abierto/, label: "lenguaje de feedback (usar \"tickets abiertos\")" },
+  { pattern: /[Ff]eedback\s+cr[ií]tico/, label: "lenguaje de feedback (usar \"tickets urgentes/de alta prioridad\")" },
 ];
 
 const SKIP_DIRS = new Set(["node_modules", ".next", ".git"]);
+
+// Sprint 10C: migraciones YA APLICADAS nunca se editan retroactivamente
+// (0034 se reemplazó vía CREATE OR REPLACE VIEW en 0065, nunca editando
+// el archivo original) — el texto histórico que queda ahí describe lo
+// que el sistema hacía EN ESE MOMENTO, no lo que hace hoy. Se excluye
+// explícitamente, un archivo a la vez, nunca un directorio completo.
+const SUPERSEDED_FILES = new Set([
+  "supabase/migrations/0034_implementation_views.sql",
+]);
 
 function* walk(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
@@ -79,6 +103,8 @@ for (const dir of SCAN_DIRS) {
   }
   for (const file of entries) {
     scanned += 1;
+    const relPath = relative(ROOT, file);
+    if (SUPERSEDED_FILES.has(relPath)) continue;
     const content = readFileSync(file, "utf8");
     const lines = content.split("\n");
     lines.forEach((line, i) => {

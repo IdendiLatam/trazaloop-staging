@@ -22,11 +22,15 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
 [ ] npm run test:settings pasa
 [ ] npm run test:platform pasa
 [ ] npm run test:trazadocs pasa
+[ ] npm run test:plans pasa
+[ ] npm run test:document-master pasa
+[ ] npm run test:support pasa
+[ ] npm run test:launch pasa
 [ ] npm run test:smoke pasa contra staging
 [ ] npm run test:rls pasa contra staging o local (obligatorio antes de producción real)
 [ ] .env.local no está en Git
 [ ] tsconfig.tsbuildinfo no está en Git
-[ ] Supabase migrations aplicadas (0001 … 0049)
+[ ] Supabase migrations aplicadas (0001 … 0069)
 [ ] Bucket evidences existe y NO es público
 [ ] Auth redirect URLs configuradas (Site URL + Additional Redirect URLs)
 [ ] Vercel env vars configuradas (las 5 de .env.example, más
@@ -36,8 +40,20 @@ primeros de una vez; `test:smoke` y `test:rls` requieren Supabase configurado
     implementación → feedback → importaciones CSV → equipo/invitaciones →
     configuración de empresa/perfil → consola de plataforma con superadmin
     bootstrapeado por SQL → TrazaDocs: crear desde estructura sugerida,
-    diligenciar, enviar a revisión, aprobar, versiones, imprimir)
+    diligenciar, enviar a revisión, aprobar, versiones, imprimir →
+    empresa nueva queda en Demo → límites de Demo bloquean al 2º
+    documento/proveedor/etc. → superadmin cambia plan a Full/Extra desde
+    /platform/organizations/[id] → /modules muestra Trazaloop CPR
+    disponible y el resto "Próximamente" → superadmin suspende la empresa
+    → catálogos/evidencias/trazabilidad/cálculo/TrazaDocs/equipo/feedback
+    bloquean toda escritura con el mensaje de cuenta suspendida, pero
+    siguen mostrando los datos ya cargados → superadmin reactiva → la
+    empresa vuelve a operar con normalidad)
 ```
+
+Configuración adicional requerida en el panel de Supabase (Sprint 10A):
+Authentication → Providers → Email → **Confirm email = enabled** — ver
+`docs/PLANS_AND_LIMITS_GUIDE.md` §8.
 
 Notas:
 

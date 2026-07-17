@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkFeatureEnabled } from "@/server/actions/plans";
 import { parseCsv } from "@/lib/csv";
 import {
   IMPORT_TEMPLATES,
@@ -229,6 +230,11 @@ export async function validateImportAction(
     error: null,
   };
 
+  // Sprint 10A (Bloqueante 2): mismo criterio que validateImportCsvAction
+  // — validar ya escribe un import_job real, no es un paso "sin efecto".
+  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  if (!featureCheck.allowed) return { ...empty, error: featureCheck.error };
+
   if (!IMPORT_TEMPLATES[entity]) return { ...empty, error: "Entidad no soportada." };
 
   const parsed = parseCsv(csvText);
@@ -286,6 +292,10 @@ export async function commitImportAction(
 ): Promise<ImportCommitResult> {
   const org = await requireActiveOrg();
   const supabase = await createServerClient();
+
+  // Sprint 10A (Parte 8): Demo no incluye importaciones.
+  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  if (!featureCheck.allowed) return { inserted: 0, error: featureCheck.error };
 
   const errors = await validateRows(entity, rows, org.organizationId);
   if (errors.length > 0) {

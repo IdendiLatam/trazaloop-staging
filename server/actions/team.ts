@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkFeatureEnabled, checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { assertMyLegalAcceptance } from "@/server/actions/legal";
 import { requireSession } from "@/lib/auth/require-session";
 import { writeActiveOrgCookie } from "@/lib/auth/active-organization";
 import { getUserOrganizations, getActiveOrganization } from "@/lib/db/organizations";
@@ -143,6 +145,12 @@ export async function createTeamInvitationAction(
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
 
+  // Sprint 10A (Parte 8): Demo deshabilita invitaciones/roles por completo.
+  const featureCheck = await checkFeatureEnabled("roles_enabled");
+  if (!featureCheck.allowed) return { error: featureCheck.error };
+  const limitCheck = await checkResourceLimit("team_members");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
+
   const email = String(formData.get("email") ?? "").trim();
   const roleCode = String(formData.get("role_code") ?? "").trim();
   if (!isTeamRole(roleCode)) return { error: "Selecciona un rol válido." };
@@ -177,6 +185,9 @@ export async function revokeTeamInvitationAction(
   if (!canManageTeam(org.roleCode)) {
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const invitationId = String(formData.get("invitation_id") ?? "");
   if (!invitationId) return { error: "Falta el identificador de la invitación." };
 
@@ -197,6 +208,15 @@ export async function acceptTeamInvitationAction(
   await requireSession();
   const token = String(formData.get("token") ?? "");
   if (!token) return { error: "Falta el token de la invitación." };
+
+  // Sprint 10D (Bloqueante 2): revisar aceptación legal ANTES de aceptar
+  // la invitación — redirige (no solo devuelve error) porque el destino
+  // correcto es volver aquí mismo después de aceptar, preservando el
+  // token en la URL.
+  const { hasAccepted } = await assertMyLegalAcceptance();
+  if (!hasAccepted) {
+    redirect(`/legal/accept?next=${encodeURIComponent(`/accept-invite?token=${encodeURIComponent(token)}`)}`);
+  }
 
   const { organizationId, error } = await acceptInvitationByToken(token);
   if (error || !organizationId) {
@@ -221,6 +241,13 @@ export async function updateMemberRoleAction(
   if (!canManageTeam(org.roleCode)) {
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
+
+  // Sprint 10A (Bloqueante 2): Demo no incluye roles/invitaciones — este
+  // chequeo también bloquea si la suscripción está suspended/cancelled
+  // (checkFeatureEnabled revisa el estado del plan primero).
+  const featureCheck = await checkFeatureEnabled("roles_enabled");
+  if (!featureCheck.allowed) return { error: featureCheck.error };
+
   const membershipId = String(formData.get("membership_id") ?? "");
   const roleCode = String(formData.get("role_code") ?? "").trim();
   if (!membershipId) return { error: "Falta el identificador del miembro." };
@@ -247,6 +274,16 @@ export async function deactivateMemberAction(
   if (!canManageTeam(org.roleCode)) {
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
+
+  // Sprint 10A (corrección final): a diferencia de updateMemberRoleAction/
+  // reactivateMemberAction (que revisan roles_enabled y por lo tanto ya
+  // bloquean Demo activo), desactivar SIGUE permitido en Demo activo —
+  // ayuda a volver dentro del límite. Solo se bloquea si la suscripción
+  // está suspended/cancelled (checkOrganizationCanMutate, no
+  // checkFeatureEnabled).
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const membershipId = String(formData.get("membership_id") ?? "");
   if (!membershipId) return { error: "Falta el identificador del miembro." };
 
@@ -270,6 +307,12 @@ export async function reactivateMemberAction(
   if (!canManageTeam(org.roleCode)) {
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
+
+  // Sprint 10A (Bloqueante 2): mismo criterio que updateMemberRoleAction
+  // — reactivar es, en esencia, volver a conceder un rol activo.
+  const featureCheck = await checkFeatureEnabled("roles_enabled");
+  if (!featureCheck.allowed) return { error: featureCheck.error };
+
   const membershipId = String(formData.get("membership_id") ?? "");
   if (!membershipId) return { error: "Falta el identificador del miembro." };
 

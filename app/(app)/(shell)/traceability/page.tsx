@@ -51,10 +51,10 @@ export default async function TraceabilityIndexPage() {
             Ver matriz de evidencias
           </Link>
           <Link
-            href="/implementation/feedback?module=traceability"
+            href="/support/new?module=traceability"
             className="rounded-md border border-hairline bg-surface px-3 py-2 text-sm font-medium text-ink-soft hover:border-loop"
           >
-            Registrar feedback sobre trazabilidad
+            Crear ticket de soporte sobre trazabilidad
           </Link>
         </div>
       </header>

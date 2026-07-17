@@ -35,7 +35,7 @@ export const ROLE_DESCRIPTION: Record<TeamRoleCode, string> = {
   quality:
     "Puede validar evidencias, revisar cálculos y apoyar la preparación técnica.",
   consultant:
-    "Puede cargar y organizar información, importar datos y registrar feedback, pero no valida evidencias.",
+    "Puede cargar y organizar información, importar datos y crear tickets de soporte, pero no valida evidencias.",
 };
 
 /** Rango relativo de cada rol, usado SOLO para la regla "no invitar con rol
@@ -341,17 +341,39 @@ export function isSafeAcceptInviteNext(next: string | null | undefined): next is
 /** Convierte un PostAuthDestination en una ruta interna para redirect().
  *  Función pura y SÍNCRONA a propósito: vive aquí (no en
  *  server/actions/team.ts) porque todo export de un archivo "use server"
- *  debe ser async — esta no necesita serlo. */
+ *  debe ser async — esta no necesita serlo.
+ *
+ *  Sprint 10A (Bloqueante 5): /modules es la entrada interna principal —
+ *  dashboard/select-org/create-org pasan TODOS por ahí primero (la
+ *  tarjeta "Trazaloop CPR → Entrar" ya resuelve el destino final por su
+ *  cuenta, con la MISMA lógica). Una invitación pendiente NUNCA pasa por
+ *  /modules: ya es un destino explícito y más específico que elegir
+ *  módulo, igual que un `next=/accept-invite?token=...` explícito en la
+ *  URL de login (ver isSafeAcceptInviteNext, que se evalúa ANTES que
+ *  esta función y tiene prioridad total). */
 export function postAuthDestinationPath(dest: PostAuthDestination): string {
+  switch (dest.kind) {
+    case "dashboard":
+    case "select-org":
+    case "create-org":
+      return "/modules";
+    case "accept-invite":
+      return `/accept-invite?token=${encodeURIComponent(dest.token)}`;
+  }
+}
+
+/** La ruta a la que de verdad debe llegar el usuario UNA VEZ que ya eligió
+ *  "Trazaloop CPR" en /modules — aquí sí se usa el destino real
+ *  (dashboard/select-org), nunca /modules de nuevo (evita un ciclo). */
+export function moduleEntryDestinationPath(dest: PostAuthDestination): string {
   switch (dest.kind) {
     case "dashboard":
       return "/dashboard";
     case "select-org":
+    case "create-org":
       return "/select-org";
     case "accept-invite":
       return `/accept-invite?token=${encodeURIComponent(dest.token)}`;
-    case "create-org":
-      return "/select-org";
   }
 }
 

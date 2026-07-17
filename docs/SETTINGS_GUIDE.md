@@ -29,6 +29,10 @@ los documentos TrazaDocs al imprimir o guardar como PDF** desde el
 navegador (`/trazadocs/[id]/print`) — si no hay logo cargado, la
 impresión simplemente no muestra ninguno, nunca una imagen rota.
 
+El logo cuenta contra la **cuota de almacenamiento** del plan de la
+empresa (Sprint 10A) — 50 MB en Demo, 500 MB en Full, 5 GB en Extra,
+compartida con las evidencias. Ver `docs/PLANS_AND_LIMITS_GUIDE.md`.
+
 ## 2. Qué roles pueden editar
 
 - **Admin**: puede ver y editar los datos de empresa.

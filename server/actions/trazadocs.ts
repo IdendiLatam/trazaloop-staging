@@ -5,6 +5,9 @@ import { redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
+import { checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { findFileDocumentByNormalizedTitle } from "@/lib/db/trazadocs-master";
+import { DUPLICATE_MASTER_TITLE_MESSAGE } from "@/lib/domain/trazadocs-master";
 import {
   listDocuments,
   getDocument,
@@ -165,6 +168,11 @@ export async function createDocumentFromBlueprintAction(
     return { error: "Tu rol no permite crear documentos en TrazaDocs." };
   }
 
+  // Sprint 10A (Parte 8): límite de plan — Demo permite 2 documentos
+  // TrazaDocs por empresa.
+  const limitCheck = await checkResourceLimit("documents_trazadocs");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
+
   const blueprintId = String(formData.get("blueprint_id") ?? "");
   const blueprint = await getBlueprintByIdForCompany(blueprintId);
   if (!blueprint) {
@@ -179,7 +187,7 @@ export async function createDocumentFromBlueprintAction(
     return { error: DUPLICATE_BLUEPRINT_MESSAGE, documentId: existingFromBlueprint.id };
   }
 
-  const payload = buildSuggestedDocumentInsertPayload(blueprint.id, blueprint.name, user.id);
+  const payload = buildSuggestedDocumentInsertPayload(blueprint.id, blueprint.name, user.id, blueprint.documentType);
 
   // Regla 1-3: título duplicado (normalizado) dentro de la misma empresa.
   // El nombre del documento sugerido es el nombre del blueprint — chequeo
@@ -188,6 +196,12 @@ export async function createDocumentFromBlueprintAction(
   const existingByTitle = await findDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(payload.title));
   if (existingByTitle) {
     return { error: DUPLICATE_TITLE_MESSAGE, documentId: existingByTitle.id };
+  }
+  // Sprint 10B (Parte 18): anti-duplicado CRUZADO — también contra
+  // documentos descargables del Maestro de documentos, mismo mensaje.
+  const existingFileByTitle = await findFileDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(payload.title));
+  if (existingFileByTitle) {
+    return { error: DUPLICATE_MASTER_TITLE_MESSAGE };
   }
 
   const { id: documentId, error: docError } = await insertDocument(org.organizationId, payload);
@@ -231,6 +245,11 @@ export async function createCustomDocumentAction(
     return { error: "Tu rol no permite crear documentos en TrazaDocs." };
   }
 
+  // Sprint 10A (Parte 8): límite de plan — Demo permite 2 documentos
+  // TrazaDocs por empresa (sugeridos + libres cuentan juntos).
+  const limitCheck = await checkResourceLimit("documents_trazadocs");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
+
   const input = {
     title: String(formData.get("title") ?? ""),
     code: String(formData.get("code") ?? ""),
@@ -246,6 +265,10 @@ export async function createCustomDocumentAction(
   const existingByTitle = await findDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(input.title));
   if (existingByTitle) {
     return { error: DUPLICATE_TITLE_MESSAGE, documentId: existingByTitle.id };
+  }
+  const existingFileByTitle = await findFileDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(input.title));
+  if (existingFileByTitle) {
+    return { error: DUPLICATE_MASTER_TITLE_MESSAGE };
   }
 
   const payload = buildCustomDocumentInsertPayload({ ...input, ownerId: user.id });
@@ -275,6 +298,9 @@ export async function updateDocumentMetadataAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "El nombre del documento no puede estar vacío." };
@@ -299,6 +325,9 @@ export async function updateDocumentSectionsAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
 
   const updates: { sectionId: string; content: string }[] = [];
@@ -322,6 +351,9 @@ export async function addCustomSectionAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
   const title = String(formData.get("title") ?? "");
   const sortOrder = Number(formData.get("sort_order") ?? "0");
@@ -350,6 +382,9 @@ export async function deleteDocumentSectionAction(
   if (!canDeleteSection(org.roleCode)) {
     return { error: "Tu rol no permite eliminar secciones." };
   }
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
   const sectionId = String(formData.get("section_id") ?? "");
   const { error } = await deleteSection(org.organizationId, sectionId);
@@ -372,6 +407,9 @@ export async function deleteDraftTrazadocDocumentAction(
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
   const { user } = await requireSession();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
 
   const doc = await getDocument(org.organizationId, documentId);
@@ -416,6 +454,9 @@ export async function moveSectionAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const documentId = String(formData.get("document_id") ?? "");
   const sectionId = String(formData.get("section_id") ?? "");
   const currentOrder = Number(formData.get("current_order") ?? "0");
@@ -441,6 +482,14 @@ async function transition(
   note: string | null
 ): Promise<TrazadocsActionState> {
   await requireActiveOrg();
+
+  // Sprint 10A (Bloqueante 3): las 6 acciones de transición de estado
+  // (enviar a revisión, aprobar, marcar obsoleto, reactivar, crear
+  // versión en borrador desde aprobado, guardar nueva versión) comparten
+  // este único helper — un solo chequeo cubre todas, nunca duplicado.
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const { newVersion, error } = await changeDocumentStatus(documentId, toStatus, note);
   if (error || newVersion == null) {
     return { error: error ?? "No fue posible cambiar el estado del documento." };

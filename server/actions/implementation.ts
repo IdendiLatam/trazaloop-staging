@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkOrganizationCanMutate } from "@/server/actions/plans";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   getImplementationDashboard,
@@ -167,8 +168,11 @@ export async function createImplementationFeedbackAction(
   const supabase = await createServerClient();
 
   if (!["admin", "quality", "consultant"].includes(org.roleCode)) {
-    return { error: "Tu rol no permite registrar feedback en esta empresa." };
+    return { error: "Tu rol no permite crear tickets de soporte en esta empresa." };
   }
+
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const moduleValue = String(formData.get("module") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim();
@@ -224,6 +228,9 @@ export async function updateImplementationFeedbackAction(
 
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Falta el identificador del feedback a editar." };
+
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const moduleValue = String(formData.get("module") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim();
@@ -304,6 +311,9 @@ export async function updateImplementationFeedbackStatusAction(
   if (!id) return { error: "Falta el identificador del feedback." };
   if (!isFeedbackStatusGuard(status)) return { error: "Estado no válido." };
 
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
   const { data, error } = await supabase
     .from("implementation_feedback")
     .update({ status })
@@ -336,6 +346,9 @@ export async function deleteImplementationFeedbackAction(
 
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Falta el identificador del feedback a eliminar." };
+
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const { data, error } = await supabase
     .from("implementation_feedback")

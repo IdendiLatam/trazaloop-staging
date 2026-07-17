@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
+import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { signOutAction } from "@/server/actions/auth";
 import { Wordmark } from "@/components/layout/logo";
 
@@ -20,6 +21,9 @@ export default async function PlatformLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const { isSuperadmin } = await requirePlatformStaff();
+  // Sprint 10D (Parte 5): platform_staff TAMBIÉN debe aceptar términos/
+  // política antes de entrar a la consola — sin excepción por rol.
+  await requireLegalAcceptance();
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[220px_1fr]">

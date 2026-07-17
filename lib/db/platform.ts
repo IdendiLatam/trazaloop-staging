@@ -41,6 +41,8 @@ export type PlatformOrganizationRow = {
   calculationsCount: number;
   openFeedbackCount: number;
   criticalFeedbackCount: number;
+  contactEmail: string | null;
+  phone: string | null;
 };
 
 function mapPlatformOrgRow(r: Record<string, unknown>): PlatformOrganizationRow {
@@ -59,6 +61,8 @@ function mapPlatformOrgRow(r: Record<string, unknown>): PlatformOrganizationRow 
     calculationsCount: Number(r.calculations_count ?? 0),
     openFeedbackCount: Number(r.open_feedback_count ?? 0),
     criticalFeedbackCount: Number(r.critical_feedback_count ?? 0),
+    contactEmail: (r.contact_email as string | null) ?? null,
+    phone: (r.phone as string | null) ?? null,
   };
 }
 
@@ -86,6 +90,65 @@ export async function getPlatformOrganizationDetail(
   return data ? mapPlatformOrgRow(data as unknown as Record<string, unknown>) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Sprint 10A (corrección, Bloqueante 6): miembros e invitaciones
+// pendientes de CUALQUIER empresa, para el detalle ampliado de la consola
+// de plataforma. v_platform_organization_members/_invitations (0055)
+// llevan la misma guarda is_platform_staff() que v_platform_organizations
+// — un usuario normal siempre recibe cero filas.
+// ---------------------------------------------------------------------------
+export type PlatformOrganizationMemberRow = {
+  userId: string;
+  fullName: string | null;
+  email: string;
+  roleCode: string;
+  status: string;
+  joinedAt: string;
+};
+
+export async function getPlatformOrganizationMembers(organizationId: string): Promise<PlatformOrganizationMemberRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("v_platform_organization_members")
+    .select("user_id, full_name, email, role_code, status, joined_at")
+    .eq("organization_id", organizationId)
+    .order("joined_at", { ascending: true });
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+    userId: r.user_id as string,
+    fullName: (r.full_name as string | null) ?? null,
+    email: r.email as string,
+    roleCode: r.role_code as string,
+    status: r.status as string,
+    joinedAt: r.joined_at as string,
+  }));
+}
+
+export type PlatformOrganizationInvitationRow = {
+  email: string;
+  roleCode: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export async function getPlatformOrganizationPendingInvitations(
+  organizationId: string
+): Promise<PlatformOrganizationInvitationRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("v_platform_organization_invitations")
+    .select("email, role_code, status, expires_at, created_at")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+    email: r.email as string,
+    roleCode: r.role_code as string,
+    status: r.status as string,
+    expiresAt: r.expires_at as string,
+    createdAt: r.created_at as string,
+  }));
+}
+
 export type CreatePlatformOrgResult = {
   organizationId: string | null;
   adminLinked: boolean;
@@ -106,6 +169,7 @@ export async function createPlatformOrganization(
     p_contact_email: payload.contact_email,
     p_admin_name: payload.admin_name,
     p_admin_email: payload.admin_email,
+    p_plan_code: payload.plan_code,
   });
   if (error || !data || (Array.isArray(data) && data.length === 0)) {
     return {

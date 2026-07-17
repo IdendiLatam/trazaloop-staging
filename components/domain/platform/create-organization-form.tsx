@@ -5,11 +5,13 @@ import {
   createPlatformOrganizationAction,
   type PlatformActionState,
 } from "@/server/actions/platform";
-import { Field } from "@/components/ui/field";
+import { Field, SelectField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
+import { PLAN_CODES, PLAN_LABEL } from "@/lib/plans/types";
 
 const initial: PlatformActionState = { error: null };
+const PLAN_OPTIONS = PLAN_CODES.map((c) => ({ value: c, label: PLAN_LABEL[c] }));
 
 /** Formulario de "Nueva empresa" desde la consola de plataforma (Parte 8).
  *  Solo superadmin (gate real: el server action + la RPC). Sin envío de
@@ -53,6 +55,13 @@ export function CreateOrganizationForm() {
           <Field label="País" name="country" />
           <Field label="Ciudad" name="city" />
         </div>
+        <SelectField
+          label="Plan inicial"
+          name="plan_code"
+          options={PLAN_OPTIONS}
+          defaultValue="demo"
+          hint="Si no cambias esto, la empresa queda en Demo — igual que si se creara desde el registro normal."
+        />
       </fieldset>
 
       <fieldset className="space-y-4 border-t border-hairline pt-4">

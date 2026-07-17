@@ -55,6 +55,34 @@ encontrando durante la prueba.
   versionan dentro de la plataforma — ver `docs/TRAZADOCS_GUIDE.md`. Antes
   de imprimir un documento, vale la pena cargar el logo real de la
   empresa desde `/settings/company` para que aparezca en el encabezado.
+- **Maestro de documentos (Sprint 10B):** `/trazadocs/master` reúne los
+  documentos vivos de TrazaDocs con documentos descargables (archivos
+  externos como PDF/Word/Excel que la empresa sube y versiona sin
+  editarlos en línea) — con categoría, exportación a CSV e impresión.
+  Ver `docs/DOCUMENT_MASTER_GUIDE.md`.
+- **Centro de soporte (Sprint 10C):** `/support` reemplaza al antiguo
+  «Feedback» — cualquier miembro de la empresa puede crear un ticket,
+  hacer seguimiento a su estado y conversar con el equipo de Trazaloop.
+  Un ticket resuelto o cerrado se reabre solo con responder. Ver
+  `docs/SUPPORT_TICKETS_GUIDE.md`.
+- **Portal de lanzamiento y onboarding (Sprint 10D):** `/` es ahora
+  público (sin login) y presenta Trazaloop CPR junto a los módulos
+  próximos. Toda cuenta nueva debe aceptar términos y privacidad antes
+  de entrar, y una empresa recién creada va directo a `/onboarding` con
+  7 pasos calculados desde datos reales. Ver
+  `docs/LAUNCH_PORTAL_AND_ONBOARDING_GUIDE.md`.
+- **Plan de la empresa (Sprint 10A):** toda empresa nueva empieza en
+  **Demo**, con límites reducidos (2 documentos TrazaDocs, 1 proveedor, 5
+  materiales, sin importaciones ni invitaciones de equipo, entre otros).
+  Si estás probando la implementación completa de una empresa real y
+  chocas con esos límites, pide a Trazaloop que la cambie a **Full** o
+  **Extra** desde la consola de plataforma — ver
+  `docs/PLANS_AND_LIMITS_GUIDE.md`. Cambiar de plan nunca borra datos ya
+  cargados. Si ves el mensaje «La cuenta de esta empresa está suspendida»
+  o «no está activa» al intentar guardar algo, significa que un
+  superadministrador suspendió o canceló la suscripción — la empresa
+  puede seguir consultando todo lo que ya tenía, pero necesita que se
+  reactive desde plataforma para volver a crear o editar.
 
 ## Los 17 pasos
 
@@ -83,49 +111,50 @@ encontrando durante la prueba.
     la matriz de evidencias y las brechas identificadas.
 15. **Revisar el flujo guiado** (`/guided-flow`) para confirmar que no falta
     ningún paso del recorrido.
-16. **Registrar feedback**: cualquier error, duda, falta de datos o mejora
-    encontrada durante la prueba se registra en `/implementation/feedback`,
-    clasificada por módulo, categoría y severidad.
+16. **Crear ticket de soporte**: cualquier error, duda, falta de datos o
+    mejora encontrada durante la prueba se registra en `/support`,
+    clasificada por categoría, módulo relacionado y prioridad.
 17. **Revisar el checklist de implementación** en `/implementation` para
     confirmar el avance general y ver la siguiente acción recomendada.
 
 ## Qué mirar en `/implementation`
 
 - **Estado general de implementación**: conteos reales de proveedores,
-  materiales, evidencias, trazabilidad, cálculos y feedback — nunca datos
-  inventados.
+  materiales, evidencias, trazabilidad, cálculos y solicitudes históricas —
+  nunca datos inventados.
 - **Checklist de implementación real**: los 17 pasos anteriores con su
   estado (pendiente, en progreso, completo o con advertencias) y un acceso
   directo a la pantalla correspondiente.
 - **Siguiente acción recomendada**: la brecha de mayor prioridad detectada
   ahora mismo, con un botón directo para resolverla.
 - **Últimos cálculos y dossiers**: los cálculos más recientes con acceso
-  directo al cálculo, al dossier y a registrar feedback sobre ese cálculo.
-- **Feedback reciente**: los últimos hallazgos registrados, clasificados por
-  módulo, categoría, severidad y estado.
+  directo al cálculo, al dossier y a crear un ticket de soporte sobre ese
+  cálculo.
+- **Histórico de soporte anterior**: los hallazgos registrados antes de que
+  existiera el Centro de soporte (Sprint 6), conservados tal cual, con
+  acceso directo al Centro de soporte para lo nuevo.
 
-## Registrar feedback durante la prueba
+## Crear tickets de soporte durante la prueba
 
-`/implementation/feedback` permite:
+`/support` (Centro de soporte) permite:
 
-- listar y filtrar el feedback por módulo, categoría, severidad y estado;
-- registrar un hallazgo nuevo con título, descripción, pasos para
-  reproducir, resultado esperado/actual y, si aplica, la entidad
-  relacionada (material, evidencia, lote de entrada, orden / corrida,
-  lote producido / lote final, cálculo, dossier u otro);
-- cambiar el estado (abierto → en revisión → resuelto → cerrado);
-- editar el feedback propio, o cualquiera si el rol es administrador o
-  calidad;
-- eliminar feedback (solo administrador o calidad).
+- listar y filtrar tus tickets por estado, categoría y prioridad;
+- crear un ticket nuevo con asunto, descripción, categoría, módulo
+  relacionado y prioridad;
+- ver el objetivo de primera respuesta (siguiente día hábil — nunca una
+  garantía) y su estado frente a ese objetivo;
+- conversar con el equipo de soporte de Trazaloop;
+- reabrir un ticket resuelto o cerrado con solo responder.
 
 Además, varias pantallas existentes (flujo guiado, detalle de cálculo,
-dossier técnico, evidencias y trazabilidad) tienen un botón «Registrar
-feedback…» que abre el formulario con el módulo (y a veces la entidad)
-ya sugeridos.
+dossier técnico, evidencias y trazabilidad) tienen un botón «Crear ticket
+de soporte…» que abre el formulario con el módulo relacionado ya
+preseleccionado.
 
-**Lenguaje**: se habla de implementación, prueba real, feedback, brecha,
-hallazgo de prueba, soporte técnico, dossier técnico y revisión técnica.
-Trazaloop no promete ni menciona certificación en ningún punto de esta
+**Lenguaje**: se habla de implementación, prueba real, ticket de soporte,
+brecha, hallazgo de prueba, soporte técnico, dossier técnico y revisión
+técnica. Trazaloop no promete ni menciona certificación en ningún punto
+de esta
 sección; ver `/legal`.
 
 ## Qué NO hace esta sección

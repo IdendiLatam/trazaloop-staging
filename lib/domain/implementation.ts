@@ -258,7 +258,7 @@ export type NextActionFacts = {
  * Cadena de decisión (misma que v_implementation_next_actions, priority 1-12):
  * proveedores → materiales → soporte de origen → evidencia pendiente →
  * lotes de entrada → órdenes/corridas → consumos → composición → cálculo →
- * brechas críticas → dossier defendible → (si todo avanzó) registrar feedback.
+ * brechas críticas → dossier defendible → (si todo avanzó) crear ticket de soporte.
  */
 export function resolveNextAction(f: NextActionFacts): NextActionCode {
   if (f.suppliersCount === 0) return "create_supplier";
@@ -287,7 +287,7 @@ export const NEXT_ACTION_LABEL: Record<NextActionCode, string> = {
   calculate_recycled_content: "Calcular contenido reciclado",
   review_gaps: "Revisar brechas",
   open_dossier: "Ver dossier técnico",
-  record_feedback: "Registrar feedback de la prueba",
+  record_feedback: "Crear ticket de soporte",
 };
 
 export const NEXT_ACTION_HREF: Record<NextActionCode, string> = {
@@ -302,7 +302,7 @@ export const NEXT_ACTION_HREF: Record<NextActionCode, string> = {
   calculate_recycled_content: "/recycled-content/output-batches",
   review_gaps: "/audit-support",
   open_dossier: "/audit-support",
-  record_feedback: "/implementation/feedback",
+  record_feedback: "/support/new",
 };
 
 // ---------------------------------------------------------------------------
@@ -513,11 +513,11 @@ export function resolveChecklist(f: ChecklistFacts): ChecklistItem[] {
     },
     {
       id: 17,
-      title: "Registrar feedback de la prueba",
+      title: "Crear ticket de soporte",
       description: "Registra errores, dudas, hallazgos o mejoras encontradas durante la prueba real.",
       status: f.feedbackCount > 0 ? "completo" : "pendiente",
-      actionLabel: "Registrar feedback",
-      actionHref: "/implementation/feedback",
+      actionLabel: "Ir al Centro de soporte",
+      actionHref: "/support/new",
     },
   ];
   return items;

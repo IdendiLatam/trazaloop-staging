@@ -14,6 +14,7 @@
  * role_code de platform_staff. No se mezclan ni en tipos ni en tablas.
  */
 import { isValidEmail, TEAM_ROLES } from "./team";
+import type { PlanCode } from "../plans/types";
 
 // ---------------------------------------------------------------------------
 // Roles de PLATAFORMA (nunca de empresa).
@@ -156,6 +157,8 @@ export type PlatformOrgDraftInput = {
   contactEmail?: string | null;
   adminName?: string | null;
   adminEmail: string;
+  /** Sprint 10A (Parte 4): opcional — si el superadmin no elige, cae en 'demo'. */
+  planCode?: PlanCode | null;
 };
 
 export type PlatformValidation = { error: string | null };
@@ -186,6 +189,7 @@ export type TrustedPlatformOrgInput = {
   contact_email: string | null;
   admin_name: string | null;
   admin_email: string;
+  plan_code: PlanCode;
 };
 
 function optionalText(raw: string | null | undefined): string | null {
@@ -211,6 +215,7 @@ export function buildPlatformOrgPayload(input: PlatformOrgDraftInput): TrustedPl
     contact_email: optionalText(input.contactEmail)?.toLowerCase() ?? null,
     admin_name: optionalText(input.adminName),
     admin_email: input.adminEmail.trim().toLowerCase(),
+    plan_code: input.planCode ?? "demo",
   };
 }
 

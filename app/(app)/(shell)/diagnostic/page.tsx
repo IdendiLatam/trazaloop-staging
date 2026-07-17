@@ -12,8 +12,10 @@ import {
 } from "@/lib/db/diagnostic";
 import { READINESS_LABEL, type ReadinessLevel } from "@/lib/diagnostic/scoring";
 import { startDiagnosticFormAction } from "@/server/actions/diagnostic";
+import { checkFeatureEnabled } from "@/server/actions/plans";
 import { DiagnosticWizard } from "@/components/domain/diagnostic/wizard";
 import { Button } from "@/components/ui/button";
+import { InfoAlert } from "@/components/ui/alert";
 
 const LEVEL_TONE: Record<ReadinessLevel, string> = {
   low: "border-danger/30 bg-danger/5 text-danger",
@@ -24,11 +26,17 @@ const LEVEL_TONE: Record<ReadinessLevel, string> = {
 
 export default async function DiagnosticPage() {
   const org = await requireActiveOrg();
-  const [sections, questions, latest] = await Promise.all([
+  const [sections, questions, latest, recommendationsFeature] = await Promise.all([
     getDiagnosticSections(),
     getActiveQuestions(),
     getLatestDiagnostic(org.organizationId),
+    checkFeatureEnabled("diagnostic_recommendations_enabled"),
   ]);
+  // Bloqueante 1 (Sprint 10A, corrección): Demo SIEMPRE puede tomar y ver
+  // el resultado del diagnóstico (respuestas "No", nivel de preparación,
+  // % por sección) — lo único que se oculta es el texto de acción
+  // recomendada por pregunta, gateado por diagnostic_recommendations_enabled.
+  const recommendationsEnabled = recommendationsFeature.allowed;
 
   const header = (
     <header className="space-y-1">
@@ -159,6 +167,11 @@ export default async function DiagnosticPage() {
           <p className="mb-4 text-xs text-ink-soft">
             {noAnswers.length} pregunta(s) respondidas “No”. Empieza por las críticas.
           </p>
+          {!recommendationsEnabled ? (
+            <div className="mb-4">
+              <InfoAlert message="Las recomendaciones avanzadas están disponibles en los planes Full y Extra." />
+            </div>
+          ) : null}
           <ul className="space-y-3">
             {noAnswers.map((q) => (
               <li key={q.id} className="rounded-md border border-hairline p-3">
@@ -171,7 +184,7 @@ export default async function DiagnosticPage() {
                     </span>
                   ) : null}
                 </p>
-                {q.recommendedAction ? (
+                {recommendationsEnabled && q.recommendedAction ? (
                   <p className="mt-1 text-sm text-ink-soft">
                     <span className="font-medium text-loop-deep">Acción: </span>
                     {q.recommendedAction}

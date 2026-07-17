@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { checkResourceLimit, checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
 
 export type EvidenceActionState = { error: string | null; warning?: string | null };
 
@@ -27,6 +28,24 @@ export async function createEvidenceAction(
   const file = formData.get("file") as File | null;
 
   if (!name) return { error: "El nombre de la evidencia es obligatorio." };
+
+  // Sprint 10A (corrección final): chequeo explícito de solo-lectura,
+  // además de checkResourceLimit/checkStorageAvailable abajo — mismo
+  // resultado (ambos ya revisan el estado del plan primero), pero
+  // explícito aquí para que la regla sea uniforme y clara en las 4
+  // acciones de este archivo.
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
+  // Sprint 10A (Parte 8): límite de plan — Demo permite 1 evidencia.
+  const limitCheck = await checkResourceLimit("evidences");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
+
+  // Y cuota de almacenamiento, si viene archivo adjunto.
+  if (file && file.size > 0) {
+    const storageCheck = await checkStorageAvailable(file.size);
+    if (!storageCheck.allowed) return { error: storageCheck.error };
+  }
 
   const { data: inserted, error } = await supabase
     .from("evidences")
@@ -60,9 +79,11 @@ export async function createEvidenceAction(
       };
     }
 
+    // Sprint 10A (Parte 6): tamaño real del archivo, para medir uso de
+    // almacenamiento contra la cuota del plan.
     await supabase
       .from("evidences")
-      .update({ storage_path: path })
+      .update({ storage_path: path, size_bytes: file.size })
       .eq("id", inserted.id)
       .eq("organization_id", org.organizationId);
   }
@@ -98,6 +119,8 @@ export async function validateEvidenceAction(
   formData: FormData
 ): Promise<EvidenceActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
@@ -132,6 +155,8 @@ export async function deleteEvidenceAction(
   formData: FormData
 ): Promise<EvidenceActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
@@ -170,6 +195,8 @@ export async function linkEvidenceAction(
   formData: FormData
 ): Promise<EvidenceActionState> {
   const org = await requireActiveOrg();
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 
   const evidenceId = String(formData.get("evidence_id") ?? "");

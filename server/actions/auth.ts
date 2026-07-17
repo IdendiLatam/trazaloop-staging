@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { clearActiveOrgCookie } from "@/lib/auth/active-organization";
 import { isSafeAcceptInviteNext, postAuthDestinationPath } from "@/lib/domain/team";
 import { getPostAuthDestinationAction } from "@/server/actions/team";
+import { getMyLegalAcceptanceStatusAction } from "@/server/actions/legal";
 
 export type AuthActionState = { error: string | null };
 
@@ -21,14 +22,28 @@ function message(error: { message?: string } | null, fallback: string) {
 
 /**
  * Corrección de onboarding: a dónde va alguien justo después de iniciar
- * sesión o registrarse. Si viene de un enlace de invitación (`next`,
- * validado contra una lista blanca — nunca una URL arbitraria), se
- * respeta ese destino explícito. Si no, se calcula con
- * getPostAuthDestinationAction: nunca manda a crear empresa si ya tiene
- * membership o invitación pendiente (antes SIEMPRE se mandaba a
- * /dashboard o /select-org sin revisar invitaciones).
+ * sesión o registrarse.
+ *
+ * Sprint 10D (Parte 6/13): la aceptación legal se revisa PRIMERO, antes
+ * incluso de un `next` explícito de invitación — nadie entra a ninguna
+ * parte del espacio protegido sin haber aceptado términos/política. El
+ * `next` original (si era una invitación válida) se preserva como
+ * parámetro de /legal/accept, para volver ahí en cuanto acepte.
+ *
+ * Si viene de un enlace de invitación (`next`, validado contra una lista
+ * blanca — nunca una URL arbitraria), se respeta ese destino explícito.
+ * Si no, se calcula con getPostAuthDestinationAction: nunca manda a
+ * crear empresa si ya tiene membership o invitación pendiente (antes
+ * SIEMPRE se mandaba a /dashboard o /select-org sin revisar
+ * invitaciones).
  */
 async function redirectPostAuth(next: string | null): Promise<never> {
+  const legalStatus = await getMyLegalAcceptanceStatusAction();
+  if (!legalStatus.hasAcceptedAll) {
+    const preservedNext = isSafeAcceptInviteNext(next) ? next : null;
+    redirect(preservedNext ? `/legal/accept?next=${encodeURIComponent(preservedNext)}` : "/legal/accept");
+  }
+
   if (isSafeAcceptInviteNext(next)) {
     redirect(next);
   }
