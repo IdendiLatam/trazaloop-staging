@@ -26,6 +26,8 @@ import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanChangeForm } from "@/components/domain/plans/plan-change-form";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
+import { OrganizationModulesSection } from "@/components/domain/platform/organization-modules-section";
+import { getPlatformOrganizationModulesAction } from "@/server/actions/platform-modules";
 import { getOrganizationSupportSummaryAction } from "@/server/actions/support";
 
 export default async function PlatformOrganizationDetailPage({
@@ -35,10 +37,11 @@ export default async function PlatformOrganizationDetailPage({
 }) {
   await requirePlatformStaff();
   const { id } = await params;
-  const [{ org, members, invitations, legalAcceptances, onboarding }, planDetail, supportSummary] = await Promise.all([
+  const [{ org, members, invitations, legalAcceptances, onboarding }, planDetail, supportSummary, moduleDetail] = await Promise.all([
     getPlatformOrganizationDetailAction(id),
     getOrganizationPlanDetailAction(id),
     getOrganizationSupportSummaryAction(id),
+    getPlatformOrganizationModulesAction(id),
   ]);
   if (!org) notFound();
   const planLimits = planDetail.usage ? await getPlanLimits(planDetail.usage.planCode) : [];
@@ -91,6 +94,12 @@ export default async function PlatformOrganizationDetailPage({
           currentStatus={planDetail.usage?.planStatus ?? "active"}
         />
       ) : null}
+
+      <OrganizationModulesSection
+        organizationId={id}
+        modules={moduleDetail.modules}
+        canManage={moduleDetail.canManage}
+      />
 
       <dl className="divide-y divide-hairline rounded-lg border border-hairline bg-surface">
         {rows.map(([label, value]) => (

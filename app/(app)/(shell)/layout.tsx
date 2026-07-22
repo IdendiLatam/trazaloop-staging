@@ -9,6 +9,8 @@ import { requireSession } from "@/lib/auth/require-session";
 import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { checkPlatformStatus } from "@/lib/db/platform";
+import { getDemoTrialSummary } from "@/lib/db/module-access";
+import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
 import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
 import { ModuleHeaderBadge } from "@/components/layout/module-badge";
@@ -38,6 +40,9 @@ export default async function ShellLayout({
   if (!activeOrg) {
     redirect("/select-org");
   }
+
+  // T9F: aviso del Demo temporal (48 h) — compartido en todo el shell.
+  const demoTrials = await getDemoTrialSummary(activeOrg.organizationId);
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
@@ -102,7 +107,10 @@ export default async function ShellLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 space-y-4 p-6">
+          <DemoTrialBanner trials={demoTrials.activeTrials} hasExpired={demoTrials.hasExpired} />
+          {children}
+        </main>
       </div>
     </div>
   );

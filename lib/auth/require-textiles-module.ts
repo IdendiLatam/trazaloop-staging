@@ -1,40 +1,45 @@
 import "server-only";
 
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { getOrganizationModules } from "@/lib/db/organizations";
 import type { ActiveOrganization } from "@/lib/db/organizations";
-import {
-  isTextilesModuleEnabled,
-  organizationHasTextiles,
-} from "@/lib/modules/textiles";
+import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
+import { resolveModuleAccessForOrg } from "@/lib/db/module-access";
+import { TEXTILES_MODULE_CODE } from "@/lib/modules/catalog";
+import { moduleAccessDeniedMessage } from "@/lib/modules/messages";
 
 /**
  * Trazaloop · Sprint T1 (Textil) · Guard del módulo Trazaloop Textiles.
+ * Sprint T9F: consume la REGLA CANÓNICA de acceso (lib/modules/access.ts vía
+ * resolveModuleAccessForOrg), que combina:
+ *   1. kill switch global TEXTILES_MODULE_ENABLED (apagado → módulo privado);
+ *   2. asignación habilitada (enabled);
+ *   3. access_mode vigente (full/extra, demo permanente o demo no vencido).
  *
- * Exige, EN SERVIDOR y en este orden:
- *   1. feature flag TEXTILES_MODULE_ENABLED encendido (apagado → 404 para
- *      todo el mundo, sin excepciones);
- *   2. sesión + empresa activa VALIDADA (requireActiveOrg, patrón del
- *      proyecto — el organization_id jamás viene del cliente);
- *   3. fila habilitada (organization_id, 'textiles') en
- *      organization_modules, leída bajo RLS con la sesión real.
+ * El vencimiento de una prueba Demo se deriva por FECHA, sin cron.
  *
- * Fallo de flag o de habilitación → notFound() (404): para quien no está
- * habilitado, el módulo simplemente no existe — nunca una pantalla que
- * confirme que "hay algo" detrás (módulo privado, DL-02/DL-03).
+ * Bloqueos:
+ *   · kill switch apagado → notFound() (404): módulo PRIVADO (DL-02/DL-03),
+ *     para quien no está habilitado el módulo simplemente no existe;
+ *   · demo vencido / deshabilitado / sin asignación → redirect a /modules,
+ *     donde el selector comunica el motivo real ("Prueba finalizada" /
+ *     "Módulo deshabilitado"). Nunca 404 confuso ni error SQL. Los datos se
+ *     conservan siempre.
  *
- * Se aplica en app/(app)/(shell)/textiles/layout.tsx, de modo que TODA
- * ruta presente o futura bajo /textiles queda protegida por defecto.
+ * Se aplica en app/(app)/(shell)/textiles/layout.tsx: TODA ruta bajo
+ * /textiles queda protegida por defecto.
  */
 export async function requireTextilesModule(): Promise<ActiveOrganization> {
+  // El kill switch se evalúa primero y de forma privada (404 para todos).
   if (!isTextilesModuleEnabled()) notFound();
 
   const org = await requireActiveOrg();
-
-  const modules = await getOrganizationModules(org.organizationId);
-  if (!organizationHasTextiles(modules)) notFound();
-
+  const access = await resolveModuleAccessForOrg(org.organizationId, TEXTILES_MODULE_CODE);
+  if (!access.allowed) {
+    // Con el flag encendido, un bloqueo comercial (demo vencido, deshabilitado
+    // o sin asignación) se comunica de forma coherente en el selector.
+    redirect("/modules");
+  }
   return org;
 }
 
@@ -42,9 +47,8 @@ export const TEXTILES_MODULE_NOT_AVAILABLE_ERROR =
   "El módulo Trazaloop Textiles no está habilitado para esta organización.";
 
 /**
- * Variante para SERVER ACTIONS (T2/T3): misma triple validación pero
- * devolviendo un error seguro en lugar de 404 (una action no debe
- * responder notFound). Usada por los diagnósticos y los catálogos.
+ * Variante para SERVER ACTIONS (T2/T3): misma regla canónica, error seguro en
+ * lugar de 404/redirect (una action no debe responder notFound ni redirect).
  */
 export async function requireTextilesForAction(): Promise<
   { org: ActiveOrganization; error: null } | { org: null; error: string }
@@ -53,9 +57,12 @@ export async function requireTextilesForAction(): Promise<
   if (!isTextilesModuleEnabled()) {
     return { org: null, error: TEXTILES_MODULE_NOT_AVAILABLE_ERROR };
   }
-  const modules = await getOrganizationModules(org.organizationId);
-  if (!organizationHasTextiles(modules)) {
-    return { org: null, error: TEXTILES_MODULE_NOT_AVAILABLE_ERROR };
+  const access = await resolveModuleAccessForOrg(org.organizationId, TEXTILES_MODULE_CODE);
+  if (!access.allowed) {
+    if (access.reason === "not_assigned" || access.reason === "globally_disabled") {
+      return { org: null, error: TEXTILES_MODULE_NOT_AVAILABLE_ERROR };
+    }
+    return { org: null, error: moduleAccessDeniedMessage("Trazaloop Textiles", access.reason) };
   }
   return { org, error: null };
 }

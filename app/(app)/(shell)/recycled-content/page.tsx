@@ -3,12 +3,12 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getRecycledDashboard } from "@/lib/db/recycled";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 
 export default async function RecycledContentPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const d = await getRecycledDashboard(org.organizationId);
 
   const cards = [

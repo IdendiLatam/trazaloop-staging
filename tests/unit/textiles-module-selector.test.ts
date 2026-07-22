@@ -115,40 +115,52 @@ console.log("\nTrazaloop · T9E: invariantes de fuente del portal /modules\n");
 
 const portal = read("app/(app)/modules/page.tsx");
 
+// T9F: el selector se generaliza a la REGLA CANÓNICA por módulo. La
+// disponibilidad de Textiles (flag + organization_modules) la resuelve la capa
+// server-only lib/db/module-access.ts (getActiveOrgModuleStatuses →
+// resolveModuleAccessForOrg → isKillSwitchActive/isTextilesModuleEnabled).
+const moduleAccess = read("lib/db/module-access.ts");
+const catalog = read("lib/modules/catalog.ts");
+const messages = read("lib/modules/messages.ts");
+
 check("7. El portal resuelve la tarjeta por flag + organization_modules en servidor", () => {
-  assert(portal.includes("isTextilesModuleEnabled()"), "debía consultar el flag en servidor");
-  assert(portal.includes("organizationHasTextiles"), "debía consultar organization_modules");
-  assert(portal.includes("getOrganizationModules"), "debía leer organization_modules bajo RLS");
-  assert(portal.includes('key: "textiles"'), "la tarjeta debía conservar la clave DL-01");
+  assert(portal.includes("getActiveOrgModuleStatuses"), "el portal debía resolver el estado en servidor");
+  assert(moduleAccess.includes("isTextilesModuleEnabled()"), "la capa server-only debía consultar el flag");
+  assert(moduleAccess.includes("organization_modules"), "debía consultar organization_modules bajo RLS");
+  assert(catalog.includes('key: "textiles"'), "el catálogo debía conservar la clave DL-01");
 });
 
 check("8. Cuando está disponible, la tarjeta es un enlace activo a /textiles", () => {
-  assert(portal.includes('availability === "available"'), "debía existir el estado available");
+  assert(portal.includes("isEnterableState"), "un estado enterable debía producir un enlace");
   assert(portal.includes("TEXTILES_HOME_PATH"), "la tarjeta activa debía enlazar la home del módulo");
-  assert(portal.includes("Disponible para tu organización"), "la tarjeta activa debía decirlo claramente");
+  assert(portal.includes("Entrar"), "la tarjeta activa debía decir Entrar");
 });
 
 check("9. Estados bloqueados con explicación: sin organización y sin habilitación", () => {
-  assert(portal.includes('availability === "no_active_org"'), "debía existir el estado sin organización");
   assert(portal.includes("/select-org"), "sin organización debía llevar a seleccionar empresa");
-  assert(portal.includes('availability === "org_not_enabled"'), "debía existir el estado no habilitado");
+  // Cada bloqueo real (sin asignación / deshabilitado / demo vencido) tiene su
+  // propia explicación — jamás un 'Próximamente' engañoso.
   assert(
-    portal.includes("aún no tiene habilitado"),
-    "el bloqueo por organización debía explicarse (no un 'Próximamente' engañoso)"
+    messages.includes("not_assigned") && messages.includes("disabled") && messages.includes("demo_expired"),
+    "cada bloqueo debía tener su explicación"
+  );
+  assert(messages.includes("Prueba finalizada"), "el demo vencido no debía confundirse con 'Deshabilitado'");
+});
+
+check("10. Sin 'Próximamente' engañoso para bloqueos reales; solo para módulos no funcionales", () => {
+  // 'Próximamente' es la etiqueta EXCLUSIVA del estado coming_soon.
+  assert(messages.includes('coming_soon: "Próximamente"'), "'Próximamente' solo etiqueta coming_soon");
+  // El demo vencido, deshabilitado y sin asignación tienen etiquetas propias.
+  assert(
+    messages.includes('demo_expired: "Prueba finalizada"') &&
+      messages.includes('disabled: "Módulo deshabilitado"') &&
+      messages.includes('not_assigned: "Sin asignar"'),
+    "los bloqueos reales no deben rotularse 'Próximamente'"
   );
 });
 
-check("10. Sin 'Próximamente' hardcodeado para Textiles habilitado; sin depender de CPR", () => {
-  // El texto "Próximamente" solo puede pertenecer al estado flag_disabled y
-  // a las tarjetas de otros módulos futuros (Quality/Construcción).
-  const textilesCard = portal.slice(portal.indexOf("function TextilesCard"), portal.indexOf("export default"));
-  const beforeComingSoon = textilesCard.slice(0, textilesCard.indexOf("flag_disabled"));
-  assert(!beforeComingSoon.includes("Próximamente"), "ningún estado habilitado muestra 'Próximamente'");
-  assert(!textilesCard.includes("cprHref"), "la tarjeta Textiles no depende del destino CPR");
-});
-
-check("11. La tarjeta del módulo se llama Trazaloop Textiles", () => {
-  assert(portal.includes("Trazaloop Textiles"), "la tarjeta debía usar el nombre del módulo");
+check("11. La tarjeta del módulo se llama Trazaloop Textiles (catálogo canónico)", () => {
+  assert(catalog.includes("Trazaloop Textiles"), "el catálogo debía usar el nombre del módulo");
 });
 
 if (failed > 0) {

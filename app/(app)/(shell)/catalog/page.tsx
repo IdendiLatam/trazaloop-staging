@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import {
   listSuppliers,
   listFamilies,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/db/catalog";
 
 export default async function CatalogIndexPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const [suppliers, families, products, materials] = await Promise.all([
     listSuppliers(org.organizationId),
     listFamilies(org.organizationId),

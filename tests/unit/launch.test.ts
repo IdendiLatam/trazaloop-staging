@@ -261,12 +261,19 @@ check("20. Suspended/cancelled muestran aviso de cuenta no activa", () => {
 console.log("\nTrazaloop · lanzamiento: módulos próximos siguen sin funcionalidad (Parte 3/16)\n");
 
 check("21. /modules mantiene CPR disponible y los demás módulos deshabilitados", () => {
+  // T9F: /modules se genera desde el CATÁLOGO CANÓNICO y el estado comercial
+  // real (regla canónica), no de tarjetas hardcodeadas. Los nombres y el
+  // status (functional / coming_soon) viven en lib/modules/catalog.ts.
   const source = readSource("../../app/(app)/modules/page.tsx");
-  assert(source.includes("Trazaloop CPR") && source.includes("available: true"), "/modules debía seguir mostrando Trazaloop CPR disponible");
-  for (const mod of ["Trazaloop Textil", "Trazaloop Quality", "Trazaloop Construcción"]) {
-    assert(source.includes(mod), `/modules debía seguir mostrando ${mod}`);
+  const catalog = readSource("../../lib/modules/catalog.ts");
+  assert(source.includes("COMMERCIAL_MODULES") && source.includes("getActiveOrgModuleStatuses"), "/modules debía consumir el catálogo canónico y el estado en servidor");
+  assert(catalog.includes("Trazaloop CPR"), "el catálogo debía incluir Trazaloop CPR");
+  for (const mod of ["Trazaloop Textiles", "Trazaloop Quality", "Trazaloop Construcción"]) {
+    assert(catalog.includes(mod), `el catálogo debía incluir ${mod}`);
   }
-  assert((source.match(/available: false/g) ?? []).length === 3, "debían seguir exactamente 3 módulos marcados como no disponibles");
+  // CPR y Textiles funcionales; Quality y Construcción exactamente 2 coming_soon.
+  assert((catalog.match(/status: "coming_soon"/g) ?? []).length === 2, "debían existir exactamente 2 módulos coming_soon (Quality, Construcción)");
+  assert((catalog.match(/status: "functional"/g) ?? []).length === 2, "debían existir exactamente 2 módulos funcionales (CPR, Textiles)");
 });
 
 check("22. Textil/Quality/Construcción no tienen rutas funcionales nuevas", () => {

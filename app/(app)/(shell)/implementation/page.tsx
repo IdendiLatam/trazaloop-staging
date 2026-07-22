@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import {
   getImplementationDashboardAction,
   getImplementationChecklistAction,
@@ -23,7 +23,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function ImplementationPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
 
   const [dashboard, checklist, nextActions, calculations, recentFeedback, teamOverview, trazadocsOverview] =
     await Promise.all([

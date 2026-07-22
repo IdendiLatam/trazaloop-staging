@@ -80,7 +80,14 @@ check("6. El guard valida flag + organización habilitada y responde 404", () =>
   const guard = readSource("../../lib/auth/require-textiles-module.ts");
   assert(guard.includes("isTextilesModuleEnabled()") && guard.includes("notFound()"), "flag apagado debía dar 404");
   assert(guard.includes("requireActiveOrg"), "debía validar la empresa activa en servidor");
-  assert(guard.includes("organizationHasTextiles"), "debía validar organization_modules");
+  // T9F: la habilitación por organización se resuelve ahora con la REGLA
+  // CANÓNICA (resolveModuleAccessForOrg), que incluye la asignación en
+  // organization_modules + access_mode vigente. El flag sigue teniendo
+  // prioridad (kill switch privado → 404).
+  assert(
+    guard.includes("resolveModuleAccessForOrg") && guard.includes("TEXTILES_MODULE_CODE"),
+    "debía validar la asignación con la regla canónica (organization_modules)"
+  );
 });
 
 check("7. La landing comunica Trazaloop como plataforma y CPR como módulo", () => {
@@ -94,9 +101,18 @@ check("7. La landing comunica Trazaloop como plataforma y CPR como módulo", () 
 
 check("8. El portal /modules usa la clave 'textiles' y nunca expone el enlace sin flag+habilitación", () => {
   const portal = readSource("../../app/(app)/modules/page.tsx");
-  assert(portal.includes('key: "textiles"'), "la tarjeta debía usar key 'textiles' (DL-01)");
+  const catalog = readSource("../../lib/modules/catalog.ts");
+  // T9F: las tarjetas se generan desde el catálogo canónico; la clave
+  // 'textiles' vive allí (una sola fuente), no hardcodeada en la página.
+  assert(catalog.includes('key: "textiles"'), "el catálogo debía usar key 'textiles' (DL-01)");
   assert(!portal.includes('key: "textil"'), "la clave 'textil' (singular) debía desaparecer");
-  assert(portal.includes("isTextilesModuleEnabled()") && portal.includes("organizationHasTextiles"), "el enlace privado debía exigir flag + habilitación en servidor");
+  // El estado comercial (incluido el enlace) lo resuelve la regla canónica en
+  // servidor (getActiveOrgModuleStatuses), que aplica flag + asignación +
+  // vencimiento; el enlace solo aparece en estados 'enterables'.
+  assert(
+    portal.includes("getActiveOrgModuleStatuses") && portal.includes("isEnterableState"),
+    "el enlace privado debía exigir el estado resuelto en servidor (flag + habilitación)"
+  );
 });
 
 check("9. La migración 0070 es solo la fila del catálogo, idempotente y privada", () => {
@@ -106,12 +122,12 @@ check("9. La migración 0070 es solo la fila del catálogo, idempotente y privad
   assert(!/create table|alter table|drop /i.test(mig), "no debía crear/alterar/borrar nada");
 });
 
-check("10. Migraciones textiles bajo control: 0070–0099 (módulo, diagnóstico, hardening, catálogos, productos, evidencias, hardening de evidencias, inmutabilidad de archivo, trazabilidad, hardening de trazabilidad, circularidad, hardening de circularidad, TrazaDocs Textil, hardening de secciones, pasaporte técnico, hardening de pasaporte, fuentes/vínculos, vínculo documental, snapshot completo, enlaces privados, fibras personalizadas T9E , intentos de carga T9E.1, fixes digest T9E.1 y finalización atómica T9E.2 y sellado server-only T9E.3 y Storage RLS T9E.4)", () => {
+check("10. Migraciones bajo control: 0070–0100 (módulo, diagnóstico, hardening, catálogos, productos, evidencias, hardening de evidencias, inmutabilidad de archivo, trazabilidad, hardening de trazabilidad, circularidad, hardening de circularidad, TrazaDocs Textil, hardening de secciones, pasaporte técnico, hardening de pasaporte, fuentes/vínculos, vínculo documental, snapshot completo, enlaces privados, fibras personalizadas T9E , intentos de carga T9E.1, fixes digest T9E.1 y finalización atómica T9E.2 y sellado server-only T9E.3 y Storage RLS T9E.4 y acceso comercial por módulo T9F)", () => {
   const dir = path.resolve(__dirname, "../../supabase/migrations");
   const files = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) >= 70).sort();
   assert(
-    JSON.stringify(files) === JSON.stringify(["0070_add_textiles_module.sql", "0071_textile_diagnostic.sql", "0072_textile_diagnostic_hardening.sql", "0073_textile_catalogs.sql", "0074_textile_products_and_composition.sql", "0075_textile_evidences.sql", "0076_textile_evidences_hardening_and_storage_usage.sql", "0077_textile_evidence_file_metadata_immutability.sql", "0078_textile_orders_lots_traceability.sql", "0079_textile_traceability_status_hardening.sql", "0080_textile_circularity_assessments.sql", "0081_textile_circularity_creation_hardening.sql", "0082_textile_trazadocs.sql", "0083_trazadocs_section_module_hardening.sql", "0084_textile_technical_passports.sql", "0085_textile_technical_passport_state_hardening.sql", "0086_textile_passport_sources_and_links_fix.sql", "0087_textile_passport_documentary_link_fix.sql", "0088_textile_technical_passport_full_snapshot.sql", "0089_textile_technical_passport_snapshot_fixes.sql", "0090_textile_technical_passport_snapshot_sources_closure.sql", "0091_textile_passport_circularity_evidence_hotfix.sql", "0092_textile_passport_private_share_links.sql", "0093_textile_custom_fibers.sql", "0094_textile_evidence_upload_intents.sql", "0095_fix_passport_share_digest_schema.sql", "0096_fix_passport_generation_digest_schema.sql", "0097_atomic_textile_evidence_upload_finalize.sql", "0098_server_only_textile_evidence_finalize.sql", "0099_textile_storage_rls_and_csv_utf8_closure.sql"]),
-    `solo debían existir 0070–0099 (hay: ${files.join(", ")})`
+    JSON.stringify(files) === JSON.stringify(["0070_add_textiles_module.sql", "0071_textile_diagnostic.sql", "0072_textile_diagnostic_hardening.sql", "0073_textile_catalogs.sql", "0074_textile_products_and_composition.sql", "0075_textile_evidences.sql", "0076_textile_evidences_hardening_and_storage_usage.sql", "0077_textile_evidence_file_metadata_immutability.sql", "0078_textile_orders_lots_traceability.sql", "0079_textile_traceability_status_hardening.sql", "0080_textile_circularity_assessments.sql", "0081_textile_circularity_creation_hardening.sql", "0082_textile_trazadocs.sql", "0083_trazadocs_section_module_hardening.sql", "0084_textile_technical_passports.sql", "0085_textile_technical_passport_state_hardening.sql", "0086_textile_passport_sources_and_links_fix.sql", "0087_textile_passport_documentary_link_fix.sql", "0088_textile_technical_passport_full_snapshot.sql", "0089_textile_technical_passport_snapshot_fixes.sql", "0090_textile_technical_passport_snapshot_sources_closure.sql", "0091_textile_passport_circularity_evidence_hotfix.sql", "0092_textile_passport_private_share_links.sql", "0093_textile_custom_fibers.sql", "0094_textile_evidence_upload_intents.sql", "0095_fix_passport_share_digest_schema.sql", "0096_fix_passport_generation_digest_schema.sql", "0097_atomic_textile_evidence_upload_finalize.sql", "0098_server_only_textile_evidence_finalize.sql", "0099_textile_storage_rls_and_csv_utf8_closure.sql", "0100_organization_module_access_modes_and_demo_trial.sql"]),
+    `solo debían existir 0070–0100 (hay: ${files.join(", ")})`
   );
   const mig = readSource("../../supabase/migrations/0071_textile_diagnostic.sql");
   assert(!/plan_definitions|plan_limits|organization_subscriptions|organization_module_access/.test(mig), "0071 no debía tocar planes ni acceso por módulo");

@@ -9,7 +9,7 @@ import {
   listOutputBatchReadinessAction,
   getNextBestActionsAction,
 } from "@/server/actions/guided-flow";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { ReadinessBadge } from "@/components/domain/guided-flow/readiness-badge";
 import {
   ProgressStepCard,
@@ -20,7 +20,7 @@ import { TraceabilityStatusBadge } from "@/components/domain/traceability/status
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function GuidedFlowPage() {
-  await requireActiveOrg();
+  await requireCprModule();
   const [d, rows, nextActions] = await Promise.all([
     getGuidedFlowDashboardAction(),
     listOutputBatchReadinessAction(),

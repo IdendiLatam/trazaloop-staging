@@ -3,11 +3,8 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import {
-  getActiveOrganization,
-  getOrganizationModules,
-} from "@/lib/db/organizations";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
+import { getOrganizationModules } from "@/lib/db/organizations";
 import { getTraceabilityMetrics } from "@/lib/db/traceability";
 import { getOrganizationUsage, getPlanLimits } from "@/lib/db/plans";
 import { getOrganizationOnboardingStatus } from "@/lib/db/onboarding";
@@ -18,8 +15,9 @@ import { OnboardingProgressCard } from "@/components/domain/onboarding/onboardin
 import { DemoPlanBanner, AccountStatusBanner } from "@/components/domain/onboarding/demo-plan-banner";
 
 export default async function DashboardPage() {
-  const activeOrg = await getActiveOrganization();
-  if (!activeOrg) redirect("/select-org");
+  // T9F: el dashboard es el inicio de CPR — su guard consume la regla canónica
+  // (bloquea Demo vencido / módulo deshabilitado con redirect a /modules).
+  const activeOrg = await requireCprModule();
 
   const [modules, metrics, usage, onboarding, tickets] = await Promise.all([
     getOrganizationModules(activeOrg.organizationId),

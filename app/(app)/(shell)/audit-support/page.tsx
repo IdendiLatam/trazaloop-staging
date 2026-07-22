@@ -3,11 +3,13 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getAuditSupportDashboardAction } from "@/server/actions/audit-support";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 
 export default async function AuditSupportPage() {
+  await requireCprModule(); // T9F: guard de módulo CPR (regla canónica)
   const d = await getAuditSupportDashboardAction();
 
   const cards = [

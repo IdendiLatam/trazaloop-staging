@@ -258,11 +258,16 @@ check("Extra: los 13 recursos medibles están todos definidos", () => {
 
 check("Extra: /modules existe con Trazaloop CPR disponible y el resto próximamente", () => {
   const modulesPage = fs.readFileSync(path.resolve(__dirname, "../../app/(app)/modules/page.tsx"), "utf8");
-  assert(modulesPage.includes("Trazaloop CPR"), "el portal de módulos debía mostrar Trazaloop CPR");
-  assert(modulesPage.includes("Trazaloop Textil"), "el portal de módulos debía mostrar Trazaloop Textil");
-  assert(modulesPage.includes("Trazaloop Quality"), "el portal de módulos debía mostrar Trazaloop Quality");
-  assert(modulesPage.includes("Trazaloop Construcción"), "el portal de módulos debía mostrar Trazaloop Construcción");
-  assert(modulesPage.includes("Próximamente"), "los módulos no disponibles debían decir 'Próximamente'");
+  // T9F: los nombres de los módulos viven en el CATÁLOGO CANÓNICO
+  // (lib/modules/catalog.ts), que la página consume — una sola fuente.
+  const catalog = fs.readFileSync(path.resolve(__dirname, "../../lib/modules/catalog.ts"), "utf8");
+  const messages = fs.readFileSync(path.resolve(__dirname, "../../lib/modules/messages.ts"), "utf8");
+  assert(catalog.includes("Trazaloop CPR"), "el catálogo debía incluir Trazaloop CPR");
+  assert(catalog.includes("Trazaloop Textiles"), "el catálogo debía incluir Trazaloop Textiles");
+  assert(catalog.includes("Trazaloop Quality"), "el catálogo debía incluir Trazaloop Quality");
+  assert(catalog.includes("Trazaloop Construcción"), "el catálogo debía incluir Trazaloop Construcción");
+  assert(modulesPage.includes("COMMERCIAL_MODULES"), "la página debía renderizar el catálogo canónico");
+  assert(messages.includes("Próximamente"), "los módulos no funcionales debían poder mostrar 'Próximamente'");
 });
 
 console.log("\nTrazaloop · corrección post Sprint 10A (Bloqueante 1): Demo oculta recomendaciones\n");

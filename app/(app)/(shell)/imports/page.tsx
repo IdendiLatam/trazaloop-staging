@@ -3,14 +3,14 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getImportTemplatesAction, listImportJobsAction } from "@/server/actions/imports";
 import { ImportTemplateList } from "@/components/domain/imports/import-template-list";
 import { ImportHistory } from "@/components/domain/imports/import-history";
 import { ImportWizard } from "@/components/domain/imports/import-wizard";
 
 export default async function ImportsPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const [templates, jobs] = await Promise.all([getImportTemplatesAction(), listImportJobsAction()]);
   const canImport = org.roleCode === "admin" || org.roleCode === "quality" || org.roleCode === "consultant";
 

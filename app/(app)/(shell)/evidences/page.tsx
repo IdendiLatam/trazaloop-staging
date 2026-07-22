@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   listSuppliers,
@@ -30,7 +30,7 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
 };
 
 export default async function EvidencesPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const supabase = await createServerClient();
   const canApprove = org.roleCode === "admin" || org.roleCode === "quality";
 

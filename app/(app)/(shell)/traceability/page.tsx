@@ -3,11 +3,11 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getTraceabilityMetrics } from "@/lib/db/traceability";
 
 export default async function TraceabilityIndexPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const m = await getTraceabilityMetrics(org.organizationId);
 
   const cards = [

@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import {
   getDiagnosticSections,
   getActiveQuestions,
@@ -25,7 +25,7 @@ const LEVEL_TONE: Record<ReadinessLevel, string> = {
 };
 
 export default async function DiagnosticPage() {
-  const org = await requireActiveOrg();
+  const org = await requireCprModule();
   const [sections, questions, latest, recommendationsFeature] = await Promise.all([
     getDiagnosticSections(),
     getActiveQuestions(),
