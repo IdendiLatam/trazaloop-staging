@@ -61,12 +61,21 @@ function mapSummaryRow(r: Record<string, unknown>): DocumentSummaryRow {
   };
 }
 
-export async function listDocuments(orgId: string): Promise<DocumentSummaryRow[]> {
+// T8: los listados/consultas filtran por module_key ('cpr' por defecto —
+// comportamiento CPR intacto; TrazaDocs Textil pasa 'textiles'). Es la
+// separación documental entre módulos del encargo T8 §9.
+export type TrazadocModuleKey = "cpr" | "textiles";
+
+export async function listDocuments(
+  orgId: string,
+  moduleKey: TrazadocModuleKey = "cpr"
+): Promise<DocumentSummaryRow[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("v_trazadoc_document_summary")
     .select("*")
     .eq("organization_id", orgId)
+    .eq("module_key", moduleKey)
     .order("updated_at", { ascending: false });
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(mapSummaryRow);
 }
@@ -102,7 +111,11 @@ export type DocumentDetail = {
   sections: DocumentSectionRow[];
 };
 
-export async function getDocument(orgId: string, documentId: string): Promise<DocumentDetail | null> {
+export async function getDocument(
+  orgId: string,
+  documentId: string,
+  moduleKey: TrazadocModuleKey = "cpr"
+): Promise<DocumentDetail | null> {
   const supabase = await createServerClient();
   const [{ data: doc }, { data: sections }] = await Promise.all([
     supabase
@@ -110,6 +123,7 @@ export async function getDocument(orgId: string, documentId: string): Promise<Do
       .select("*")
       .eq("organization_id", orgId)
       .eq("id", documentId)
+      .eq("module_key", moduleKey)
       .maybeSingle(),
     supabase
       .from("trazadoc_document_sections")
@@ -163,12 +177,15 @@ export type BlueprintSummaryRow = {
   requiredSectionsCount: number;
 };
 
-export async function listAvailableBlueprints(): Promise<BlueprintSummaryRow[]> {
+export async function listAvailableBlueprints(
+  moduleKey: TrazadocModuleKey = "cpr"
+): Promise<BlueprintSummaryRow[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("v_trazadoc_blueprint_summary")
     .select("*")
     .eq("status", "active")
+    .eq("module_key", moduleKey)
     .order("name", { ascending: true });
   return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     blueprintId: r.blueprint_id as string,
@@ -201,7 +218,8 @@ export async function getBlueprintSections(blueprintId: string): Promise<Bluepri
 }
 
 export async function getBlueprintByIdForCompany(
-  blueprintId: string
+  blueprintId: string,
+  moduleKey: TrazadocModuleKey = "cpr"
 ): Promise<{ id: string; name: string; documentType: DocumentType } | null> {
   const supabase = await createServerClient();
   const { data } = await supabase
@@ -209,6 +227,7 @@ export async function getBlueprintByIdForCompany(
     .select("id, name, document_type")
     .eq("id", blueprintId)
     .eq("status", "active")
+    .eq("module_key", moduleKey)
     .maybeSingle();
   return data
     ? { id: data.id as string, name: data.name as string, documentType: data.document_type as DocumentType }
@@ -223,13 +242,15 @@ export async function getBlueprintByIdForCompany(
 export async function findDocumentByNormalizedTitle(
   orgId: string,
   normalizedTitle: string,
-  excludeDocumentId?: string
+  excludeDocumentId?: string,
+  moduleKey: TrazadocModuleKey = "cpr"
 ): Promise<{ id: string; title: string; status: string } | null> {
   const supabase = await createServerClient();
   let query = supabase
     .from("trazadoc_documents")
     .select("id, title, status")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .eq("module_key", moduleKey);
   if (excludeDocumentId) query = query.neq("id", excludeDocumentId);
   const { data } = await query;
   const match = ((data ?? []) as { id: string; title: string; status: string }[]).find(
@@ -258,13 +279,19 @@ export async function findDocumentByBlueprint(
  *  (0048) ya exige status='draft' y el rol correcto; aquí solo se
  *  distingue "no encontrado / no autorizado" de "no estaba en borrador"
  *  para dar un mensaje más útil. */
-export async function deleteDocument(orgId: string, documentId: string): Promise<{ error: string | null }> {
+export async function deleteDocument(
+  orgId: string,
+  documentId: string,
+  moduleKey: TrazadocModuleKey = "cpr"
+): Promise<{ error: string | null }> {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("trazadoc_documents")
     .delete()
     .eq("organization_id", orgId)
     .eq("id", documentId)
+    // T8.1: un borrador de otro módulo jamás se elimina desde este flujo.
+    .eq("module_key", moduleKey)
     .select("id");
   if (error) return { error: "No fue posible eliminar el documento." };
   if ((data ?? []).length === 0) {
@@ -362,7 +389,8 @@ export async function insertInitialVersion(
 export async function updateDocumentMetadata(
   orgId: string,
   documentId: string,
-  input: { title: string; code: string | null; description: string | null; ownerId: string | null }
+  input: { title: string; code: string | null; description: string | null; ownerId: string | null },
+  moduleKey: TrazadocModuleKey = "cpr"
 ): Promise<{ error: string | null }> {
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -370,27 +398,64 @@ export async function updateDocumentMetadata(
     .update({ title: input.title, code: input.code, description: input.description, owner_id: input.ownerId })
     .eq("organization_id", orgId)
     .eq("id", documentId)
+    // T8.1: un documento de otro módulo jamás se edita desde este flujo.
+    .eq("module_key", moduleKey)
     .select("id");
   if (error) return { error: "No fue posible guardar los datos del documento." };
   if ((data ?? []).length === 0) return { error: "Tu rol no permite editar este documento en su estado actual." };
   return { error: null };
 }
 
-export async function updateSectionContent(
+/** T8.1: hechos mínimos del documento amarrados a organización Y módulo —
+ *  base de toda edición de secciones (regla obligatoria del sprint). */
+export async function getDocumentFacts(
   orgId: string,
-  sectionId: string,
-  content: string
-): Promise<{ error: string | null }> {
+  documentId: string,
+  moduleKey: TrazadocModuleKey
+): Promise<{ id: string; status: DocumentStatus } | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("trazadoc_documents")
+    .select("id, status")
+    .eq("organization_id", orgId)
+    .eq("id", documentId)
+    .eq("module_key", moduleKey)
+    .maybeSingle();
+  return data ? { id: data.id as string, status: data.status as DocumentStatus } : null;
+}
+
+/** T8.1: REEMPLAZA al antiguo updateSectionContent(orgId, sectionId,
+ *  content), que actualizaba por organización + sección sin amarrar el
+ *  documento ni el módulo (edición cruzada posible manipulando el
+ *  formulario). Esta variante exige TODO a la vez: organización,
+ *  documento del MÓDULO esperado, estado editable y pertenencia de la
+ *  sección a ese documento. El rol lo valida la action (canEditDocument)
+ *  y la RLS de 0047 lo re-exige. */
+export async function updateSectionContentForDocument(input: {
+  organizationId: string;
+  documentId: string;
+  sectionId: string;
+  moduleKey: TrazadocModuleKey;
+  content: string;
+}): Promise<{ error: string | null }> {
+  const doc = await getDocumentFacts(input.organizationId, input.documentId, input.moduleKey);
+  if (!doc) {
+    return { error: "El documento no existe, no pertenece a tu organización o no pertenece a este módulo." };
+  }
+  if (doc.status !== "draft" && doc.status !== "in_review") {
+    return { error: "Las secciones solo pueden editarse mientras el documento está en borrador o en revisión." };
+  }
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("trazadoc_document_sections")
-    .update({ content })
-    .eq("organization_id", orgId)
-    .eq("id", sectionId)
+    .update({ content: input.content })
+    .eq("organization_id", input.organizationId)
+    .eq("document_id", input.documentId)
+    .eq("id", input.sectionId)
     .select("id");
   if (error) return { error: "No fue posible guardar la sección." };
   if ((data ?? []).length === 0) {
-    return { error: "Tu rol no permite editar esta sección en el estado actual del documento." };
+    return { error: "La sección no pertenece a este documento." };
   }
   return { error: null };
 }
@@ -422,12 +487,19 @@ export async function insertCustomSection(
   return { error: null };
 }
 
-export async function deleteSection(orgId: string, sectionId: string): Promise<{ error: string | null }> {
+export async function deleteSection(
+  orgId: string,
+  documentId: string,
+  sectionId: string
+): Promise<{ error: string | null }> {
+  // T8.1: la sección debe pertenecer al documento indicado (además de la
+  // RLS: solo padre en borrador, admin/quality).
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("trazadoc_document_sections")
     .delete()
     .eq("organization_id", orgId)
+    .eq("document_id", documentId)
     .eq("id", sectionId)
     .select("id");
   if (error) return { error: "No fue posible eliminar la sección." };
@@ -437,14 +509,17 @@ export async function deleteSection(orgId: string, sectionId: string): Promise<{
 
 export async function reorderSections(
   orgId: string,
+  documentId: string,
   sections: { id: string; sortOrder: number }[]
 ): Promise<{ error: string | null }> {
+  // T8.1: cada sección reordenada debe pertenecer al documento indicado.
   const supabase = await createServerClient();
   for (const s of sections) {
     const { error } = await supabase
       .from("trazadoc_document_sections")
       .update({ sort_order: s.sortOrder })
       .eq("organization_id", orgId)
+      .eq("document_id", documentId)
       .eq("id", s.id);
     if (error) return { error: "No fue posible reordenar las secciones." };
   }

@@ -1,82 +1,55 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  SISTEMA_GROUP,
+  PLATFORM_GROUP,
+  resolveShellModuleForPath,
+  isShellNavLinkActive,
+  type ModuleNavLink,
+  type ModuleNavGroup,
+} from "@/lib/modules/registry";
 
 /**
- * Navegación. Sprint 9.2 (Parte 1): el menú lateral ya tenía demasiadas
- * opciones sueltas — se reorganiza en grupos plegables (elemento nativo
- * <details>, sin JS de cliente) para que siga siendo fácil de escanear.
- * Ninguna ruta cambia, solo su agrupación visual.
+ * Navegación del shell autenticado. Sprint 9.2 introdujo los grupos
+ * plegables; Sprint T9E la vuelve CONTEXTUAL AL MÓDULO: la definición de
+ * menús vive en lib/modules/registry.ts (un solo registro por módulo) y
+ * este componente resuelve el módulo activo por la ruta actual — dentro de
+ * /textiles se muestra la navegación Textil, en el resto la de CPR. Los
+ * grupos transversales (Sistema, Plataforma) son comunes a los módulos.
  *
  * "Plataforma" NUNCA aparece de forma estática — se agrega en tiempo de
  * render solo si `showPlatform` es true (is_platform_staff() del usuario
  * actual), calculado en el layout del shell. No es un rol de empresa: no
- * depende de memberships ni de la organización activa. La administración
- * global de estructuras/hints de TrazaDocs vive SOLO en este grupo
- * Plataforma — nunca mezclada como opción empresarial del grupo TrazaDocs.
+ * depende de memberships ni de la organización activa.
  */
-type NavLink = { label: string; href: string };
-type NavGroup = { title: string; items: NavLink[] };
 
-export const NAV_TOP_LEVEL: NavLink[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Flujo guiado", href: "/guided-flow" },
-];
+// Compatibilidad: estos grupos históricos se re-exportan desde el registro
+// central (tests/unit/platform.test.ts y cualquier consumidor existente).
+export {
+  NAV_TOP_LEVEL,
+  TRAZABILIDAD_GROUP,
+  TRAZADOCS_GROUP,
+  SISTEMA_GROUP,
+  PLATFORM_GROUP,
+} from "@/lib/modules/registry";
 
-export const TRAZABILIDAD_GROUP: NavGroup = {
-  title: "Trazabilidad",
-  items: [
-    { label: "Diagnóstico", href: "/diagnostic" },
-    { label: "Catálogos", href: "/catalog" },
-    { label: "Evidencias", href: "/evidences" },
-    { label: "Trazabilidad", href: "/traceability" },
-    { label: "Contenido reciclado", href: "/recycled-content" },
-    { label: "Soporte técnico", href: "/audit-support" },
-    { label: "Implementación", href: "/implementation" },
-    { label: "Importaciones", href: "/imports" },
-  ],
-};
-
-export const TRAZADOCS_GROUP: NavGroup = {
-  title: "TrazaDocs",
-  items: [
-    { label: "Documentos", href: "/trazadocs" },
-    { label: "Nuevo documento", href: "/trazadocs/new" },
-    { label: "Maestro de documentos", href: "/trazadocs/master" },
-  ],
-};
-
-export const SISTEMA_GROUP: NavGroup = {
-  title: "Sistema",
-  items: [
-    { label: "Equipo", href: "/team" },
-    { label: "Datos de empresa", href: "/settings/company" },
-    { label: "Mi perfil", href: "/settings/profile" },
-    { label: "Centro de soporte", href: "/support" },
-    { label: "Onboarding", href: "/onboarding" },
-  ],
-};
-
-export const PLATFORM_GROUP: NavGroup = {
-  title: "Plataforma",
-  items: [
-    { label: "Administración de plataforma", href: "/platform" },
-    { label: "Nueva empresa", href: "/platform/organizations/new" },
-    { label: "Estructuras TrazaDocs", href: "/platform/trazadocs" },
-    { label: "Tickets de soporte", href: "/platform/support" },
-  ],
-};
-
-function NavItem({ item }: { item: NavLink }) {
+function NavItem({ item, active }: { item: ModuleNavLink; active: boolean }) {
   return (
     <Link
       href={item.href}
-      className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+      aria-current={active ? "page" : undefined}
+      className={`block rounded-md px-3 py-2 text-sm font-medium ${
+        active ? "bg-white/15 text-white" : "text-white hover:bg-white/10"
+      }`}
     >
       {item.label}
     </Link>
   );
 }
 
-function NavGroupSection({ group }: { group: NavGroup }) {
+function NavGroupSection({ group, pathname }: { group: ModuleNavGroup; pathname: string }) {
   return (
     <details open className="group">
       <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-100/70 hover:bg-white/5">
@@ -85,7 +58,7 @@ function NavGroupSection({ group }: { group: NavGroup }) {
       </summary>
       <div className="mt-0.5 space-y-0.5">
         {group.items.map((item) => (
-          <NavItem key={item.label} item={item} />
+          <NavItem key={item.label} item={item} active={isShellNavLinkActive(item, pathname)} />
         ))}
       </div>
     </details>
@@ -93,17 +66,36 @@ function NavGroupSection({ group }: { group: NavGroup }) {
 }
 
 export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}) {
+  const pathname = usePathname() ?? "";
+  const activeModule = resolveShellModuleForPath(pathname);
+
   return (
     <nav aria-label="Navegación principal" className="space-y-3">
-      <div className="space-y-0.5">
-        {NAV_TOP_LEVEL.map((item) => (
-          <NavItem key={item.label} item={item} />
-        ))}
+      <div className="space-y-1">
+        <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-emerald-100/50">
+          {activeModule.name}
+        </p>
+        <div className="space-y-0.5">
+          {activeModule.topLevel.map((item) => (
+            <NavItem
+              key={item.label}
+              item={item}
+              active={isShellNavLinkActive(item, pathname)}
+            />
+          ))}
+        </div>
       </div>
-      <NavGroupSection group={TRAZABILIDAD_GROUP} />
-      <NavGroupSection group={TRAZADOCS_GROUP} />
-      <NavGroupSection group={SISTEMA_GROUP} />
-      {showPlatform ? <NavGroupSection group={PLATFORM_GROUP} /> : null}
+      {activeModule.groups.map((group) => (
+        <NavGroupSection key={group.title} group={group} pathname={pathname} />
+      ))}
+      <NavGroupSection group={SISTEMA_GROUP} pathname={pathname} />
+      {showPlatform ? <NavGroupSection group={PLATFORM_GROUP} pathname={pathname} /> : null}
+      <Link
+        href="/modules"
+        className="block rounded-md px-3 py-2 text-xs font-medium text-emerald-100/70 hover:bg-white/10 hover:text-white"
+      >
+        ⇄ Cambiar de módulo
+      </Link>
     </nav>
   );
 }

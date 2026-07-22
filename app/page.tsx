@@ -1,7 +1,12 @@
-// Portal público (Sprint 10D, Parte 2): accesible SIN login. Lee la
-// sesión de forma NO bloqueante (igual que /accept-invite) — nunca
-// redirige por falta de sesión, solo cambia el destino del botón
-// "Entrar" de Trazaloop CPR.
+// Portal público (Sprint 10D, Parte 2; hero corregido en Sprint T1):
+// accesible SIN login. Lee la sesión de forma NO bloqueante (igual que
+// /accept-invite) — nunca redirige por falta de sesión, solo cambia el
+// destino del botón "Entrar" a la plataforma.
+//
+// Sprint T1 (DL-16/DL-17): el hero comunica "Trazaloop" — la PLATAFORMA
+// modular — y los módulos (CPR disponible; Textil/Quality/Construcción
+// próximamente) se presentan en las tarjetas de abajo. Trazaloop CPR es
+// el primer módulo, nunca "toda la plataforma".
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -40,11 +45,11 @@ export default async function PublicLandingPage() {
             Beta / lanzamiento controlado
           </span>
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-ink">
-            Trazaloop CPR
+            Trazaloop
           </h1>
           <p className="max-w-2xl text-lg text-ink-soft">
-            Plataforma para gestionar trazabilidad, documentación técnica, evidencias y cálculo de
-            contenido reciclado en procesos asociados a NTC 6632 y UNE-EN 15343.
+            Plataforma modular para gestionar trazabilidad, documentación técnica, evidencias y
+            preparación técnica de productos, procesos y cadenas de valor.
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <Link
@@ -69,8 +74,8 @@ export default async function PublicLandingPage() {
             </span>
             <span className="text-lg font-semibold">Trazaloop CPR</span>
             <span className="text-sm text-ink-soft">
-              Trazabilidad, contenido reciclado, evidencias, TrazaDocs, maestro documental y
-              soporte técnico.
+              Trazabilidad, documentación técnica, evidencias y cálculo de contenido reciclado en
+              procesos asociados a NTC 6632 y UNE-EN 15343.
             </span>
             <Link href={cprHref} className="mt-2 text-sm font-medium text-loop hover:underline">
               Entrar →
@@ -81,8 +86,11 @@ export default async function PublicLandingPage() {
             <span className="inline-flex w-fit rounded-full border border-hairline bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft">
               Próximamente
             </span>
-            <span className="text-lg font-semibold">Trazaloop Textil</span>
-            <span className="text-sm text-ink-soft">{COMING_SOON_MESSAGE}</span>
+            <span className="text-lg font-semibold">Trazaloop Textiles</span>
+            <span className="text-sm text-ink-soft">
+              Trazabilidad de productos de confección, composición de fibras, evidencias,
+              circularidad y pasaporte técnico textil. {COMING_SOON_MESSAGE}
+            </span>
             <button
               type="button"
               disabled
@@ -97,7 +105,9 @@ export default async function PublicLandingPage() {
               Próximamente
             </span>
             <span className="text-lg font-semibold">Trazaloop Quality</span>
-            <span className="text-sm text-ink-soft">Gestión de calidad e ISO 9001. {COMING_SOON_MESSAGE}</span>
+            <span className="text-sm text-ink-soft">
+              Gestión documental y soporte para sistemas de gestión de calidad. {COMING_SOON_MESSAGE}
+            </span>
             <button
               type="button"
               disabled
@@ -112,7 +122,10 @@ export default async function PublicLandingPage() {
               Próximamente
             </span>
             <span className="text-lg font-semibold">Trazaloop Construcción</span>
-            <span className="text-sm text-ink-soft">{COMING_SOON_MESSAGE}</span>
+            <span className="text-sm text-ink-soft">
+              Trazabilidad documental y técnica para productos, materiales y proyectos de
+              construcción. {COMING_SOON_MESSAGE}
+            </span>
             <button
               type="button"
               disabled

@@ -37,6 +37,10 @@ export async function listDocumentMaster(orgId: string): Promise<MasterRow[]> {
   const { data } = await supabase
     .from("v_trazadoc_document_master")
     .select("*")
+    // T8: el maestro documental de la app sigue siendo CPR; los documentos
+    // de TrazaDocs Textil viven en /textiles/trazadocs (un maestro Textil
+    // queda preparado por la columna module_key, no forzado en T8).
+    .eq("module_key", "cpr")
     .eq("organization_id", orgId)
     .order("title", { ascending: true });
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(mapMasterRow);

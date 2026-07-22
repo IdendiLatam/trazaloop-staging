@@ -21,7 +21,8 @@ import {
   findDocumentByBlueprint,
   deleteDocument,
   updateDocumentMetadata,
-  updateSectionContent,
+  updateSectionContentForDocument,
+  getDocumentFacts,
   insertCustomSection,
   deleteSection,
   reorderSections,
@@ -330,6 +331,15 @@ export async function updateDocumentSectionsAction(
 
   const documentId = String(formData.get("document_id") ?? "");
 
+  // T8.1 (regla obligatoria): documento de la organización, del módulo
+  // CPR, en estado editable y con rol autorizado — ANTES de tocar
+  // cualquier sección; el helper re-amarra sección→documento→módulo.
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu organización." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
+
   const updates: { sectionId: string; content: string }[] = [];
   for (const [key, value] of formData.entries()) {
     if (key.startsWith("section:")) {
@@ -338,7 +348,13 @@ export async function updateDocumentSectionsAction(
   }
 
   for (const u of updates) {
-    const { error } = await updateSectionContent(org.organizationId, u.sectionId, u.content);
+    const { error } = await updateSectionContentForDocument({
+      organizationId: org.organizationId,
+      documentId,
+      sectionId: u.sectionId,
+      moduleKey: "cpr",
+      content: u.content,
+    });
     if (error) return { error };
   }
 
@@ -357,6 +373,14 @@ export async function addCustomSectionAction(
   const documentId = String(formData.get("document_id") ?? "");
   const title = String(formData.get("title") ?? "");
   const sortOrder = Number(formData.get("sort_order") ?? "0");
+
+  // T8.1: solo se agregan secciones a un documento CPR editable de la
+  // organización (nunca a un documento Textil desde este flujo).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu organización." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
 
   const validation = validateCustomSectionInput({ title });
   if (validation.error) return { error: validation.error };
@@ -387,7 +411,11 @@ export async function deleteDocumentSectionAction(
 
   const documentId = String(formData.get("document_id") ?? "");
   const sectionId = String(formData.get("section_id") ?? "");
-  const { error } = await deleteSection(org.organizationId, sectionId);
+  // T8.1: la sección debe pertenecer a un documento CPR de la
+  // organización; la RLS re-exige padre en borrador.
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu organización." };
+  const { error } = await deleteSection(org.organizationId, documentId, sectionId);
   if (error) return { error };
 
   revalidateTrazadocs(documentId);
@@ -463,7 +491,15 @@ export async function moveSectionAction(
   const targetOrder = Number(formData.get("target_order") ?? "0");
   const targetSectionId = String(formData.get("target_section_id") ?? "");
 
-  const { error } = await reorderSections(org.organizationId, [
+  // T8.1: reordenar exige documento CPR editable; ambas secciones deben
+  // pertenecerle (el helper las amarra por document_id).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu organización." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
+
+  const { error } = await reorderSections(org.organizationId, documentId, [
     { id: sectionId, sortOrder: targetOrder },
     { id: targetSectionId, sortOrder: currentOrder },
   ]);
@@ -481,7 +517,7 @@ async function transition(
   toStatus: DocumentStatus,
   note: string | null
 ): Promise<TrazadocsActionState> {
-  await requireActiveOrg();
+  const org = await requireActiveOrg();
 
   // Sprint 10A (Bloqueante 3): las 6 acciones de transición de estado
   // (enviar a revisión, aprobar, marcar obsoleto, reactivar, crear
@@ -489,6 +525,12 @@ async function transition(
   // este único helper — un solo chequeo cubre todas, nunca duplicado.
   const mutateCheck = await checkOrganizationCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
+  // T8.1: separación por módulo también en transiciones — el documento
+  // debe ser CPR y de la organización activa (las rutas textiles hacen el
+  // chequeo espejo con 'textiles' desde T8).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu organización." };
 
   const { newVersion, error } = await changeDocumentStatus(documentId, toStatus, note);
   if (error || newVersion == null) {
