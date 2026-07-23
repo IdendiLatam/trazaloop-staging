@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import type { DocumentStatus } from "@/lib/domain/trazadocs";
 import type { MasterRow, MasterSourceType, TrustedFileDocumentInsert } from "@/lib/domain/trazadocs-master";
@@ -294,16 +295,24 @@ export async function changeFileDocumentStatus(
 /** T9F.4 · §15: la finalización recibe el INTENT — la ruta, el nombre y el
  *  MIME salen de la reserva durable (jamás del navegador) y la RPC v2 de
  *  0101 consume la reserva en la MISMA transacción que fija los campos. */
-export async function finalizeFileDocumentInitialVersion(
-  intentId: string,
-  sizeBytes: number,
-  note: string | null
-): Promise<{ error: string | null }> {
-  const supabase = await createServerClient();
-  const { error } = await supabase.rpc("finalize_trazadoc_file_document_initial_version_v2", {
-    p_intent_id: intentId,
-    p_file_size_bytes: sizeBytes,
-    p_change_note: note,
+/** T9F.5B · A05-A08 · SERVER-ONLY: el tamaño y el MIME provienen del objeto
+ *  FÍSICO verificado por el servidor; el actor viaja explícito (bajo
+ *  service_role `auth.uid()` es NULL) y la RPC revalida rol, propiedad,
+ *  acceso, tope por archivo del plan vigente y CUOTA ACTUAL. */
+export async function finalizeFileDocumentInitialVersionServer(input: {
+  actorId: string;
+  intentId: string;
+  realSizeBytes: number;
+  realMimeType: string;
+  note: string | null;
+}): Promise<{ error: string | null }> {
+  const supabase = createAdminClient();
+  const { error } = await supabase.rpc("finalize_trazadoc_file_document_initial_version_server", {
+    p_actor_id: input.actorId,
+    p_intent_id: input.intentId,
+    p_real_size_bytes: input.realSizeBytes,
+    p_real_mime_type: input.realMimeType,
+    p_change_note: input.note,
   });
   if (error) return { error: error.message ?? "No fue posible finalizar la creación del documento." };
   return { error: null };
@@ -386,18 +395,25 @@ export async function listFileDocumentStorageObjects(
 /** T9F.4 · §14-§15: el reemplazo también consume su RESERVA — la RPC v2 de
  *  0101 toma ruta/nombre/MIME del intent y reserva el objeto NUEVO sin
  *  liberar el anterior (que pasa a versión histórica y sigue contando). */
-export async function replaceFileDocumentFile(
-  intentId: string,
-  sizeBytes: number,
-  note: string | null
-): Promise<{ newVersion: number | null; error: string | null }> {
-  const supabase = await createServerClient();
-  const { data, error } = await supabase.rpc("replace_trazadoc_file_document_v2", {
-    p_intent_id: intentId,
-    p_file_size_bytes: sizeBytes,
-    p_change_note: note,
+export async function replaceFileDocumentFileServer(input: {
+  actorId: string;
+  intentId: string;
+  realSizeBytes: number;
+  realMimeType: string;
+  note: string | null;
+}): Promise<{ newVersion: number | null; error: string | null }> {
+  // T9F.5B · A05-A08 · SERVER-ONLY con valores físicos verificados.
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("replace_trazadoc_file_document_server", {
+    p_actor_id: input.actorId,
+    p_intent_id: input.intentId,
+    p_real_size_bytes: input.realSizeBytes,
+    p_real_mime_type: input.realMimeType,
+    p_change_note: input.note,
   });
-  if (error || data == null) return { newVersion: null, error: error?.message ?? "No fue posible reemplazar el archivo." };
+  if (error || data == null) {
+    return { newVersion: null, error: error?.message ?? "No fue posible reemplazar el archivo." };
+  }
   return { newVersion: Number(data), error: null };
 }
 

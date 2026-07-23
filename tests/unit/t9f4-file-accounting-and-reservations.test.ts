@@ -155,7 +155,7 @@ check("18-19. Begin reserva bytes bajo el lock de cuota del módulo correcto: CP
 });
 
 check("20-21. Dos begins simultáneos no superan la cuota: reservas activas dentro del snapshot bajo el MISMO lock (carrera REAL 5 en verde; local H3)", () => {
-  assert(/from storage_upload_intents g[\s\S]{0,200}g\.status = 'pending' and g\.expires_at > now\(\)/.test(sqlFn("module_storage_snapshot")),
+  assert(/from storage_upload_intents g[\s\S]{0,600}g\.status = 'pending' and g\.expires_at > now\(\)/.test(sqlFn("module_storage_snapshot")),
     "el snapshot suma las reservas genéricas activas");
   assert(RACE4.includes("Carrera 5") && RACE4.includes("STORAGE_QUOTA_EXCEEDED"), "carrera real de doble begin");
   assert(SMOKE4.includes("H3 segunda reserva sobre cuota bloqueada"), "las reservas cuentan (H3)");
@@ -173,12 +173,35 @@ check("22-23. Cancel: el intent pasa a failed y sus bytes SIGUEN contando hasta 
 });
 
 check("24-25. Finalize verifica el tamaño REAL contra la reserva (contrato estricto) y el doble finalize es idempotente sin duplicar (local H4-H8; carrera T9F.3 de finalizes)", () => {
-  for (const fn of ["finalize_evidence_attachment", "finalize_trazadoc_file_document_initial_version_v2", "replace_trazadoc_file_document_v2"]) {
-    const body = sqlFn(fn);
-    assert(body.includes("OBJECT_SIZE_MISMATCH"), `${fn}: tamaño real = declarado`);
-    assert(body.includes("for update"), `${fn}: intent bajo FOR UPDATE`);
-    assert(body.includes("if v_intent.status = 'finalized' then"), `${fn}: idempotente`);
-    assert(body.includes("MODULE_ACCESS_BLOCKED"), `${fn}: revalida el acceso comercial`);
+  // T9F.5B · A05/A06: el contrato ya no compara dos valores del CLIENTE. El
+  // finalizer server-only exige metadata FÍSICA verificada por el servidor
+  // (OBJECT_NOT_VERIFIED si falta) y usa el tamaño REAL contra la cuota.
+  const evServer = sqlFn("finalize_evidence_attachment_server");
+  assert(evServer.includes("OBJECT_NOT_VERIFIED"), "CPR: fail-closed sin metadata física");
+  assert(evServer.includes("for update"), "CPR: intent bajo FOR UPDATE");
+  assert(evServer.includes("if v_intent.status = 'finalized' then"), "CPR: idempotente");
+  assert(evServer.includes("MODULE_ACCESS_BLOCKED"), "CPR: revalida el acceso comercial");
+  assert(evServer.includes("size_bytes = p_real_size_bytes"), "CPR: registra el tamaño FÍSICO real");
+  const pre = sqlFn("assert_trazadoc_finalize_preconditions");
+  assert(pre.includes("OBJECT_NOT_VERIFIED"), "TrazaDocs: fail-closed sin metadata física");
+  assert(pre.includes("for update"), "TrazaDocs: intent bajo FOR UPDATE");
+  assert(pre.includes("INTENT_ALREADY_FINALIZED"), "TrazaDocs: no se finaliza dos veces");
+  assert(pre.includes("MODULE_ACCESS_BLOCKED"), "TrazaDocs: revalida el acceso comercial");
+  assert(pre.includes("module_storage_snapshot"), "TrazaDocs: revalida la CUOTA vigente (A08)");
+  // Las firmas históricas quedan CERRADAS a clientes: su cuerpo ya no
+  // finaliza nada, solo lanza SERVER_ONLY_FINALIZER. (Se busca la definición
+  // EXACTA por su lista de parámetros, para no confundirla con la variante
+  // _server, cuyo nombre la contiene como prefijo.)
+  for (const [legacy, firstParam] of [
+    ["finalize_evidence_attachment", "p_intent_id uuid,\n  p_file_size_bytes bigint\n)"],
+    ["finalize_trazadoc_file_document_initial_version_v2", "p_intent_id uuid,"],
+    ["replace_trazadoc_file_document_v2", "p_intent_id uuid,"],
+  ] as const) {
+    const head = `create or replace function public.${legacy}(\n  ${firstParam}`;
+    const at = MIG101_RAW.indexOf(head);
+    assert(at !== -1, `${legacy}: no se encontró la firma histórica`);
+    const body = MIG101_RAW.slice(at, at + 1200);
+    assert(body.includes("SERVER_ONLY_FINALIZER"), `${legacy}: firma histórica cerrada`);
   }
   for (const id of ["H4", "H5", "H6", "H7", "H8"]) assert(SMOKE4.includes(`${id} `), `batería local ${id}`);
 });
@@ -277,17 +300,20 @@ check("46. El mantenimiento server-only sigue disponible: resolve/registro servi
 // ---------------------------------------------------------------------------
 console.log("\nTrazaloop · T9F.4 §J — Estructurales anti-deriva (§30)\n");
 
-check("§30a. Toda carga CPR/TrazaDocs crea su intent ANTES del upload (evidencias, alta y reemplazo del maestro): el path del objeto sale SIEMPRE del intent", () => {
+check("§30a. Toda carga CPR/TrazaDocs crea su intent ANTES del upload; el path del objeto sale SIEMPRE del intent (T9F.5B.1: el upload ya no ocurre dentro de la Server Action)", () => {
+  // T9F.5B.1 · Con CARGA DIRECTA el orden es entre acciones, no dentro de una:
+  // begin crea el intent y DEVUELVE la ruta reservada; el navegador sube a esa
+  // ruta exacta; finalize solo recibe el intentId. Ninguna Server Action ve un
+  // File, así que el invariante se comprueba sobre el contrato de begin.
   for (const [file, fn] of [
-    ["server/actions/evidences.ts", "createEvidenceAction"],
-    ["server/actions/trazadocs-master.ts", "uploadFileDocumentAction"],
-    ["server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction"],
+    ["server/actions/evidences.ts", "beginEvidenceUploadAction"],
+    ["server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction"],
+    ["server/actions/trazadocs-master.ts", "beginFileDocumentReplaceAction"],
   ] as const) {
     const body = fnBody(file, fn);
-    const b = body.indexOf("beginCprStorageUpload");
-    const u = body.indexOf(".upload(") !== -1 ? body.indexOf(".upload(") : body.indexOf("uploadFileDocumentFile(");
-    assert(b !== -1 && u !== -1 && b < u, `${fn}: begin ANTES del upload`);
-    assert(body.includes("begin.intent.objectPath"), `${fn}: la ruta viene del intent`);
+    assert(body.includes("beginCprStorageUpload"), `${fn}: crea el intent durable`);
+    assert(body.includes("objectPath: begin.intent.objectPath"), `${fn}: devuelve la ruta EXACTA del intent`);
+    assert(!/\.upload\(/.test(body), `${fn}: el archivo NO se sube dentro de la Server Action`);
   }
   const lib = read("lib/db/trazadocs-master.ts");
   assert(!/const path = `\$\{orgId\}\/document_files/.test(lib), "la lib ya no construye rutas por su cuenta");
@@ -302,7 +328,13 @@ check("§30b. Sin COALESCE(size, 0) ni GREATEST permisivo sobre tamaños de obje
 
 check("§30c. organization_subscriptions NO recupera autoridad y Storage RLS 0099 sigue intacta", () => {
   assert(!MIG101.includes("organization_subscriptions"), "0101 no consulta el plan legacy");
-  assert(!/storage\.objects/.test(MIG101), "0101 no toca políticas de storage.objects (0099)");
+  // T9F.5B · §12: 0101 corrige Storage RLS (A01-A04) en sentido ENDURECEDOR;
+  // la política textil de 0099 no se redefine ni se debilita.
+  assert(/drop policy if exists trazadocs_documents_(update|delete) on storage\.objects/.test(MIG101),
+    "0101 retira UPDATE/DELETE directos de TrazaDocs (A03/A04)");
+  assert(!/create policy[^;]+for (update|delete)[^;]*on storage\.objects/i.test(MIG101),
+    "0101 no crea políticas UPDATE/DELETE sobre storage.objects");
+  assert(!MIG101.includes("create policy evidences_insert_textiles"), "0099 (textil) intacta");
   assert(!INTENTS.includes("organization_subscriptions"), "las reservas tampoco");
 });
 
@@ -311,11 +343,28 @@ check("§30d. Los intents genéricos no son accesibles por clientes: RLS habilit
     "tabla cerrada a clientes");
   for (const sig of [
     "begin_cpr_storage_upload(text, uuid, text, bigint, text, integer, text)",
-    "finalize_evidence_attachment(uuid, bigint)",
     "cancel_cpr_storage_upload(uuid)",
   ]) {
     assert(MIG101.includes(`revoke all on function public.${sig} from public, anon;`), `revoke de ${sig}`);
     assert(MIG101.includes(`grant execute on function public.${sig} to authenticated;`), `grant mínimo de ${sig}`);
+  }
+  // T9F.5B · A05 · §17: los finalizers físicos son SERVER-ONLY — revocados a
+  // authenticated y anon, concedidos solo a service_role.
+  for (const sig of [
+    "finalize_evidence_attachment_server(uuid, uuid, bigint, text)",
+    "finalize_trazadoc_file_document_initial_version_server(uuid, uuid, bigint, text, text)",
+    "replace_trazadoc_file_document_server(uuid, uuid, bigint, text, text)",
+  ]) {
+    assert(MIG101.includes(`revoke all on function public.${sig} from public, anon, authenticated;`), `revoke server-only de ${sig}`);
+    assert(MIG101.includes(`grant execute on function public.${sig} to service_role;`), `grant service_role de ${sig}`);
+  }
+  for (const legacy of [
+    "finalize_evidence_attachment(uuid, bigint)",
+    "finalize_trazadoc_file_document_initial_version_v2(uuid, bigint, text)",
+    "replace_trazadoc_file_document_v2(uuid, bigint, text)",
+  ]) {
+    assert(MIG101.includes(`revoke all on function public.${legacy} from public, anon, authenticated;`), `firma histórica revocada: ${legacy}`);
+    assert(!MIG101.includes(`grant execute on function public.${legacy} to authenticated;`), `sin grant a authenticated: ${legacy}`);
   }
   assert(MIG101.includes("revoke all on function public.resolve_cpr_upload_intent_object(uuid, boolean) from public, anon, authenticated;"),
     "la resolución NO se concede a authenticated");

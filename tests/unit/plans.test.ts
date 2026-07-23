@@ -579,7 +579,7 @@ check("Extra: el barrido cubrió las 35 acciones de escritura listadas, ninguna 
     ["../../server/actions/catalog.ts", "upsertMaterialAction"],
     ["../../server/actions/catalog.ts", "deleteMaterialAction"],
     ["../../server/actions/catalog.ts", "reclassifyMaterialAction"],
-    ["../../server/actions/evidences.ts", "createEvidenceAction"],
+    ["../../server/actions/evidences.ts", "beginEvidenceUploadAction"],
     ["../../server/actions/evidences.ts", "validateEvidenceAction"],
     ["../../server/actions/evidences.ts", "deleteEvidenceAction"],
     ["../../server/actions/evidences.ts", "linkEvidenceAction"],

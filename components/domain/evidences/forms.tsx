@@ -1,23 +1,100 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  createEvidenceAction,
+  beginEvidenceUploadAction,
+  finalizeEvidenceUploadAction,
+  cancelEvidenceUploadAction,
   linkEvidenceAction,
   type EvidenceActionState,
 } from "@/server/actions/evidences";
+import { uploadFileToIntentPath } from "@/lib/storage/direct-upload";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
 const initial: EvidenceActionState = { error: null };
 
+/**
+ * T9F.5B.1 · CARGA DIRECTA: el archivo NO viaja en FormData hacia la Server
+ * Action. Flujo: begin (solo metadata) → PUT directo del navegador a la ruta
+ * EXACTA del intent → finalize (solo intentId; el servidor verifica el objeto
+ * físico y su firma binaria antes de registrar nada).
+ */
 export function EvidenceForm() {
-  const [state, formAction, pending] = useActionState(createEvidenceAction, initial);
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"idle" | "saving" | "uploading" | "finalizing">("idle");
+  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+  const pending = phase !== "idle";
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const file = data.get("file");
+    const realFile = file instanceof File && file.size > 0 ? file : null;
+
+    setPhase("saving");
+    const begin = await beginEvidenceUploadAction({
+      name: String(data.get("name") ?? "").trim(),
+      evidenceType: String(data.get("evidence_type") ?? "").trim() || null,
+      evidenceDate: String(data.get("evidence_date") ?? "") || null,
+      responsible: String(data.get("responsible") ?? "").trim() || null,
+      observations: String(data.get("observations") ?? "").trim() || null,
+      validUntil: String(data.get("valid_until") ?? "") || null,
+      file: realFile
+        ? {
+            name: realFile.name,
+            sizeBytes: realFile.size,
+            mimeType: realFile.type || "application/octet-stream",
+          }
+        : null,
+    });
+    if (begin.error !== null) {
+      setPhase("idle");
+      setError(begin.error);
+      return;
+    }
+    if (!begin.upload || !realFile) {
+      setPhase("idle");
+      form.reset();
+      router.refresh();
+      return;
+    }
+
+    setPhase("uploading");
+    const uploaded = await uploadFileToIntentPath({
+      bucketId: begin.upload.bucketId,
+      objectPath: begin.upload.objectPath,
+      file: realFile,
+    });
+    if (!uploaded.ok) {
+      // Compensación: se cancela la reserva y se intenta el retiro CONFIRMADO.
+      await cancelEvidenceUploadAction(begin.upload.intentId);
+      setPhase("idle");
+      setError(`La evidencia se creó, pero ${uploaded.message.toLowerCase()}`);
+      router.refresh();
+      return;
+    }
+
+    setPhase("finalizing");
+    const finalized = await finalizeEvidenceUploadAction(begin.upload.intentId);
+    setPhase("idle");
+    if (finalized.error) {
+      setError(finalized.error);
+      router.refresh();
+      return;
+    }
+    form.reset();
+    router.refresh();
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      <ErrorAlert message={state.error} />
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+      <ErrorAlert message={error} />
       <Field label="Nombre" name="name" required />
       <Field
         label="Tipo (opcional)"
@@ -42,7 +119,13 @@ export function EvidenceForm() {
         </span>
       </label>
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Guardando…" : "Crear evidencia"}
+        {phase === "saving"
+          ? "Guardando…"
+          : phase === "uploading"
+            ? "Subiendo archivo…"
+            : phase === "finalizing"
+              ? "Verificando archivo…"
+              : "Crear evidencia"}
       </Button>
     </form>
   );

@@ -1,11 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   updateFileDocumentMetadataAction,
-  replaceFileDocumentFileAction,
+  beginFileDocumentReplaceAction,
+  finalizeFileDocumentReplaceAction,
+  cancelFileDocumentUploadAction,
   type MasterActionState,
 } from "@/server/actions/trazadocs-master";
+import { uploadFileToIntentPath } from "@/lib/storage/direct-upload";
 import { CATEGORY_CODES, CATEGORY_LABEL } from "@/lib/domain/trazadocs-master";
 import { Field, SelectField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -53,18 +57,72 @@ export function FileDocumentEditForm({
   );
 }
 
+/**
+ * T9F.5B.1 · CARGA DIRECTA del reemplazo: begin (metadata) → PUT directo a la
+ * ruta v(n+1) reservada → finalize (solo intentId). El archivo anterior no se
+ * sobrescribe: la nueva versión es un objeto NUEVO (A03).
+ */
 export function ReplaceFileDocumentForm({ documentId }: { documentId: string }) {
-  const [state, formAction, pending] = useActionState(replaceFileDocumentFileAction, initial);
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"idle" | "saving" | "uploading" | "finalizing">("idle");
+  const pending = phase !== "idle";
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const file = data.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      setError("Selecciona un archivo.");
+      return;
+    }
+    const note = String(data.get("note") ?? "").trim() || null;
+
+    setPhase("saving");
+    const begin = await beginFileDocumentReplaceAction({
+      documentId,
+      file: { name: file.name, sizeBytes: file.size, mimeType: file.type },
+    });
+    if (begin.error !== null) {
+      setPhase("idle");
+      setError(begin.error);
+      return;
+    }
+
+    setPhase("uploading");
+    const uploaded = await uploadFileToIntentPath({
+      bucketId: begin.upload.bucketId,
+      objectPath: begin.upload.objectPath,
+      file,
+    });
+    if (!uploaded.ok) {
+      await cancelFileDocumentUploadAction(begin.upload.intentId);
+      setPhase("idle");
+      setError(uploaded.message);
+      return;
+    }
+
+    setPhase("finalizing");
+    const finalized = await finalizeFileDocumentReplaceAction(begin.upload.intentId, note);
+    setPhase("idle");
+    if (finalized.error) {
+      setError(finalized.error);
+      return;
+    }
+    form.reset();
+    router.refresh();
+  }
 
   return (
-    <form action={formAction} className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
-      <input type="hidden" name="id" value={documentId} />
+    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
       <h3 className="text-sm font-semibold">Reemplazar archivo</h3>
       <p className="text-xs text-ink-soft">
         Sube una nueva versión del archivo. Si el documento estaba aprobado, la nueva versión queda
         en borrador — nunca se sobrescribe silenciosamente un archivo ya aprobado.
       </p>
-      <ErrorAlert message={state.error} />
+      <ErrorAlert message={error} />
       <input
         type="file"
         name="file"
@@ -74,7 +132,13 @@ export function ReplaceFileDocumentForm({ documentId }: { documentId: string }) 
       />
       <Field label="Nota de cambio (opcional)" name="note" placeholder="Se corrige la versión con el cambio solicitado." />
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Subiendo…" : "Reemplazar archivo"}
+        {phase === "saving"
+          ? "Preparando…"
+          : phase === "uploading"
+            ? "Subiendo archivo…"
+            : phase === "finalizing"
+              ? "Verificando archivo…"
+              : "Reemplazar archivo"}
       </Button>
     </form>
   );

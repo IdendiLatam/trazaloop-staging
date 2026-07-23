@@ -317,12 +317,17 @@ check("38. TrazaDocs: si la finalización falla tras subir, el objeto queda REGI
   // intent) — el fallo de la finalización ya no depende de una compensación
   // registrar-y-retirar: la resolución server-only inspecciona el retiro y,
   // sin confirmación, los bytes SIGUEN contando por el propio intent.
-  const upload = fnBody("server/actions/trazadocs-master.ts", "uploadFileDocumentAction");
-  assert(upload.indexOf("beginCprStorageUpload") !== -1 && upload.indexOf("beginCprStorageUpload") < upload.indexOf("uploadFileDocumentFile"),
-    "el intent durable se crea ANTES del upload");
-  assert(upload.includes("resolveCprUploadIntentObject"), "resolución server-only del intent");
-  assert(upload.indexOf("finalizeError") < upload.lastIndexOf("resolveCprUploadIntentObject"), "la resolución cuelga del error REAL inspeccionado");
-  assert(upload.includes("seguirá contando"), "aviso honesto cuando el retiro no se confirma");
+  // T9F.5B.1 · Con CARGA DIRECTA el ciclo se reparte en tres acciones: begin
+  // crea el intent (referencia durable ANTES de que el navegador suba nada),
+  // finalize verifica y compensa ante fallo, cancel compensa el PUT fallido.
+  const begin = fnBody("server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction");
+  assert(begin.includes("beginCprStorageUpload"), "el intent durable se crea en begin, ANTES del PUT del navegador");
+  const fin = fnBody("server/actions/trazadocs-master.ts", "finalizeFileDocumentUploadAction");
+  assert(fin.includes("compensateFailedCprUpload"), "compensación server-only del intent");
+  assert(fin.indexOf("finalizeError") < fin.lastIndexOf("compensateFailedCprUpload"), "la compensación cuelga del error REAL inspeccionado");
+  assert(fin.includes("seguirá contando"), "aviso honesto cuando el retiro no se confirma");
+  const cancel = fnBody("server/actions/trazadocs-master.ts", "cancelFileDocumentUploadAction");
+  assert(cancel.includes("compensateFailedCprUpload"), "el abandono o el PUT fallido también compensan");
 });
 
 check("39-40. Evidencias CPR: la escritura de storage_path/size es la RPC de finalización (definer) y su resultado se INSPECCIONA; ante fallo no hay éxito silencioso y el objeto permanece contabilizado si no se elimina", () => {
@@ -330,13 +335,16 @@ check("39-40. Evidencias CPR: la escritura de storage_path/size es la RPC de fin
   // trigger — la única escritura es finalize_evidence_attachment (misma
   // transacción que consume la reserva) y su error se inspecciona; el
   // objeto conserva su referencia durable (intent) mientras no se resuelva.
-  const create = fnBody("server/actions/evidences.ts", "createEvidenceAction");
-  assert(!/from\("evidences"\)[\s\S]{0,120}\.update\(\{ storage_path/.test(create),
+  // T9F.5B.1 · La creación (begin) y la finalización viven en acciones
+  // separadas: el archivo ya no viaja por la Server Action.
+  const begin = fnBody("server/actions/evidences.ts", "beginEvidenceUploadAction");
+  assert(!/from\("evidences"\)[\s\S]{0,120}\.update\(\{ storage_path/.test(begin),
     "sin UPDATE directo de campos físicos en la acción (los fija la RPC definer)");
-  assert(create.includes("finalizeEvidenceAttachment"), "finalización autoritativa por RPC");
-  assert(create.includes("!finalized.ok"), "el resultado de la finalización se inspecciona");
-  assert(create.includes("resolveCprUploadIntentObject"), "resolución server-only ante fallo");
-  assert(create.includes("seguirá contando"), "si el retiro falla, el usuario sabe que sigue contando");
+  const fin = fnBody("server/actions/evidences.ts", "finalizeEvidenceUploadAction");
+  assert(fin.includes("finalizeEvidenceAttachmentServer"), "finalización autoritativa por RPC server-only");
+  assert(fin.includes("!finalized.ok"), "el resultado de la finalización se inspecciona");
+  assert(fin.includes("compensateFailedCprUpload"), "compensación server-only ante fallo");
+  assert(fin.includes("seguirá contando"), "si el retiro falla, el usuario sabe que sigue contando");
 });
 
 // ---------------------------------------------------------------------------

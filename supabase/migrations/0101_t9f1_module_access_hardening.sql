@@ -1,5 +1,5 @@
 -- ============================================================================
--- Trazaloop · Sprints T9F.1 + T9F.2 + T9F.3 (migración ACUMULADA) ·
+-- Trazaloop · Sprints T9F.1 + T9F.2 + T9F.3 + T9F.5B (migración ACUMULADA) ·
 -- CIERRE DEFINITIVO del control comercial por módulo:
 --   · la BASE DE DATOS es la autoridad final (triggers atómicos por recurso);
 --   · reservas de evidencias Textiles (unidad + bytes) en begin/finalize;
@@ -7,7 +7,32 @@
 --   · registro de objetos pendientes ENDURECIDO (sin datos físicos del cliente);
 --   · tamaños por versión y tamaños DESCONOCIDOS ≠ cero;
 --   · RPC de asignación idempotente y segura ante concurrencia (T9F.2);
---   · uso REAL por módulo con deduplicación física, reservas y desconocidos.
+--   · uso REAL por módulo con deduplicación física, reservas y desconocidos;
+--   · T9F.5B: remediación mínima de A01-A08, A13 y A14 (equipo rojo T9F.5A).
+-- ============================================================================
+--
+-- T9F.5B (remediación mínima sobre ESTE MISMO archivo, que sigue SIN aplicar;
+-- por eso NO se crea 0102 y NO se modifica 0100):
+--   · A01/A02 · §12 · INSERT de storage.objects ligado a un intent EXACTO
+--     (ruta, bucket, usuario, organización, módulo, propósito, estado,
+--     vigencia y tamaño reservado); se ELIMINAN evidences_insert_legacy y
+--     trazadocs_documents_insert.
+--   · A03/A04 · §12 · se ELIMINAN trazadocs_documents_update y
+--     trazadocs_documents_delete: UPDATE/upsert y DELETE directos quedan en
+--     deny-by-default; el reemplazo es objeto NUEVO y el borrado físico es
+--     server-only vía pending_delete.
+--   · A05/A06/A07 · §6b · finalizers CPR/TrazaDocs SERVER-ONLY que exigen
+--     tamaño y MIME FÍSICOS verificados por el servidor; las firmas
+--     históricas quedan revocadas y fallan con SERVER_ONLY_FINALIZER.
+--   · A08 · §6b · revalidación de acceso, tope por archivo y CUOTA VIGENTE
+--     en el instante del finalize (inicial, replace y evidencia CPR).
+--   · A13 · §5 · el límite de trazadoc_documents deriva el módulo del
+--     BLUEPRINT (fuente autoritativa), no de new.module_key del cliente.
+--   · A14 · §6b.0 · tope POR ARCHIVO por (resource_type, access_mode):
+--     CPR 20 MB; TrazaDocs Demo 10 MB, Full 25 MB, Extra 25 MB.
+-- No cambia planes, cuotas ni catálogo comercial; no crea funciones
+-- exclusivas de Extra; no toca pasaportes, QR ni circularidad; no trunca ni
+-- desactiva RLS; conserva las protecciones A09-A12 y A15-A18.
 -- ============================================================================
 --
 -- ADITIVA sobre 0100 (aplicada e INTACTA). Esta migración NUNCA fue aplicada:
@@ -15,7 +40,8 @@
 -- staging como UNA unidad. Reemplazos de funciones existentes solo mediante
 -- CREATE OR REPLACE conservando firmas (0097/0098 se extienden en runtime sin
 -- tocar sus archivos). No borra datos de negocio, no trunca, no desactiva RLS,
--- no toca Storage RLS (0093–0099) ni crea planes/cuotas.
+-- no crea planes/cuotas. (T9F.5B SÍ corrige Storage RLS en §12: era la
+-- superficie que hacía opcional toda la arquitectura de reservas.)
 --
 -- PRINCIPIO DE AUTORIDAD (T9F.3): las Server Actions siguen validando para la
 -- experiencia, pero el LÍMITE COMERCIAL se aplica en PostgreSQL:
@@ -36,6 +62,7 @@
 --   §9  audit_log: FK a organizations RETIRADA (filas intactas; ver nota)
 --   §10 Índices de apoyo
 --   §11 Verificaciones posteriores (documentación)
+--   §12 T9F.5B · Storage RLS ligada a intent (A01-A04)
 --
 -- ROLLBACK (informe T9F.3 §56 / guía; NO ejecutar sin decisión): restaurar
 -- las funciones reemplazadas con sus definiciones de 0097/0098/0100 (los
@@ -874,6 +901,7 @@ set search_path = public
 as $$
 declare
   v_module text := tg_argv[0];
+  v_module_key text;
   v_resource text := tg_argv[1];
   v_access jsonb;
   v_reason text;
@@ -889,12 +917,33 @@ begin
     return new;
   end if;
 
-  -- trazadoc_documents sirve a DOS módulos: el módulo real sale de la fila
-  -- (module_key lo fija un trigger de 0082 en servidor, jamás el cliente).
+  -- T9F.5B · A13 · El módulo de trazadoc_documents se deriva de una FUENTE
+  -- AUTORITATIVA — el blueprint — ANTES de evaluar el límite. Confiar en
+  -- new.module_key era explotable: PostgreSQL ejecuta los triggers BEFORE
+  -- INSERT en orden ALFABÉTICO de nombre, y 't_trazadoc_documents_limit' <
+  -- 't_trazadoc_documents_module_key', así que el límite leía el valor del
+  -- CLIENTE antes de que 0082 lo normalizara desde el blueprint. Un
+  -- documento con blueprint CPR y module_key='textiles' se evaluaba contra
+  -- el plan Textiles y luego se guardaba como CPR.
+  --
+  -- Derivación directa (no depende del orden de triggers): si hay
+  -- blueprint_id, el módulo REAL es el del blueprint; solo un documento
+  -- LIBRE (sin blueprint) usa new.module_key, que en ese caso es el valor
+  -- que 0082 conserva. Un blueprint_id inexistente falla cerrado.
   if v_module = 'BY_MODULE_KEY' then
-    v_module := case new.module_key when 'cpr' then 'traceability_6632'
-                                    when 'textiles' then 'textiles'
-                                    else null end;
+    if new.blueprint_id is not null then
+      select b.module_key into v_module_key
+        from trazadoc_blueprints b where b.id = new.blueprint_id;
+      if v_module_key is null then
+        raise exception 'BLUEPRINT_NOT_FOUND'
+          using hint = 'La estructura documental indicada no existe.';
+      end if;
+    else
+      v_module_key := new.module_key;
+    end if;
+    v_module := case v_module_key when 'cpr' then 'traceability_6632'
+                                  when 'textiles' then 'textiles'
+                                  else null end;
     if v_module is null then
       return new; -- claves futuras sin límite comercial definido
     end if;
@@ -1025,8 +1074,14 @@ create table public.storage_upload_intents (
       (resource_type = 'evidence' and bucket_id = 'evidences')
       or (resource_type in ('trazadoc_initial', 'trazadoc_replace') and bucket_id = 'trazadocs-documents')
     ),
+  -- T9F.5B · A14: el CHECK estructural usa el MÁXIMO TÉCNICO SUPERIOR
+  -- permitido por el catálogo (TrazaDocs Full/Extra = 25 MB). El límite
+  -- ESPECÍFICO por (resource_type, access_mode) — CPR evidencia 20 MB,
+  -- TrazaDocs Demo 10 MB, TrazaDocs Full/Extra 25 MB — lo aplica la RPC
+  -- begin_cpr_storage_upload y se re-verifica en los finalizers. El CHECK
+  -- es solo una barrera estructural, jamás el límite comercial por plan.
   constraint storage_upload_intents_size_check
-    check (expected_size_bytes > 0 and expected_size_bytes <= 20 * 1024 * 1024),
+    check (expected_size_bytes > 0 and expected_size_bytes <= 25 * 1024 * 1024),
   constraint storage_upload_intents_prefix_check
     check (position(organization_id::text || '/' in object_path) = 1),
   constraint storage_upload_intents_expiry_check check (expires_at > created_at),
@@ -1119,8 +1174,15 @@ as $$
        and (i.status = 'failed' or (i.status = 'pending' and i.expires_at <= now()))
     union all
     -- T9F.4: intents CPR/TrazaDocs no finalizados ni resueltos: idem.
-    select g.bucket_id, g.object_path, g.expected_size_bytes
+    -- T9F.5B.1 · A06 · El tamaño que cuenta es el MAYOR entre el declarado y
+    -- el FÍSICO real del objeto en Storage. Sin esto, reservar 1 MB y subir
+    -- 5 MB dejaba 4 MB de capacidad FICTICIA: la contabilidad creía 1 MB.
+    select g.bucket_id, g.object_path,
+           greatest(g.expected_size_bytes,
+                    coalesce((o.metadata ->> 'size')::bigint, 0))
       from storage_upload_intents g
+      left join storage.objects o
+        on o.bucket_id = g.bucket_id and o.name = g.object_path
      where p_module_code = 'traceability_6632'
        and g.organization_id = p_organization_id
        and g.status <> 'finalized' and g.storage_resolved_at is null
@@ -1141,8 +1203,14 @@ as $$
                where p_module_code = 'textiles'
                  and i.organization_id = p_organization_id
                  and i.status = 'pending' and i.expires_at > now()), 0)::bigint
-    + coalesce((select sum(g.expected_size_bytes)
+    -- T9F.5B.1 · A06 · Una reserva ACTIVA cuyo objeto ya está subido cuenta
+    -- por su tamaño FÍSICO si este es mayor que el declarado: jamás se
+    -- concede capacidad como si el objeto ocupara lo que el cliente dijo.
+    + coalesce((select sum(greatest(g.expected_size_bytes,
+                                    coalesce((o.metadata ->> 'size')::bigint, 0)))
                 from storage_upload_intents g
+                left join storage.objects o
+                  on o.bucket_id = g.bucket_id and o.name = g.object_path
                where p_module_code = 'traceability_6632'
                  and g.organization_id = p_organization_id
                  and g.status = 'pending' and g.expires_at > now()), 0)::bigint,
@@ -1154,7 +1222,7 @@ $$;
 revoke all on function public.module_storage_snapshot(uuid, text) from public, anon, authenticated;
 
 comment on function public.module_storage_snapshot(uuid, text) is
-  'T9F.3 · Instantánea autoritativa: bytes CONFIRMADOS (objetos físicos deduplicados por bucket+ruta; tamaño máximo ante referencias repetidas), bytes RESERVADOS (intents textiles pending no vencidos), objetos con tamaño DESCONOCIDO (path sin size — jamás cero) y conflictos. Interna; misma semántica que v_organization_module_usage.';
+  'T9F.5B.1 · Instantánea autoritativa (los intents CPR cuentan por el MAYOR entre su tamaño declarado y el FÍSICO real del objeto: nunca capacidad ficticia). T9F.3 · bytes CONFIRMADOS (objetos físicos deduplicados por bucket+ruta; tamaño máximo ante referencias repetidas), bytes RESERVADOS (intents textiles pending no vencidos), objetos con tamaño DESCONOCIDO (path sin size — jamás cero) y conflictos. Interna; misma semántica que v_organization_module_usage.';
 
 -- begin v2: TODA la validación de 0097 (rol, archivo, MIME, extensión,
 -- metadata canónica, ruta en servidor, tope 20 MB por archivo) MÁS: acceso
@@ -1608,6 +1676,152 @@ comment on function public.finalize_textile_evidence_upload_server(uuid, uuid, b
 -- Textiles, ya reservadas por 0094 — sin tercera arquitectura.
 
 -- begin: crea la referencia durable Y la reserva, bajo el lock de cuota.
+-- ----------------------------------------------------------------------------
+-- §6b.0b · T9F.5B.1 · ACCESO COMERCIAL RESUELTO PARA UN ACTOR EXPLÍCITO
+-- ----------------------------------------------------------------------------
+-- BLOQUEADOR encontrado en la revisión previa a QA: los finalizers server-only
+-- se invocan con service_role, donde `auth.uid()` es NULL. Como
+-- `resolve_organization_module_access` (0100) decide con
+-- `is_org_member() or is_platform_superadmin()` —y ambas dependen de
+-- `auth.uid()`—, TODA finalización legítima habría terminado en
+-- MODULE_ACCESS_BLOCKED con reason = 'not_member'. El usuario real de la
+-- operación no está en `auth.uid()`: está en `p_actor_id`.
+--
+-- Solución (misma estrategia que el finalizer Textiles de 0098, que ya evita
+-- depender de auth.uid() bajo service_role): un helper server-only que recibe
+-- el actor EXPLÍCITAMENTE, comprueba su membresía ACTIVA y solo entonces lee
+-- `organization_modules` directamente. Replica la semántica de 0100 campo por
+-- campo (módulo funcional, asignado, enabled, access_mode, Demo vencido) SIN
+-- modificar 0100 y SIN debilitar el resolver para las llamadas normales: el
+-- resolver original queda intacto y sigue siendo el único camino para
+-- `authenticated`. Aquí no se simula `auth.uid()` en ningún momento.
+create or replace function public.resolve_module_access_for_actor(
+  p_organization_id uuid,
+  p_module_code text,
+  p_actor_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_functional boolean;
+  v_row        public.organization_modules%rowtype;
+  v_is_demo    boolean;
+  v_expired    boolean;
+  v_allowed    boolean;
+begin
+  -- (1) El ACTOR es obligatorio y debe existir de verdad.
+  if p_actor_id is null then
+    return jsonb_build_object('allowed', false, 'reason', 'actor_required', 'assigned', false);
+  end if;
+  if not exists (select 1 from auth.users u where u.id = p_actor_id) then
+    return jsonb_build_object('allowed', false, 'reason', 'actor_not_found', 'assigned', false);
+  end if;
+
+  -- (2) Membresía ACTIVA del actor en ESA organización — el equivalente
+  --     explícito de is_org_member(), evaluado sobre p_actor_id y nunca
+  --     sobre auth.uid(). service_role no sustituye a la membresía.
+  if not exists (
+    select 1 from public.memberships m
+     where m.organization_id = p_organization_id
+       and m.user_id = p_actor_id
+       and m.status = 'active'
+  ) then
+    return jsonb_build_object('allowed', false, 'reason', 'not_member', 'assigned', false);
+  end if;
+
+  -- (3) A partir de aquí, la MISMA semántica de 0100, campo por campo.
+  select coalesce(bool_or(m.is_functional), false) into v_functional
+    from modules m where m.code = p_module_code;
+  if not v_functional then
+    return jsonb_build_object('allowed', false, 'reason', 'coming_soon', 'assigned', false, 'is_functional', false);
+  end if;
+
+  select * into v_row
+    from organization_modules
+   where organization_id = p_organization_id and module_code = p_module_code;
+
+  if v_row.id is null then
+    return jsonb_build_object('allowed', false, 'reason', 'not_assigned', 'assigned', false, 'is_functional', true);
+  end if;
+
+  if not v_row.enabled then
+    return jsonb_build_object(
+      'allowed', false, 'reason', 'disabled', 'assigned', true, 'is_functional', true,
+      'enabled', false, 'access_mode', v_row.access_mode, 'access_expires_at', v_row.access_expires_at
+    );
+  end if;
+
+  v_is_demo := v_row.access_mode = 'demo';
+  v_expired := v_is_demo and v_row.access_expires_at is not null and v_row.access_expires_at <= now();
+  v_allowed := not v_expired;
+
+  return jsonb_build_object(
+    'allowed', v_allowed,
+    'reason', case when v_expired then 'demo_expired' else 'ok' end,
+    'assigned', true,
+    'is_functional', true,
+    'enabled', true,
+    'access_mode', v_row.access_mode,
+    'access_expires_at', v_row.access_expires_at,
+    'is_demo', v_is_demo,
+    'is_expired', v_expired
+  );
+end;
+$$;
+
+revoke all on function public.resolve_module_access_for_actor(uuid, text, uuid) from public, anon, authenticated;
+grant execute on function public.resolve_module_access_for_actor(uuid, text, uuid) to service_role;
+
+comment on function public.resolve_module_access_for_actor(uuid, text, uuid) is
+  'T9F.5B.1 · Acceso comercial EFECTIVO resuelto para un ACTOR EXPLÍCITO, para código server-only donde auth.uid() es NULL bajo service_role. Exige actor existente y membresía ACTIVA, y replica la semántica de resolve_organization_module_access (0100): módulo funcional, asignado, enabled, access_mode y vencimiento Demo por la hora de la BD. No modifica ni debilita el resolver de 0100, que sigue siendo el camino de authenticated.';
+
+-- ----------------------------------------------------------------------------
+-- §6b.0 · T9F.5B · A14 · MÁXIMO POR ARCHIVO según tipo de recurso y plan
+-- ----------------------------------------------------------------------------
+-- Antes existía un único tope FIJO de 20 MB para TODO upload CPR/TrazaDocs,
+-- que rechazaba un TrazaDocs Full de 22 MB pese a que el catálogo comercial
+-- y la capa TypeScript (lib/domain/trazadocs-master.ts) permiten 25 MB en
+-- Full/Extra y 10 MB en Demo. La base era MÁS restrictiva que el producto.
+--
+-- Esta función es la ÚNICA fuente del tope por archivo en SQL y distingue:
+--   · evidencia CPR              → 20 MB (su máximo técnico propio, INTACTO;
+--                                  no se asume igual al de TrazaDocs)
+--   · TrazaDocs Demo             → 10 MB
+--   · TrazaDocs Full             → 25 MB
+--   · TrazaDocs Extra            → 25 MB (mismo tope POR ARCHIVO que Full;
+--                                  Extra solo difiere en la CUOTA total)
+-- Un modo desconocido falla cerrado (NULL ⇒ el llamador rechaza).
+create or replace function public.cpr_upload_max_file_bytes(
+  p_resource_type text,
+  p_access_mode text
+)
+returns bigint
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when p_resource_type = 'evidence' then 20 * 1024 * 1024
+    when p_resource_type in ('trazadoc_initial', 'trazadoc_replace') then
+      case p_access_mode
+        when 'demo'  then 10 * 1024 * 1024
+        when 'full'  then 25 * 1024 * 1024
+        when 'extra' then 25 * 1024 * 1024
+        else null
+      end
+    else null
+  end::bigint;
+$$;
+
+revoke all on function public.cpr_upload_max_file_bytes(text, text) from public, anon, authenticated;
+
+comment on function public.cpr_upload_max_file_bytes(text, text) is
+  'T9F.5B · A14 · Tope POR ARCHIVO autoritativo por (resource_type, access_mode): evidencia CPR 20 MB (máximo técnico propio); TrazaDocs Demo 10 MB, Full 25 MB, Extra 25 MB. Sustituye el 20 MB fijo común. NULL = modo desconocido ⇒ el llamador falla cerrado. No cambia planes, cuotas ni catálogo comercial.';
+
 create or replace function public.begin_cpr_storage_upload(
   p_resource_type text,
   p_resource_id uuid,
@@ -1633,6 +1847,7 @@ declare
   v_mode text;
   v_quota bigint;
   v_snap record;
+  v_max_file bigint;
   v_existing public.storage_upload_intents%rowtype;
   v_id uuid := gen_random_uuid();
 begin
@@ -1645,8 +1860,13 @@ begin
   if p_file_name is null or length(trim(p_file_name)) = 0 then
     raise exception 'FILE_REQUIRED';
   end if;
+  -- T9F.5B · A14 · Barrera ESTRUCTURAL únicamente (máximo técnico superior
+  -- del catálogo = 25 MB, igual que el CHECK de la tabla de intents). El
+  -- tope REAL por (tipo de recurso, plan) se aplica más abajo, en cuanto se
+  -- conoce el access_mode vigente: aquí aún no se sabe a qué organización
+  -- ni a qué plan pertenece la carga.
   if p_file_size_bytes is null or p_file_size_bytes <= 0
-     or p_file_size_bytes > 20 * 1024 * 1024 then
+     or p_file_size_bytes > 25 * 1024 * 1024 then
     raise exception 'FILE_SIZE_INVALID';
   end if;
   if p_file_mime_type is null or length(trim(p_file_mime_type)) = 0 then
@@ -1693,6 +1913,19 @@ begin
       using detail = coalesce(v_access->>'reason', 'not_allowed');
   end if;
   v_mode := v_access->>'access_mode';
+
+  -- T9F.5B · A14 · Tope POR ARCHIVO específico del tipo de recurso y del
+  -- plan VIGENTE (no un 20 MB común): evidencia CPR 20 MB; TrazaDocs Demo
+  -- 10 MB; TrazaDocs Full/Extra 25 MB. Un modo desconocido falla cerrado.
+  v_max_file := cpr_upload_max_file_bytes(p_resource_type, v_mode);
+  if v_max_file is null then
+    raise exception 'FILE_SIZE_LIMIT_UNVERIFIABLE'
+      using detail = coalesce(v_mode, 'null') || '/' || p_resource_type;
+  end if;
+  if p_file_size_bytes > v_max_file then
+    raise exception 'FILE_SIZE_INVALID'
+      using detail = p_file_size_bytes || '>' || v_max_file || ' (' || p_resource_type || '/' || v_mode || ')';
+  end if;
 
   perform pg_advisory_xact_lock(
     hashtextextended('module_storage:' || v_org::text || '/traceability_6632', 0)
@@ -1788,11 +2021,182 @@ grant execute on function public.begin_cpr_storage_upload(text, uuid, text, bigi
 
 comment on function public.begin_cpr_storage_upload(text, uuid, text, bigint, text, integer, text) is
   'T9F.4 · Referencia DURABLE + RESERVA atómica ANTES de todo upload CPR/TrazaDocs: deriva organización, bucket y ruta de la fila de dominio, valida acceso comercial y exige (confirmado + reservado + entrante <= cuota) bajo el advisory lock del módulo, fail-closed ante desconocidos; idempotente y con expiración atómica de claves vencidas (jamás bloqueo permanente).';
--- finalize del ADJUNTO de evidencia CPR: convierte la reserva en consumo y
--- fija los campos físicos (vía DEFINER: el guard de §3b no aplica al dueño).
-create or replace function public.finalize_evidence_attachment(
+-- Precondiciones COMPARTIDAS de los finalizers TrazaDocs (server-only).
+-- Centraliza, bajo el advisory lock del módulo, todo lo que T9F.5A encontró
+-- ausente: verificación de que el servidor traía metadata física (A05),
+-- tamaño físico real (A06), MIME físico coherente (A07) y REVALIDACIÓN de
+-- plan, tope por archivo y CUOTA VIGENTE en el instante del finalize (A08).
+-- Devuelve el intent ya bloqueado (FOR UPDATE) listo para consumirse.
+create or replace function public.assert_trazadoc_finalize_preconditions(
+  p_actor_id uuid,
   p_intent_id uuid,
-  p_file_size_bytes bigint
+  p_real_size_bytes bigint,
+  p_real_mime_type text,
+  p_expected_resource_type text
+)
+returns public.storage_upload_intents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_intent public.storage_upload_intents%rowtype;
+  v_access jsonb;
+  v_mode text;
+  v_quota bigint;
+  v_snap record;
+  v_max_file bigint;
+  v_claims text := nullif(current_setting('request.jwt.claims', true), '');
+begin
+  if v_claims is not null
+     and coalesce(v_claims::jsonb ->> 'role', '') <> 'service_role' then
+    raise exception 'SERVER_ONLY';
+  end if;
+  if p_actor_id is null then
+    raise exception 'ACTOR_REQUIRED';
+  end if;
+  if not exists (select 1 from auth.users u where u.id = p_actor_id) then
+    raise exception 'ACTOR_NOT_FOUND';
+  end if;
+  -- A05 · Sin metadata física verificada por el servidor NO se finaliza.
+  if p_real_size_bytes is null or p_real_size_bytes <= 0 then
+    raise exception 'OBJECT_NOT_VERIFIED'
+      using hint = 'El objeto físico no pudo verificarse en Storage.';
+  end if;
+  if p_real_mime_type is null or length(trim(p_real_mime_type)) = 0 then
+    raise exception 'OBJECT_MIME_UNVERIFIED';
+  end if;
+
+  select organization_id into v_intent.organization_id
+    from storage_upload_intents where id = p_intent_id;
+  if v_intent.organization_id is null then
+    raise exception 'INTENT_NOT_FOUND';
+  end if;
+  perform pg_advisory_xact_lock(
+    hashtextextended('module_storage:' || v_intent.organization_id::text || '/traceability_6632', 0)
+  );
+  select * into v_intent from storage_upload_intents where id = p_intent_id for update;
+  if not found then
+    raise exception 'INTENT_NOT_FOUND';
+  end if;
+  if v_intent.resource_type <> p_expected_resource_type then
+    raise exception 'RESOURCE_TYPE_INVALID';
+  end if;
+  if v_intent.created_by <> p_actor_id then
+    raise exception 'INTENT_NOT_OWNED';
+  end if;
+  if not exists (
+    select 1 from public.memberships m
+     where m.organization_id = v_intent.organization_id
+       and m.user_id = p_actor_id
+       and m.status = 'active'
+       and m.role_code in ('admin', 'quality', 'consultant')
+  ) then
+    raise exception 'ROLE_NOT_ALLOWED';
+  end if;
+  if v_intent.status = 'finalized' then
+    raise exception 'INTENT_ALREADY_FINALIZED';
+  end if;
+  if v_intent.status <> 'pending' or v_intent.expires_at <= now() then
+    raise exception 'INTENT_NOT_PENDING';
+  end if;
+  -- T9F.5B.1 · A06 · POLÍTICA CANÓNICA: RECHAZO ESTRICTO (real == reservado).
+  if p_real_size_bytes <> v_intent.expected_size_bytes then
+    raise exception 'OBJECT_SIZE_MISMATCH'
+      using detail = p_real_size_bytes || '<>' || v_intent.expected_size_bytes;
+  end if;
+  -- A07 · El MIME físico verificado debe coincidir con el reservado.
+  if p_real_mime_type <> v_intent.expected_mime_type then
+    raise exception 'OBJECT_MIME_MISMATCH'
+      using detail = p_real_mime_type || '<>' || v_intent.expected_mime_type;
+  end if;
+
+  -- A08 · Acceso, plan y cuota se resuelven AHORA, no en begin.
+  -- T9F.5B.1 · Con el ACTOR EXPLÍCITO: bajo service_role auth.uid() es NULL y
+  -- el resolver de 0100 devolvería not_member para toda finalización legítima.
+  v_access := resolve_module_access_for_actor(v_intent.organization_id, 'traceability_6632', p_actor_id);
+  if coalesce((v_access->>'allowed')::boolean, false) is distinct from true then
+    raise exception 'MODULE_ACCESS_BLOCKED'
+      using detail = coalesce(v_access->>'reason', 'not_allowed');
+  end if;
+  v_mode := v_access->>'access_mode';
+
+  -- A14 · Tope por archivo del plan VIGENTE sobre el tamaño FÍSICO.
+  v_max_file := cpr_upload_max_file_bytes(v_intent.resource_type, v_mode);
+  if v_max_file is null then
+    raise exception 'FILE_SIZE_LIMIT_UNVERIFIABLE';
+  end if;
+  if p_real_size_bytes > v_max_file then
+    raise exception 'FILE_SIZE_INVALID'
+      using detail = p_real_size_bytes || '>' || v_max_file;
+  end if;
+
+  -- A08 · CUOTA VIGENTE recalculada: un intent reservado bajo Extra NO se
+  -- finaliza por encima de la cuota Demo si el módulo se degradó entretanto.
+  select storage_limit_bytes into v_quota from plan_definitions where code = v_mode;
+  if v_quota is null then
+    raise exception 'STORAGE_QUOTA_UNVERIFIABLE';
+  end if;
+  select * into v_snap from module_storage_snapshot(v_intent.organization_id, 'traceability_6632');
+  if v_snap is null then
+    raise exception 'STORAGE_USAGE_UNVERIFIABLE';
+  end if;
+  if v_snap.unknown_size_count > 0 or v_snap.conflict_count > 0 then
+    raise exception 'STORAGE_UNVERIFIABLE';
+  end if;
+  -- A06 · El tamaño FÍSICO real sustituye al declarado en la contabilidad:
+  -- si el objeto es mayor que la reserva, o cabe (reserva ampliada bajo el
+  -- MISMO lock) o se rechaza. Nunca se finaliza informando menos bytes.
+  if v_snap.committed_bytes + (v_snap.reserved_bytes - v_intent.expected_size_bytes) + p_real_size_bytes > v_quota then
+    raise exception 'STORAGE_QUOTA_EXCEEDED'
+      using detail = v_snap.committed_bytes || '+' || (v_snap.reserved_bytes - v_intent.expected_size_bytes) || '+' || p_real_size_bytes || '>' || v_quota;
+  end if;
+
+  return v_intent;
+end;
+$$;
+
+revoke all on function public.assert_trazadoc_finalize_preconditions(uuid, uuid, bigint, text, text) from public, anon, authenticated;
+grant execute on function public.assert_trazadoc_finalize_preconditions(uuid, uuid, bigint, text, text) to service_role;
+
+comment on function public.assert_trazadoc_finalize_preconditions(uuid, uuid, bigint, text, text) is
+  'T9F.5B · A05-A08/A14 · Precondiciones compartidas de los finalizers TrazaDocs server-only: exige metadata física verificada por el servidor, revalida actor/rol/propiedad/estado/vigencia, MIME físico, acceso comercial, tope por archivo y CUOTA VIGENTE bajo el advisory lock del módulo. Devuelve el intent bloqueado.';
+
+-- ----------------------------------------------------------------------------
+-- T9F.5B · A05/A06/A07/A08 · FINALIZERS CPR/TrazaDocs SERVER-ONLY
+-- ----------------------------------------------------------------------------
+-- T9F.5A demostró que los tres finalizers CPR/TrazaDocs eran CLIENT-TRUSTING:
+-- ejecutables por `authenticated`, aceptaban el tamaño declarado por el
+-- cliente, nunca consultaban el objeto físico y (TrazaDocs) no revalidaban
+-- cuota. Un cliente podía finalizar sin haber subido nada (A05), declarar un
+-- tamaño menor que el físico (A06), declarar un MIME que el contenido no
+-- respalda (A07) o consumir bajo Demo una reserva creada bajo Extra (A08).
+--
+-- MODELO CORREGIDO (idéntico al de Textiles, ya SERVER-VERIFIED en 0098):
+--   Cliente autenticado
+--     → Server Action (autentica al usuario y valida membresía)
+--     → código server-only lee la METADATA FÍSICA del objeto en Storage
+--        (existencia, bucket, ruta, tamaño real, Content-Type real)
+--     → código server-only valida la FIRMA BINARIA de los bytes reales
+--     → RPC server-only finaliza con los valores VERIFICADOS por el servidor
+--
+-- El actor viaja EXPLÍCITO (`p_actor_id`) porque bajo service_role
+-- `auth.uid()` es NULL; la RPC revalida membresía, rol, propiedad del intent,
+-- estado, vigencia, acceso comercial, CUOTA VIGENTE y tope por archivo del
+-- plan ACTUAL. El servidor jamás sustituye a la autorización: la añade.
+--
+-- Las firmas históricas (…_v2 / finalize_evidence_attachment) se conservan
+-- para no romper el contrato de las migraciones ya escritas, pero quedan
+-- REVOCADAS a authenticated/anon y fallan cerrado con SERVER_ONLY_FINALIZER:
+-- ningún cliente puede llamarlas ni con intent ajeno, ni con tamaño, MIME o
+-- ruta inventados.
+
+-- (1) Evidencia CPR — server-only, tamaño y MIME REALES del objeto.
+create or replace function public.finalize_evidence_attachment_server(
+  p_actor_id uuid,
+  p_intent_id uuid,
+  p_real_size_bytes bigint,
+  p_real_mime_type text
 )
 returns jsonb
 language plpgsql
@@ -1800,17 +2204,37 @@ security definer
 set search_path = public
 as $$
 declare
-  v_uid uuid := auth.uid();
   v_intent public.storage_upload_intents%rowtype;
   v_access jsonb;
   v_mode text;
   v_quota bigint;
   v_snap record;
+  v_max_file bigint;
   v_updated integer;
+  v_claims text := nullif(current_setting('request.jwt.claims', true), '');
 begin
-  if v_uid is null then
-    raise exception 'AUTH_REQUIRED';
+  -- SERVER-ONLY (mismo patrón que resolve_cpr_upload_intent_object / 0098):
+  -- con claims presentes, solo service_role.
+  if v_claims is not null
+     and coalesce(v_claims::jsonb ->> 'role', '') <> 'service_role' then
+    raise exception 'SERVER_ONLY';
   end if;
+  if p_actor_id is null then
+    raise exception 'ACTOR_REQUIRED';
+  end if;
+  if not exists (select 1 from auth.users u where u.id = p_actor_id) then
+    raise exception 'ACTOR_NOT_FOUND';
+  end if;
+  -- A05 · El servidor DEBE haber verificado el objeto: sin tamaño o MIME
+  -- físicos no se finaliza jamás (fail-closed, nunca valores del cliente).
+  if p_real_size_bytes is null or p_real_size_bytes <= 0 then
+    raise exception 'OBJECT_NOT_VERIFIED'
+      using hint = 'El objeto físico no pudo verificarse en Storage.';
+  end if;
+  if p_real_mime_type is null or length(trim(p_real_mime_type)) = 0 then
+    raise exception 'OBJECT_MIME_UNVERIFIED';
+  end if;
+
   select organization_id into v_intent.organization_id from storage_upload_intents where id = p_intent_id;
   if v_intent.organization_id is null then
     raise exception 'INTENT_NOT_FOUND';
@@ -1825,9 +2249,20 @@ begin
   if v_intent.resource_type <> 'evidence' then
     raise exception 'RESOURCE_TYPE_INVALID';
   end if;
-  if v_intent.created_by <> v_uid then
+  -- El actor REAL debe ser el creador del intent Y miembro con rol vigente.
+  if v_intent.created_by <> p_actor_id then
     raise exception 'INTENT_NOT_OWNED';
   end if;
+  if not exists (
+    select 1 from public.memberships m
+     where m.organization_id = v_intent.organization_id
+       and m.user_id = p_actor_id
+       and m.status = 'active'
+       and m.role_code in ('admin', 'quality', 'consultant')
+  ) then
+    raise exception 'ROLE_NOT_ALLOWED';
+  end if;
+  -- Idempotencia conservada: una finalización ya completada no se duplica.
   if v_intent.status = 'finalized' then
     return jsonb_build_object('evidence_id', v_intent.resource_id, 'already_finalized', true);
   end if;
@@ -1837,15 +2272,47 @@ begin
   if v_intent.expires_at <= now() then
     raise exception 'INTENT_EXPIRED';
   end if;
-  if p_file_size_bytes is null or p_file_size_bytes <> v_intent.expected_size_bytes then
-    raise exception 'OBJECT_SIZE_MISMATCH';
+  -- T9F.5B.1 · A06 · POLÍTICA CANÓNICA: **RECHAZO ESTRICTO**. El tamaño
+  -- FÍSICO real debe ser EXACTAMENTE el reservado. No hay ampliación de
+  -- reserva en finalize: un objeto que no coincide con su reserva no se
+  -- finaliza nunca, y sus bytes siguen contabilizados por su tamaño FÍSICO
+  -- hasta que la resolución server-only confirme el retiro. Es el mismo
+  -- contrato estricto que Textiles (0098) — una sola política en SQL,
+  -- TypeScript y suite adversarial.
+  if p_real_size_bytes <> v_intent.expected_size_bytes then
+    raise exception 'OBJECT_SIZE_MISMATCH'
+      using detail = p_real_size_bytes || '<>' || v_intent.expected_size_bytes;
   end if;
-  v_access := resolve_organization_module_access(v_intent.organization_id, 'traceability_6632');
+  -- A07 · El MIME que se registra es el FÍSICO verificado por el servidor y
+  -- debe coincidir con el declarado en la reserva (la coherencia
+  -- extensión/MIME/firma la valida además el servidor sobre los bytes).
+  if p_real_mime_type <> v_intent.expected_mime_type then
+    raise exception 'OBJECT_MIME_MISMATCH'
+      using detail = p_real_mime_type || '<>' || v_intent.expected_mime_type;
+  end if;
+
+  -- T9F.5B.1 · Bajo service_role auth.uid() es NULL: el acceso se resuelve
+  -- para el ACTOR REAL (ya validado arriba como creador del intent y miembro
+  -- con rol vigente), jamás con el resolver dependiente de auth.uid().
+  v_access := resolve_module_access_for_actor(v_intent.organization_id, 'traceability_6632', p_actor_id);
   if coalesce((v_access->>'allowed')::boolean, false) is distinct from true then
     raise exception 'MODULE_ACCESS_BLOCKED'
       using detail = coalesce(v_access->>'reason', 'not_allowed');
   end if;
   v_mode := v_access->>'access_mode';
+
+  -- A08/A14 · Tope por archivo del plan VIGENTE (no el de begin) sobre el
+  -- tamaño FÍSICO real.
+  v_max_file := cpr_upload_max_file_bytes(v_intent.resource_type, v_mode);
+  if v_max_file is null then
+    raise exception 'FILE_SIZE_LIMIT_UNVERIFIABLE';
+  end if;
+  if p_real_size_bytes > v_max_file then
+    raise exception 'FILE_SIZE_INVALID'
+      using detail = p_real_size_bytes || '>' || v_max_file;
+  end if;
+
+  -- A08 · Cuota VIGENTE recalculada (jamás la de begin).
   select storage_limit_bytes into v_quota from plan_definitions where code = v_mode;
   if v_quota is null then
     raise exception 'STORAGE_QUOTA_UNVERIFIABLE';
@@ -1857,13 +2324,18 @@ begin
   if v_snap.unknown_size_count > 0 or v_snap.conflict_count > 0 then
     raise exception 'STORAGE_UNVERIFIABLE';
   end if;
-  if v_snap.committed_bytes + (v_snap.reserved_bytes - v_intent.expected_size_bytes) + p_file_size_bytes > v_quota then
-    raise exception 'STORAGE_QUOTA_EXCEEDED';
+  -- A06 · El tamaño FÍSICO real (no el declarado) es el que se compara con
+  -- la cuota y el que se registra. Si el objeto resultó mayor que la
+  -- reserva, esto AMPLÍA la reserva bajo el MISMO lock: cabe o se rechaza.
+  if v_snap.committed_bytes + (v_snap.reserved_bytes - v_intent.expected_size_bytes) + p_real_size_bytes > v_quota then
+    raise exception 'STORAGE_QUOTA_EXCEEDED'
+      using detail = v_snap.committed_bytes || '+' || (v_snap.reserved_bytes - v_intent.expected_size_bytes) || '+' || p_real_size_bytes || '>' || v_quota;
   end if;
 
+  -- A06 · size_bytes = TAMAÑO FÍSICO REAL, jamás el informado por cliente.
   update evidences
      set storage_path = v_intent.object_path,
-         size_bytes = p_file_size_bytes
+         size_bytes = p_real_size_bytes
    where id = v_intent.resource_id
      and organization_id = v_intent.organization_id;
   get diagnostics v_updated = row_count;
@@ -1879,18 +2351,41 @@ begin
 end;
 $$;
 
-revoke all on function public.finalize_evidence_attachment(uuid, bigint) from public, anon;
-grant execute on function public.finalize_evidence_attachment(uuid, bigint) to authenticated;
+revoke all on function public.finalize_evidence_attachment_server(uuid, uuid, bigint, text) from public, anon, authenticated;
+grant execute on function public.finalize_evidence_attachment_server(uuid, uuid, bigint, text) to service_role;
+
+comment on function public.finalize_evidence_attachment_server(uuid, uuid, bigint, text) is
+  'T9F.5B · A05-A08 · Finalización SERVER-ONLY del adjunto de evidencia CPR: exige tamaño y MIME FÍSICOS verificados por el servidor (fail-closed si faltan), revalida actor/rol/propiedad, acceso, tope por archivo del plan VIGENTE y CUOTA ACTUAL bajo advisory lock, registra el tamaño REAL y conserva la idempotencia. Ningún cliente puede ejecutarla.';
+
+-- Firma histórica: CERRADA a clientes (A05). Se conserva para no romper el
+-- contrato previo, pero ya no finaliza nada desde el navegador.
+create or replace function public.finalize_evidence_attachment(
+  p_intent_id uuid,
+  p_file_size_bytes bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  raise exception 'SERVER_ONLY_FINALIZER'
+    using detail = 'finalize_evidence_attachment_server',
+          hint = 'La finalización de adjuntos CPR exige verificación física del objeto y solo ocurre en servidor.';
+end;
+$$;
+
+revoke all on function public.finalize_evidence_attachment(uuid, bigint) from public, anon, authenticated;
 
 comment on function public.finalize_evidence_attachment(uuid, bigint) is
-  'T9F.4 · Finalización AUTORITATIVA del adjunto de evidencia CPR: bajo el lock de cuota revalida acceso, tamaño real=declarado y cuota con las OTRAS reservas, fija ruta/tamaño (vía DEFINER) y convierte la reserva exactamente una vez (idempotente).';
+  'T9F.5B · A05 · CERRADA: la finalización CPR sin verificación física fue retirada de la superficie de clientes. Usa finalize_evidence_attachment_server (server-only, con tamaño y MIME reales).';
 
--- v2 de la finalización inicial y del reemplazo del maestro: los VALORES
--- FÍSICOS salen del INTENT (jamás del navegador) y la reserva se consume en
--- la MISMA transacción en la que la RPC de 0057/0059 fija los campos.
-create or replace function public.finalize_trazadoc_file_document_initial_version_v2(
+-- (2) TrazaDocs · versión inicial — server-only, con verificación física.
+create or replace function public.finalize_trazadoc_file_document_initial_version_server(
+  p_actor_id uuid,
   p_intent_id uuid,
-  p_file_size_bytes bigint,
+  p_real_size_bytes bigint,
+  p_real_mime_type text,
   p_change_note text default 'Borrador inicial'
 )
 returns integer
@@ -1902,39 +2397,16 @@ declare
   v_intent public.storage_upload_intents%rowtype;
   v_result integer;
 begin
-  select organization_id into v_intent.organization_id from storage_upload_intents where id = p_intent_id;
-  if v_intent.organization_id is null then
-    raise exception 'INTENT_NOT_FOUND';
-  end if;
-  perform pg_advisory_xact_lock(
-    hashtextextended('module_storage:' || v_intent.organization_id::text || '/traceability_6632', 0)
+  v_intent := public.assert_trazadoc_finalize_preconditions(
+    p_actor_id, p_intent_id, p_real_size_bytes, p_real_mime_type, 'trazadoc_initial'
   );
-  select * into v_intent from storage_upload_intents where id = p_intent_id for update;
-  if v_intent.resource_type <> 'trazadoc_initial' then
-    raise exception 'RESOURCE_TYPE_INVALID';
-  end if;
-  if v_intent.created_by is distinct from auth.uid() then
-    raise exception 'INTENT_NOT_OWNED';
-  end if;
-  if v_intent.status = 'finalized' then
-    return 1;
-  end if;
-  if v_intent.status <> 'pending' or v_intent.expires_at <= now() then
-    raise exception 'INTENT_NOT_PENDING';
-  end if;
-  if p_file_size_bytes is null or p_file_size_bytes <> v_intent.expected_size_bytes then
-    raise exception 'OBJECT_SIZE_MISMATCH';
-  end if;
-  if coalesce((resolve_organization_module_access(v_intent.organization_id, 'traceability_6632')->>'allowed')::boolean, false)
-     is distinct from true then
-    raise exception 'MODULE_ACCESS_BLOCKED';
-  end if;
 
   -- La RPC de 0059 (definer) valida rol/estado del documento y fija los
   -- campos físicos con la RUTA y el NOMBRE del intent — misma transacción.
+  -- A06/A07: el TAMAÑO y el MIME son los FÍSICOS verificados por servidor.
   v_result := finalize_trazadoc_file_document_initial_version(
     v_intent.resource_id, v_intent.object_path, v_intent.original_filename,
-    v_intent.expected_mime_type, p_file_size_bytes, p_change_note
+    p_real_mime_type, p_real_size_bytes, p_change_note
   );
 
   update storage_upload_intents
@@ -1944,12 +2416,37 @@ begin
 end;
 $$;
 
-revoke all on function public.finalize_trazadoc_file_document_initial_version_v2(uuid, bigint, text) from public, anon;
-grant execute on function public.finalize_trazadoc_file_document_initial_version_v2(uuid, bigint, text) to authenticated;
+revoke all on function public.finalize_trazadoc_file_document_initial_version_server(uuid, uuid, bigint, text, text) from public, anon, authenticated;
+grant execute on function public.finalize_trazadoc_file_document_initial_version_server(uuid, uuid, bigint, text, text) to service_role;
 
-create or replace function public.replace_trazadoc_file_document_v2(
+comment on function public.finalize_trazadoc_file_document_initial_version_server(uuid, uuid, bigint, text, text) is
+  'T9F.5B · A05-A08 · Finalización SERVER-ONLY de la versión inicial TrazaDocs: tamaño y MIME FÍSICOS del servidor, revalidación de actor/rol/acceso, tope por archivo del plan VIGENTE y CUOTA ACTUAL (A08) bajo advisory lock; idempotente.';
+
+create or replace function public.finalize_trazadoc_file_document_initial_version_v2(
   p_intent_id uuid,
   p_file_size_bytes bigint,
+  p_change_note text default 'Borrador inicial'
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  raise exception 'SERVER_ONLY_FINALIZER'
+    using detail = 'finalize_trazadoc_file_document_initial_version_server',
+          hint = 'La finalización TrazaDocs exige verificación física del objeto y solo ocurre en servidor.';
+end;
+$$;
+
+revoke all on function public.finalize_trazadoc_file_document_initial_version_v2(uuid, bigint, text) from public, anon, authenticated;
+
+-- (3) TrazaDocs · reemplazo — server-only, con verificación física.
+create or replace function public.replace_trazadoc_file_document_server(
+  p_actor_id uuid,
+  p_intent_id uuid,
+  p_real_size_bytes bigint,
+  p_real_mime_type text,
   p_change_note text default null
 )
 returns integer
@@ -1961,38 +2458,15 @@ declare
   v_intent public.storage_upload_intents%rowtype;
   v_result integer;
 begin
-  select organization_id into v_intent.organization_id from storage_upload_intents where id = p_intent_id;
-  if v_intent.organization_id is null then
-    raise exception 'INTENT_NOT_FOUND';
-  end if;
-  perform pg_advisory_xact_lock(
-    hashtextextended('module_storage:' || v_intent.organization_id::text || '/traceability_6632', 0)
+  v_intent := public.assert_trazadoc_finalize_preconditions(
+    p_actor_id, p_intent_id, p_real_size_bytes, p_real_mime_type, 'trazadoc_replace'
   );
-  select * into v_intent from storage_upload_intents where id = p_intent_id for update;
-  if v_intent.resource_type <> 'trazadoc_replace' then
-    raise exception 'RESOURCE_TYPE_INVALID';
-  end if;
-  if v_intent.created_by is distinct from auth.uid() then
-    raise exception 'INTENT_NOT_OWNED';
-  end if;
-  if v_intent.status = 'finalized' then
-    return -1; -- idempotencia: el reemplazo YA se aplicó (versión vigente)
-  end if;
-  if v_intent.status <> 'pending' or v_intent.expires_at <= now() then
-    raise exception 'INTENT_NOT_PENDING';
-  end if;
-  if p_file_size_bytes is null or p_file_size_bytes <> v_intent.expected_size_bytes then
-    raise exception 'OBJECT_SIZE_MISMATCH';
-  end if;
-  if coalesce((resolve_organization_module_access(v_intent.organization_id, 'traceability_6632')->>'allowed')::boolean, false)
-     is distinct from true then
-    raise exception 'MODULE_ACCESS_BLOCKED';
-  end if;
-  -- El reemplazo RESERVÓ el nuevo objeto sin liberar el anterior: el
+
+  -- El reemplazo RESERVÓ el objeto NUEVO sin liberar el anterior: el
   -- anterior pasa a versión histórica (sigue referenciado y contando).
   v_result := replace_trazadoc_file_document(
     v_intent.resource_id, v_intent.object_path, v_intent.original_filename,
-    v_intent.expected_mime_type, p_file_size_bytes, p_change_note
+    p_real_mime_type, p_real_size_bytes, p_change_note
   );
 
   update storage_upload_intents
@@ -2002,8 +2476,30 @@ begin
 end;
 $$;
 
-revoke all on function public.replace_trazadoc_file_document_v2(uuid, bigint, text) from public, anon;
-grant execute on function public.replace_trazadoc_file_document_v2(uuid, bigint, text) to authenticated;
+revoke all on function public.replace_trazadoc_file_document_server(uuid, uuid, bigint, text, text) from public, anon, authenticated;
+grant execute on function public.replace_trazadoc_file_document_server(uuid, uuid, bigint, text, text) to service_role;
+
+comment on function public.replace_trazadoc_file_document_server(uuid, uuid, bigint, text, text) is
+  'T9F.5B · A05-A08 · Reemplazo SERVER-ONLY de archivo TrazaDocs: nueva ruta física, tamaño y MIME FÍSICOS del servidor, revalidación de acceso, tope por archivo del plan VIGENTE y CUOTA ACTUAL (A08); la versión anterior queda como histórica y sigue contabilizada.';
+
+create or replace function public.replace_trazadoc_file_document_v2(
+  p_intent_id uuid,
+  p_file_size_bytes bigint,
+  p_change_note text default null
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  raise exception 'SERVER_ONLY_FINALIZER'
+    using detail = 'replace_trazadoc_file_document_server',
+          hint = 'El reemplazo TrazaDocs exige verificación física del objeto y solo ocurre en servidor.';
+end;
+$$;
+
+revoke all on function public.replace_trazadoc_file_document_v2(uuid, bigint, text) from public, anon, authenticated;
 
 -- Cancelación: sin objeto → la resolución server-only libera; con objeto →
 -- queda como candidato contabilizado (equivalente de pending_delete) hasta
@@ -2474,6 +2970,148 @@ create index if not exists trazadoc_file_document_versions_org_idx
   on public.trazadoc_file_document_versions (organization_id);
 
 -- ----------------------------------------------------------------------------
+-- §12 · T9F.5B · STORAGE RLS: A01, A02, A03, A04
+-- ----------------------------------------------------------------------------
+-- T9F.5A reconstruyó el estado ACUMULADO de storage.objects tras 0015, 0016,
+-- 0049, 0058, 0076 y 0099 y encontró CUATRO políticas permisivas que hacían
+-- OPCIONAL toda la arquitectura de intents/reservas/finalize:
+--
+--   A01 · evidences_insert_legacy      (0099) — INSERT CPR por rol + prefijo
+--   A02 · trazadocs_documents_insert   (0058) — INSERT TrazaDocs por rol
+--   A03 · trazadocs_documents_update   (0058) — UPDATE/upsert por rol
+--   A04 · trazadocs_documents_delete   (0058) — DELETE físico por rol
+--
+-- Recordatorio decisivo: en PostgreSQL las políticas PERMISSIVE se combinan
+-- con OR. Añadir una política restrictiva NO cierra nada mientras sobreviva
+-- una permisiva que conceda lo mismo. Por eso cada política identificada se
+-- ELIMINA explícitamente con DROP POLICY IF EXISTS antes de instalar su
+-- sustituta ligada a intent.
+--
+-- ESTADO FINAL PRETENDIDO (por bucket y verbo):
+--   evidences             INSERT → evidences_insert_cpr (intent EXACTO)
+--                                + evidences_insert_textiles (0099, INTACTA)
+--                         SELECT → evidences_select (0016, INTACTA)
+--                         UPDATE → sin política  (deny-by-default)
+--                         DELETE → sin política  (deny-by-default, 0099)
+--   trazadocs-documents   INSERT → trazadocs_documents_insert_intent
+--                         SELECT → trazadocs_documents_select (0058, INTACTA)
+--                         UPDATE → sin política  (deny-by-default) · A03
+--                         DELETE → sin política  (deny-by-default) · A04
+--   organization-assets   sin cambios (fuera del alcance A01-A18: logos y
+--                         branding, sin reserva ni cuota por objeto).
+--
+-- La LECTURA y la descarga autorizadas NO se tocan: ninguna política SELECT
+-- se elimina ni se debilita, y las URLs firmadas siguen funcionando igual.
+--
+-- El retiro físico legítimo (huérfanos, intents fallidos/vencidos, borrado de
+-- borradores) ya es server-only con cliente administrativo — service_role no
+-- pasa por RLS —, de modo que eliminar la política DELETE de clientes no deja
+-- ningún flujo real sin vía: queue_and_delete_* + resolve_* siguen intactos.
+
+-- (0) Predicado ligado a intent, en SECURITY DEFINER.
+--     `storage_upload_intents` tiene RLS habilitada, SIN políticas y revocada
+--     a authenticated (0101 §6): una política de Storage no puede leerla
+--     directamente. Este predicado —y solo él— la consulta en nombre de la
+--     política, sin exponer una sola fila al cliente.
+create or replace function public.storage_object_matches_upload_intent(
+  p_bucket_id text,
+  p_object_name text,
+  p_resource_types text[]
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+      from public.storage_upload_intents i
+     where i.object_path = p_object_name            -- coincidencia EXACTA de ruta
+       and i.bucket_id = p_bucket_id                -- bucket exacto
+       and i.created_by = auth.uid()                -- el usuario correcto
+       and i.resource_type = any (p_resource_types) -- propósito de carga válido
+       and i.module_code = 'traceability_6632'      -- módulo correcto
+       and i.status = 'pending'                     -- ni finalizado/cancelado/vencido
+       and i.expires_at > now()                     -- vigente
+       and i.expected_size_bytes > 0                -- tamaño declarado válido
+       -- La ORGANIZACIÓN sale del intent y debe coincidir con el prefijo de
+       -- la ruta: jamás se deriva solo del path enviado por el cliente.
+       and i.organization_id = public.safe_uuid((storage.foldername(p_object_name))[1])
+       -- Rol vigente AHORA (pudo perderse tras crear el intent).
+       and public.has_org_role(
+             i.organization_id,
+             array['admin', 'quality', 'consultant']
+           )
+       -- Acceso comercial vigente AHORA (pudo deshabilitarse después).
+       and coalesce(
+             (public.resolve_organization_module_access(
+                i.organization_id, 'traceability_6632') ->> 'allowed')::boolean,
+             false)
+  );
+$$;
+
+revoke all on function public.storage_object_matches_upload_intent(text, text, text[]) from public, anon;
+grant execute on function public.storage_object_matches_upload_intent(text, text, text[]) to authenticated;
+
+comment on function public.storage_object_matches_upload_intent(text, text, text[]) is
+  'T9F.5B · A01/A02 · Predicado de las políticas INSERT de Storage: un objeto CPR/TrazaDocs solo puede escribirse si existe un storage_upload_intent EXACTO (misma ruta, mismo bucket, mismo usuario, misma organización, módulo CPR, propósito válido, pending, no vencido y con tamaño reservado) y si el rol y el acceso comercial siguen vigentes. No expone ninguna fila de intents al cliente.';
+
+-- (1) A01 · CPR: la política por rol + prefijo se ELIMINA y se sustituye por
+--     una ligada a intent EXACTO. El flujo Textiles (evidences_insert_textiles,
+--     0099) NO se toca: conserva su predicado propio y su comportamiento.
+drop policy if exists evidences_insert_legacy on storage.objects;
+
+create policy evidences_insert_cpr on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'evidences'
+    -- Disyunción por el 2.º segmento: una ruta textil jamás se ampara en
+    -- esta política, ni una ruta CPR en la textil (mismo criterio que 0099).
+    and (storage.foldername(name))[2] is distinct from 'textiles'
+    and public.storage_object_matches_upload_intent(
+          'evidences', name, array['evidence']
+        )
+  );
+
+-- (2) A02 · TrazaDocs: INSERT ligado a intent inicial o de reemplazo.
+drop policy if exists trazadocs_documents_insert on storage.objects;
+
+create policy trazadocs_documents_insert_intent on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'trazadocs-documents'
+    and public.storage_object_matches_upload_intent(
+          'trazadocs-documents', name, array['trazadoc_initial', 'trazadoc_replace']
+        )
+  );
+
+-- (3) A03 · UPDATE directo (upsert, renombrado, cambio de metadata o de
+--     contenido) sobre objetos TrazaDocs: PROHIBIDO. Sin política de
+--     reemplazo ⇒ deny-by-default, igual que el bucket `evidences` desde
+--     0099. Un reemplazo legítimo es SIEMPRE un objeto NUEVO: nuevo intent →
+--     nueva ruta vN+1 → upload autorizado → verificación física →
+--     finalización server-only → el objeto anterior queda como versión
+--     histórica (sigue referenciado y contabilizado). Sobrescribir el mismo
+--     path invalidaría size_bytes, versionado, cuota e historial.
+drop policy if exists trazadocs_documents_update on storage.objects;
+
+-- (4) A04 · DELETE directo sobre objetos TrazaDocs: PROHIBIDO. La eliminación
+--     física queda reservada al flujo server-only:
+--        fila de dominio o versión → pending_delete → retiro server-only
+--        verificado → deleted confirmado
+--     (queue_and_delete_trazadoc_draft / resolve_storage_deletion /
+--      resolve_cpr_upload_intent_object). Nunca "DELETE directo → referencia
+--     de dominio rota".
+drop policy if exists trazadocs_documents_delete on storage.objects;
+
+-- NOTA (limitación demostrada del entorno gestionado, ya documentada en
+-- 0099): `comment on policy … on storage.objects` falla con "must be owner of
+-- relation objects" (SQLSTATE 42501) porque el esquema `storage` pertenece a
+-- Supabase. Por eso la documentación de cada política vive en estos
+-- comentarios SQL y en el informe T9F.5B, no en pg_description.
+
+-- ----------------------------------------------------------------------------
 -- §11 · Verificaciones posteriores (documentación; NO ejecutar aquí)
 -- ----------------------------------------------------------------------------
 -- Tras aplicar 0101 en staging (guía TRAZALOOP_T9F3_APPLY_LATER_GUIDE.md):
@@ -2485,6 +3123,18 @@ create index if not exists trazadoc_file_document_versions_org_idx
 --   4) has_function_privilege('authenticated', 'register_storage_orphan(uuid,text,text,text,bigint)', 'execute') → false.
 --   5) La vista expone storage_reserved_bytes y storage_unknown_size_count.
 --   6) Dos finalizes concurrentes del mismo intent → una sola evidencia.
+--   7) T9F.5B · select policyname, cmd from pg_policies where schemaname='storage'
+--      and tablename='objects' order by policyname;
+--      → NO deben existir: evidences_insert_legacy, trazadocs_documents_insert,
+--        trazadocs_documents_update, trazadocs_documents_delete.
+--      → SÍ deben existir: evidences_insert_cpr, evidences_insert_textiles,
+--        trazadocs_documents_insert_intent, y los SELECT intactos.
+--   8) T9F.5B · has_function_privilege('authenticated',
+--      'finalize_evidence_attachment_server(uuid,uuid,bigint,text)', 'execute') → false.
+--   9) T9F.5B · begin_cpr_storage_upload(trazadoc_initial, 22 MB) bajo Full →
+--      éxito; el mismo begin bajo Demo → FILE_SIZE_INVALID.
+--  10) T9F.5B · insert en trazadoc_documents con blueprint CPR y
+--      module_key='textiles' → se evalúa el límite de CPR (A13).
 -- ============================================================================
--- FIN 0101 (acumulada T9F.1 + T9F.2 + T9F.3)
+-- FIN 0101 (acumulada T9F.1 + T9F.2 + T9F.3 + remediación T9F.5B)
 -- ============================================================================

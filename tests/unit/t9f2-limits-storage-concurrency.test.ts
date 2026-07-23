@@ -209,7 +209,7 @@ check("20. El plan legacy NO altera el tamaño CPR: upload y replace resuelven a
   const src = stripTs(read("server/actions/trazadocs-master.ts"));
   assert(!src.includes("getOrganizationUsage"), "trazadocs-master ya no lee el uso legacy");
   assert(!src.includes('?? "demo"'), "sin fallback silencioso a un plan por defecto");
-  for (const fn of ["uploadFileDocumentAction", "replaceFileDocumentFileAction"] as const) {
+  for (const fn of ["beginFileDocumentUploadAction", "beginFileDocumentReplaceAction"] as const) {
     const body = fnBody("server/actions/trazadocs-master.ts", fn);
     assert(body.includes("getCprAccessModeForAction()"), `${fn} resuelve el modo del módulo CPR`);
     assert(body.includes("accessModeToPlanCode(cprMode.accessMode)"), `${fn} deriva el tamaño del plan del módulo`);
@@ -395,9 +395,10 @@ check("La 0101 acumulada sigue siendo ADITIVA y no crea 0102", () => {
   const lower = MIG101.toLowerCase();
   assert(!/truncate/.test(lower), "sin TRUNCATE");
   assert(!/drop table/.test(lower) && !/drop function/.test(lower) && !/drop view/.test(lower), "sin DROP destructivo");
-  // T9F.4 · §9: los ÚNICOS drop policy son las TRES políticas de DELETE
-  // directo retiradas (endurecimiento — el ciclo seguro es la única vía).
-  assert((lower.match(/drop policy/g) ?? []).length === 3, "solo los tres drop policy de DELETE directo (T9F.4 §3b)");
+  // T9F.4 · §9: tres políticas de DELETE directo retiradas (endurecimiento).
+  // T9F.5B · §12: cuatro políticas PERMISIVAS de storage.objects retiradas
+  // (A01-A04), sustituidas por INSERT ligado a intent o deny-by-default.
+  assert((lower.match(/drop policy/g) ?? []).length === 7, "tres drop policy de DELETE directo (T9F.4 §3b) + cuatro de Storage (T9F.5B §12)");
   {
     // T9F.3/T9F.4: los ÚNICOS DELETE permitidos son los de DOMINIO dentro
     // de las RPCs atómicas — encolados (§3, misma transacción que crea el
@@ -410,7 +411,19 @@ check("La 0101 acumulada sigue siendo ADITIVA y no crea 0102", () => {
     assert(deletes.some((d) => d.includes("evidences where id = v_ev.id")), "delete de la evidencia dentro de su RPC");
     assert(deletes.some((d) => d.includes("textile_evidences where id = v_ev.id")), "delete de la evidencia textil dentro de su RPC (T9F.4)");
   }
-  assert(!/storage\.objects/.test(lower), "no toca Storage RLS 0099");
+  // T9F.5B · §12: 0101 SÍ corrige ahora Storage RLS — era la superficie
+  // (A01-A04) que hacía opcional toda la arquitectura de reservas. Lo que se
+  // exige es que el cambio sea ENDURECEDOR: se retiran políticas permisivas
+  // y las que se crean exigen intent; jamás se toca el bucket de Textiles
+  // (evidences_insert_textiles, 0099) ni se abre ningún verbo nuevo.
+  assert(/drop policy if exists evidences_insert_legacy on storage\.objects/.test(lower),
+    "T9F.5B retira la política CPR permisiva (A01)");
+  assert(/create policy evidences_insert_cpr on storage\.objects/.test(lower),
+    "T9F.5B instala el INSERT CPR ligado a intent (A01)");
+  assert(!/create policy evidences_insert_textiles/.test(lower),
+    "0101 no redefine la política textil de 0099");
+  assert(!/create policy[^;]+for (update|delete)[^;]*on storage\.objects/.test(lower),
+    "0101 no crea ninguna política UPDATE/DELETE sobre storage.objects");
   assert(!/insert into public\.plan_definitions/.test(lower) && !/insert into public\.plan_limits/.test(lower), "no crea planes ni cuotas");
   const migs = readdirSync(join(process.cwd(), "supabase/migrations"));
   assert(!migs.some((f) => f.startsWith("0102")), "NO existe 0102: 0101 acumula T9F.1 + T9F.2 (nunca fue aplicada)");

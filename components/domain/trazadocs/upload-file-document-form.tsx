@@ -1,35 +1,91 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { uploadFileDocumentAction, type MasterActionState } from "@/server/actions/trazadocs-master";
+import {
+  beginFileDocumentUploadAction,
+  finalizeFileDocumentUploadAction,
+  cancelFileDocumentUploadAction,
+} from "@/server/actions/trazadocs-master";
+import { uploadFileToIntentPath } from "@/lib/storage/direct-upload";
 import { CATEGORY_CODES, CATEGORY_LABEL } from "@/lib/domain/trazadocs-master";
 import { Field, SelectField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
-const initial: MasterActionState = { error: null };
 const CATEGORY_OPTIONS = CATEGORY_CODES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }));
 
 /** Subir un documento descargable (Parte 13) — PDF/Word/Excel/CSV/imagen,
  *  controlado y versionado, nunca editable en línea. */
+/**
+ * T9F.5B.1 · CARGA DIRECTA: begin (metadata) → PUT directo del navegador a la
+ * ruta EXACTA del intent → finalize (solo intentId). El archivo no atraviesa
+ * ninguna Server Action, lo que además hace posible A14 (22 MB en Full/Extra)
+ * sin elevar `serverActions.bodySizeLimit`.
+ */
 export function UploadFileDocumentForm() {
-  const [state, formAction, pending] = useActionState(uploadFileDocumentAction, initial);
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [existingId, setExistingId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"idle" | "saving" | "uploading" | "finalizing">("idle");
+  const pending = phase !== "idle";
 
-  useEffect(() => {
-    if (state.success && state.documentId) {
-      router.push(`/trazadocs/files/${state.documentId}`);
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setExistingId(null);
+    const data = new FormData(event.currentTarget);
+    const file = data.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      setError("Selecciona un archivo.");
+      return;
     }
-  }, [state, router]);
+
+    setPhase("saving");
+    const begin = await beginFileDocumentUploadAction({
+      title: String(data.get("title") ?? ""),
+      code: String(data.get("code") ?? ""),
+      categoryCode: String(data.get("category_code") ?? "other"),
+      description: String(data.get("description") ?? ""),
+      file: { name: file.name, sizeBytes: file.size, mimeType: file.type },
+    });
+    if (begin.error !== null) {
+      setPhase("idle");
+      setError(begin.error);
+      setExistingId(begin.documentId);
+      return;
+    }
+
+    setPhase("uploading");
+    const uploaded = await uploadFileToIntentPath({
+      bucketId: begin.upload.bucketId,
+      objectPath: begin.upload.objectPath,
+      file,
+    });
+    if (!uploaded.ok) {
+      await cancelFileDocumentUploadAction(begin.upload.intentId);
+      setPhase("idle");
+      setError(uploaded.message);
+      return;
+    }
+
+    setPhase("finalizing");
+    const finalized = await finalizeFileDocumentUploadAction(begin.upload.intentId);
+    setPhase("idle");
+    if (finalized.error) {
+      setError(finalized.error);
+      setExistingId(finalized.documentId ?? null);
+      return;
+    }
+    if (finalized.documentId) router.push(`/trazadocs/files/${finalized.documentId}`);
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
-      <ErrorAlert message={state.error} />
-      {state.error && state.documentId ? (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <ErrorAlert message={error} />
+      {error && existingId ? (
         <p className="text-xs text-ink-soft">
-          <a href={`/trazadocs/files/${state.documentId}`} className="text-loop hover:underline">
+          <a href={`/trazadocs/files/${existingId}`} className="text-loop hover:underline">
             Abrir el documento existente
           </a>
         </p>
@@ -57,7 +113,13 @@ export function UploadFileDocumentForm() {
       </label>
 
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Subiendo…" : "Subir documento"}
+        {phase === "saving"
+          ? "Guardando…"
+          : phase === "uploading"
+            ? "Subiendo archivo…"
+            : phase === "finalizing"
+              ? "Verificando archivo…"
+              : "Subir documento"}
       </Button>
     </form>
   );

@@ -3,16 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import {
-  resolveCprUploadIntentObject,
-  removeQueuedStorageObject,
-} from "@/lib/db/storage-deletion";
+import { requireSession } from "@/lib/auth/require-session";
+import { removeQueuedStorageObject } from "@/lib/db/storage-deletion";
 import { checkCprResourceLimit, checkCprStorageAvailable, checkCprCanMutate } from "@/server/actions/module-plans";
 import {
   beginCprStorageUpload,
-  cancelCprStorageUpload,
-  finalizeEvidenceAttachment,
+  finalizeEvidenceAttachmentServer,
+  getOwnCprUploadIntent,
 } from "@/lib/db/storage-intents";
+import {
+  verifyCprUploadedObject,
+  compensateFailedCprUpload,
+} from "@/server/actions/cpr-upload-verification";
 
 export type EvidenceActionState = { error: string | null; warning?: string | null };
 
@@ -21,39 +23,66 @@ export type EvidenceActionState = { error: string | null; warning?: string | nul
  * ruta {organization_id}/{evidence_id}/{filename}. La subida usa la SESIÓN
  * DEL USUARIO (RLS de Storage aplica); nunca service_role.
  */
-export async function createEvidenceAction(
-  _prev: EvidenceActionState,
-  formData: FormData
-): Promise<EvidenceActionState> {
+/**
+ * T9F.5B.1 · CARGA DIRECTA (bloqueador 2) · Tipos del contrato begin/finalize.
+ *
+ * El archivo YA NO viaja dentro de FormData hacia ninguna Server Action: el
+ * navegador sube los bytes DIRECTAMENTE a Supabase Storage con su sesión
+ * autenticada, contra la ruta EXACTA que reservó el intent (y que la política
+ * de Storage ligada a intent, 0101 §12, es la única que autoriza).
+ *
+ * Esto era además imprescindible para A14: con el límite por defecto de
+ * Server Actions (1 MB), un TrazaDocs Full de 22 MB jamás llegaba a `begin`.
+ * `next.config.ts` NO eleva `serverActions.bodySizeLimit`.
+ */
+export type BeginEvidenceUploadInput = {
+  name: string;
+  evidenceType: string | null;
+  evidenceDate: string | null;
+  responsible: string | null;
+  observations: string | null;
+  validUntil: string | null;
+  /** Metadata del archivo — NUNCA sus bytes. */
+  file: { name: string; sizeBytes: number; mimeType: string } | null;
+  idempotencyKey?: string | null;
+};
+
+export type BeginEvidenceUploadResult =
+  | {
+      error: null;
+      evidenceId: string;
+      upload: { intentId: string; bucketId: string; objectPath: string } | null;
+    }
+  | { error: string; evidenceId: null; upload: null };
+
+/**
+ * (A) BEGIN · Solo metadata. Autentica, valida acceso comercial, crea la fila
+ * de dominio y —si hay archivo— la reserva durable, devolviendo la ruta EXACTA
+ * a la que el cliente debe subir.
+ */
+export async function beginEvidenceUploadAction(
+  input: BeginEvidenceUploadInput
+): Promise<BeginEvidenceUploadResult> {
   const org = await requireActiveOrg();
+  await requireSession();
   const supabase = await createServerClient();
 
-  const name = String(formData.get("name") ?? "").trim();
-  const evidenceType = String(formData.get("evidence_type") ?? "").trim() || null;
-  const evidenceDate = String(formData.get("evidence_date") ?? "") || null;
-  const responsible = String(formData.get("responsible") ?? "").trim() || null;
-  const observations = String(formData.get("observations") ?? "").trim() || null;
-  const validUntil = String(formData.get("valid_until") ?? "") || null;
-  const file = formData.get("file") as File | null;
+  const name = input.name.trim();
+  if (!name) return { error: "El nombre de la evidencia es obligatorio.", evidenceId: null, upload: null };
 
-  if (!name) return { error: "El nombre de la evidencia es obligatorio." };
-
-  // Sprint 10A (corrección final): chequeo explícito de solo-lectura,
-  // además de checkResourceLimit/checkStorageAvailable abajo — mismo
-  // resultado (ambos ya revisan el estado del plan primero), pero
-  // explícito aquí para que la regla sea uniforme y clara en las 4
-  // acciones de este archivo.
   const mutateCheck = await checkCprCanMutate();
-  if (!mutateCheck.allowed) return { error: mutateCheck.error };
-
-  // Sprint 10A (Parte 8): límite de plan — Demo permite 1 evidencia.
+  if (!mutateCheck.allowed) {
+    return { error: mutateCheck.error ?? "El módulo no permite crear evidencias.", evidenceId: null, upload: null };
+  }
   const limitCheck = await checkCprResourceLimit("evidences");
-  if (!limitCheck.allowed) return { error: limitCheck.error };
-
-  // Y cuota de almacenamiento, si viene archivo adjunto.
-  if (file && file.size > 0) {
-    const storageCheck = await checkCprStorageAvailable(file.size);
-    if (!storageCheck.allowed) return { error: storageCheck.error };
+  if (!limitCheck.allowed) {
+    return { error: limitCheck.error ?? "Tu plan alcanzó el límite de evidencias.", evidenceId: null, upload: null };
+  }
+  if (input.file) {
+    const storageCheck = await checkCprStorageAvailable(input.file.sizeBytes);
+    if (!storageCheck.allowed) {
+      return { error: storageCheck.error ?? "No hay capacidad de almacenamiento disponible.", evidenceId: null, upload: null };
+    }
   }
 
   const { data: inserted, error } = await supabase
@@ -61,89 +90,105 @@ export async function createEvidenceAction(
     .insert({
       organization_id: org.organizationId,
       name,
-      evidence_type: evidenceType,
-      evidence_date: evidenceDate,
-      responsible,
-      observations,
-      valid_until: validUntil,
+      evidence_type: input.evidenceType,
+      evidence_date: input.evidenceDate,
+      responsible: input.responsible,
+      observations: input.observations,
+      valid_until: input.validUntil,
     })
     .select("id")
     .single();
+  if (error || !inserted) return { error: "No fue posible crear la evidencia.", evidenceId: null, upload: null };
 
-  if (error || !inserted) return { error: "No fue posible crear la evidencia." };
-
-  if (file && file.size > 0) {
-    // T9F.4 · §11-§13: la RESERVA es la autoridad — antes de subir un solo
-    // byte existe un intent DURABLE (referencia + bytes reservados bajo el
-    // lock de cuota del módulo). La ruta la decide la BASE desde la fila
-    // de la evidencia; el pre-chequeo de arriba solo mejora el mensaje.
-    const begin = await beginCprStorageUpload({
-      resourceType: "evidence",
-      resourceId: inserted.id,
-      fileName: file.name,
-      fileSizeBytes: file.size,
-      fileMimeType: file.type || "application/octet-stream",
-    });
-    if (!begin.intent) {
-      revalidatePath("/evidences");
-      return {
-        error: `La evidencia se creó, pero el archivo no pudo reservarse: ${begin.error ?? "intenta adjuntarlo de nuevo."}`,
-      };
-    }
-    const bytes = await file.arrayBuffer();
-    const { error: uploadError } = await supabase.storage
-      .from(begin.intent.bucketId)
-      .upload(begin.intent.objectPath, bytes, {
-        contentType: file.type || "application/octet-stream",
-      });
-
-    if (uploadError) {
-      // Sin objeto subido: cancelar la reserva y RESOLVERLA server-only
-      // (verifica la inexistencia real antes de liberar los bytes).
-      const cancelled = await cancelCprStorageUpload(begin.intent.intentId);
-      if (cancelled) {
-        await resolveCprUploadIntentObject({
-          intentId: begin.intent.intentId,
-          bucketId: begin.intent.bucketId,
-          objectPath: begin.intent.objectPath,
-        });
-      }
-      revalidatePath("/evidences");
-      return {
-        error:
-          "La evidencia se creó, pero el archivo no pudo subirse. Intenta adjuntarlo de nuevo.",
-      };
-    }
-
-    // T9F.4 · §15: la finalización AUTORITATIVA fija ruta y tamaño en la
-    // misma transacción que consume la reserva (tamaño real = declarado).
-    const finalized = await finalizeEvidenceAttachment(begin.intent.intentId, file.size);
-    if (!finalized.ok) {
-      console.error("[evidences] finalización de adjunto fallida; resolviendo intent", {
-        op: "createEvidenceAction.finalizeEvidenceAttachment",
-      });
-      // El objeto YA subido conserva su referencia durable (el intent) y
-      // sigue contabilizado; la resolución server-only intenta el retiro
-      // CONFIRMADO — jamás se libera sin confirmación.
-      await cancelCprStorageUpload(begin.intent.intentId);
-      const resolution = await resolveCprUploadIntentObject({
-        intentId: begin.intent.intentId,
-        bucketId: begin.intent.bucketId,
-        objectPath: begin.intent.objectPath,
-      });
-      revalidatePath("/evidences");
-      if (resolution.resolved) {
-        return {
-          error: `La evidencia se creó, pero el archivo no pudo registrarse y fue retirado (${finalized.error ?? "error desconocido"}). Intenta adjuntarlo de nuevo.`,
-        };
-      }
-      return {
-        error:
-          "La evidencia se creó, pero el archivo no pudo registrarse: quedó pendiente de retiro físico y seguirá contando en tu almacenamiento hasta completarse la limpieza.",
-      };
-    }
+  if (!input.file) {
+    revalidatePath("/evidences");
+    return { error: null, evidenceId: inserted.id as string, upload: null };
   }
 
+  // T9F.4 · §11-§13: RESERVA DURABLE antes de subir un solo byte. La RUTA la
+  // decide la BASE desde la fila de dominio; el navegador jamás la propone.
+  const begin = await beginCprStorageUpload({
+    resourceType: "evidence",
+    resourceId: inserted.id as string,
+    fileName: input.file.name,
+    fileSizeBytes: input.file.sizeBytes,
+    fileMimeType: input.file.mimeType || "application/octet-stream",
+    idempotencyKey: input.idempotencyKey ?? null,
+  });
+  if (!begin.intent) {
+    revalidatePath("/evidences");
+    return {
+      error: `La evidencia se creó, pero el archivo no pudo reservarse: ${begin.error ?? "intenta adjuntarlo de nuevo."}`,
+      evidenceId: null,
+      upload: null,
+    };
+  }
+
+  revalidatePath("/evidences");
+  return {
+    error: null,
+    evidenceId: inserted.id as string,
+    upload: {
+      intentId: begin.intent.intentId,
+      bucketId: begin.intent.bucketId,
+      objectPath: begin.intent.objectPath,
+    },
+  };
+}
+
+/**
+ * (C) FINALIZE · Recibe SOLO el intentId. No acepta tamaño, MIME, bucket ni
+ * ruta del cliente: todo se deriva del intent y del objeto FÍSICO real.
+ */
+export async function finalizeEvidenceUploadAction(
+  intentId: string
+): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+
+  const intent = await getOwnCprUploadIntent(intentId, user.id, org.organizationId);
+  if (!intent) return { error: "La reserva de subida no existe o no pertenece a tu sesión." };
+  if (intent.resourceType !== "evidence") return { error: "La reserva de subida no corresponde a una evidencia." };
+
+  const verification = await verifyCprUploadedObject({
+    bucketId: intent.bucketId,
+    objectPath: intent.objectPath,
+    expectedSizeBytes: intent.expectedSizeBytes,
+    expectedMimeType: intent.expectedMimeType,
+  });
+  if (verification.error !== null) {
+    await compensateFailedCprUpload(intent);
+    revalidatePath("/evidences");
+    return { error: verification.error };
+  }
+
+  const finalized = await finalizeEvidenceAttachmentServer({
+    actorId: user.id,
+    intentId: intent.intentId,
+    realSizeBytes: verification.sizeBytes,
+    realMimeType: verification.mimeType,
+  });
+  if (!finalized.ok) {
+    const resolution = await compensateFailedCprUpload(intent);
+    revalidatePath("/evidences");
+    return {
+      error: resolution.resolved
+        ? `El archivo no pudo registrarse (${finalized.error ?? "error desconocido"}) y fue retirado. Intenta adjuntarlo de nuevo.`
+        : "El archivo no pudo registrarse: quedó pendiente de retiro físico y seguirá contando en tu almacenamiento hasta completarse la limpieza.",
+    };
+  }
+
+  revalidatePath("/evidences");
+  return { error: null };
+}
+
+/** Cancelación explícita (abandono o fallo del PUT) — compensación completa. */
+export async function cancelEvidenceUploadAction(intentId: string): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+  const intent = await getOwnCprUploadIntent(intentId, user.id, org.organizationId);
+  if (!intent) return { error: null }; // nada que cancelar: idempotente
+  await compensateFailedCprUpload(intent);
   revalidatePath("/evidences");
   return { error: null };
 }

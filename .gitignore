@@ -46,3 +46,6 @@ next-env.d.ts
 
 # caché del CLI de Supabase
 supabase/.temp/
+
+# T9F.5B.1 · artefactos accidentales de comandos `find` mal citados
+-name*

@@ -11,24 +11,25 @@ import {
 } from "@/server/actions/module-plans";
 import { accessModeToPlanCode } from "@/lib/modules/access";
 import { requireCprForAction } from "@/lib/auth/require-cpr-module";
+import { removeQueuedStorageObjects } from "@/lib/db/storage-deletion";
+import { beginCprStorageUpload, getOwnCprUploadIntent } from "@/lib/db/storage-intents";
+// T9F.5B.1 · verificación FÍSICA y compensación compartidas (server-only).
 import {
-  resolveCprUploadIntentObject,
-  removeQueuedStorageObjects,
-} from "@/lib/db/storage-deletion";
-import { beginCprStorageUpload, cancelCprStorageUpload } from "@/lib/db/storage-intents";
+  verifyCprUploadedObject,
+  compensateFailedCprUpload,
+} from "@/server/actions/cpr-upload-verification";
 import {
   listDocumentMaster,
   findMasterDocumentByNormalizedTitle,
   getFileDocument,
   insertFileDocument,
-  uploadFileDocumentFile,
   getFileDocumentDownloadUrl,
   updateFileDocumentMetadata,
   queueAndDeleteFileDocumentDraft,
   deleteFileDocumentRow,
   changeFileDocumentStatus,
-  finalizeFileDocumentInitialVersion,
-  replaceFileDocumentFile,
+  finalizeFileDocumentInitialVersionServer,
+  replaceFileDocumentFileServer,
   listFileDocumentVersions,
   updateLiveDocumentCategory,
   type FileDocumentDetail,
@@ -186,147 +187,207 @@ export async function downloadFileDocumentAction(id: string): Promise<{ url: str
 // ---------------------------------------------------------------------------
 // Crear documento descargable (Parte 13).
 // ---------------------------------------------------------------------------
-export async function uploadFileDocumentAction(
-  _prev: MasterActionState,
-  formData: FormData
-): Promise<MasterActionState> {
+/**
+ * T9F.5B.1 · CARGA DIRECTA (bloqueador 2) · TrazaDocs descargable.
+ *
+ * El archivo NO viaja en FormData: begin recibe solo metadata, el navegador
+ * hace el PUT directo a la ruta EXACTA del intent con su sesión, y finalize
+ * recibe únicamente el intentId. Sin esto, el límite por defecto de Server
+ * Actions (1 MB) hacía imposible A14 (TrazaDocs Full de 22 MB).
+ */
+export type BeginFileDocumentUploadInput = {
+  title: string;
+  code: string;
+  categoryCode: string;
+  description: string;
+  file: { name: string; sizeBytes: number; mimeType: string };
+  idempotencyKey?: string | null;
+};
+
+export type BeginFileDocumentUploadResult =
+  | {
+      error: null;
+      documentId: string;
+      upload: { intentId: string; bucketId: string; objectPath: string };
+    }
+  | { error: string; documentId: string | null; upload: null };
+
+export async function beginFileDocumentUploadAction(
+  input: BeginFileDocumentUploadInput
+): Promise<BeginFileDocumentUploadResult> {
   const org = await requireActiveOrg();
   const { user } = await requireSession();
 
   const mutateCheck = await checkCprCanMutate();
-  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  if (!mutateCheck.allowed) {
+    return { error: mutateCheck.error ?? "El módulo no permite crear documentos.", documentId: null, upload: null };
+  }
 
-  const input = {
-    title: String(formData.get("title") ?? ""),
-    code: String(formData.get("code") ?? ""),
-    categoryCode: String(formData.get("category_code") ?? "other"),
-    description: String(formData.get("description") ?? ""),
-  };
-  const validation = validateFileDocumentDraft(input);
-  if (validation.error) return { error: validation.error };
+  const validation = validateFileDocumentDraft({
+    title: input.title,
+    code: input.code,
+    categoryCode: input.categoryCode,
+    description: input.description,
+  });
+  if (validation.error) return { error: validation.error, documentId: null, upload: null };
 
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "Selecciona un archivo." };
+  if (!input.file || input.file.sizeBytes <= 0) {
+    return { error: "Selecciona un archivo.", documentId: null, upload: null };
+  }
 
-  // Parte 11: documents_trazadocs cuenta documentos vivos Y descargables
-  // juntos — un solo límite, checkResourceLimit ya lee el conteo
-  // combinado de la vista de uso (ver server/actions/plans.ts).
   const limitCheck = await checkCprResourceLimit("documents_trazadocs");
-  if (!limitCheck.allowed) return { error: limitCheck.error };
+  if (!limitCheck.allowed) {
+    return { error: limitCheck.error ?? "Tu plan alcanzó el límite de documentos.", documentId: null, upload: null };
+  }
 
-  // T9F.2 · Bloqueador 2: el tamaño máximo POR ARCHIVO se resuelve desde el
-  // plan del MÓDULO CPR (organization_modules.access_mode → demo 10 MB;
-  // full/extra 25 MB — Extra solo difiere en la CUOTA total). El plan legacy
-  // (organization_subscriptions) ya no participa. Si el modo no puede
-  // resolverse, se bloquea: nunca se cae a un plan por defecto.
+  // El tope POR ARCHIVO se resuelve desde el plan del MÓDULO CPR (T9F.5B ·
+  // A14: Demo 10 MB, Full/Extra 25 MB). Si el modo no se resuelve, se bloquea.
   const cprMode = await getCprAccessModeForAction();
   if (cprMode.accessMode === null) {
-    return { error: cprMode.error ?? "No fue posible verificar el plan del módulo. Inténtalo nuevamente." };
+    return {
+      error: cprMode.error ?? "No fue posible verificar el plan del módulo. Inténtalo nuevamente.",
+      documentId: null,
+      upload: null,
+    };
   }
   const fileValidation = validateFileDocumentUpload(
-    { size: file.size, type: file.type },
+    { size: input.file.sizeBytes, type: input.file.mimeType },
     accessModeToPlanCode(cprMode.accessMode)
   );
-  if (fileValidation.error) return { error: fileValidation.error };
+  if (fileValidation.error) return { error: fileValidation.error, documentId: null, upload: null };
 
-  const storageCheck = await checkCprStorageAvailable(file.size);
-  if (!storageCheck.allowed) return { error: storageCheck.error };
+  const storageCheck = await checkCprStorageAvailable(input.file.sizeBytes);
+  if (!storageCheck.allowed) {
+    return { error: storageCheck.error ?? "No hay capacidad de almacenamiento disponible.", documentId: null, upload: null };
+  }
 
-  // Parte 18: anti-duplicado cruzado (vivo + descargable) por título normalizado.
-  const existing = await findMasterDocumentByNormalizedTitle(org.organizationId, normalizeDocumentTitle(input.title));
-  if (existing) return { error: DUPLICATE_MASTER_TITLE_MESSAGE, documentId: existing.documentId };
+  const existing = await findMasterDocumentByNormalizedTitle(
+    org.organizationId,
+    normalizeDocumentTitle(input.title)
+  );
+  if (existing) return { error: DUPLICATE_MASTER_TITLE_MESSAGE, documentId: existing.documentId, upload: null };
 
-  const payload = buildFileDocumentInsertPayload(input, user.id);
-  const extension = fileDocumentExtensionForType(file.type);
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || `documento.${extension}`;
+  const payload = buildFileDocumentInsertPayload(
+    { title: input.title, code: input.code, categoryCode: input.categoryCode, description: input.description },
+    user.id
+  );
+  const extension = fileDocumentExtensionForType(input.file.mimeType);
+  const safeFileName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || `documento.${extension}`;
 
-  // 1. Crear la fila (con datos de archivo provisionales) para obtener un id.
   const { id: documentId, error: insertError } = await insertFileDocument(
     org.organizationId,
     payload,
-    { storagePath: "", fileName: safeFileName, mimeType: file.type, sizeBytes: file.size },
+    { storagePath: "", fileName: safeFileName, mimeType: input.file.mimeType, sizeBytes: input.file.sizeBytes },
     user.id
   );
-  if (insertError || !documentId) return { error: insertError ?? "No fue posible crear el documento." };
+  if (insertError || !documentId) {
+    return { error: insertError ?? "No fue posible crear el documento.", documentId: null, upload: null };
+  }
 
-  // 2. T9F.4 · §11-§13: RESERVA DURABLE antes de subir un solo byte — el
-  //    intent fija bucket, ruta (v1) y bytes bajo el lock de cuota; el
-  //    pre-chequeo de arriba solo mejora el mensaje.
   const begin = await beginCprStorageUpload({
     resourceType: "trazadoc_initial",
     resourceId: documentId,
     fileName: safeFileName,
-    fileSizeBytes: file.size,
-    fileMimeType: file.type,
+    fileSizeBytes: input.file.sizeBytes,
+    fileMimeType: input.file.mimeType,
+    idempotencyKey: input.idempotencyKey ?? null,
   });
   if (!begin.intent) {
     const { error: cleanupError } = await deleteFileDocumentRow(org.organizationId, documentId);
     if (cleanupError) {
-      return { error: "El documento no quedó completamente creado. Elimina el borrador antes de intentar de nuevo." };
+      return {
+        error: "El documento no quedó completamente creado. Elimina el borrador antes de intentar de nuevo.",
+        documentId,
+        upload: null,
+      };
     }
-    return { error: begin.error ?? "No fue posible reservar la subida. No se creó el documento." };
+    return { error: begin.error ?? "No fue posible reservar la subida. No se creó el documento.", documentId: null, upload: null };
   }
 
-  const bytes = await file.arrayBuffer();
-  const { storagePath, error: uploadError } = await uploadFileDocumentFile(
-    begin.intent.objectPath,
-    bytes,
-    file.type
-  );
-  if (uploadError || !storagePath) {
-    // Sin objeto subido: cancelar la reserva, resolverla server-only
-    // (confirma la inexistencia) y limpiar el borrador vacío.
-    await cancelCprStorageUpload(begin.intent.intentId);
-    await resolveCprUploadIntentObject({
+  return {
+    error: null,
+    documentId,
+    upload: {
       intentId: begin.intent.intentId,
       bucketId: begin.intent.bucketId,
       objectPath: begin.intent.objectPath,
-    });
-    const { error: cleanupError } = await deleteFileDocumentRow(org.organizationId, documentId);
-    if (cleanupError) {
-      return { error: "El documento no quedó completamente creado. Elimina el borrador antes de intentar de nuevo." };
-    }
-    return { error: "No fue posible subir el archivo. No se creó el documento." };
+    },
+  };
+}
+
+/** FINALIZE · solo intentId; el servidor verifica el objeto físico. */
+export async function finalizeFileDocumentUploadAction(
+  intentId: string
+): Promise<MasterActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+
+  const intent = await getOwnCprUploadIntent(intentId, user.id, org.organizationId);
+  if (!intent) return { error: "La reserva de subida no existe o no pertenece a tu sesión." };
+  if (intent.resourceType !== "trazadoc_initial") {
+    return { error: "La reserva de subida no corresponde a la creación de un documento." };
   }
 
-  // 3. T9F.4 · §15: la RPC v2 fija ruta/nombre/MIME DEL INTENT y deja
-  //    EXACTAMENTE una versión v1, consumiendo la reserva en la misma
-  //    transacción.
-  const { error: finalizeError } = await finalizeFileDocumentInitialVersion(
-    begin.intent.intentId,
-    file.size,
-    "Borrador inicial"
-  );
-  if (finalizeError) {
-    // El objeto YA subido conserva su referencia durable (el intent) y
-    // sigue contabilizado; la resolución server-only intenta el retiro
-    // CONFIRMADO — jamás se libera sin confirmación.
-    await cancelCprStorageUpload(begin.intent.intentId);
-    const resolution = await resolveCprUploadIntentObject({
-      intentId: begin.intent.intentId,
-      bucketId: begin.intent.bucketId,
-      objectPath: begin.intent.objectPath,
-    });
+  const verification = await verifyCprUploadedObject({
+    bucketId: intent.bucketId,
+    objectPath: intent.objectPath,
+    expectedSizeBytes: intent.expectedSizeBytes,
+    expectedMimeType: intent.expectedMimeType,
+  });
+  if (verification.error !== null) {
+    const resolution = await compensateFailedCprUpload(intent);
     if (resolution.resolved) {
-      const { error: cleanupError } = await deleteFileDocumentRow(org.organizationId, documentId);
+      await deleteFileDocumentRow(org.organizationId, intent.resourceId);
+    }
+    revalidateMaster();
+    return { error: verification.error };
+  }
+
+  const { error: finalizeError } = await finalizeFileDocumentInitialVersionServer({
+    actorId: user.id,
+    intentId: intent.intentId,
+    realSizeBytes: verification.sizeBytes,
+    realMimeType: verification.mimeType,
+    note: "Borrador inicial",
+  });
+  if (finalizeError) {
+    const resolution = await compensateFailedCprUpload(intent);
+    if (resolution.resolved) {
+      const { error: cleanupError } = await deleteFileDocumentRow(org.organizationId, intent.resourceId);
       if (cleanupError) {
         return {
           error:
             "No fue posible finalizar la creación. El archivo subido fue retirado; elimina el borrador vacío antes de intentar de nuevo.",
         };
       }
+      revalidateMaster();
       return { error: "No fue posible finalizar la creación del documento. Inténtalo nuevamente." };
     }
+    revalidateMaster();
     return {
       error:
         finalizeError +
         " El archivo subido quedó registrado como pendiente de retiro y seguirá contando en tu almacenamiento hasta completarse la limpieza.",
-      documentId,
+      documentId: intent.resourceId,
     };
   }
 
   revalidateMaster();
-  return { error: null, success: true, documentId };
+  return { error: null, success: true, documentId: intent.resourceId };
+}
+
+/** Cancelación explícita (abandono o fallo del PUT). */
+export async function cancelFileDocumentUploadAction(intentId: string): Promise<MasterActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+  const intent = await getOwnCprUploadIntent(intentId, user.id, org.organizationId);
+  if (!intent) return { error: null };
+  const resolution = await compensateFailedCprUpload(intent);
+  if (resolution.resolved && intent.resourceType === "trazadoc_initial") {
+    await deleteFileDocumentRow(org.organizationId, intent.resourceId);
+  }
+  revalidateMaster();
+  return { error: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,101 +420,124 @@ export async function updateFileDocumentMetadataAction(
   return { ...okState, documentId: id };
 }
 
-export async function replaceFileDocumentFileAction(
-  _prev: MasterActionState,
-  formData: FormData
-): Promise<MasterActionState> {
+/**
+ * T9F.5B.1 · CARGA DIRECTA · Reemplazo de archivo TrazaDocs.
+ * begin (metadata) → PUT directo del navegador → finalize (solo intentId).
+ */
+export type BeginFileDocumentReplaceInput = {
+  documentId: string;
+  file: { name: string; sizeBytes: number; mimeType: string };
+  idempotencyKey?: string | null;
+};
+
+export async function beginFileDocumentReplaceAction(
+  input: BeginFileDocumentReplaceInput
+): Promise<BeginFileDocumentUploadResult> {
   const org = await requireActiveOrg();
+  await requireSession();
   const mutateCheck = await checkCprCanMutate();
-  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  if (!mutateCheck.allowed) {
+    return { error: mutateCheck.error ?? "El módulo no permite reemplazar archivos.", documentId: null, upload: null };
+  }
 
-  const id = String(formData.get("id") ?? "");
-
-  // Corrección (Bloqueante 3): TODO se valida ANTES de subir nada —
-  // documento existe, rol y estado permiten reemplazar. La RPC
-  // replace_trazadoc_file_document sigue siendo la autoridad real (mismo
-  // chequeo exacto en SQL), esto solo evita gastar una subida a Storage
-  // cuando ya se sabe que se va a rechazar.
-  const doc = await getFileDocument(org.organizationId, id);
-  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+  const doc = await getFileDocument(org.organizationId, input.documentId);
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa.", documentId: null, upload: null };
   if (!canReplaceFileDocumentFile(org.roleCode as "admin" | "quality" | "consultant" | null, doc.status)) {
     return {
       error:
         doc.status === "obsolete"
           ? "Un documento obsoleto no se puede reemplazar directamente; reactívalo primero."
           : "Tu rol no permite reemplazar el archivo de este documento en su estado actual.",
+      documentId: null,
+      upload: null,
     };
   }
+  if (!input.file || input.file.sizeBytes <= 0) {
+    return { error: "Selecciona un archivo.", documentId: null, upload: null };
+  }
 
-  const file = formData.get("file") as File | null;
-  if (!file || file.size === 0) return { error: "Selecciona un archivo." };
-
-  // T9F.2 · Bloqueador 2: el tamaño máximo POR ARCHIVO se resuelve desde el
-  // plan del MÓDULO CPR (organization_modules.access_mode → demo 10 MB;
-  // full/extra 25 MB — Extra solo difiere en la CUOTA total). El plan legacy
-  // (organization_subscriptions) ya no participa. Si el modo no puede
-  // resolverse, se bloquea: nunca se cae a un plan por defecto.
   const cprMode = await getCprAccessModeForAction();
   if (cprMode.accessMode === null) {
-    return { error: cprMode.error ?? "No fue posible verificar el plan del módulo. Inténtalo nuevamente." };
+    return {
+      error: cprMode.error ?? "No fue posible verificar el plan del módulo. Inténtalo nuevamente.",
+      documentId: null,
+      upload: null,
+    };
   }
   const fileValidation = validateFileDocumentUpload(
-    { size: file.size, type: file.type },
+    { size: input.file.sizeBytes, type: input.file.mimeType },
     accessModeToPlanCode(cprMode.accessMode)
   );
-  if (fileValidation.error) return { error: fileValidation.error };
+  if (fileValidation.error) return { error: fileValidation.error, documentId: null, upload: null };
 
-  const storageCheck = await checkCprStorageAvailable(file.size);
-  if (!storageCheck.allowed) return { error: storageCheck.error };
+  const storageCheck = await checkCprStorageAvailable(input.file.sizeBytes);
+  if (!storageCheck.allowed) {
+    return { error: storageCheck.error ?? "No hay capacidad de almacenamiento disponible.", documentId: null, upload: null };
+  }
 
-  // T9F.4 · §14: el reemplazo RESERVA el objeto NUEVO antes de subirlo (la
-  // ruta v(n+1) la decide la base) y NO libera el anterior — la versión
-  // histórica sigue contando hasta un retiro confirmado.
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || doc.fileName;
+  // El reemplazo RESERVA el objeto NUEVO (ruta v(n+1), decidida por la base)
+  // y NO libera el anterior: la versión histórica sigue contando.
+  const safeFileName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || doc.fileName;
   const begin = await beginCprStorageUpload({
     resourceType: "trazadoc_replace",
-    resourceId: id,
+    resourceId: input.documentId,
     fileName: safeFileName,
-    fileSizeBytes: file.size,
-    fileMimeType: file.type,
+    fileSizeBytes: input.file.sizeBytes,
+    fileMimeType: input.file.mimeType,
+    idempotencyKey: input.idempotencyKey ?? null,
   });
   if (!begin.intent) {
-    return { error: begin.error ?? "No fue posible reservar la subida del nuevo archivo." };
+    return { error: begin.error ?? "No fue posible reservar la subida del nuevo archivo.", documentId: null, upload: null };
   }
-  const bytes = await file.arrayBuffer();
-  const { storagePath, error: uploadError } = await uploadFileDocumentFile(
-    begin.intent.objectPath,
-    bytes,
-    file.type
-  );
-  if (uploadError || !storagePath) {
-    await cancelCprStorageUpload(begin.intent.intentId);
-    await resolveCprUploadIntentObject({
+  return {
+    error: null,
+    documentId: input.documentId,
+    upload: {
       intentId: begin.intent.intentId,
       bucketId: begin.intent.bucketId,
       objectPath: begin.intent.objectPath,
-    });
-    return { error: "No fue posible subir el nuevo archivo." };
+    },
+  };
+}
+
+export async function finalizeFileDocumentReplaceAction(
+  intentId: string,
+  note: string | null
+): Promise<MasterActionState> {
+  const org = await requireActiveOrg();
+  const { user } = await requireSession();
+
+  const intent = await getOwnCprUploadIntent(intentId, user.id, org.organizationId);
+  if (!intent) return { error: "La reserva de subida no existe o no pertenece a tu sesión." };
+  if (intent.resourceType !== "trazadoc_replace") {
+    return { error: "La reserva de subida no corresponde a un reemplazo." };
   }
 
-  const note = String(formData.get("note") ?? "").trim() || null;
-  const { error } = await replaceFileDocumentFile(begin.intent.intentId, file.size, note);
+  const verification = await verifyCprUploadedObject({
+    bucketId: intent.bucketId,
+    objectPath: intent.objectPath,
+    expectedSizeBytes: intent.expectedSizeBytes,
+    expectedMimeType: intent.expectedMimeType,
+  });
+  if (verification.error !== null) {
+    await compensateFailedCprUpload(intent);
+    return { error: verification.error };
+  }
+
+  const { error } = await replaceFileDocumentFileServer({
+    actorId: user.id,
+    intentId: intent.intentId,
+    realSizeBytes: verification.sizeBytes,
+    realMimeType: verification.mimeType,
+    note: note?.trim() || null,
+  });
   if (error) {
-    // T9F.4: la RPC falló DESPUÉS de subir el nuevo objeto. El intent es su
-    // referencia durable y sigue contabilizado; la resolución server-only
-    // intenta el retiro CONFIRMADO — sin confirmación, la cuota lo sigue
-    // contando hasta la limpieza. El usuario recibe el error real.
-    await cancelCprStorageUpload(begin.intent.intentId);
-    await resolveCprUploadIntentObject({
-      intentId: begin.intent.intentId,
-      bucketId: begin.intent.bucketId,
-      objectPath: begin.intent.objectPath,
-    });
+    await compensateFailedCprUpload(intent);
     return { error };
   }
 
-  revalidateMaster(id);
-  return { ...okState, documentId: id };
+  revalidateMaster(intent.resourceId);
+  return { ...okState, documentId: intent.resourceId };
 }
 
 export async function deleteDraftFileDocumentAction(

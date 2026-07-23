@@ -171,7 +171,7 @@ const CPR_MUTATION_MATRIX: Record<string, { guarded: string[]; delegating?: Reco
     delegating: { startDiagnosticFormAction: "startDiagnosticAction" },
   },
   "server/actions/evidences.ts": {
-    guarded: ["createEvidenceAction", "validateEvidenceAction", "deleteEvidenceAction", "linkEvidenceAction"],
+    guarded: ["beginEvidenceUploadAction", "validateEvidenceAction", "deleteEvidenceAction", "linkEvidenceAction"],
   },
   "server/actions/implementation.ts": {
     guarded: [
@@ -212,8 +212,8 @@ const CPR_MUTATION_MATRIX: Record<string, { guarded: string[]; delegating?: Reco
   },
   "server/actions/trazadocs-master.ts": {
     guarded: [
-      "exportDocumentMasterCsvAction", "downloadFileDocumentAction", "uploadFileDocumentAction", "updateFileDocumentMetadataAction",
-      "replaceFileDocumentFileAction", "deleteDraftFileDocumentAction", "submitFileDocumentForReviewAction",
+      "exportDocumentMasterCsvAction", "downloadFileDocumentAction", "beginFileDocumentUploadAction", "updateFileDocumentMetadataAction",
+      "beginFileDocumentReplaceAction", "deleteDraftFileDocumentAction", "submitFileDocumentForReviewAction",
       "approveFileDocumentAction", "markFileDocumentObsoleteAction", "reactivateFileDocumentAction",
       "createFileDocumentDraftVersionAction", "updateLiveDocumentCategoryAction",
     ],
@@ -484,16 +484,21 @@ check("0101 es ADITIVA: sin TRUNCATE, sin DROP destructivo, sin DELETE, sin back
   assert(!/truncate/.test(lower), "sin TRUNCATE");
   assert(!/drop table/.test(lower) && !/drop function/.test(lower), "sin DROP destructivo");
   {
-    // T9F.4 · §9: retirar una política PERMISIVA de DELETE ENDURECE la RLS
-    // (no borra datos ni capacidades del servidor) — los ÚNICOS drop policy
-    // admitidos son EXACTAMENTE las tres políticas de DELETE directo
-    // sustituidas por las RPCs seguras de §3.
+    // T9F.4 · §9: retirar una política PERMISIVA ENDURECE la RLS (no borra
+    // datos ni capacidades del servidor). T9F.5B (§12) añade cuatro drops
+    // más sobre storage.objects: son EXACTAMENTE las políticas permisivas
+    // que el equipo rojo identificó como A01-A04, cada una sustituida por
+    // una política ligada a intent o por deny-by-default.
     const drops = lower.match(/drop policy[^;]+;/g) ?? [];
-    assert(drops.length === 3, "solo los tres drop policy de DELETE directo de §3b");
+    assert(drops.length === 7, "los tres drop policy de DELETE directo (§3b) más los cuatro de Storage (T9F.5B §12)");
     for (const expected of [
       "drop policy trazadoc_file_documents_delete on public.trazadoc_file_documents;",
       "drop policy evidences_delete on public.evidences;",
       "drop policy textile_evidences_delete on public.textile_evidences;",
+      "drop policy if exists evidences_insert_legacy on storage.objects;",
+      "drop policy if exists trazadocs_documents_insert on storage.objects;",
+      "drop policy if exists trazadocs_documents_update on storage.objects;",
+      "drop policy if exists trazadocs_documents_delete on storage.objects;",
     ]) {
       assert(drops.includes(expected), `drop policy inesperado o ausente: ${expected}`);
     }
@@ -509,7 +514,19 @@ check("0101 es ADITIVA: sin TRUNCATE, sin DROP destructivo, sin DELETE, sin back
     assert(deletes.every((d) => d.includes("where id = v_")), "cada DELETE apunta a UNA fila de dominio autorizada");
   }
   assert(!/update public\.organization_modules/.test(lower.replace(/update organization_modules\s+set enabled/g, "")), "sin backfill masivo de organization_modules");
-  assert(!/storage\.objects/.test(lower), "no toca Storage RLS (0099)");
+  // T9F.5B · §12: 0101 SÍ corrige ahora Storage RLS — era la superficie
+  // (A01-A04) que hacía opcional toda la arquitectura de reservas. Lo que se
+  // exige es que el cambio sea ENDURECEDOR: se retiran políticas permisivas
+  // y las que se crean exigen intent; jamás se toca el bucket de Textiles
+  // (evidences_insert_textiles, 0099) ni se abre ningún verbo nuevo.
+  assert(/drop policy if exists evidences_insert_legacy on storage\.objects/.test(lower),
+    "T9F.5B retira la política CPR permisiva (A01)");
+  assert(/create policy evidences_insert_cpr on storage\.objects/.test(lower),
+    "T9F.5B instala el INSERT CPR ligado a intent (A01)");
+  assert(!/create policy evidences_insert_textiles/.test(lower),
+    "0101 no redefine la política textil de 0099");
+  assert(!/create policy[^;]+for (update|delete)[^;]*on storage\.objects/.test(lower),
+    "0101 no crea ninguna política UPDATE/DELETE sobre storage.objects");
   assert(!/insert into public\.plan_definitions/.test(lower) && !/insert into public\.plan_limits/.test(lower), "no crea planes ni modifica cuotas comerciales");
 });
 
