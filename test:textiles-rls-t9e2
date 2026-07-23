@@ -1,0 +1,60 @@
+
+> trazaloop@0.5.0 test:textiles-rls-t9e2
+> tsx tests/rls/textiles-t9e2-integrity.test.ts
+
+◇ injected env (8) from .env.local // tip: ◈ secrets for agents [www.dotenvx.com]
+
+Trazaloop · T9E.2/T9E.3: integridad REAL server-only (staging)
+
+Datos temporales creados (2 organizaciones, 3 usuarios).
+
+  ✔ 1. La RPC begin funciona para un usuario autorizado y la ruta cumple el patrón EXACTO
+  ✔ 2. INSERT directo a la tabla está bloqueado (incluso con datos válidos)
+  ✔ 3. UPDATE y DELETE directos están bloqueados (también para el propio creador)
+  ✔ 4. ATAQUE B1 · finalize DIRECTO sin objeto en Storage → permission denied para creador, mismo-org, otra org y anon; CERO evidencias
+  ✔ 5. ATAQUE B2 · cleanup DIRECTO con p_removed=true afirmado por el navegador → permission denied; intento intacto
+  ✔ 6. Lecturas por creador: A2 (misma org, rol autorizado) NO ve el intento de A1 ni lo marca fallido
+  ✔ 7. *_server con actor INCORRECTO → rechazado aunque invoque service_role (mismo-org, otra org, inexistente, null)
+  ✘ 8. Tamaño verificado distinto → rechazo Y el intento sigue pending SIN evidencia (rollback atómico): el tamaño divergente debía rechazarse
+  ✔ 9. Flujo LEGÍTIMO server-only: evidencia + consumo + vínculo en UNA transacción, con el ACTOR real como created_by
+  ✔ 10. Doble finalize server-only: idempotente — mismo evidence_id, UNA sola evidencia
+  ✔ 11. Un intento consumed es INMUTABLE e imborrable, incluso para service_role
+  ✔ 12. Un intento VIGENTE no entra al ciclo de limpieza ('still_active') y conserva su estado
+  ✔ 13. Limpieza RECUPERABLE server-only: removed=false NO cierra (contador++), removed=true cierra en 'expired'
+  ✔ 14. La limpieza JAMÁS cierra un intento consumed (objeto de evidencia intocable)
+  ✔ 15. Metadata inválida en begin → rechazada ANTES de emitir autorización de subida
+  ✔ 16. A no puede iniciar un intento PARA la organización B (rol re-verificado en la RPC)
+    · OBSERVADO: el token firmado SE REUTILIZÓ tras el retiro (NO es de un solo uso) → la defensa por re-barrido es NECESARIA
+    · DEFENSA: el objeto tardío fue retirado por el re-barrido (ventana de gracia)
+  ✔ 17. EXPERIMENTO: reutilización del token firmado tras el retiro; defensa por re-barrido; jamás finalizable
+
+Resultado: 16 pasaron, 1 fallaron.
+
+Limpieza de datos temporales…
+TypeError: fetch failed
+    at node:internal/deps/undici/undici:15141:13
+    at async _handleRequest (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/lib/fetch.ts:223:14)
+    at async _request (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/lib/fetch.ts:196:16)
+    at async GoTrueAdminApi.deleteUser (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/GoTrueAdminApi.ts:840:14)
+    at async cleanup (/Users/jhormanmena/Developer/trazaloop2/tests/rls/textiles-t9e2-integrity.test.ts:571:25) {
+  [cause]: Error: read ECONNRESET
+      at TLSWrap.onStreamRead (node:internal/stream_base_commons:216:20) {
+    errno: -54,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }
+}
+TypeError: fetch failed
+    at node:internal/deps/undici/undici:15141:13
+    at async _handleRequest (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/lib/fetch.ts:223:14)
+    at async _request (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/lib/fetch.ts:196:16)
+    at async GoTrueAdminApi.deleteUser (/Users/jhormanmena/Developer/trazaloop2/node_modules/@supabase/auth-js/src/GoTrueAdminApi.ts:840:14)
+    at async cleanup (/Users/jhormanmena/Developer/trazaloop2/tests/rls/textiles-t9e2-integrity.test.ts:571:25) {
+  [cause]: Error: read ECONNRESET
+      at TLSWrap.onStreamRead (node:internal/stream_base_commons:216:20) {
+    errno: -54,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }
+}
+Limpieza: 4 objeto(s) tratados; usuarios eliminados/rotados: 3; organizaciones tratadas: 2.

@@ -339,23 +339,139 @@ async function main() {
 
   console.log("\n── Regresión CPR ────────────────────────────────────────────\n");
 
-  await check("23. CPR: INSERT en {org}/{evidence_id}/archivo y descarga → SIGUEN FUNCIONANDO", async () => {
-    const { data: ev, error: evErr } = await a1.client.from("evidences").insert({
-      organization_id: orgA, name: "Evidencia CPR regresión T9E4",
-      evidence_type: "other", evidence_date: "2026-07-21",
-    }).select("id").single();
-    assert(!evErr && ev, `no se pudo crear la evidencia CPR: ${evErr?.message}`);
-    const cprPath = `${orgA}/${ev!.id}/regresion-cpr.pdf`;
-    const up = await a1.client.storage.from(BUCKET).upload(cprPath, PDF, { contentType: "application/pdf" });
-    assert(!up.error, `*** 0099 ROMPIÓ la carga CPR: ${up.error?.message} ***`);
-    createdObjects.push(cprPath);
-    const dl = await a1.client.storage.from(BUCKET).createSignedUrl(cprPath, 60);
-    assert(!dl.error && dl.data?.signedUrl, `*** 0099 rompió la descarga CPR: ${dl.error?.message} ***`);
-    // CPR jamás ha tenido DELETE de cliente: debe seguir sin tenerlo.
-    await a1.client.storage.from(BUCKET).remove([cprPath]);
-    assert(await objectExists(cprPath), "CPR no debía poder borrar desde el cliente");
-    await admin.from("evidences").delete().eq("id", ev!.id);
-  });
+  await check(
+    "23. CPR: sin intent se rechaza; con begin → upload → finalize y descarga funciona",
+    async () => {
+      const { data: ev, error: evErr } =
+        await a1.client
+          .from("evidences")
+          .insert({
+            organization_id: orgA,
+            name:
+              "Evidencia CPR regresión T9E4",
+            evidence_type: "other",
+            evidence_date: "2026-07-21",
+          })
+          .select("id")
+          .single();
+
+      assert(
+        !evErr && ev,
+        `no se pudo crear la evidencia CPR: ${
+          evErr?.message
+        }`
+      );
+
+      const expectedPath =
+        `${orgA}/${ev!.id}/regresion-cpr.pdf`;
+
+      const direct = await a1.client.storage
+        .from(BUCKET)
+        .upload(expectedPath, PDF, {
+          contentType: "application/pdf",
+        });
+
+      assert(
+        direct.error !== null,
+        "CPR sin intent debía ser rechazado por 0101"
+      );
+
+      const {
+        data: beginData,
+        error: beginError,
+      } = await a1.client.rpc(
+        "begin_cpr_storage_upload",
+        {
+          p_resource_type: "evidence",
+          p_resource_id: ev!.id,
+          p_file_name: "regresion-cpr.pdf",
+          p_file_size_bytes: PDF.length,
+          p_file_mime_type:
+            "application/pdf",
+          p_ttl_minutes: 30,
+          p_idempotency_key:
+            `t9e4-cpr-${ev!.id}`,
+        }
+      );
+
+      assert(
+        !beginError && beginData,
+        `begin CPR: ${beginError?.message}`
+      );
+
+      const intent = beginData as {
+        intent_id: string;
+        object_path: string;
+      };
+
+      assert(
+        intent.object_path === expectedPath,
+        `ruta CPR inesperada: ${
+          intent.object_path
+        }`
+      );
+
+      const up = await a1.client.storage
+        .from(BUCKET)
+        .upload(intent.object_path, PDF, {
+          contentType: "application/pdf",
+        });
+
+      assert(
+        !up.error,
+        `carga CPR con intent falló: ${
+          up.error?.message
+        }`
+      );
+
+      createdObjects.push(intent.object_path);
+
+      const { error: finalizeError } =
+        await admin.rpc(
+          "finalize_evidence_attachment_server",
+          {
+            p_actor_id: a1.id,
+            p_intent_id: intent.intent_id,
+            p_real_size_bytes: PDF.length,
+            p_real_mime_type:
+              "application/pdf",
+          }
+        );
+
+      assert(
+        !finalizeError,
+        `finalize CPR: ${
+          finalizeError?.message
+        }`
+      );
+
+      const dl = await a1.client.storage
+        .from(BUCKET)
+        .createSignedUrl(
+          intent.object_path,
+          60
+        );
+
+      assert(
+        !dl.error && dl.data?.signedUrl,
+        `descarga CPR: ${dl.error?.message}`
+      );
+
+      await a1.client.storage
+        .from(BUCKET)
+        .remove([intent.object_path]);
+
+      assert(
+        await objectExists(intent.object_path),
+        "CPR no debía poder borrar desde el cliente"
+      );
+
+      await admin
+        .from("evidences")
+        .delete()
+        .eq("id", ev!.id);
+    }
+  );
 
   console.log(`\nResultado: ${passed} pasaron, ${failed} fallaron.`);
 }

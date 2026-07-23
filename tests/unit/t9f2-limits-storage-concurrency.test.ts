@@ -391,7 +391,7 @@ check("39. Una transición real crea EXACTAMENTE una auditoría", () => {
   assert(/'changed', true/.test(RPC), "la transición real devuelve changed=true");
 });
 
-check("La 0101 acumulada sigue siendo ADITIVA y no crea 0102", () => {
+check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA posterior", () => {
   const lower = MIG101.toLowerCase();
   assert(!/truncate/.test(lower), "sin TRUNCATE");
   assert(!/drop table/.test(lower) && !/drop function/.test(lower) && !/drop view/.test(lower), "sin DROP destructivo");
@@ -425,8 +425,27 @@ check("La 0101 acumulada sigue siendo ADITIVA y no crea 0102", () => {
   assert(!/create policy[^;]+for (update|delete)[^;]*on storage\.objects/.test(lower),
     "0101 no crea ninguna política UPDATE/DELETE sobre storage.objects");
   assert(!/insert into public\.plan_definitions/.test(lower) && !/insert into public\.plan_limits/.test(lower), "no crea planes ni cuotas");
-  const migs = readdirSync(join(process.cwd(), "supabase/migrations"));
-  assert(!migs.some((f) => f.startsWith("0102")), "NO existe 0102: 0101 acumula T9F.1 + T9F.2 (nunca fue aplicada)");
+  const migs = readdirSync(
+    join(process.cwd(), "supabase/migrations")
+  );
+
+  const after0101 = migs
+    .filter((file) => {
+      const match = /^(\d{4})_/.exec(file);
+      return match !== null && Number(match[1]) > 101;
+    })
+    .sort();
+
+  const expectedAfter0101 = [
+    "0102_t9g_qa_finalizer_closure.sql",
+  ];
+
+  assert(
+    JSON.stringify(after0101) ===
+      JSON.stringify(expectedAfter0101),
+    `después de 0101 solo debe existir el cierre QA 0102 ` +
+      `(hay: ${after0101.join(", ") || "ninguna"})`
+  );
 });
 
 // ---------------------------------------------------------------------------

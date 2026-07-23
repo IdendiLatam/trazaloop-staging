@@ -425,9 +425,25 @@ check("B5. El paquete no incluye artefactos accidentales", () => {
   assert(/^-name\*$/m.test(ignore), ".gitignore debe cubrir los artefactos de `find` mal citados");
 });
 
-check("B5. Sigue sin existir 0102 y 0100 no se modifica", () => {
+check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
   const files = readdirSync(join(process.cwd(), "supabase/migrations"));
-  assert(!files.some((f) => f.startsWith("0102")), "no debe existir ninguna migración 0102");
+  const after0101 = files
+    .filter((file) => {
+      const match = /^(\d{4})_/.exec(file);
+      return match !== null && Number(match[1]) > 101;
+    })
+    .sort();
+
+  const expectedAfter0101 = [
+    "0102_t9g_qa_finalizer_closure.sql",
+  ];
+
+  assert(
+    JSON.stringify(after0101) ===
+      JSON.stringify(expectedAfter0101),
+    `después de 0101 solo debe existir el cierre QA 0102 ` +
+      `(hay: ${after0101.join(", ") || "ninguna"})`
+  );
   assert(
     MIG100.includes("create or replace function public.resolve_organization_module_access"),
     "0100 conserva su resolver original"

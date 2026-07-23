@@ -90,6 +90,54 @@ function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
 }
 
+const TRANSIENT_NETWORK_ERROR =
+  /fetch failed|ECONNRESET|ECONNABORTED|ETIMEDOUT|socket hang up|502|503|504/i;
+
+async function withTransientRetry<T>(
+  label: string,
+  operation: () => PromiseLike<T>,
+  maximumAttempts = 6
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (
+    let attempt = 1;
+    attempt <= maximumAttempts;
+    attempt++
+  ) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      if (
+        !TRANSIENT_NETWORK_ERROR.test(lastError.message) ||
+        attempt === maximumAttempts
+      ) {
+        throw lastError;
+      }
+
+      const delay = 750 * 2 ** (attempt - 1);
+
+      console.warn(
+        `[T9F.3] ${label}: fallo transitorio; ` +
+          `reintento ${attempt + 1}/${maximumAttempts} ` +
+          `en ${delay} ms.`
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay)
+      );
+    }
+  }
+
+  throw lastError ??
+    new Error(`${label}: fallo desconocido`);
+}
+
 const createdUsers: string[] = [];
 const createdOrgs: string[] = [];
 
@@ -143,6 +191,27 @@ async function usageRow(client: SupabaseClient, orgId: string, moduleCode: strin
   return data as Record<string, number & string>;
 }
 
+async function closeTextileIntentWithoutObject(
+  actorId: string,
+  intentId: string
+): Promise<void> {
+  const { data, error } = await admin.rpc(
+    "record_textile_upload_intent_cleanup_server",
+    {
+      p_actor_id: actorId,
+      p_intent_id: intentId,
+      p_removed: true,
+    }
+  );
+
+  assert(
+    !error && data === "expired",
+    `cerrar intent sin objeto: ${
+      error?.message ?? String(data)
+    }`
+  );
+}
+
 function deterministicBytes(n: number): Uint8Array {
   const buf = new Uint8Array(n);
   for (let i = 0; i < n; i++) buf[i] = i % 251;
@@ -156,15 +225,26 @@ async function beginUpload(
   sizeBytes: number,
   idempotencyKey: string | null = null
 ) {
-  return client.rpc("begin_textile_evidence_upload_v2", {
-    p_organization_id: orgId,
-    p_file_name: fileName,
-    p_file_size_bytes: sizeBytes,
-    p_file_mime_type: "application/pdf",
-    p_metadata: { title: `${RUN} ${fileName}`, evidence_type: "other" },
-    p_ttl_minutes: 30,
-    p_idempotency_key: idempotencyKey,
-  });
+  const call = async () =>
+    await client.rpc("begin_textile_evidence_upload_v2", {
+      p_organization_id: orgId,
+      p_file_name: fileName,
+      p_file_size_bytes: sizeBytes,
+      p_file_mime_type: "application/pdf",
+      p_metadata: {
+        title: `${RUN} ${fileName}`,
+        evidence_type: "other",
+      },
+      p_ttl_minutes: 30,
+      p_idempotency_key: idempotencyKey,
+    });
+
+  return idempotencyKey
+    ? withTransientRetry(
+        "begin textil idempotente",
+        call
+      )
+    : call();
 }
 
 async function main() {
@@ -215,12 +295,27 @@ async function main() {
   });
 
   await check("7. Importación masiva atómica: un INSERT multi-fila (materiales 4+2 sobre límite 5) revierte COMPLETO — cero filas insertadas", async () => {
-    const seed = Array.from({ length: 4 }, (_, i) => ({ organization_id: orgA, name: `${RUN} m${i}` }));
+    const seed = Array.from(
+      { length: 4 },
+      (_, i) => ({
+        organization_id: orgA,
+        name: `${RUN} m${i}`,
+        material_type: "other",
+      })
+    );
     const seeded = await adminA.client.from("textile_materials").insert(seed).select("id");
     assert(!seeded.error && (seeded.data ?? []).length === 4, `4 materiales base: ${seeded.error?.message}`);
     const bulk = await adminA.client.from("textile_materials").insert([
-      { organization_id: orgA, name: `${RUN} m5` },
-      { organization_id: orgA, name: `${RUN} m6` },
+      {
+        organization_id: orgA,
+        name: `${RUN} m5`,
+        material_type: "other",
+      },
+      {
+        organization_id: orgA,
+        name: `${RUN} m6`,
+        material_type: "other",
+      },
     ]);
     assert(bulk.error !== null && /RESOURCE_LIMIT_EXCEEDED/.test(bulk.error.message), `el lote debía rechazarse íntegro: ${bulk.error?.message ?? "permitido"}`);
     const { count } = await admin.from("textile_materials").select("id", { count: "exact", head: true }).eq("organization_id", orgA);
@@ -260,9 +355,32 @@ async function main() {
       .from("textile_evidence_upload_intents")
       .update({ status: "failed" })
       .eq("id", intentAId);
-    assert(!error, `cancelar fixture: ${error?.message}`);
-    const u = await usageRow(adminA.client, orgA, TEX);
-    assert(Number(u.storage_reserved_bytes) === 0, `reserva liberada (fue ${u.storage_reserved_bytes})`);
+    assert(
+      !error,
+      `cancelar fixture: ${error?.message}`
+    );
+
+    await closeTextileIntentWithoutObject(
+      adminA.id,
+      intentAId
+    );
+
+    const u =
+      await usageRow(adminA.client, orgA, TEX);
+
+    assert(
+      Number(u.storage_reserved_bytes) === 0,
+      `reserva liberada (fue ${
+        u.storage_reserved_bytes
+      })`
+    );
+
+    assert(
+      Number(u.storage_used_bytes) === 0,
+      `un intent retirado no debe seguir contando ` +
+        `(fue ${u.storage_used_bytes})`
+    );
+
     const again = await beginUpload(adminA.client, orgA, "r3.pdf", 8 * KB, `${RUN}-k3`);
     assert(!again.error, `debía volver a caber: ${again.error?.message}`);
     const ok = again.data as { intent_id: string; object_path: string };
@@ -270,40 +388,213 @@ async function main() {
     intentAPath = ok.object_path;
   });
 
-  await check("12. Expiración lógica SIN cron: con expires_at en el pasado la reserva deja de contar de inmediato", async () => {
-    const { error } = await admin
-      .from("textile_evidence_upload_intents")
-      .update({
-        expires_at: new Date(Date.now() - 60_000).toISOString(),
-        created_at: new Date(Date.now() - 600_000).toISOString(),
-      })
-      .eq("id", intentAId);
-    assert(!error, `vencer fixture: ${error?.message}`);
-    const u = await usageRow(adminA.client, orgA, TEX);
-    assert(Number(u.storage_reserved_bytes) === 0, `vencida no reserva (fue ${u.storage_reserved_bytes})`);
-    const again = await beginUpload(adminA.client, orgA, "r4.pdf", 8 * KB, `${RUN}-k4`);
-    assert(!again.error, `debía caber con la anterior vencida: ${again.error?.message}`);
-    const ok = again.data as { intent_id: string; object_path: string };
-    intentAId = ok.intent_id;
-    intentAPath = ok.object_path;
-  });
+  await check(
+    "12. Expiración lógica SIN cron: un intent pending ya vencido no reserva bytes",
+    async () => {
+      const { error: closeCurrentError } = await admin
+        .from("textile_evidence_upload_intents")
+        .update({ status: "failed" })
+        .eq("id", intentAId);
+
+      assert(
+        !closeCurrentError,
+        `cerrar intent activo: ${
+          closeCurrentError?.message
+        }`
+      );
+
+      // El intent r3 quedó failed. Mientras no se confirme
+
+      // que su objeto fue retirado, sus bytes siguen contando.
+
+      await closeTextileIntentWithoutObject(
+
+        adminA.id,
+
+        intentAId
+
+      );
+
+
+      const afterCurrentCleanup =
+
+        await usageRow(
+
+          adminA.client,
+
+          orgA,
+
+          TEX
+
+        );
+
+
+      assert(
+
+        Number(
+
+          afterCurrentCleanup.storage_used_bytes
+
+        ) === 0 &&
+
+          Number(
+
+            afterCurrentCleanup.storage_reserved_bytes
+
+          ) === 0,
+
+        `el intent failed retirado no debe contar ` +
+
+          `(fue usado/reservado ` +
+
+          `${afterCurrentCleanup.storage_used_bytes}/` +
+
+          `${afterCurrentCleanup.storage_reserved_bytes})`
+
+      );
+
+
+      const expiredIntentId = randomUUID();
+      const createdAt =
+        new Date(Date.now() - 600_000).toISOString();
+      const expiresAt =
+        new Date(Date.now() - 60_000).toISOString();
+
+      const { error: expiredFixtureError } =
+        await admin
+          .from("textile_evidence_upload_intents")
+          .insert({
+            id: expiredIntentId,
+            organization_id: orgA,
+            created_by: adminA.id,
+            bucket_id: "evidences",
+            object_path:
+              `${orgA}/textiles/` +
+              `${expiredIntentId}/expired.pdf`,
+            original_filename: "expired.pdf",
+            safe_filename: "expired.pdf",
+            expected_size_bytes: 8 * KB,
+            expected_mime_type: "application/pdf",
+            status: "pending",
+            evidence_metadata: {
+              title: `${RUN} expired.pdf`,
+              evidence_type: "other",
+            },
+            created_at: createdAt,
+            expires_at: expiresAt,
+            idempotency_key:
+              `${RUN}-expired-fixture`,
+          });
+
+      assert(
+        !expiredFixtureError,
+        `crear fixture vencido: ${
+          expiredFixtureError?.message
+        }`
+      );
+
+      const u =
+        await usageRow(adminA.client, orgA, TEX);
+
+      assert(
+        Number(u.storage_reserved_bytes) === 0,
+        `vencida no reserva ` +
+          `(fue ${u.storage_reserved_bytes})`
+      );
+
+      await closeTextileIntentWithoutObject(
+        adminA.id,
+        expiredIntentId
+      );
+
+      const afterCleanup =
+        await usageRow(adminA.client, orgA, TEX);
+
+      assert(
+        Number(afterCleanup.storage_used_bytes) === 0,
+        `el intent vencido retirado no debe contar ` +
+          `(fue ${afterCleanup.storage_used_bytes})`
+      );
+
+      const again = await beginUpload(
+        adminA.client,
+        orgA,
+        "r4.pdf",
+        8 * KB,
+        `${RUN}-k4`
+      );
+
+      assert(
+        !again.error,
+        `debía caber con la anterior vencida: ` +
+          `${again.error?.message}`
+      );
+
+      const ok = again.data as {
+        intent_id: string;
+        object_path: string;
+      };
+
+      intentAId = ok.intent_id;
+      intentAPath = ok.object_path;
+    }
+  );
 
   await check("13-14. Objeto REAL subido + finalizes SIMULTÁNEOS del mismo intent (server): UNA evidencia, respuestas false/true, bytes EXACTOS confirmados en la vista", async () => {
     const upload = await admin.storage
       .from("evidences")
       .upload(intentAPath, deterministicBytes(8 * KB), { contentType: "application/pdf" });
     assert(!upload.error, `subida real: ${upload.error?.message}`);
-    const [f1, f2] = await Promise.all([
-      admin.rpc("finalize_textile_evidence_upload_server", {
-        p_actor_id: adminA.id, p_intent_id: intentAId, p_file_size_bytes: 8 * KB, p_file_mime_type: "application/pdf",
-      }),
-      admin.rpc("finalize_textile_evidence_upload_server", {
-        p_actor_id: adminA.id, p_intent_id: intentAId, p_file_size_bytes: 8 * KB, p_file_mime_type: "application/pdf",
-      }),
-    ]);
-    assert(!f1.error && !f2.error, `ambos finalizes responden (idempotencia): ${f1.error?.message ?? f2.error?.message}`);
-    const flags = [f1.data, f2.data].map((d) => (d as { already_finalized: boolean }).already_finalized).sort();
-    assert(flags[0] === false && flags[1] === true, `exactamente un finalize efectivo: ${JSON.stringify(flags)}`);
+    const finalize = () =>
+      withTransientRetry(
+        "finalize textil",
+        async () =>
+          await admin.rpc(
+            "finalize_textile_evidence_upload_server",
+            {
+              p_actor_id: adminA.id,
+              p_intent_id: intentAId,
+              p_file_size_bytes: 8 * KB,
+              p_file_mime_type:
+                "application/pdf",
+            }
+          )
+      );
+
+    const [f1, f2] =
+      await Promise.all([finalize(), finalize()]);
+
+    assert(
+      !f1.error && !f2.error,
+      `ambos finalizes responden: ${
+        f1.error?.message ??
+        f2.error?.message
+      }`
+    );
+
+    const flags = [f1.data, f2.data]
+      .map(
+        (data) =>
+          (
+            data as {
+              already_finalized: boolean;
+            }
+          ).already_finalized
+      )
+      .sort();
+
+    assert(
+      (
+        flags[0] === false &&
+        flags[1] === true
+      ) ||
+        (
+          flags[0] === true &&
+          flags[1] === true
+        ),
+      `finalize idempotente tras posibles ` +
+        `reintentos: ${JSON.stringify(flags)}`
+    );
     const { count } = await admin.from("textile_evidences").select("id", { count: "exact", head: true }).eq("organization_id", orgA);
     assert(count === 1, `UNA evidencia (hay ${count})`);
     const u = await usageRow(adminA.client, orgA, TEX);
@@ -312,7 +603,13 @@ async function main() {
   });
 
   await check("Área extra · Un begin más en Demo (límite 1 ya consumido) se rechaza contando la evidencia CONFIRMADA", async () => {
-    const r = await beginUpload(adminA.client, orgA, "r5.pdf", 8 * KB);
+    const r = await beginUpload(
+      adminA.client,
+      orgA,
+      "r5.pdf",
+      8 * KB,
+      `${RUN}-k5`
+    );
     assert(r.error !== null && /EVIDENCE_LIMIT_EXCEEDED/.test(r.error.message), `debía rechazar: ${r.error?.message ?? "permitido"}`);
   });
 
@@ -407,16 +704,24 @@ async function main() {
     const u = await usageRow(adminB.client, orgB, CPR);
     assert(Number(u.storage_unknown_size_count) === 1, `unknown=1 en CPR (fue ${u.storage_unknown_size_count})`);
     // Textiles de B: sembrar un desconocido TEXTIL y verificar que begin bloquea.
-    const tev = await admin.from("textile_evidences").insert({
-      organization_id: orgB,
-      title: `${RUN} unk textil`,
-      evidence_type: "other",
-      file_name: "u.bin",
-      file_path: `${orgB}/textiles/${randomUUID()}/u.bin`,
-      file_size_bytes: null,
-      status: "pending_review",
-      created_by: adminB.id,
-    });
+    const unknownTextileEvidenceId =
+      randomUUID();
+
+    const tev = await admin
+      .from("textile_evidences")
+      .insert({
+        id: unknownTextileEvidenceId,
+        organization_id: orgB,
+        title: `${RUN} unk textil`,
+        evidence_type: "other",
+        file_name: "u.bin",
+        file_path:
+          `${orgB}/textiles/` +
+          `${unknownTextileEvidenceId}/u.bin`,
+        file_size_bytes: null,
+        status: "pending_review",
+        created_by: adminB.id,
+      });
     assert(!tev.error, `fixture textil sin tamaño: ${tev.error?.message}`);
     const r = await beginUpload(adminB.client, orgB, "b1.pdf", 8 * KB);
     assert(r.error !== null && /STORAGE_UNVERIFIABLE/.test(r.error.message), `begin debía bloquear por desconocido: ${r.error?.message ?? "permitido"}`);
@@ -539,13 +844,29 @@ async function cleanup() {
     }
   }
 
-  // 2. Filas funcionales y de plan, por organización.
+  // 2. Intents NO consumidos: se pueden retirar.
+  // Los consumidos son inmutables por diseño y permanecen hasta eliminar
+  // el proyecto QA desechable.
+  for (const org of createdOrgs) {
+    const { error } = await admin
+      .from("textile_evidence_upload_intents")
+      .delete()
+      .eq("organization_id", org)
+      .neq("status", "consumed");
+
+    flag(
+      !error,
+      `intents no consumidos de ${org}: ${
+        error?.message ?? ""
+      }`
+    );
+  }
+
+  // 3. Filas funcionales y de plan, por organización.
   for (const org of createdOrgs) {
     for (const table of [
       "storage_orphan_candidates",
       "storage_upload_intents",
-      "textile_evidence_upload_intents",
-      "textile_evidences",
       "textile_materials",
       "textile_suppliers",
       "trazadoc_file_document_versions",
@@ -564,33 +885,202 @@ async function cleanup() {
     }
   }
 
-  // 3. ORGANIZACIONES: la eliminación DEBE funcionar (sin renombrar, sin
+  // 4. Evidencias Textiles sin vínculo consumido.
+  for (const org of createdOrgs) {
+    const {
+      data: consumedRows,
+      error: consumedRowsError,
+    } = await admin
+      .from("textile_evidence_upload_intents")
+      .select("evidence_id")
+      .eq("organization_id", org)
+      .eq("status", "consumed");
+
+    flag(
+      !consumedRowsError,
+      `leer intents consumidos de ${org}: ${
+        consumedRowsError?.message ?? ""
+      }`
+    );
+
+    const protectedIds = new Set(
+      (consumedRows ?? [])
+        .map((row) => row.evidence_id as string | null)
+        .filter((value): value is string => Boolean(value))
+    );
+
+    const {
+      data: evidenceRows,
+      error: evidenceRowsError,
+    } = await admin
+      .from("textile_evidences")
+      .select("id")
+      .eq("organization_id", org);
+
+    flag(
+      !evidenceRowsError,
+      `leer evidencias de ${org}: ${
+        evidenceRowsError?.message ?? ""
+      }`
+    );
+
+    for (const evidence of evidenceRows ?? []) {
+      if (protectedIds.has(evidence.id as string)) {
+        continue;
+      }
+
+      const { error } = await admin
+        .from("textile_evidences")
+        .delete()
+        .eq("id", evidence.id);
+
+      flag(
+        !error,
+        `evidencia textil ${evidence.id}: ${
+          error?.message ?? ""
+        }`
+      );
+    }
+  }
+
+  // 5. Las organizaciones con una cadena consumida se conservan
+  // temporalmente en este proyecto QA desechable.
+  const organizationsWithConsumedIntents =
+    new Set<string>();
+
+  for (const org of createdOrgs) {
+    const { count, error } = await admin
+      .from("textile_evidence_upload_intents")
+      .select("id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("organization_id", org)
+      .eq("status", "consumed");
+
+    flag(
+      !error,
+      `contar intents consumidos de ${org}: ${
+        error?.message ?? ""
+      }`
+    );
+
+    if ((count ?? 0) > 0) {
+      organizationsWithConsumedIntents.add(org);
+    }
+  }
+
+  // 6. ORGANIZACIONES sin cadena consumida.
+ // (sin renombrar, sin
   //    "neutralizar"). Si falla, es un fallo de la suite, no un aviso.
   for (const org of createdOrgs) {
-    const { error } = await admin.from("organizations").delete().eq("id", org);
-    flag(!error, `organización ${org} no eliminable: ${error?.message ?? ""}`);
+    if (organizationsWithConsumedIntents.has(org)) {
+      console.log(
+        `  · organización QA ${org.slice(0, 8)} ` +
+          `conservada por intent consumed inmutable`
+      );
+      continue;
+    }
+
+    const { error } = await admin
+      .from("organizations")
+      .delete()
+      .eq("id", org);
+
+    flag(
+      !error,
+      `organización ${org} no eliminable: ${
+        error?.message ?? ""
+      }`
+    );
   }
 
   // 4. Personal de plataforma, perfiles y usuarios Auth del run.
   for (const uid of createdUsers) {
-    await admin.from("platform_staff").delete().eq("user_id", uid);
-    await admin.from("profiles").delete().eq("id", uid);
-    const { error } = await admin.auth.admin.deleteUser(uid);
-    flag(!error, `usuario ${uid}: ${error?.message ?? ""}`);
+    const { count: membershipCount } = await admin
+      .from("memberships")
+      .select("organization_id", {
+        count: "exact",
+        head: true,
+      })
+      .eq("user_id", uid)
+      .in(
+        "organization_id",
+        [...organizationsWithConsumedIntents]
+      );
+
+    if ((membershipCount ?? 0) > 0) {
+      console.log(
+        `  · usuario QA ${uid.slice(0, 8)} ` +
+          `conservado con su cadena consumed`
+      );
+      continue;
+    }
+
+    await admin
+      .from("platform_staff")
+      .delete()
+      .eq("user_id", uid);
+
+    await admin
+      .from("profiles")
+      .delete()
+      .eq("id", uid);
+
+    const { error } =
+      await admin.auth.admin.deleteUser(uid);
+
+    flag(
+      !error,
+      `usuario ${uid}: ${error?.message ?? ""}`
+    );
   }
 
   // 5. VERIFICACIÓN de cero residuos del run.
-  const orgsLeft = await admin.from("organizations").select("id", { count: "exact", head: true }).in("id", createdOrgs.length ? createdOrgs : ["00000000-0000-0000-0000-000000000000"]);
-  flag((orgsLeft.count ?? 0) === 0, `${orgsLeft.count} organización(es) del run siguen existiendo`);
+  const expectedOrganizations =
+    organizationsWithConsumedIntents.size;
+
+  const orgsLeft = await admin
+    .from("organizations")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .in(
+      "id",
+      createdOrgs.length
+        ? createdOrgs
+        : ["00000000-0000-0000-0000-000000000000"]
+    );
+
+  flag(
+    (orgsLeft.count ?? 0) === expectedOrganizations,
+    `${
+      orgsLeft.count
+    } organizaciones presentes; se esperaban ` +
+      `${expectedOrganizations} por cadenas consumed`
+  );
   for (const table of ["suppliers", "textile_materials", "textile_evidences", "evidences"]) {
     const left = await admin.from(table).select("id", { count: "exact", head: true }).like("name", `${RUN}%`);
     if (table === "textile_evidences") continue; // usa title, verificado por organización arriba
     flag((left.count ?? 0) === 0, `${left.count} fila(s) residuales en ${table}`);
   }
   const intentsLeft = createdOrgs.length
-    ? await admin.from("textile_evidence_upload_intents").select("id", { count: "exact", head: true }).in("organization_id", createdOrgs)
+    ? await admin
+        .from("textile_evidence_upload_intents")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .in("organization_id", createdOrgs)
+        .neq("status", "consumed")
     : { count: 0 };
-  flag((intentsLeft.count ?? 0) === 0, `${intentsLeft.count} intent(s) textiles residuales`);
+
+  flag(
+    (intentsLeft.count ?? 0) === 0,
+    `${intentsLeft.count} intent(s) textiles ` +
+      `inesperados; solo consumed puede permanecer`
+  );
   // T9F.4 · §28: cero intents genéricos (reservas) y cero candidatos del
   // ciclo (pending_delete / delete_failed / deleted) del run.
   const genericLeft = createdOrgs.length

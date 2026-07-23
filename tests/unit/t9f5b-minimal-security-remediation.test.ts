@@ -497,10 +497,37 @@ check("A15/A16/A17/A18. Aislamiento, desconocidos, intents no resueltos e idempo
 // ===========================================================================
 console.log("\nTrazaloop · T9F.5B §H — Alcance y honestidad de la fase\n");
 
-check("No se crea 0102 ni se modifica 0100: la corrección viaja en la 0101 aún sin aplicar", () => {
-  const files = readdirSync(join(process.cwd(), "supabase/migrations"));
-  assert(!files.some((f) => f.startsWith("0102")), "no debe existir ninguna migración 0102");
-  assert(files.some((f) => f.startsWith("0101")), "0101 sigue siendo la migración pendiente");
+check("0101 conserva la remediación y 0102 es el único cierre QA posterior autorizado", () => {
+  const files = readdirSync(
+    join(process.cwd(), "supabase/migrations")
+  );
+
+  assert(
+    files.some(
+      (file) =>
+        file ===
+        "0101_t9f1_module_access_hardening.sql"
+    ),
+    "0101 sigue existiendo como migración de endurecimiento"
+  );
+
+  const after0101 = files
+    .filter((file) => {
+      const match = /^(\d{4})_/.exec(file);
+      return match !== null && Number(match[1]) > 101;
+    })
+    .sort();
+
+  const expectedAfter0101 = [
+    "0102_t9g_qa_finalizer_closure.sql",
+  ];
+
+  assert(
+    JSON.stringify(after0101) ===
+      JSON.stringify(expectedAfter0101),
+    `después de 0101 solo debe existir el cierre QA 0102 ` +
+      `(hay: ${after0101.join(", ") || "ninguna"})`
+  );
 });
 
 check("0101 sigue sin operaciones destructivas ni cambios comerciales", () => {
@@ -516,15 +543,54 @@ check("0101 sigue sin operaciones destructivas ni cambios comerciales", () => {
 });
 
 check("La suite adversarial QA está preparada para A01-A18 con operaciones reales", () => {
-  for (const id of ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A13", "A14"]) {
-    assert(ADVERSARIAL.includes(`scenario("${id}"`), `la suite QA debe incluir ${id}`);
+  for (
+    const id of [
+      "A01",
+      "A02",
+      "A03",
+      "A04",
+      "A05",
+      "A06",
+      "A07",
+      "A08",
+      "A13",
+      "A14",
+    ]
+  ) {
+    const scenarioPattern = new RegExp(
+      `scenario\\s*\\(\\s*["']${id}["']`
+    );
+
+    assert(
+      scenarioPattern.test(ADVERSARIAL),
+      `la suite QA debe incluir ${id}`
+    );
   }
-  assert(ADVERSARIAL.includes(".upload("), "A01/A02: operaciones REALES de Storage");
-  assert(ADVERSARIAL.includes(".remove("), "A04: borrado real");
-  assert(ADVERSARIAL.includes("upsert: true"), "A03: upsert real");
-  assert(ADVERSARIAL.includes("22 * 1024 * 1024"), "A14: archivo determinista de 22 MB");
-  assert(/cleanup|limpieza/i.test(ADVERSARIAL), "la suite limpia sus fixtures");
-  assert(!ADVERSARIAL.includes("audit_log\").delete"), "jamás se elimina audit_log");
+
+  assert(
+    ADVERSARIAL.includes(".upload("),
+    "A01/A02: operaciones REALES de Storage"
+  );
+  assert(
+    ADVERSARIAL.includes(".remove("),
+    "A04: borrado real"
+  );
+  assert(
+    ADVERSARIAL.includes("upsert: true"),
+    "A03: upsert real"
+  );
+  assert(
+    ADVERSARIAL.includes("22 * 1024 * 1024"),
+    "A14: archivo determinista de 22 MB"
+  );
+  assert(
+    /cleanup|limpieza/i.test(ADVERSARIAL),
+    "la suite limpia sus fixtures"
+  );
+  assert(
+    !ADVERSARIAL.includes("audit_log\").delete"),
+    "jamás se elimina audit_log"
+  );
 });
 
 check("Esta suite NO afirma que ningún ataque esté PROTEGIDO", () => {

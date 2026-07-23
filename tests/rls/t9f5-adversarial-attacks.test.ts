@@ -84,6 +84,180 @@ function trackObject(bucket: string, path: string) {
   createdObjects.push({ bucket, path });
 }
 
+let platformSuperadminClient: SupabaseClient | null = null;
+
+/** Sesión real de superadministrador para RPC que exigen auth.uid(). */
+async function getPlatformSuperadmin(): Promise<SupabaseClient> {
+  if (platformSuperadminClient) {
+    return platformSuperadminClient;
+  }
+
+  const email =
+    `${PREFIX}_super@qa.trazaloop.test`;
+  const password =
+    `Qa!Super-${PREFIX}`;
+
+  const userId = await createQaAuthUser(
+    "crear superadmin QA",
+    email,
+    password
+  );
+
+  if (!createdUsers.includes(userId)) {
+    createdUsers.push(userId);
+  }
+
+  await withFixtureRetry(
+    "registrar platform_staff QA",
+    async () => {
+      const { error } = await admin
+        .from("platform_staff")
+        .upsert(
+          {
+            user_id: userId,
+            role_code: "superadmin",
+            status: "active",
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    8
+  );
+
+  const client = createClient(URL!, ANON!, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  await withFixtureRetry(
+    "iniciar sesión superadmin QA",
+    async () => {
+      const { error } =
+        await client.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    8
+  );
+
+  platformSuperadminClient = client;
+  return client;
+}
+
+const sleep = (milliseconds: number) =>
+  new Promise<void>((resolve) =>
+    setTimeout(resolve, milliseconds)
+  );
+
+const TRANSIENT_FIXTURE_ERROR =
+  /fetch failed|ECONNRESET|ECONNABORTED|ETIMEDOUT|socket hang up|invalid JWT|unrecognized JWT kid|502|503|504/i;
+
+async function withFixtureRetry<T>(
+  label: string,
+  operation: () => Promise<T>,
+  maximumAttempts = 8
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (
+    let attempt = 1;
+    attempt <= maximumAttempts;
+    attempt++
+  ) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      const transient =
+        TRANSIENT_FIXTURE_ERROR.test(lastError.message);
+
+      if (!transient || attempt === maximumAttempts) {
+        throw lastError;
+      }
+
+      const delay = 750 * 2 ** (attempt - 1);
+
+      console.warn(
+        `[T9F.5] ${label}: fallo transitorio; ` +
+          `reintento ${attempt + 1}/${maximumAttempts} ` +
+          `en ${delay} ms.`
+      );
+
+      await sleep(delay);
+    }
+  }
+
+  throw lastError ?? new Error(`${label}: fallo desconocido`);
+}
+
+async function createQaAuthUser(
+  label: string,
+  email: string,
+  password: string
+): Promise<string> {
+  return withFixtureRetry(
+    label,
+    async () => {
+      const { data, error } =
+        await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+
+      if (!error && data?.user) {
+        return data.user.id;
+      }
+
+      const duplicate =
+        /already registered|already been registered|user already exists/i
+          .test(error?.message ?? "");
+
+      if (duplicate) {
+        const { data: listed, error: listError } =
+          await admin.auth.admin.listUsers({
+            page: 1,
+            perPage: 1000,
+          });
+
+        if (listError) {
+          throw new Error(listError.message);
+        }
+
+        const existing = listed.users.find(
+          (user) => user.email === email
+        );
+
+        if (existing) {
+          return existing.id;
+        }
+      }
+
+      throw new Error(
+        error?.message ?? "usuario no creado"
+      );
+    },
+    8
+  );
+}
+
 /**
  * Organización QA con usuario miembro REAL (Auth real, sesión real) y el
  * módulo en el modo comercial pedido. El cliente de servicio SOLO siembra;
@@ -94,51 +268,155 @@ async function makeOrgWithMember(opts: {
   accessMode: "demo" | "full" | "extra";
   role: "admin" | "quality" | "consultant";
 }): Promise<Fixture> {
-  const email = `${PREFIX}_${randomUUID().slice(0, 8)}@qa.trazaloop.test`;
-  const password = `Qa!${randomUUID()}`;
+  const fixtureId = randomUUID().slice(0, 8);
+  const email =
+    `${PREFIX}_${fixtureId}@qa.trazaloop.test`;
+  const password =
+    `Qa!${randomUUID()}`;
+  const taxId =
+    `QA-${PREFIX.slice(-6)}-${fixtureId}`;
 
-  const { data: created, error: userError } = await admin.auth.admin.createUser({
+  const userId = await createQaAuthUser(
+    "crear usuario QA",
     email,
-    password,
-    email_confirm: true,
-  });
-  if (userError || !created?.user) throw new Error(`fixture usuario QA: ${userError?.message}`);
-  const userId = created.user.id;
-  createdUsers.push(userId);
+    password
+  );
 
-  const { data: org, error: orgError } = await admin
-    .from("organizations")
-    .insert({ name: `${PREFIX}_org`, tax_id: `QA-${randomUUID().slice(0, 8)}` })
-    .select("id")
-    .single();
-  if (orgError || !org) throw new Error(`fixture organización QA: ${orgError?.message}`);
+  if (!createdUsers.includes(userId)) {
+    createdUsers.push(userId);
+  }
+
+  const org = await withFixtureRetry(
+    "crear organización QA",
+    async () => {
+      const { data, error } = await admin
+        .from("organizations")
+        .insert({
+          name: `${PREFIX}_org_${fixtureId}`,
+          tax_id: taxId,
+          created_by: userId,
+        })
+        .select("id")
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+
+      const duplicate =
+        /duplicate key|already exists/i.test(
+          error?.message ?? ""
+        );
+
+      if (duplicate) {
+        const {
+          data: existing,
+          error: existingError,
+        } = await admin
+          .from("organizations")
+          .select("id")
+          .eq("tax_id", taxId)
+          .single();
+
+        if (!existingError && existing) {
+          return existing;
+        }
+      }
+
+      throw new Error(
+        error?.message ?? "organización no creada"
+      );
+    },
+    8
+  );
+
   const orgId = org.id as string;
-  createdOrgs.push(orgId);
 
-  const { error: memberError } = await admin.from("memberships").insert({
-    organization_id: orgId,
-    user_id: userId,
-    role_code: opts.role,
-    status: "active",
-  });
-  if (memberError) throw new Error(`fixture membresía QA: ${memberError.message}`);
+  if (!createdOrgs.includes(orgId)) {
+    createdOrgs.push(orgId);
+  }
+
+  await withFixtureRetry(
+    "crear membresía QA",
+    async () => {
+      const { error } = await admin
+        .from("memberships")
+        .upsert(
+          {
+            organization_id: orgId,
+            user_id: userId,
+            role_code: opts.role,
+            status: "active",
+          },
+          {
+            onConflict: "organization_id,user_id",
+          }
+        );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    8
+  );
 
   const targetState =
-    opts.accessMode === "demo" ? "demo_permanent" : opts.accessMode === "full" ? "full" : "extra";
-  const { error: accessError } = await admin.rpc("set_organization_module_access", {
-    p_organization_id: orgId,
-    p_module_code: opts.module,
-    p_target_state: targetState,
-  });
-  if (accessError) throw new Error(`fixture modo del módulo: ${accessError.message}`);
+    opts.accessMode === "demo"
+      ? "demo_permanent"
+      : opts.accessMode === "full"
+        ? "full"
+        : "extra";
+
+  const platformAdmin =
+    await getPlatformSuperadmin();
+
+  await withFixtureRetry(
+    "asignar modo del módulo QA",
+    async () => {
+      const { error } = await platformAdmin.rpc(
+        "set_organization_module_access",
+        {
+          p_organization_id: orgId,
+          p_module_code: opts.module,
+          p_target_state: targetState,
+        }
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    8
+  );
 
   const userClient = createClient(URL!, ANON!, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   });
-  const { error: signInError } = await userClient.auth.signInWithPassword({ email, password });
-  if (signInError) throw new Error(`fixture sesión QA: ${signInError.message}`);
 
-  return { orgId, userId, userClient };
+  await withFixtureRetry(
+    "iniciar sesión QA",
+    async () => {
+      const { error } =
+        await userClient.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    8
+  );
+
+  return {
+    orgId,
+    userId,
+    userClient,
+  };
 }
 
 /** Bytes deterministas del tamaño exacto pedido (A06/A14: archivos reales). */
@@ -207,18 +485,51 @@ async function beginUpload(
 }
 
 /** Uso y cuota del módulo CPR tal como los ve la plataforma (vista oficial). */
-async function readModuleUsage(orgId: string): Promise<{ used: number; reserved: number; quota: number }> {
-  const { data, error } = await admin
-    .from("v_organization_module_usage")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("module_code", CPR)
+async function readModuleUsage(
+  orgId: string,
+  planCode: "demo" | "full" | "extra"
+): Promise<{ used: number; reserved: number; quota: number }> {
+  const { data: snapshotData, error: snapshotError } = await admin.rpc(
+    "module_storage_snapshot",
+    {
+      p_organization_id: orgId,
+      p_module_code: CPR,
+    }
+  );
+
+  const snapshot = (
+    Array.isArray(snapshotData) ? snapshotData[0] : snapshotData
+  ) as {
+    committed_bytes?: number | string;
+    reserved_bytes?: number | string;
+  } | null;
+
+  if (snapshotError || !snapshot) {
+    throw new Error(
+      `no se pudo leer la instantánea autoritativa: ${
+        snapshotError?.message ?? "sin datos"
+      }`
+    );
+  }
+
+  const { data: plan, error: planError } = await admin
+    .from("plan_definitions")
+    .select("storage_limit_bytes")
+    .eq("code", planCode)
     .single();
-  if (error || !data) throw new Error(`no se pudo leer el uso del módulo: ${error?.message}`);
+
+  if (planError || !plan) {
+    throw new Error(
+      `no se pudo leer la cuota del plan: ${
+        planError?.message ?? "sin datos"
+      }`
+    );
+  }
+
   return {
-    used: Number(data.storage_used_bytes ?? 0),
-    reserved: Number(data.storage_reserved_bytes ?? 0),
-    quota: Number(data.storage_limit_bytes ?? 0),
+    used: Number(snapshot.committed_bytes ?? 0),
+    reserved: Number(snapshot.reserved_bytes ?? 0),
+    quota: Number(plan.storage_limit_bytes ?? 0),
   };
 }
 
@@ -464,7 +775,7 @@ scenario("A06b", "CORREGIDO_T9F5B", "Objeto de 5 MB sobre reserva de 1 MB sin fi
   const declared = 1 * 1024 * 1024;
   const real = 5 * 1024 * 1024;
 
-  const before = await readModuleUsage(f.orgId);
+  const before = await readModuleUsage(f.orgId, "full");
   const begun = await beginUpload(f, {
     resourceType: "evidence",
     resourceId: evidenceId,
@@ -485,7 +796,7 @@ scenario("A06b", "CORREGIDO_T9F5B", "Objeto de 5 MB sobre reserva de 1 MB sin fi
 
   // El objeto quedó almacenado. NO se ejecuta finalize: se consulta la
   // contabilidad tal como la ve la plataforma.
-  const after = await readModuleUsage(f.orgId);
+  const after = await readModuleUsage(f.orgId, "full");
   const committed = (after.used - before.used) + (after.reserved - before.reserved);
   assert(
     committed >= real,
@@ -576,7 +887,8 @@ scenario("A08", "CORREGIDO_T9F5B", "Plan degradado entre begin y finalize (Traza
   assert(!up.error, `A08: fixture upload: ${up.error?.message}`);
 
   // El módulo se degrada a Demo entre begin y finalize.
-  const { error: degradeError } = await admin.rpc("set_organization_module_access", {
+  const platformAdmin = await getPlatformSuperadmin();
+  const { error: degradeError } = await platformAdmin.rpc("set_organization_module_access", {
     p_organization_id: f.orgId,
     p_module_code: CPR,
     p_target_state: "demo_permanent",
@@ -663,51 +975,94 @@ scenario("A12", "REGRESION_T9F5A", "DELETE directo de fila de dominio", async ()
 // =============================================================================
 // A13 — module_key manipulado → el límite usa el módulo del BLUEPRINT
 // =============================================================================
-scenario("A13", "CORREGIDO_T9F5B", "module_key manipulado sobre blueprint CPR", async () => {
-  // CPR en Demo (documents_trazadocs = 2) y Textiles con cupo (Full).
-  const f = await makeOrgWithMember({ module: CPR, accessMode: "demo", role: "admin" });
-  const { error: textilesError } = await admin.rpc("set_organization_module_access", {
-    p_organization_id: f.orgId,
-    p_module_code: TEXTILES,
-    p_target_state: "full",
-  });
-  assert(!textilesError, `A13: fixture Textiles: ${textilesError?.message}`);
-
-  const { data: bp, error: bpError } = await admin
-    .from("trazadoc_blueprints")
-    .select("id")
-    .eq("module_key", "cpr")
-    .limit(1)
-    .single();
-  assert(!bpError && bp, `A13: se requiere un blueprint CPR en el catálogo: ${bpError?.message}`);
-
-  // Se agota el límite CPR (Demo = 2 documentos).
-  for (let i = 0; i < 2; i++) {
-    const { error } = await admin.from("trazadoc_documents").insert({
-      organization_id: f.orgId,
-      blueprint_id: bp!.id,
-      title: `${PREFIX}_cpr_${i}`,
-      created_by: f.userId,
+scenario(
+  "A13",
+  "CORREGIDO_T9F5B",
+  "module_key manipulado sobre blueprint CPR",
+  async () => {
+    // CPR en Demo: máximo 2 documentos. Textiles en Full.
+    const f = await makeOrgWithMember({
+      module: CPR,
+      accessMode: "demo",
+      role: "admin",
     });
-    assert(!error, `A13: fixture documento CPR ${i}: ${error?.message}`);
-  }
 
-  // ATAQUE: blueprint CPR declarando module_key='textiles' (que sí tiene cupo).
-  const { error } = await f.userClient
-    .from("trazadoc_documents")
-    .insert({
-      organization_id: f.orgId,
-      blueprint_id: bp!.id,
-      module_key: "textiles",
-      title: `${PREFIX}_a13`,
-    })
-    .select("id")
-    .single();
-  assert(
-    error && /RESOURCE_LIMIT_EXCEEDED/.test(error.message),
-    `A13: el límite debe evaluarse contra el módulo del BLUEPRINT (CPR), no contra el module_key del cliente; obtuve: ${error?.message ?? "ÉXITO (vulnerable)"}`
-  );
-});
+    const platformAdmin = await getPlatformSuperadmin();
+
+    const { error: textilesError } =
+      await platformAdmin.rpc(
+        "set_organization_module_access",
+        {
+          p_organization_id: f.orgId,
+          p_module_code: TEXTILES,
+          p_target_state: "full",
+        }
+      );
+
+    assert(
+      !textilesError,
+      `A13: fixture Textiles: ${textilesError?.message}`
+    );
+
+    const {
+      data: blueprints,
+      error: blueprintError,
+    } = await admin
+      .from("trazadoc_blueprints")
+      .select("id")
+      .eq("module_key", "cpr")
+      .eq("status", "active")
+      .order("code")
+      .limit(3);
+
+    assert(
+      !blueprintError &&
+        blueprints &&
+        blueprints.length >= 3,
+      "A13: se requieren al menos tres blueprints CPR activos"
+    );
+
+    // Agotar Demo con dos blueprints diferentes.
+    for (let index = 0; index < 2; index++) {
+      const { error } = await admin
+        .from("trazadoc_documents")
+        .insert({
+          organization_id: f.orgId,
+          blueprint_id: blueprints![index].id,
+          source_type: "suggested",
+          title: `${PREFIX}_cpr_${index}`,
+          created_by: f.userId,
+        });
+
+      assert(
+        !error,
+        `A13: fixture documento CPR ${index}: ` +
+          `${error?.message}`
+      );
+    }
+
+    // Ataque: tercer blueprint CPR declarando Textiles.
+    const { error } = await f.userClient
+      .from("trazadoc_documents")
+      .insert({
+        organization_id: f.orgId,
+        blueprint_id: blueprints![2].id,
+        module_key: "textiles",
+        source_type: "suggested",
+        title: `${PREFIX}_a13`,
+      })
+      .select("id")
+      .single();
+
+    assert(
+      error &&
+        /RESOURCE_LIMIT_EXCEEDED/.test(error.message),
+      "A13: el límite debe evaluarse contra CPR según " +
+        "el blueprint; obtuve: " +
+        `${error?.message ?? "ÉXITO (vulnerable)"}`
+    );
+  }
+);
 
 // =============================================================================
 // A14 — Archivo determinista de 22 MB: Demo rechazado, Full y Extra permitidos
@@ -886,14 +1241,29 @@ scenario("A17", "REGRESION_T9F5A", "Intent failed con objeto sigue contabilizado
   const cancelled = await f.userClient.rpc("cancel_cpr_storage_upload", { p_intent_id: begun.intentId });
   assert(!cancelled.error, `A17: cancel: ${cancelled.error?.message}`);
 
-  const { data: usage, error: usageError } = await admin
-    .from("v_organization_module_usage")
-    .select("*")
-    .eq("organization_id", f.orgId)
-    .eq("module_code", CPR)
-    .single();
-  assert(!usageError && usage, `A17: no se pudo leer el uso: ${usageError?.message}`);
-  const counted = Number(usage!.storage_used_bytes ?? 0) + Number(usage!.storage_reserved_bytes ?? 0);
+  const { data: snapshotData, error: snapshotError } = await admin.rpc(
+    "module_storage_snapshot",
+    {
+      p_organization_id: f.orgId,
+      p_module_code: CPR,
+    }
+  );
+
+  const usage = (
+    Array.isArray(snapshotData) ? snapshotData[0] : snapshotData
+  ) as {
+    committed_bytes?: number | string;
+    reserved_bytes?: number | string;
+  } | null;
+
+  assert(
+    !snapshotError && usage,
+    `A17: no se pudo leer la instantánea: ${snapshotError?.message}`
+  );
+
+  const counted =
+    Number(usage!.committed_bytes ?? 0) +
+    Number(usage!.reserved_bytes ?? 0);
   assert(counted >= size, `A17: los bytes del intent failed con objeto deben seguir contando; observado=${counted}`);
 });
 
@@ -914,9 +1284,17 @@ scenario("A18", "REGRESION_T9F5A", "Reutilización de idempotency key vencida", 
   });
   assert(!first.error, `A18: primer begin: ${first.error?.message}`);
 
+  const expiredCreatedAt =
+    new Date(Date.now() - 120_000).toISOString();
+  const expiredAt =
+    new Date(Date.now() - 60_000).toISOString();
+
   const { error: expireError } = await admin
     .from("storage_upload_intents")
-    .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+    .update({
+      created_at: expiredCreatedAt,
+      expires_at: expiredAt,
+    })
     .eq("idempotency_key", key);
   assert(!expireError, `A18: fixture vencimiento: ${expireError?.message}`);
 
@@ -965,7 +1343,14 @@ async function cleanup() {
     await admin.from("organizations").delete().eq("id", orgId);
   }
   for (const userId of createdUsers) {
-    await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+    await admin
+      .from("platform_staff")
+      .delete()
+      .eq("user_id", userId);
+
+    await admin.auth.admin
+      .deleteUser(userId)
+      .catch(() => undefined);
   }
   console.log("[T9F.5] Limpieza completada (audit_log intacto).");
 }
@@ -990,14 +1375,17 @@ async function main() {
       failures.push(s.id);
       fail++;
     }
+
+    await sleep(1200);
   }
+
   await cleanup();
   console.log(`\n[T9F.5] Resultado: ${pass} PASS / ${fail} FAIL de ${scenarios.length}.`);
   if (fail > 0) {
     console.error(`[T9F.5] Ataques NO cerrados: ${failures.join(", ")}. NO se aprueba.`);
     process.exit(1);
   }
-  console.log("[T9F.5] 18/18 en verde contra Supabase QA real: base para la clasificación T9F.5C.\n");
+  console.log("[T9F.5] 19/19 en verde contra Supabase QA real: base para la clasificación T9F.5C.\n");
 }
 
 main().catch(async (e) => {

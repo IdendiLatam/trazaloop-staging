@@ -23,7 +23,7 @@
  *   10    Reserva CPR: begin crea el intent DURABLE y la cuota bloquea
  *         contando reservas activas (Demo→Full con cuota sembrada).
  *   11    Reserva TrazaDocs CPR: begin inicial + upload REAL a la ruta del
- *         intent + finalize v2 → v1 física, bytes exactos en la vista.
+ *         intent + finalize server-only → v1 física, bytes exactos en la vista.
  *   12    Reserva TrazaDocs Textiles: los descargables NO existen en
  *         Textiles (sus documentos vivos no suben archivos) — sus uploads
  *         son las evidencias 0094, y begin_v2 reserva bytes contra la cuota
@@ -334,7 +334,7 @@ async function main() {
 
   // ── Área 11 · Reserva TrazaDocs CPR con Storage REAL ─────────────────────
   let docB = "";
-  await check("11. TrazaDocs CPR: begin inicial + upload REAL a la ruta del intent + finalize v2 → v1 física con bytes exactos", async () => {
+  await check("11. TrazaDocs CPR: begin inicial + upload REAL a la ruta del intent + finalize server-only → v1 física con bytes exactos", async () => {
     const fd = await userB.client
       .from("trazadoc_file_documents")
       .insert({ organization_id: orgB, title: `${RUN} doc B`, category_code: "other", storage_path: "", file_name: "m.pdf", mime_type: "application/pdf", size_bytes: 0, created_by: userB.id })
@@ -349,12 +349,23 @@ async function main() {
     assert(intent.object_path === `${orgB}/document_files/${docB}/v1/manual_v1.pdf`, `ruta derivada del documento (${intent.object_path})`);
     const up = await userB.client.storage.from("trazadocs-documents").upload(intent.object_path, deterministicBytes(size), { contentType: "application/pdf" });
     assert(!up.error, `upload real: ${up.error?.message}`);
-    const fin = await userB.client.rpc("finalize_trazadoc_file_document_initial_version_v2", {
-      p_intent_id: intent.intent_id,
-      p_file_size_bytes: size,
-      p_change_note: "Alta QA",
-    });
-    assert(!fin.error && Number(fin.data) === 1, `finalize v2: ${fin.error?.message ?? fin.data}`);
+    const fin = await admin.rpc(
+      "finalize_trazadoc_file_document_initial_version_server",
+      {
+        p_actor_id: userB.id,
+        p_intent_id: intent.intent_id,
+        p_real_size_bytes: size,
+        p_real_mime_type: "application/pdf",
+        p_change_note: "Alta QA",
+      }
+    );
+
+    assert(
+      !fin.error && Number(fin.data) === 1,
+      `finalize server-only: ${
+        fin.error?.message ?? fin.data
+      }`
+    );
     const doc = await admin.from("trazadoc_file_documents").select("storage_path, size_bytes, current_version").eq("id", docB).single();
     assert(doc.data?.storage_path === intent.object_path && Number(doc.data?.size_bytes) === size && Number(doc.data?.current_version) === 1,
       "el documento debía quedar con la ruta/tamaño DEL INTENT y en v1");
@@ -467,8 +478,20 @@ async function main() {
     queuedPath = intent.object_path;
     const up = await userB.client.storage.from("evidences").upload(queuedPath, deterministicBytes(size), { contentType: "application/pdf" });
     assert(!up.error, `upload real: ${up.error?.message}`);
-    const fin = await userB.client.rpc("finalize_evidence_attachment", { p_intent_id: intent.intent_id, p_file_size_bytes: size });
-    assert(!fin.error, `finalize: ${fin.error?.message}`);
+    const fin = await admin.rpc(
+      "finalize_evidence_attachment_server",
+      {
+        p_actor_id: userB.id,
+        p_intent_id: intent.intent_id,
+        p_real_size_bytes: size,
+        p_real_mime_type: "application/pdf",
+      }
+    );
+
+    assert(
+      !fin.error,
+      `finalize server-only: ${fin.error?.message}`
+    );
     const before = await usageRow(userB.client, orgB, CPR);
     const del = await userB.client.rpc("queue_and_delete_evidence", { p_evidence_id: ev.data!.id });
     assert(!del.error, `queue_and_delete: ${del.error?.message}`);

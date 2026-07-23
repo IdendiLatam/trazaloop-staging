@@ -301,7 +301,14 @@ async function main() {
       p_file_size_bytes: PDF_BYTES.length + 999,
       p_file_mime_type: "application/pdf",
     });
-    assert(error !== null && error.message.includes("OBJECT_SIZE_MISMATCH"), "el tamaño divergente debía rechazarse");
+    assert(
+      error !== null &&
+        error.message.includes(
+          "OBJECT_SIZE_MISMATCH"
+        ),
+      `el tamaño divergente debía rechazarse; ` +
+        `obtuve: ${error?.message ?? "ÉXITO"}`
+    );
     const snap = await intentSnapshot(intent.intent_id);
     assert(snap.status === "pending" && snap.evidenceId === null, "el intento cambió pese al rechazo");
     assert(snap.evidences === 0, "quedó una evidencia pese al rechazo");

@@ -83,6 +83,54 @@ async function check(name: string, fn: () => Promise<void>) {
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
 }
+
+const TRANSIENT_NETWORK_ERROR =
+  /fetch failed|ECONNRESET|ECONNABORTED|ETIMEDOUT|socket hang up|502|503|504/i;
+
+async function withScenarioRetry<T>(
+  label: string,
+  operation: () => Promise<T>,
+  maximumAttempts = 6
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (
+    let attempt = 1;
+    attempt <= maximumAttempts;
+    attempt++
+  ) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error(String(error));
+
+      if (
+        !TRANSIENT_NETWORK_ERROR.test(lastError.message) ||
+        attempt === maximumAttempts
+      ) {
+        throw lastError;
+      }
+
+      const delay = 750 * 2 ** (attempt - 1);
+
+      console.warn(
+        `[T9F.2] ${label}: fallo transitorio; ` +
+          `reintento ${attempt + 1}/${maximumAttempts} ` +
+          `en ${delay} ms.`
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay)
+      );
+    }
+  }
+
+  throw lastError ??
+    new Error(`${label}: fallo desconocido`);
+}
 function isDenied(error: { code?: string; message: string } | null): boolean {
   return (
     error !== null &&
@@ -214,27 +262,46 @@ async function main() {
   });
 
   await check("5-8. Materiales Demo (límite 5): 4/5 permite 1 pero RECHAZA incremento 2 (masivo íntegro); 5/5 rechaza 1", async () => {
-    await seedRows("textile_materials", orgA, 4, (i) => ({ name: `${RUN} mat ${i}` }));
+    await seedRows("textile_materials", orgA, 4, (i) => ({
+      name: `${RUN} mat ${i}`,
+      material_type: "other",
+    }));
     let r = await allowance(adminA.client, orgA, TEX, "materials", 1);
     assert(r.allowed === true, `4/5 + 1 debía caber: ${JSON.stringify(r)}`);
     r = await allowance(adminA.client, orgA, TEX, "materials", 2);
     assert(r.allowed === false && r.reason === "limit_exceeded", `4/5 + 2 debía rechazarse ÍNTEGRO: ${JSON.stringify(r)}`);
-    await seedRows("textile_materials", orgA, 1, () => ({ name: `${RUN} mat 4` }));
+    await seedRows("textile_materials", orgA, 1, () => ({
+      name: `${RUN} mat 4`,
+      material_type: "other",
+    }));
     r = await allowance(adminA.client, orgA, TEX, "materials", 1);
     assert(r.allowed === false && r.current_count === 5, `5/5 debía rechazar con conteo exacto 5: ${JSON.stringify(r)}`);
   });
 
   await check("9-11. Evidencias/órdenes/lotes Demo (límite 1 c/u): la decisión al límite rechaza con conteo exacto por recurso", async () => {
-    await seedRows("textile_evidences", orgA, 1, (i) => ({
-      title: `${RUN} ev ${i}`,
-      evidence_type: "other",
-      file_name: "a.pdf",
-      file_path: `${orgA}/textiles/${randomUUID()}/a.pdf`,
-      file_mime_type: "application/pdf",
-      file_size_bytes: 1 * MB,
-      status: "pending_review",
-      created_by: adminA.id,
-    }));
+    const textileEvidenceId = randomUUID();
+    const { error: textileEvidenceError } = await admin
+      .from("textile_evidences")
+      .insert({
+        id: textileEvidenceId,
+        organization_id: orgA,
+        title: `${RUN} ev 0`,
+        evidence_type: "other",
+        file_name: "a.pdf",
+        file_path:
+          `${orgA}/textiles/${textileEvidenceId}/a.pdf`,
+        file_mime_type: "application/pdf",
+        file_size_bytes: 1 * MB,
+        status: "pending_review",
+        created_by: adminA.id,
+      });
+
+    assert(
+      !textileEvidenceError,
+      `fixture textile_evidences: ${
+        textileEvidenceError?.message
+      }`
+    );
     const rEv = await allowance(adminA.client, orgA, TEX, "evidences", 1);
     assert(rEv.allowed === false && rEv.current_count === 1 && rEv.limit_value === 1, `evidencias 1/1: ${JSON.stringify(rEv)}`);
     const rPo = await allowance(adminA.client, orgA, TEX, "production_orders", 1);
@@ -458,24 +525,95 @@ async function main() {
     assert(delta === 1, `debía auditarse exactamente 1 transición (Δ=${delta})`);
   });
 
-  await check("45-46. Objetivos DISTINTOS simultáneos sobre fila inexistente: serializados — 1 fila, 2 transiciones, estado final ∈ {full, extra}", async () => {
-    await admin.from("organization_modules").delete().eq("organization_id", orgB).eq("module_code", CPR);
-    const before = await accessChangedCount(orgB);
-    const [r1, r2] = await Promise.all([
-      setModule(superU.client, orgB, CPR, "full"),
-      setModule(superU.client, orgB, CPR, "extra"),
-    ]);
-    assert(!r1.error && !r2.error, `sin errores: ${r1.error?.message ?? r2.error?.message}`);
-    const { data: rows } = await admin
-      .from("organization_modules")
-      .select("access_mode")
-      .eq("organization_id", orgB)
-      .eq("module_code", CPR);
-    assert(rows!.length === 1, `1 fila final (hay ${rows!.length})`);
-    assert(["full", "extra"].includes(rows![0].access_mode), `modo final serializado: ${rows![0].access_mode}`);
-    const delta = (await accessChangedCount(orgB)) - before;
-    assert(delta === 2, `2 transiciones auditadas (Δ=${delta})`);
-  });
+  await check(
+    "45-46. Objetivos DISTINTOS simultáneos sobre fila inexistente: serializados — 1 fila, 2 transiciones, estado final ∈ {full, extra}",
+    async () => {
+      await withScenarioRetry(
+        "concurrencia full/extra",
+        async () => {
+          const { error: resetError } = await admin
+            .from("organization_modules")
+            .delete()
+            .eq("organization_id", orgB)
+            .eq("module_code", CPR);
+
+          if (resetError) {
+            throw new Error(resetError.message);
+          }
+
+          const before =
+            await accessChangedCount(orgB);
+
+          const [r1, r2] = await Promise.all([
+            setModule(
+              superU.client,
+              orgB,
+              CPR,
+              "full"
+            ),
+            setModule(
+              superU.client,
+              orgB,
+              CPR,
+              "extra"
+            ),
+          ]);
+
+          const transientMessage =
+            r1.error?.message ??
+            r2.error?.message ??
+            "";
+
+          if (
+            TRANSIENT_NETWORK_ERROR.test(
+              transientMessage
+            )
+          ) {
+            throw new Error(transientMessage);
+          }
+
+          assert(
+            !r1.error && !r2.error,
+            `sin errores: ${transientMessage}`
+          );
+
+          const { data: rows, error: rowsError } =
+            await admin
+              .from("organization_modules")
+              .select("access_mode")
+              .eq("organization_id", orgB)
+              .eq("module_code", CPR);
+
+          if (rowsError) {
+            throw new Error(rowsError.message);
+          }
+
+          assert(
+            rows!.length === 1,
+            `1 fila final (hay ${rows!.length})`
+          );
+
+          assert(
+            ["full", "extra"].includes(
+              rows![0].access_mode
+            ),
+            `modo final serializado: ${
+              rows![0].access_mode
+            }`
+          );
+
+          const delta =
+            (await accessChangedCount(orgB)) -
+            before;
+
+          assert(
+            delta === 2,
+            `2 transiciones auditadas (Δ=${delta})`
+          );
+        }
+      );
+    }
+  );
 
   console.log("\nF. Seguridad de la RPC y la decisión (47–52)\n");
 
@@ -504,6 +642,24 @@ async function main() {
 async function cleanup() {
   console.log("\nLimpieza de fixtures…");
   let shells = 0;
+
+  const deleteByOrganization = async (
+    table: string,
+    organizationId: string
+  ) =>
+    withScenarioRetry(
+      `limpieza ${table}`,
+      async () => {
+        const { error } = await admin
+          .from(table)
+          .delete()
+          .eq("organization_id", organizationId);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+      }
+    );
   try {
     // Objetos de Storage del run (si algún caso llegó a materializarlos).
     if (createdObjects.length > 0) await admin.storage.from("evidences").remove(createdObjects);
@@ -526,7 +682,15 @@ async function cleanup() {
         "team_invitations",
         "memberships",
       ]) {
-        await admin.from(t).delete().eq("organization_id", orgId);
+        try {
+          await deleteByOrganization(t, orgId);
+        } catch (error) {
+          console.error(
+            `  ✘ limpieza ${t}: ${
+              (error as Error).message
+            }`
+          );
+        }
       }
       const { error } = await admin.from("organizations").delete().eq("id", orgId);
       if (error) {
