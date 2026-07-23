@@ -33,7 +33,9 @@ export function OrganizationsTable({
         <thead>
           <tr className="border-b border-hairline text-left text-xs text-ink-soft">
             <th className="px-3 py-2 font-medium">Empresa</th>
-            <th className="px-3 py-2 font-medium">Plan</th>
+            {/* T9F.1: el plan mostrado es el LEGACY org-wide (informativo). Los
+                planes reales por módulo se gestionan en el detalle de la empresa. */}
+            <th className="px-3 py-2 font-medium">Plan heredado</th>
             <th className="px-3 py-2 font-medium">Razón social</th>
             <th className="px-3 py-2 font-medium">NIT</th>
             <th className="px-3 py-2 font-medium">País / ciudad</th>
@@ -58,6 +60,7 @@ export function OrganizationsTable({
                   <span className="inline-flex flex-col">
                     <span className="font-medium">{PLAN_LABEL[plan.planCode]}</span>
                     <span className="text-ink-soft">{plan.storagePercentUsed}% almacenamiento</span>
+                    <span className="text-[10px] text-ink-soft">No gobierna los módulos</span>
                   </span>
                 ) : (
                   "—"

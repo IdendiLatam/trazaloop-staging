@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SectionHint } from "./section-hint";
+import { SectionHint } from "@/components/ui/section-hint";
 import type { DocumentSectionRow } from "@/lib/db/trazadocs";
 
 /** Una sección dentro del editor (Parte 18): título, textarea, botón "i",

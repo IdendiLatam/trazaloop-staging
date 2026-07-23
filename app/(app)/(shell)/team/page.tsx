@@ -30,7 +30,7 @@ export default async function TeamPage() {
         <p className="eyebrow">Equipo</p>
         <h1 className="text-2xl font-semibold tracking-tight">Equipo de la empresa</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Administra usuarios, roles y accesos dentro de la organización activa.
+          Administra usuarios, roles y accesos dentro de la empresa activa.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Link
@@ -68,7 +68,7 @@ export default async function TeamPage() {
 
       {/* 1. Organización activa */}
       <section className="rounded-lg border border-loop/30 bg-loop/5 p-4">
-        <p className="eyebrow mb-1">Organización activa</p>
+        <p className="eyebrow mb-1">Empresa activa</p>
         <p className="text-lg font-semibold text-loop-deep">{org.organizationName}</p>
       </section>
 

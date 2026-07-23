@@ -393,9 +393,9 @@ console.log("\nTrazaloop · Sprint 9.2: TrazaDocs sin botones hacia otros módul
 
 check("16. TrazaDocs no muestra botones \"Ir a implementación/soporte técnico/trazabilidad/evidencias\"", () => {
   const pagesToCheck = [
-    "app/(app)/(shell)/trazadocs/page.tsx",
-    "app/(app)/(shell)/trazadocs/[id]/page.tsx",
-    "app/(app)/(shell)/trazadocs/[id]/edit/page.tsx",
+    "app/(app)/(shell)/(cpr)/trazadocs/page.tsx",
+    "app/(app)/(shell)/(cpr)/trazadocs/[id]/page.tsx",
+    "app/(app)/(shell)/(cpr)/trazadocs/[id]/edit/page.tsx",
   ];
   const forbidden = ["Ir a Implementación", "Ir a Soporte técnico", "Ir a Trazabilidad", "Ir a Evidencias"];
   for (const rel of pagesToCheck) {

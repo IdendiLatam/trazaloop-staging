@@ -33,7 +33,7 @@ export default async function PlatformPage() {
         <p className="eyebrow">Plataforma</p>
         <h1 className="text-2xl font-semibold tracking-tight">Administración de plataforma</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Vista interna para acompañar empresas, revisar organizaciones registradas y apoyar la
+          Vista interna para acompañar empresas, revisar empresas registradas y apoyar la
           implementación.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">

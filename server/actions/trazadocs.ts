@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
-import { checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkCprResourceLimit, checkCprCanMutate } from "@/server/actions/module-plans";
 import { findFileDocumentByNormalizedTitle } from "@/lib/db/trazadocs-master";
 import { DUPLICATE_MASTER_TITLE_MESSAGE } from "@/lib/domain/trazadocs-master";
 import {
@@ -21,7 +21,8 @@ import {
   findDocumentByBlueprint,
   deleteDocument,
   updateDocumentMetadata,
-  updateSectionContent,
+  updateSectionContentForDocument,
+  getDocumentFacts,
   insertCustomSection,
   deleteSection,
   reorderSections,
@@ -170,7 +171,7 @@ export async function createDocumentFromBlueprintAction(
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 2 documentos
   // TrazaDocs por empresa.
-  const limitCheck = await checkResourceLimit("documents_trazadocs");
+  const limitCheck = await checkCprResourceLimit("documents_trazadocs");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   const blueprintId = String(formData.get("blueprint_id") ?? "");
@@ -247,7 +248,7 @@ export async function createCustomDocumentAction(
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 2 documentos
   // TrazaDocs por empresa (sugeridos + libres cuentan juntos).
-  const limitCheck = await checkResourceLimit("documents_trazadocs");
+  const limitCheck = await checkCprResourceLimit("documents_trazadocs");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   const input = {
@@ -298,7 +299,7 @@ export async function updateDocumentMetadataAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
@@ -325,10 +326,19 @@ export async function updateDocumentSectionsAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
+
+  // T8.1 (regla obligatoria): documento de la organización, del módulo
+  // CPR, en estado editable y con rol autorizado — ANTES de tocar
+  // cualquier sección; el helper re-amarra sección→documento→módulo.
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
 
   const updates: { sectionId: string; content: string }[] = [];
   for (const [key, value] of formData.entries()) {
@@ -338,7 +348,13 @@ export async function updateDocumentSectionsAction(
   }
 
   for (const u of updates) {
-    const { error } = await updateSectionContent(org.organizationId, u.sectionId, u.content);
+    const { error } = await updateSectionContentForDocument({
+      organizationId: org.organizationId,
+      documentId,
+      sectionId: u.sectionId,
+      moduleKey: "cpr",
+      content: u.content,
+    });
     if (error) return { error };
   }
 
@@ -351,12 +367,20 @@ export async function addCustomSectionAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
   const title = String(formData.get("title") ?? "");
   const sortOrder = Number(formData.get("sort_order") ?? "0");
+
+  // T8.1: solo se agregan secciones a un documento CPR editable de la
+  // organización (nunca a un documento Textil desde este flujo).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
 
   const validation = validateCustomSectionInput({ title });
   if (validation.error) return { error: validation.error };
@@ -382,12 +406,16 @@ export async function deleteDocumentSectionAction(
   if (!canDeleteSection(org.roleCode)) {
     return { error: "Tu rol no permite eliminar secciones." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
   const sectionId = String(formData.get("section_id") ?? "");
-  const { error } = await deleteSection(org.organizationId, sectionId);
+  // T8.1: la sección debe pertenecer a un documento CPR de la
+  // organización; la RLS re-exige padre en borrador.
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+  const { error } = await deleteSection(org.organizationId, documentId, sectionId);
   if (error) return { error };
 
   revalidateTrazadocs(documentId);
@@ -407,7 +435,7 @@ export async function deleteDraftTrazadocDocumentAction(
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
   const { user } = await requireSession();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
@@ -454,7 +482,7 @@ export async function moveSectionAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
@@ -463,7 +491,15 @@ export async function moveSectionAction(
   const targetOrder = Number(formData.get("target_order") ?? "0");
   const targetSectionId = String(formData.get("target_section_id") ?? "");
 
-  const { error } = await reorderSections(org.organizationId, [
+  // T8.1: reordenar exige documento CPR editable; ambas secciones deben
+  // pertenecerle (el helper las amarra por document_id).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
+  if (!canEditDocument(org.roleCode, doc.status)) {
+    return { error: "Tu rol no permite editar este documento en su estado actual." };
+  }
+
+  const { error } = await reorderSections(org.organizationId, documentId, [
     { id: sectionId, sortOrder: targetOrder },
     { id: targetSectionId, sortOrder: currentOrder },
   ]);
@@ -481,14 +517,20 @@ async function transition(
   toStatus: DocumentStatus,
   note: string | null
 ): Promise<TrazadocsActionState> {
-  await requireActiveOrg();
+  const org = await requireActiveOrg();
 
   // Sprint 10A (Bloqueante 3): las 6 acciones de transición de estado
   // (enviar a revisión, aprobar, marcar obsoleto, reactivar, crear
   // versión en borrador desde aprobado, guardar nueva versión) comparten
   // este único helper — un solo chequeo cubre todas, nunca duplicado.
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
+  // T8.1: separación por módulo también en transiciones — el documento
+  // debe ser CPR y de la organización activa (las rutas textiles hacen el
+  // chequeo espejo con 'textiles' desde T8).
+  const doc = await getDocumentFacts(org.organizationId, documentId, "cpr");
+  if (!doc) return { error: "El documento no existe o no pertenece a tu empresa." };
 
   const { newVersion, error } = await changeDocumentStatus(documentId, toStatus, note);
   if (error || newVersion == null) {
@@ -503,6 +545,8 @@ export async function submitDocumentForReviewAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   if (!canSubmitForReview(org.roleCode, "draft")) {
     return { error: "Tu rol no permite enviar este documento a revisión." };
   }
@@ -516,6 +560,8 @@ export async function approveDocumentAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   if (!canApproveDocument(org.roleCode)) {
     return { error: "Tu rol no permite aprobar documentos." };
   }
@@ -529,6 +575,8 @@ export async function markDocumentObsoleteAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   if (!canMarkObsolete(org.roleCode)) {
     return { error: "Tu rol no permite marcar este documento como obsoleto." };
   }
@@ -542,6 +590,8 @@ export async function reactivateDocumentAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   if (!canReactivateDocument(org.roleCode)) {
     return { error: "Solo un administrador puede reactivar un documento obsoleto." };
   }
@@ -560,6 +610,8 @@ export async function createDraftVersionFromApprovedAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   if (!canCreateDraftVersionFromApproved(org.roleCode)) {
     return { error: "Solo un administrador o supervisor puede crear una nueva versión en borrador de un documento aprobado." };
   }
@@ -577,6 +629,8 @@ export async function createDocumentVersionAction(
   formData: FormData
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
+  const cprCheck = await checkCprCanMutate();
+  if (!cprCheck.allowed) return { error: cprCheck.error };
   const documentId = String(formData.get("document_id") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!isDocumentStatus(status)) return { error: "Estado no válido." };

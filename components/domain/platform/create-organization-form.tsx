@@ -5,13 +5,10 @@ import {
   createPlatformOrganizationAction,
   type PlatformActionState,
 } from "@/server/actions/platform";
-import { Field, SelectField } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
-import { PLAN_CODES, PLAN_LABEL } from "@/lib/plans/types";
-
 const initial: PlatformActionState = { error: null };
-const PLAN_OPTIONS = PLAN_CODES.map((c) => ({ value: c, label: PLAN_LABEL[c] }));
 
 /** Formulario de "Nueva empresa" desde la consola de plataforma (Parte 8).
  *  Solo superadmin (gate real: el server action + la RPC). Sin envío de
@@ -55,13 +52,17 @@ export function CreateOrganizationForm() {
           <Field label="País" name="country" />
           <Field label="Ciudad" name="city" />
         </div>
-        <SelectField
-          label="Plan inicial"
-          name="plan_code"
-          options={PLAN_OPTIONS}
-          defaultValue="demo"
-          hint="Si no cambias esto, la empresa queda en Demo — igual que si se creara desde el registro normal."
-        />
+        {/* T9F.1: SIN selector de plan general. Toda empresa nueva inicia
+            con CPR y Textiles en Demo de 48 horas (igual que el registro
+            normal); después, el superadministrador asigna el plan POR MÓDULO
+            desde "Módulos y planes de la empresa". El plan legacy
+            (organization_subscriptions) se crea como demo por compatibilidad
+            y no gobierna los módulos. */}
+        <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
+          La empresa iniciará con Trazaloop CPR y Trazaloop Textiles en modo Demo durante 2 días.
+          Después podrás asignar el plan de cada módulo (Demo permanente, Full o Extra) desde
+          &ldquo;Módulos y planes de la empresa&rdquo;.
+        </p>
       </fieldset>
 
       <fieldset className="space-y-4 border-t border-hairline pt-4">

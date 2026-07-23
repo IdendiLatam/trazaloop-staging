@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkFeatureEnabled } from "@/server/actions/plans";
+import { checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
+import type { ResourceCode } from "@/lib/plans/types";
 import { parseCsv } from "@/lib/csv";
 import {
   IMPORT_TEMPLATES,
@@ -232,7 +233,7 @@ export async function validateImportAction(
 
   // Sprint 10A (Bloqueante 2): mismo criterio que validateImportCsvAction
   // — validar ya escribe un import_job real, no es un paso "sin efecto".
-  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { ...empty, error: featureCheck.error };
 
   if (!IMPORT_TEMPLATES[entity]) return { ...empty, error: "Entidad no soportada." };
@@ -294,7 +295,7 @@ export async function commitImportAction(
   const supabase = await createServerClient();
 
   // Sprint 10A (Parte 8): Demo no incluye importaciones.
-  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { inserted: 0, error: featureCheck.error };
 
   const errors = await validateRows(entity, rows, org.organizationId);
@@ -313,6 +314,21 @@ export async function commitImportAction(
       inserted: 0,
       error: `La importación tiene ${errors.length} error(es). Corrige el archivo y vuelve a validar.`,
     };
+  }
+
+  // T9F.2 · §9: incremento MASIVO contra el límite del plan del MÓDULO CPR
+  // ANTES del primer INSERT (operación completa o nada; jamás parcial).
+  const legacyResource: Record<string, ResourceCode | null> = {
+    suppliers: "suppliers",
+    materials: "materials",
+    products: "products",
+    input_batches: "input_batches",
+    product_families: null,
+  };
+  const limitedResource = legacyResource[entity] ?? null;
+  if (limitedResource && rows.length > 0) {
+    const limitCheck = await checkCprResourceLimit(limitedResource, rows.length);
+    if (!limitCheck.allowed) return { inserted: 0, error: limitCheck.error };
   }
 
   let familyByName = new Map<string, string>();

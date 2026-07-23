@@ -49,7 +49,7 @@ export type FeedbackRelatedEntityType = (typeof FEEDBACK_RELATED_ENTITY_TYPES)[n
 
 export const MODULE_LABEL: Record<FeedbackModule, string> = {
   auth: "Autenticación y usuarios",
-  organization: "Organización / empresa",
+  organization: "Empresa",
   catalog: "Catálogos",
   evidences: "Evidencias",
   traceability: "Trazabilidad",
@@ -349,7 +349,7 @@ export function resolveChecklist(f: ChecklistFacts): ChecklistItem[] {
   const items: ChecklistItem[] = [
     {
       id: 1,
-      title: "Crear organización",
+      title: "Crear empresa",
       description: "La empresa ya existe y tiene al menos una membresía activa.",
       status: f.hasOrganization ? "completo" : "pendiente",
       actionLabel: "Cambiar de empresa",

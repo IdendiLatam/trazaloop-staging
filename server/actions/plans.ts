@@ -30,18 +30,28 @@ import type { OrganizationPlanUsage } from "@/lib/plans/usage";
 /**
  * Trazaloop · Sprint 10A · Server actions de planes.
  *
- * checkResourceLimit / checkFeatureEnabled / checkStorageAvailable son el
- * HELPER CENTRAL (Parte 7) que reutilizan las demás server actions
- * (TrazaDocs, catálogos, evidencias, trazabilidad, equipo, importaciones)
- * — nunca cada una vuelve a implementar su propio conteo contra
- * plan_limits. La validación real ocurre aquí, en servidor: la UI solo
- * refleja lo mismo para guiar, nunca es la única barrera.
+ * ⚠️ T9F.1 — SCOPE LEGACY / ORG-WIDE. Estos helpers resuelven contra el plan
+ * general de organization_subscriptions (v_organization_plan_usage) y quedan
+ * RESERVADOS a recursos transversales de la organización que NO pertenecen a
+ * un módulo comercial: equipo (team_members, roles_enabled), logo de empresa
+ * (almacenamiento GLOBAL no atribuido a módulo) y lecturas informativas
+ * legacy. PROHIBIDO usarlos en acciones CPR o Textiles: esos módulos validan
+ * SIEMPRE con los helpers por módulo de server/actions/module-plans.ts
+ * (moduleCode explícito, plan y uso del propio módulo). Una prueba estática
+ * (tests/unit/t9f1-module-operational-enforcement.test.ts) impide nuevas
+ * llamadas operativas CPR/Textiles sin moduleCode.
+ *
+ * checkResourceLimit / checkFeatureEnabled / checkStorageAvailable eran el
+ * helper central (Parte 7) para TODAS las server actions; desde T9F.1 su
+ * alcance queda limitado a lo anterior. La validación real ocurre aquí, en
+ * servidor: la UI solo refleja lo mismo para guiar, nunca es la única
+ * barrera.
  *
  * Corrección (Bloqueante 3): las 3 funciones llaman PRIMERO a
  * checkPlanStatusBlocking — una suscripción suspended/cancelled bloquea
  * cualquier creación/carga sin importar si estaría dentro del límite
- * normal del plan. Centralizado aquí una sola vez, nunca duplicado en
- * cada action.
+ * normal del plan. Ese estado ADMINISTRATIVO de cuenta (no comercial) lo
+ * reutilizan también los helpers por módulo.
  */
 
 function checkPlanStatusBlocking(usage: OrganizationPlanUsage): { allowed: boolean; error: string | null } {

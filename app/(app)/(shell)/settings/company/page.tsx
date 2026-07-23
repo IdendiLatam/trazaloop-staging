@@ -22,7 +22,7 @@ export default async function CompanySettingsPage() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Datos de empresa</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Actualiza la información básica de la organización activa.
+          Actualiza la información básica de la empresa activa.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Link

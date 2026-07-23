@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkCprResourceLimit, checkCprCanMutate } from "@/server/actions/module-plans";
 import {
   listInputBatches,
   listProductionOrders,
@@ -96,11 +96,11 @@ export async function createInputBatchAction(
 
   // Sprint 10A (corrección final): empresa suspended/cancelled queda en
   // modo solo lectura.
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 1 lote de entrada.
-  const limitCheck = await checkResourceLimit("input_batches");
+  const limitCheck = await checkCprResourceLimit("input_batches");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   if (
@@ -142,7 +142,7 @@ export async function updateInputBatchAction(
   if (!id) return { error: "Falta el identificador del lote." };
   if (invalid) return { error: invalid };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   if (
@@ -181,7 +181,7 @@ export async function deleteInputBatchAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -261,11 +261,11 @@ export async function createProductionOrderAction(
   if (!v.order_date) return { error: "La fecha de la orden es obligatoria." };
   if (!ORDER_STATUSES.includes(v.status)) return { error: "Estado no válido." };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 1 orden/corrida.
-  const limitCheck = await checkResourceLimit("production_orders");
+  const limitCheck = await checkCprResourceLimit("production_orders");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   const pv = parseProcessVariables(v.process_variables);
@@ -302,7 +302,7 @@ export async function updateProductionOrderAction(
   if (!v.order_code) return { error: "El código de la orden es obligatorio." };
   if (!v.order_date) return { error: "La fecha de la orden es obligatoria." };
   if (!ORDER_STATUSES.includes(v.status)) return { error: "Estado no válido." };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const pv = parseProcessVariables(v.process_variables);
   if (pv.error) return { error: pv.error };
@@ -335,7 +335,7 @@ export async function deleteProductionOrderAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -379,7 +379,7 @@ export async function addBatchConsumptionAction(
   if (Number.isNaN(mass) || mass <= 0) {
     return { error: "La masa consumida debe ser mayor que 0." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   if (
     !(await assertSameOrg("production_orders", productionOrderId, org.organizationId)) ||
@@ -422,7 +422,7 @@ export async function updateBatchConsumptionAction(
   if (Number.isNaN(mass) || mass <= 0) {
     return { error: "La masa consumida debe ser mayor que 0." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const supabase = await createServerClient();
@@ -442,7 +442,7 @@ export async function deleteBatchConsumptionAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -491,11 +491,11 @@ export async function createOutputBatchAction(
   if (!v.batch_code) return { error: "El código del lote producido / lote final es obligatorio." };
   if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 1 lote producido.
-  const limitCheck = await checkResourceLimit("output_batches");
+  const limitCheck = await checkCprResourceLimit("output_batches");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   if (v.produced_quantity_kg !== "") {
@@ -538,7 +538,7 @@ export async function updateOutputBatchAction(
   if (!id) return { error: "Falta el identificador del lote producido / lote final." };
   if (!v.batch_code) return { error: "El código del lote producido / lote final es obligatorio." };
   if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   if (v.produced_quantity_kg !== "") {
     const n = Number(v.produced_quantity_kg);
@@ -578,7 +578,7 @@ export async function deleteOutputBatchAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -616,7 +616,7 @@ export async function addBatchCompositionAction(
   if (Number.isNaN(mass) || mass <= 0) {
     return { error: "La masa debe ser mayor que 0." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   if (
     !(await assertSameOrg("output_batches", outputBatchId, org.organizationId)) ||
@@ -659,7 +659,7 @@ export async function updateBatchCompositionAction(
 
   if (!id) return { error: "Falta el identificador de la fila de composición." };
   if (Number.isNaN(mass) || mass <= 0) return { error: "La masa debe ser mayor que 0." };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const supabase = await createServerClient();
@@ -679,7 +679,7 @@ export async function deleteBatchCompositionAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase

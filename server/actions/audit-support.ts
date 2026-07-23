@@ -1,6 +1,7 @@
 "use server";
 
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import { requireCprForAction } from "@/lib/auth/require-cpr-module";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   getDossier,
@@ -134,6 +135,9 @@ export async function getAuditSupportDashboardAction() {
 /** Objeto estructurado listo para descargar como .json desde el cliente.
  *  Solo datos de la empresa activa (el dossier ya lo garantiza). */
 export async function exportCalculationDossierJsonAction(calculationId: string) {
+  // T9F.1: una exportación CPR también exige acceso comercial vigente.
+  const gate = await requireCprForAction();
+  if (gate.error !== null) return { data: null, error: gate.error };
   const { data, error } = await buildDossierBundle(calculationId);
   if (error || !data) return { data: null, error };
   const d = data.dossier;
@@ -185,6 +189,9 @@ export async function exportEvidenceMatrixCsvAction(
   outputBatchId: string,
   calculationId?: string
 ) {
+  // T9F.1: una exportación CPR también exige acceso comercial vigente.
+  const gate = await requireCprForAction();
+  if (gate.error !== null) return { data: null, error: gate.error };
   const { data: rows, error } = await getOutputBatchEvidenceMatrixAction(
     outputBatchId,
     calculationId

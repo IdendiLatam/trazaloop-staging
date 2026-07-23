@@ -82,7 +82,7 @@ export type OrgCreationFacts = {
 export type OrgCreationEligibility = { canCreate: boolean; reason: string | null };
 
 export const ALREADY_HAS_ORG_MESSAGE =
-  "Tu cuenta ya está asociada a una empresa. Si necesitas administrar otra organización, contacta al equipo de Trazaloop.";
+  "Tu cuenta ya está asociada a una empresa. Si necesitas administrar otra empresa, contacta al equipo de Trazaloop.";
 export const HAS_PENDING_INVITATION_MESSAGE =
   "Tienes una invitación pendiente. Acéptala en vez de crear una empresa nueva.";
 
@@ -157,7 +157,11 @@ export type PlatformOrgDraftInput = {
   contactEmail?: string | null;
   adminName?: string | null;
   adminEmail: string;
-  /** Sprint 10A (Parte 4): opcional — si el superadmin no elige, cae en 'demo'. */
+  /** Sprint 10A (Parte 4): opcional — si el superadmin no elige, cae en 'demo'.
+   *  @deprecated T9F.1: parámetro LEGACY. El server action lo fuerza SIEMPRE a
+   *  'demo' (la suscripción general se crea solo por compatibilidad y NO
+   *  gobierna los módulos). El plan real se asigna POR MÓDULO después de la
+   *  creación, desde "Módulos y planes de la empresa". */
   planCode?: PlanCode | null;
 };
 
@@ -224,6 +228,6 @@ export function buildPlatformOrgPayload(input: PlatformOrgDraftInput): TrustedPl
  *  creada, con enlace copiable. Mensaje puro para la UI. */
 export function describePlatformOrgOutcome(adminLinked: boolean): string {
   return adminLinked
-    ? "La organización se creó y el administrador inicial quedó vinculado de inmediato (ya tenía cuenta en Trazaloop)."
-    : "La organización se creó. El administrador inicial todavía no tiene cuenta: se generó una invitación pendiente — copia el enlace y compártelo.";
+    ? "La empresa se creó y el administrador inicial quedó vinculado de inmediato (ya tenía cuenta en Trazaloop)."
+    : "La empresa se creó. El administrador inicial todavía no tiene cuenta: se generó una invitación pendiente — copia el enlace y compártelo.";
 }

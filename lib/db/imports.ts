@@ -230,13 +230,19 @@ export async function getLookupMaps(orgId: string, entity: ImportEntityType): Pr
 
 /** Inserta el registro de negocio de UNA fila ya normalizada y validada.
  *  organization_id SIEMPRE es el parámetro explícito (empresa activa). */
-export async function insertBusinessRow(
+/**
+ * T9F.3: constructor PURO del payload por entidad (una tabla por entidad).
+ * Separado del insert para que la confirmación de importaciones pueda emitir
+ * UN ÚNICO INSERT multi-fila (una sola transacción en PostgreSQL): si el
+ * trigger de límites rechaza CUALQUIER fila, se revierte TODO — jamás una
+ * inserción parcial.
+ */
+export function buildBusinessRowPayload(
   orgId: string,
   entity: ImportEntityType,
   normalized: Record<string, unknown>,
   maps: LookupMaps
-): Promise<{ id: string | null; error: string | null }> {
-  const supabase = await createServerClient();
+): { table: string; payload: Record<string, unknown> } {
   const table = ENTITY_TABLE[entity];
 
   let payload: Record<string, unknown>;
@@ -357,9 +363,55 @@ export async function insertBusinessRow(
       break;
   }
 
+  return { table, payload };
+}
+
+export async function insertBusinessRow(
+  orgId: string,
+  entity: ImportEntityType,
+  normalized: Record<string, unknown>,
+  maps: LookupMaps
+): Promise<{ id: string | null; error: string | null }> {
+  const supabase = await createServerClient();
+  const { table, payload } = buildBusinessRowPayload(orgId, entity, normalized, maps);
+
   const { data, error } = await supabase.from(table).insert(payload).select("id").single();
   if (error || !data) {
     return { id: null, error: error?.message ?? "No fue posible crear el registro." };
   }
   return { id: data.id as string, error: null };
+}
+
+/**
+ * T9F.3 · §11: inserción MASIVA ATÓMICA. Un único statement multi-fila =
+ * una única transacción: el trigger BEFORE INSERT de límites (0101 §5) ve el
+ * acumulado de la propia transacción y, si el plan no admite TODAS las filas,
+ * PostgreSQL revierte la operación completa (cero filas). El error de
+ * Supabase se inspecciona SIEMPRE; los ids conservan el orden de entrada.
+ */
+export async function insertBusinessRows(
+  orgId: string,
+  entity: ImportEntityType,
+  normalizedRows: Array<Record<string, unknown>>,
+  maps: LookupMaps
+): Promise<{ ids: string[] | null; error: string | null; limitExceeded: boolean }> {
+  if (normalizedRows.length === 0) {
+    return { ids: [], error: null, limitExceeded: false };
+  }
+  const supabase = await createServerClient();
+  const table = ENTITY_TABLE[entity];
+  const payloads = normalizedRows.map(
+    (normalized) => buildBusinessRowPayload(orgId, entity, normalized, maps).payload
+  );
+
+  const { data, error } = await supabase.from(table).insert(payloads).select("id");
+  if (error || !data || data.length !== payloads.length) {
+    const message = error?.message ?? "No fue posible crear los registros.";
+    return {
+      ids: null,
+      error: message,
+      limitExceeded: message.includes("RESOURCE_LIMIT_EXCEEDED"),
+    };
+  }
+  return { ids: data.map((d) => d.id as string), error: null, limitExceeded: false };
 }

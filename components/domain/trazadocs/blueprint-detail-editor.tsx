@@ -14,6 +14,9 @@ import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABEL } from "@/lib/domain/trazadocs";
 import { Field, SelectField, TextareaField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
+import { HintText } from "@/components/ui/hint-text";
+import { HINT_LINK_HELP_TEXT, hasHintContent } from "@/lib/domain/hint-links";
+import { useState } from "react";
 
 const initial: TrazadocsActionState = { error: null };
 const TYPE_OPTIONS = DOCUMENT_TYPES.map((t) => ({ value: t, label: DOCUMENT_TYPE_LABEL[t] }));
@@ -148,11 +151,9 @@ function BlueprintSectionRow({
             {section.status === "active" ? "Activa" : "Inactiva"}
           </span>
         </div>
-        <TextareaField
+        <HintEditorField
           label="Tip / hint para diligenciar esta sección"
-          name="hint"
-          rows={2}
-          defaultValue={section.hint ?? ""}
+          initialValue={section.hint ?? ""}
           disabled={!canManage}
         />
         {canManage ? (
@@ -190,7 +191,7 @@ function AddSectionForm({ blueprintId, nextOrder }: { blueprintId: string; nextO
       <h3 className="text-sm font-semibold">Agregar sección</h3>
       <ErrorAlert message={state.error} />
       <Field label="Título" name="title" required />
-      <TextareaField label="Tip / hint" name="hint" rows={2} />
+      <HintEditorField label="Tip / hint" initialValue="" disabled={false} />
       <label className="flex items-center gap-1.5 text-xs text-ink-soft">
         <input type="checkbox" name="is_required" defaultChecked />
         Obligatoria
@@ -199,5 +200,42 @@ function AddSectionForm({ blueprintId, nextOrder }: { blueprintId: string; nextO
         {pending ? "Agregando…" : "Agregar sección"}
       </Button>
     </form>
+  );
+}
+
+/** Campo de edición de un tip/hint (T9G §14): mismo textarea de siempre +
+ *  ayuda breve del formato de enlaces + vista previa que usa EXACTAMENTE el
+ *  mismo renderizador seguro (`HintText`) que ven las empresas en CPR y en
+ *  Textiles — nunca un segundo parser solo para la vista previa. */
+function HintEditorField({
+  label,
+  initialValue,
+  disabled,
+}: {
+  label: string;
+  initialValue: string;
+  disabled: boolean;
+}) {
+  const [value, setValue] = useState(initialValue);
+  return (
+    <div className="space-y-1.5">
+      <TextareaField
+        label={label}
+        name="hint"
+        rows={2}
+        defaultValue={initialValue}
+        disabled={disabled}
+        hint={HINT_LINK_HELP_TEXT}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      {hasHintContent(value) ? (
+        <div className="rounded-md border border-loop/20 bg-loop/5 px-3 py-2">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-soft">Vista previa</p>
+          <p className="text-xs text-ink-soft">
+            <HintText text={value} />
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }

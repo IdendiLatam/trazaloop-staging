@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
-import { isPlanCode } from "@/lib/plans/types";
 import {
   checkPlatformStatus,
   listPlatformOrganizations,
@@ -145,7 +144,12 @@ export async function createPlatformOrganizationAction(
     return { error: "Solo un superadministrador de plataforma puede crear empresas desde esta consola." };
   }
 
-  const planCodeRaw = String(formData.get("plan_code") ?? "demo");
+  // T9F.1: el plan general legacy (organization_subscriptions) queda
+  // DEPRECATED como decisión comercial: se fuerza SIEMPRE 'demo' por
+  // compatibilidad, se ignore lo que envíe el cliente. El acceso real de la
+  // empresa nueva es la provisión por módulo de 0100 (CPR y Textiles en Demo
+  // de 48 h) y los cambios posteriores se hacen POR MÓDULO desde la consola
+  // de plataforma (server/actions/platform-modules.ts).
   const input = {
     name: String(formData.get("name") ?? ""),
     legalName: String(formData.get("legal_name") ?? ""),
@@ -155,7 +159,7 @@ export async function createPlatformOrganizationAction(
     contactEmail: String(formData.get("contact_email") ?? ""),
     adminName: String(formData.get("admin_name") ?? ""),
     adminEmail: String(formData.get("admin_email") ?? ""),
-    planCode: isPlanCode(planCodeRaw) ? planCodeRaw : "demo",
+    planCode: "demo" as const,
   };
 
   const validation = validatePlatformOrgDraft(input);
@@ -180,8 +184,8 @@ export async function createPlatformOrganizationAction(
       ? `${site}/accept-invite?token=${result.invitationToken}`
       : undefined,
     outcomeMessage: result.adminLinked
-      ? "La organización se creó y el administrador inicial quedó vinculado de inmediato (ya tenía cuenta en Trazaloop)."
-      : "La organización se creó. El administrador inicial todavía no tiene cuenta: copia el enlace de invitación y compártelo.",
+      ? "La empresa se creó y el administrador inicial quedó vinculado de inmediato (ya tenía cuenta en Trazaloop)."
+      : "La empresa se creó. El administrador inicial todavía no tiene cuenta: copia el enlace de invitación y compártelo.",
   };
 }
 

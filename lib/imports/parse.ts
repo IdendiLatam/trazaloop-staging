@@ -38,7 +38,7 @@ export function validateHeader(entity: ImportEntityType, header: string[]): Head
       ok: false,
       error:
         `El archivo trae una columna no permitida (${forbidden.join(", ")}). ` +
-        "La organización siempre es la empresa activa de tu sesión; nunca se acepta desde el archivo.",
+        "Los datos siempre pertenecen a la empresa activa de tu sesión; nunca se aceptan desde el archivo.",
       normalizedHeader: normalized,
     };
   }

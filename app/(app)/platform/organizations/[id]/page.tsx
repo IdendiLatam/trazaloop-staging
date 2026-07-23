@@ -23,9 +23,10 @@ import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { getPlanLimits } from "@/lib/db/plans";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
-import { PlanChangeForm } from "@/components/domain/plans/plan-change-form";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
+import { OrganizationModulesSection } from "@/components/domain/platform/organization-modules-section";
+import { getPlatformOrganizationModulesAction } from "@/server/actions/platform-modules";
 import { getOrganizationSupportSummaryAction } from "@/server/actions/support";
 
 export default async function PlatformOrganizationDetailPage({
@@ -35,10 +36,11 @@ export default async function PlatformOrganizationDetailPage({
 }) {
   await requirePlatformStaff();
   const { id } = await params;
-  const [{ org, members, invitations, legalAcceptances, onboarding }, planDetail, supportSummary] = await Promise.all([
+  const [{ org, members, invitations, legalAcceptances, onboarding }, planDetail, supportSummary, moduleDetail] = await Promise.all([
     getPlatformOrganizationDetailAction(id),
     getOrganizationPlanDetailAction(id),
     getOrganizationSupportSummaryAction(id),
+    getPlatformOrganizationModulesAction(id),
   ]);
   if (!org) notFound();
   const planLimits = planDetail.usage ? await getPlanLimits(planDetail.usage.planCode) : [];
@@ -72,24 +74,34 @@ export default async function PlatformOrganizationDetailPage({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{org.organizationName}</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Resumen de implementación de solo lectura. Tu organización activa no cambia al ver esta
+          Resumen de implementación de solo lectura. Tu empresa activa no cambia al ver esta
           pantalla. Esta información no es visible para usuarios normales de la empresa.
         </p>
       </header>
 
+      {/* T9F.1: la sección OPERATIVA es "Módulos y planes de la empresa".
+          El plan general legacy (organization_subscriptions) se muestra más
+          abajo SOLO como información heredada: no gobierna los módulos y ya
+          no es editable desde esta consola (el PlanChangeForm se retiró para
+          eliminar el control comercial contradictorio). */}
+      <OrganizationModulesSection
+        organizationId={id}
+        modules={moduleDetail.modules}
+        canManage={moduleDetail.canManage}
+      />
+
       {planDetail.usage ? (
         <section className="space-y-3">
-          <h2 className="eyebrow">Plan y uso</h2>
+          <h2 className="eyebrow">Plan heredado (informativo)</h2>
+          <p className="max-w-2xl text-xs text-ink-soft">
+            Información heredada de la suscripción general (organization_subscriptions). Desde
+            T9F.1 <strong>no controla</strong> el acceso, los límites ni el almacenamiento de los
+            módulos: cada módulo se gestiona arriba, en &ldquo;Módulos y planes de la
+            empresa&rdquo;. El uso y la cuota mostrados aquí son los agregados históricos a nivel
+            de empresa.
+          </p>
           <PlanUsageCard usage={planDetail.usage} limits={planLimits} />
         </section>
-      ) : null}
-
-      {planDetail.canManage ? (
-        <PlanChangeForm
-          organizationId={id}
-          currentPlanCode={planDetail.usage?.planCode ?? "demo"}
-          currentStatus={planDetail.usage?.planStatus ?? "active"}
-        />
       ) : null}
 
       <dl className="divide-y divide-hairline rounded-lg border border-hairline bg-surface">
@@ -163,7 +175,10 @@ export default async function PlatformOrganizationDetailPage({
       </section>
 
       <section className="space-y-3">
-        <h2 className="eyebrow">Historial de plan</h2>
+        <h2 className="eyebrow">Historial de plan heredado</h2>
+        <p className="text-xs text-ink-soft">
+          Historial de la suscripción general anterior a los planes por módulo. Solo informativo.
+        </p>
         <PlanHistoryList history={planDetail.history} />
       </section>
     </div>

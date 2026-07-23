@@ -178,12 +178,12 @@ check("Extra: el título y la categoría del borrador son obligatorios", () => {
 console.log("\nTrazaloop · maestro de documentos: consumo de almacenamiento y límites de plan\n");
 
 check("9. Documento descargable consume almacenamiento (checkStorageAvailable)", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkStorageAvailable(");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkStorageAvailable(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction", "checkCprStorageAvailable(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentReplaceAction", "checkCprStorageAvailable(");
 });
 
 check("10. Demo cuenta documentos vivos y descargables dentro del límite de 2 (documents_trazadocs)", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", 'checkResourceLimit("documents_trazadocs")');
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction", 'checkCprResourceLimit("documents_trazadocs")');
   // El límite documents_trazadocs (0050) es UNO SOLO — no existe un
   // recurso separado para documentos descargables — así que un documento
   // vivo y uno descargable cuentan contra el mismo tope de 2 en Demo.
@@ -209,13 +209,13 @@ check("13. Extra usa cuota de 5 GB (independiente del límite de 25 MB por archi
 console.log("\nTrazaloop · maestro de documentos: modo solo lectura (suspended/cancelled)\n");
 
 check("14. Suspended no puede subir documento", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkOrganizationCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction", "checkCprCanMutate()");
 });
 
 check("15. Suspended no puede editar metadatos", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "updateFileDocumentMetadataAction", "checkOrganizationCanMutate()");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkOrganizationCanMutate()");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", "checkOrganizationCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "updateFileDocumentMetadataAction", "checkCprCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentReplaceAction", "checkCprCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", "checkCprCanMutate()");
 });
 
 check("16. Suspended sí puede ver el maestro (nunca se bloquea lectura)", () => {
@@ -225,14 +225,17 @@ check("16. Suspended sí puede ver el maestro (nunca se bloquea lectura)", () =>
     assert(fnStart !== -1, `no se encontró ${readFn}`);
     const fnEnd = source.indexOf("\n}", fnStart);
     const fnBody = source.slice(fnStart, fnEnd);
-    assert(!fnBody.includes("checkOrganizationCanMutate"), `${readFn} es de solo lectura, nunca debía bloquearse por estado de plan`);
+    // T9F.1: la lectura sigue sin bloquearse por estado de plan/cuenta
+    // (checkCprCanMutate). El gate de acceso comercial del MÓDULO
+    // (requireCprForAction) en exportaciones/descargas es distinto y sí aplica.
+    assert(!fnBody.includes("checkOrganizationCanMutate") && !fnBody.includes("checkCprCanMutate"), `${readFn} es de solo lectura, nunca debía bloquearse por estado de plan`);
   }
 });
 
 console.log("\nTrazaloop · maestro de documentos: anti-duplicados cruzado\n");
 
 check("17. Título duplicado entre documento vivo y descargable se bloquea", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "findMasterDocumentByNormalizedTitle(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentUploadAction", "findMasterDocumentByNormalizedTitle(");
   const trazadocsSource = readSource("../../server/actions/trazadocs.ts");
   assert(trazadocsSource.includes("findFileDocumentByNormalizedTitle"), "createDocumentFromBlueprintAction/createCustomDocumentAction debían revisar también los títulos de documentos descargables");
   assert(trazadocsSource.includes("DUPLICATE_MASTER_TITLE_MESSAGE"), "debía usarse el mensaje de duplicado cruzado exacto");
@@ -291,7 +294,9 @@ check("22-23. Eliminar borrador solo funciona en draft; approved no se elimina",
 console.log("\nTrazaloop · maestro de documentos: aislamiento entre empresas\n");
 
 check("24. CSV no incluye datos de otra organización", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireActiveOrg()");
+  // T9F.1: la organización sigue saliendo SOLO de la sesión — ahora vía
+  // requireCprForAction(), que internamente ejecuta requireActiveOrg().
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireCprForAction()");
   const source = readSource("../../server/actions/trazadocs-master.ts");
   const fnStart = source.indexOf("export async function exportDocumentMasterCsvAction");
   const fnEnd = source.indexOf("\n}", fnStart);
@@ -315,14 +320,17 @@ check("25. Maestro no muestra documentos de otra organización", () => {
 console.log("\nTrazaloop · corrección: versión inicial real (Bloqueante 1)\n");
 
 check("Corrección 1. Crear documento descargable exitoso deja storage_path real en la fila principal", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "finalizeFileDocumentInitialVersion(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "finalizeFileDocumentUploadAction", "finalizeFileDocumentInitialVersionServer({");
   const source = readSource("../../server/actions/trazadocs-master.ts");
-  const fnStart = source.indexOf("export async function uploadFileDocumentAction");
+  // T9F.5B.1 · CARGA DIRECTA: el archivo ya no se sube dentro de la acción;
+  // la finalización vive en una acción SEPARADA que primero VERIFICA el
+  // objeto físico real y solo entonces fija la ruta.
+  const fnStart = source.indexOf("export async function finalizeFileDocumentUploadAction");
   const nextFnStart = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextFnStart);
   assert(
-    fnBody.indexOf("finalizeFileDocumentInitialVersion(") > fnBody.indexOf("uploadFileDocumentFile("),
-    "finalizeFileDocumentInitialVersion debía llamarse DESPUÉS de subir el archivo real, con la ruta real"
+    fnBody.indexOf("finalizeFileDocumentInitialVersionServer({") > fnBody.indexOf("verifyCprUploadedObject("),
+    "la finalización debía ocurrir DESPUÉS de verificar el objeto físico real"
   );
 });
 
@@ -355,36 +363,39 @@ check("Corrección 4. No se usa changeFileDocumentStatus para la versión inicia
 
 check("Corrección 5. Si falla la subida inicial, se elimina la fila temporal", () => {
   const source = readSource("../../server/actions/trazadocs-master.ts");
-  const fnStart = source.indexOf("export async function uploadFileDocumentAction");
-  const nextFnStart = source.indexOf("export async function", fnStart + 1);
-  const fnBody = source.slice(fnStart, nextFnStart);
-  assert(fnBody.includes("deleteFileDocumentRow("), "uploadFileDocumentAction debía limpiar la fila temporal si la subida fallaba");
+  // T9F.5B.1 · CARGA DIRECTA: la subida ocurre en el navegador, así que la
+  // limpieza de la fila temporal vive en las acciones que conocen el
+  // desenlace — finalize (verificación o RPC fallidas) y cancel (fallo del
+  // PUT o abandono). La fila solo se borra tras un retiro FÍSICO CONFIRMADO.
+  for (const fn of ["finalizeFileDocumentUploadAction", "cancelFileDocumentUploadAction"]) {
+    const start = source.indexOf(`export async function ${fn}`);
+    assert(start !== -1, `no se encontró ${fn}`);
+    const body = source.slice(start, source.indexOf("export async function", start + 1));
+    assert(body.includes("compensateFailedCprUpload("), `${fn}: compensación del intent`);
+    assert(body.includes("deleteFileDocumentRow("), `${fn}: limpieza de la fila temporal`);
+    assert(/resolution\.resolved/.test(body), `${fn}: solo limpia tras retiro CONFIRMADO`);
+  }
+  const beginStart = source.indexOf("export async function beginFileDocumentUploadAction");
+  const beginBody = source.slice(beginStart, source.indexOf("export async function", beginStart + 1));
   assert(
-    fnBody.includes("No fue posible subir el archivo. No se creó el documento."),
-    "debía devolver el mensaje exacto pedido tras limpiar exitosamente"
-  );
-  assert(
-    fnBody.includes("El documento no quedó completamente creado. Elimina el borrador antes de intentar de nuevo."),
-    "debía devolver el mensaje exacto pedido si ni siquiera se pudo limpiar la fila"
+    beginBody.includes("El documento no quedó completamente creado. Elimina el borrador antes de intentar de nuevo."),
+    "begin debía conservar el mensaje exacto cuando ni siquiera se pudo limpiar la fila"
   );
 });
 
 check("Corrección 12. No quedan storage_path vacíos en documentos creados exitosamente", () => {
-  // uploadFileDocumentAction (server/actions/trazadocs-master.ts) solo
-  // llega a `return { error: null, success: true, documentId }` DESPUÉS
-  // de finalizeFileDocumentInitialVersion — que es la única función que
-  // escribe un storage_path real en la fila principal. Cualquier fallo
-  // antes de ese punto termina en un `return { error: ... }` temprano
-  // (con limpieza de la fila si aplica), nunca en un "éxito" a medias.
-  // Verificado end-to-end contra PostgreSQL real: la RPC deja
-  // storage_path/file_name/mime_type/size_bytes reales tanto en la fila
-  // principal como en la versión v1. Ver README.
+  // T9F.5B.1 · finalizeFileDocumentUploadAction solo llega a
+  // `return { error: null, success: true, documentId }` DESPUÉS de
+  // finalizeFileDocumentInitialVersionServer — la única función que escribe
+  // un storage_path real en la fila principal. Cualquier fallo antes de ese
+  // punto termina en un `return { error: ... }` temprano (con limpieza de la
+  // fila si el retiro físico se confirmó), nunca en un "éxito" a medias.
   const source = readSource("../../server/actions/trazadocs-master.ts");
-  const fnStart = source.indexOf("export async function uploadFileDocumentAction");
+  const fnStart = source.indexOf("export async function finalizeFileDocumentUploadAction");
   const nextFnStart = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextFnStart);
-  const successIndex = fnBody.indexOf("success: true, documentId };");
-  const finalizeIndex = fnBody.indexOf("finalizeFileDocumentInitialVersion(");
+  const successIndex = fnBody.indexOf("success: true, documentId: intent.resourceId };");
+  const finalizeIndex = fnBody.indexOf("finalizeFileDocumentInitialVersionServer({");
   assert(successIndex > finalizeIndex && finalizeIndex !== -1, "el retorno de éxito debía ocurrir después de confirmar la ruta real del archivo");
 });
 
@@ -426,13 +437,16 @@ console.log("\nTrazaloop · corrección: sin archivos huérfanos al reemplazar (
 
 check("Corrección 10. Reemplazo de archivo valida permisos/estado ANTES de subir", () => {
   const source = readSource("../../server/actions/trazadocs-master.ts");
-  const fnStart = source.indexOf("export async function replaceFileDocumentFileAction");
+  const fnStart = source.indexOf("export async function beginFileDocumentReplaceAction");
   const nextFnStart = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextFnStart);
+  // T9F.5B.1 · El navegador solo puede subir a una ruta RESERVADA: el chequeo
+  // de rol/estado debe ocurrir antes de crear la reserva, que es lo único que
+  // autoriza el PUT posterior.
   const roleCheckIndex = fnBody.indexOf("canReplaceFileDocumentFile(");
-  const uploadIndex = fnBody.indexOf("uploadFileDocumentFile(");
-  assert(roleCheckIndex !== -1 && uploadIndex !== -1, "no se encontraron ambos puntos a comparar");
-  assert(roleCheckIndex < uploadIndex, "el chequeo de rol/estado debía ocurrir ANTES de subir el archivo, no después");
+  const reserveIndex = fnBody.indexOf("beginCprStorageUpload(");
+  assert(roleCheckIndex !== -1 && reserveIndex !== -1, "no se encontraron ambos puntos a comparar");
+  assert(roleCheckIndex < reserveIndex, "el chequeo de rol/estado debía ocurrir ANTES de reservar la subida");
 
   // Mismas reglas exactas que la RPC SQL (approved: solo admin/quality;
   // obsolete: nunca).
@@ -444,13 +458,19 @@ check("Corrección 10. Reemplazo de archivo valida permisos/estado ANTES de subi
 
 check("Corrección 11. Si falla la RPC después de subir el reemplazo, se intenta borrar el archivo subido", () => {
   const source = readSource("../../server/actions/trazadocs-master.ts");
-  const fnStart = source.indexOf("export async function replaceFileDocumentFileAction");
+  // T9F.4 (§11-§17) + T9F.5B.1: el INTENT se crea en `begin`, antes de que el
+  // navegador suba nada, así que la compensación es la RESOLUCIÓN server-only
+  // del intent (retiro inspeccionado; sin confirmación, los bytes siguen
+  // contando).
+  const beginStart = source.indexOf("export async function beginFileDocumentReplaceAction");
+  const beginBody = source.slice(beginStart, source.indexOf("export async function", beginStart + 1));
+  assert(beginBody.includes("beginCprStorageUpload("), "el intent durable se crea en begin, antes del PUT del navegador");
+  const fnStart = source.indexOf("export async function finalizeFileDocumentReplaceAction");
   const nextFnStart = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextFnStart);
-  assert(fnBody.includes("deleteFileDocumentStorageObject(storagePath)"), "debía intentarse limpiar el objeto huérfano si replaceFileDocumentFile fallaba");
-  const rpcCallIndex = fnBody.indexOf("replaceFileDocumentFile(id,");
-  const cleanupIndex = fnBody.indexOf("deleteFileDocumentStorageObject(storagePath)");
-  assert(rpcCallIndex !== -1 && cleanupIndex !== -1 && cleanupIndex > rpcCallIndex, "la limpieza debía ocurrir después del intento de RPC, dentro del manejo de su error");
+  const rpcCallIndex = fnBody.indexOf("replaceFileDocumentFileServer({");
+  const cleanupIndex = fnBody.lastIndexOf("compensateFailedCprUpload(");
+  assert(rpcCallIndex !== -1 && cleanupIndex !== -1 && cleanupIndex > rpcCallIndex, "la compensación server-only del intent debía ocurrir después del intento de RPC, dentro del manejo de su error");
 });
 
 if (failures > 0) {

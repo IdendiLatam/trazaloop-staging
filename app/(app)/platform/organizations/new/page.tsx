@@ -22,7 +22,7 @@ export default async function NewPlatformOrganizationPage() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Nueva empresa</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Crea una organización desde la consola interna y vincula o invita a su administrador
+          Crea una empresa desde la consola interna y vincula o invita a su administrador
           inicial.
         </p>
       </header>
