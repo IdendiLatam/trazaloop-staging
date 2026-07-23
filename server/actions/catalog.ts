@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkCprResourceLimit, checkCprCanMutate } from "@/server/actions/module-plans";
 
 export type CatalogActionState = { error: string | null };
 
@@ -34,12 +34,12 @@ export async function upsertSupplierAction(
   // Sprint 10A (corrección final): empresa suspended/cancelled queda en
   // modo solo lectura — ANTES de cualquier otro chequeo, para crear o
   // editar por igual.
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   // Sprint 10A (Parte 8): límite de plan solo aplica a CREAR, no a editar.
   if (!id) {
-    const limitCheck = await checkResourceLimit("suppliers");
+    const limitCheck = await checkCprResourceLimit("suppliers");
     if (!limitCheck.allowed) return { error: limitCheck.error };
   }
 
@@ -61,7 +61,7 @@ export async function upsertSupplierAction(
 
 export async function deleteSupplierAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -88,7 +88,7 @@ export async function upsertFamilyAction(
 
   if (!name) return { error: "El nombre de la familia es obligatorio." };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const payload = { name, description };
@@ -109,7 +109,7 @@ export async function upsertFamilyAction(
 
 export async function deleteFamilyAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -138,11 +138,11 @@ export async function upsertProductAction(
 
   if (!code || !name) return { error: "Código y nombre son obligatorios." };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   if (!id) {
-    const limitCheck = await checkResourceLimit("products");
+    const limitCheck = await checkCprResourceLimit("products");
     if (!limitCheck.allowed) return { error: limitCheck.error };
   }
 
@@ -177,7 +177,7 @@ export async function upsertProductAction(
 
 export async function deleteProductAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -206,11 +206,11 @@ export async function upsertMaterialAction(
     return { error: "Nombre y clasificación son obligatorios." };
   }
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   if (!id) {
-    const limitCheck = await checkResourceLimit("materials");
+    const limitCheck = await checkCprResourceLimit("materials");
     if (!limitCheck.allowed) return { error: limitCheck.error };
   }
 
@@ -232,7 +232,7 @@ export async function upsertMaterialAction(
 
 export async function deleteMaterialAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -269,7 +269,7 @@ export async function reclassifyMaterialAction(
     return { error: "La reclasificación exige una evidencia de soporte." };
   }
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const { error } = await supabase

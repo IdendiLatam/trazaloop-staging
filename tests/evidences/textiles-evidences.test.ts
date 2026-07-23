@@ -180,7 +180,7 @@ check("13. Storage: bucket privado `evidences` con ruta {org}/textiles/… (pol�
   assert(actionsSrc.includes('"evidences"') || actionsSrc.includes("EVIDENCES_BUCKET"), "las actions debían usar el bucket evidences");
   const storage0015 = read("supabase/migrations/0015_storage.sql");
   assert(storage0015.includes("public: ") === false && storage0015.includes("false"), "el bucket debía seguir privado (0015 intacto)");
-  assert(actionsSrc.includes("checkStorageAvailable"), "la subida debía verificar la cuota de almacenamiento");
+  assert(actionsSrc.includes("checkTextilesStorageAvailable"), "la subida debía verificar la cuota de almacenamiento del módulo (T9F.1)");
   assert(actionsSrc.includes("TEXTILE_EVIDENCE_MAX_FILE_BYTES") && actionsSrc.includes("isAllowedTextileEvidenceMime"), "la subida debía validar tamaño y mime");
   assert(!isAllowedTextileEvidenceMime("application/x-msdownload") && !isAllowedTextileEvidenceMime("application/octet-stream"), "los ejecutables debían rechazarse");
   assert(isAllowedTextileEvidenceMime("application/pdf") && isAllowedTextileEvidenceMime("image/png"), "PDF e imagen debían permitirse");
@@ -198,7 +198,7 @@ console.log("\n— Server actions, roles y rutas —");
 
 check("15. Todas las server actions pasan por la triple guarda + modo lectura", () => {
   assert(actionsSrc.includes("requireTextilesForAction"), "sin guard del módulo");
-  assert(actionsSrc.includes("checkOrganizationCanMutate"), "sin verificación de solo lectura");
+  assert(actionsSrc.includes("checkTextilesCanMutate"), "sin verificación de solo lectura (T9F.1: por módulo)");
   const exported = (actionsSrc.match(/export async function \w+Action/g) ?? []).length;
   const gates = (actionsSrc.match(/await gate\(\)/g) ?? []).length;
   // archiveTextileEvidenceAction delega en updateTextileEvidenceStatusAction.

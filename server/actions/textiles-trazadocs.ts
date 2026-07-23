@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
 import { requireSession } from "@/lib/auth/require-session";
-import { checkResourceLimit, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesResourceLimit, checkTextilesCanMutate } from "@/server/actions/module-plans";
 import {
   getBlueprintSections,
   insertDocument,
@@ -90,11 +90,11 @@ export async function createTextileTrazadocFromTemplateAction(
   if (!canCreateDocument(g.ok.roleCode as never)) {
     return { error: "Tu rol no permite crear documentos en TrazaDocs Textil." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   // Mismo límite de plan que TrazaDocs CPR: los documentos vivos cuentan
   // juntos, sin planes por módulo.
-  const limitCheck = await checkResourceLimit("documents_trazadocs");
+  const limitCheck = await checkTextilesResourceLimit("documents_trazadocs");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   const blueprintId = String(formData.get("blueprint_id") ?? "");
@@ -161,7 +161,7 @@ export async function updateTextileTrazadocSectionsAction(
 ): Promise<TextileTrazadocsActionState> {
   const g = await gate();
   if (!g.ok) return { error: g.error };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
@@ -204,7 +204,7 @@ async function textileTransition(
   toStatus: DocumentStatus,
   note: string | null
 ): Promise<TextileTrazadocsActionState> {
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   // El documento debe ser TEXTIL y de la organización activa — jamás un
   // documento CPR desde rutas textiles.

@@ -271,7 +271,8 @@ check("18. Las actions exigen módulo habilitado además de empresa activa", () 
     "el guard debía validar flag + habilitación"
   );
   assert(guard.includes("requireActiveOrg"), "el guard debía validar la empresa activa");
-  assert(actions.includes("checkOrganizationCanMutate"), "las actions debían respetar el modo solo lectura de plataforma");
+  // T9F.1: el bloqueo se conserva vía checkTextilesCanMutate (incluye estado de cuenta).
+  assert(actions.includes("checkTextilesCanMutate"), "las actions debían respetar el modo solo lectura de plataforma");
 });
 
 if (failures > 0) {

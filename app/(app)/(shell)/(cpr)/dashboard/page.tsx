@@ -6,7 +6,8 @@ import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getOrganizationModules } from "@/lib/db/organizations";
 import { getTraceabilityMetrics } from "@/lib/db/traceability";
-import { getOrganizationUsage, getPlanLimits } from "@/lib/db/plans";
+import { getModulePlanUsageSummary } from "@/lib/db/module-access";
+import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
 import { getOrganizationOnboardingStatus } from "@/lib/db/onboarding";
 import { listSupportTickets } from "@/lib/db/support";
 import { RoleBadge, ModuleBadge } from "@/components/ui/badge";
@@ -19,14 +20,18 @@ export default async function DashboardPage() {
   // (bloquea Demo vencido / módulo deshabilitado con redirect a /modules).
   const activeOrg = await requireCprModule();
 
-  const [modules, metrics, usage, onboarding, tickets] = await Promise.all([
+  // T9F.1: el plan, la cuota y el uso mostrados son los del MÓDULO CPR
+  // (organization_modules + v_organization_module_usage), nunca el plan
+  // legacy org-wide de organization_subscriptions.
+  const [modules, metrics, planSummary, onboarding, tickets] = await Promise.all([
     getOrganizationModules(activeOrg.organizationId),
     getTraceabilityMetrics(activeOrg.organizationId),
-    getOrganizationUsage(activeOrg.organizationId),
+    getModulePlanUsageSummary(activeOrg.organizationId, CPR_MODULE_CODE),
     getOrganizationOnboardingStatus(activeOrg.organizationId),
     listSupportTickets(activeOrg.organizationId),
   ]);
-  const limits = usage ? await getPlanLimits(usage.planCode) : [];
+  const usage = planSummary?.usage ?? null;
+  const limits = planSummary?.limits ?? [];
   const openTicketsCount = tickets.filter((t) =>
     ["open", "assigned", "waiting_customer", "in_progress"].includes(t.status)
   ).length;

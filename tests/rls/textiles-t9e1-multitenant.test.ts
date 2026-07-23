@@ -98,7 +98,7 @@ async function enableTextiles(orgId: string) {
   const { error } = await admin
     .from("organization_modules")
     .upsert(
-      { organization_id: orgId, module_code: "textiles", enabled: true },
+      { organization_id: orgId, module_code: "textiles", enabled: true, access_mode: "extra", access_expires_at: null },
       { onConflict: "organization_id,module_code" }
     );
   if (error) throw new Error(`enable textiles: ${error.message}`);

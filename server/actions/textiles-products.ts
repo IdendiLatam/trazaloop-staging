@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate, checkTextilesResourceLimit } from "@/server/actions/module-plans";
 import {
   textileCollectionBelongsToOrg,
   textileProductBelongsToOrg,
@@ -60,7 +60,7 @@ type GateOk = { organizationId: string };
 async function gate(): Promise<{ ok: GateOk | null; error: string | null }> {
   const access = await requireTextilesForAction();
   if (access.org === null) return { ok: null, error: access.error };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { ok: null, error: mutateCheck.error };
   return { ok: { organizationId: access.org.organizationId }, error: null };
 }
@@ -224,6 +224,11 @@ export async function createTextileProductAction(
 ): Promise<TextileProductsActionState> {
   const g = await gate();
   if (!g.ok) return { error: g.error };
+  // T9F.2 · Bloqueador 1: límite del plan del MÓDULO Textiles ANTES del
+  // INSERT (conteo real en BD vía check_module_resource_allowance; Demo
+  // limitado, Full/Extra ilimitados; fail-closed si no puede verificarse).
+  const limitCheck = await checkTextilesResourceLimit("products");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
   const validated = await validateProductInput(g.ok.organizationId, input);
   if (validated.row === null) return { error: validated.error };
 

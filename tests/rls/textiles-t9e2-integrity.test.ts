@@ -163,7 +163,7 @@ async function main() {
     await admin
       .from("organization_modules")
       .upsert(
-        { organization_id: org, module_code: "textiles", enabled: true },
+        { organization_id: org, module_code: "textiles", enabled: true, access_mode: "extra", access_expires_at: null },
         { onConflict: "organization_id,module_code" }
       );
   }

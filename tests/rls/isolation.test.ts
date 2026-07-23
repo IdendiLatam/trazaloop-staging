@@ -116,6 +116,18 @@ async function main() {
     assert(orgB, "sin id de organización B");
   });
 
+  // T9F.3: el aprovisionamiento de 0100 deja los módulos funcionales en Demo
+  // temporal (48 h) y los triggers de límites de 0101 aplican en BD. Esta
+  // suite valida AISLAMIENTO (no límites comerciales): sus organizaciones se
+  // elevan a 'extra' (ilimitado) para que ningún fixture roce un límite.
+  for (const org of [orgA, orgB]) {
+    const { error } = await admin
+      .from("organization_modules")
+      .update({ enabled: true, access_mode: "extra", access_expires_at: null })
+      .eq("organization_id", org);
+    if (error) throw new Error(`fixture extra (${org}): ${error.message}`);
+  }
+
   // 9: la RPC creó organization + membership admin + módulos base.
   await check("9. create_organization creó org + membership admin + módulos base", async () => {
     const { data: org } = await userA.client

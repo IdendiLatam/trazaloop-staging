@@ -121,7 +121,7 @@ check("9. La server action valida MIME, extensión y tamaño (la barrera real)",
   assert(ACTIONS.includes("isAllowedTextileEvidenceMime"), "valida MIME");
   assert(ACTIONS.includes("isAllowedTextileEvidenceExtension"), "valida extensión");
   assert(ACTIONS.includes("TEXTILE_EVIDENCE_MAX_FILE_BYTES"), "valida tamaño máximo");
-  assert(ACTIONS.includes("checkStorageAvailable"), "la cuota de almacenamiento se verifica antes de subir");
+  assert(ACTIONS.includes("checkTextilesStorageAvailable"), "la cuota de almacenamiento del MÓDULO se verifica antes de subir (T9F.1)");
 });
 
 check("10. El cliente pre-valida con la MISMA regla pura e informa condiciones antes de subir", () => {
@@ -136,13 +136,14 @@ check("10. El cliente pre-valida con la MISMA regla pura e informa condiciones a
 });
 
 check("11. Fallo posterior de BD → limpieza del archivo huérfano (sin filas ni archivos colgantes)", () => {
-  // T9E.1: la finalización retira el objeto y deja el intento en 'failed'
-  // (registro recuperable para la limpieza administrativa) cuando el
-  // insert no procede.
-  // T9E.2: objeto/firma inválidos → retiro + failed vía RPC; y el insert
-  // ya es ATÓMICO con el consumo (RPC 0097), sin rama TS intermedia.
+  // T9E.1: la finalización deja el intento en 'failed' cuando el insert no
+  // procede, y T9F.4 · §17 endurece la limpieza: el retiro del objeto se
+  // INSPECCIONA (resultado real de removeTextileEvidenceObject) y se
+  // registra en la RPC de limpieza — solo un retiro confirmado libera los
+  // bytes; el fallo deja el intento failed como candidato CONTABILIZADO.
+  // T9E.2: el insert sigue siendo ATÓMICO con el consumo (RPC 0097).
   assert(
-    /removeTextileEvidenceObject\(intent\.id\);[\s\S]{0,240}markTextileEvidenceUploadFailedRpc\(intent\.id\)/.test(
+    /markTextileEvidenceUploadFailedRpc\(intent\.id\);[\s\S]{0,420}const removed = await removeTextileEvidenceObject\(intent\.id\);[\s\S]{0,160}recordTextileUploadIntentCleanupRpc\([a-zA-Z]+, intent\.id, removed\)/.test(
       ACTIONS
     ),
     "el objeto rechazado debía retirarse y el intento quedar failed"

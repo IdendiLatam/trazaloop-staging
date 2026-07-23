@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkResourceLimit, checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
+import {
+  resolveCprUploadIntentObject,
+  removeQueuedStorageObject,
+} from "@/lib/db/storage-deletion";
+import { checkCprResourceLimit, checkCprStorageAvailable, checkCprCanMutate } from "@/server/actions/module-plans";
+import {
+  beginCprStorageUpload,
+  cancelCprStorageUpload,
+  finalizeEvidenceAttachment,
+} from "@/lib/db/storage-intents";
 
 export type EvidenceActionState = { error: string | null; warning?: string | null };
 
@@ -34,16 +43,16 @@ export async function createEvidenceAction(
   // resultado (ambos ya revisan el estado del plan primero), pero
   // explícito aquí para que la regla sea uniforme y clara en las 4
   // acciones de este archivo.
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   // Sprint 10A (Parte 8): límite de plan — Demo permite 1 evidencia.
-  const limitCheck = await checkResourceLimit("evidences");
+  const limitCheck = await checkCprResourceLimit("evidences");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
   // Y cuota de almacenamiento, si viene archivo adjunto.
   if (file && file.size > 0) {
-    const storageCheck = await checkStorageAvailable(file.size);
+    const storageCheck = await checkCprStorageAvailable(file.size);
     if (!storageCheck.allowed) return { error: storageCheck.error };
   }
 
@@ -64,28 +73,75 @@ export async function createEvidenceAction(
   if (error || !inserted) return { error: "No fue posible crear la evidencia." };
 
   if (file && file.size > 0) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${org.organizationId}/${inserted.id}/${safeName}`;
+    // T9F.4 · §11-§13: la RESERVA es la autoridad — antes de subir un solo
+    // byte existe un intent DURABLE (referencia + bytes reservados bajo el
+    // lock de cuota del módulo). La ruta la decide la BASE desde la fila
+    // de la evidencia; el pre-chequeo de arriba solo mejora el mensaje.
+    const begin = await beginCprStorageUpload({
+      resourceType: "evidence",
+      resourceId: inserted.id,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      fileMimeType: file.type || "application/octet-stream",
+    });
+    if (!begin.intent) {
+      revalidatePath("/evidences");
+      return {
+        error: `La evidencia se creó, pero el archivo no pudo reservarse: ${begin.error ?? "intenta adjuntarlo de nuevo."}`,
+      };
+    }
     const bytes = await file.arrayBuffer();
-
     const { error: uploadError } = await supabase.storage
-      .from("evidences")
-      .upload(path, bytes, { contentType: file.type || "application/octet-stream" });
+      .from(begin.intent.bucketId)
+      .upload(begin.intent.objectPath, bytes, {
+        contentType: file.type || "application/octet-stream",
+      });
 
     if (uploadError) {
+      // Sin objeto subido: cancelar la reserva y RESOLVERLA server-only
+      // (verifica la inexistencia real antes de liberar los bytes).
+      const cancelled = await cancelCprStorageUpload(begin.intent.intentId);
+      if (cancelled) {
+        await resolveCprUploadIntentObject({
+          intentId: begin.intent.intentId,
+          bucketId: begin.intent.bucketId,
+          objectPath: begin.intent.objectPath,
+        });
+      }
+      revalidatePath("/evidences");
       return {
         error:
           "La evidencia se creó, pero el archivo no pudo subirse. Intenta adjuntarlo de nuevo.",
       };
     }
 
-    // Sprint 10A (Parte 6): tamaño real del archivo, para medir uso de
-    // almacenamiento contra la cuota del plan.
-    await supabase
-      .from("evidences")
-      .update({ storage_path: path, size_bytes: file.size })
-      .eq("id", inserted.id)
-      .eq("organization_id", org.organizationId);
+    // T9F.4 · §15: la finalización AUTORITATIVA fija ruta y tamaño en la
+    // misma transacción que consume la reserva (tamaño real = declarado).
+    const finalized = await finalizeEvidenceAttachment(begin.intent.intentId, file.size);
+    if (!finalized.ok) {
+      console.error("[evidences] finalización de adjunto fallida; resolviendo intent", {
+        op: "createEvidenceAction.finalizeEvidenceAttachment",
+      });
+      // El objeto YA subido conserva su referencia durable (el intent) y
+      // sigue contabilizado; la resolución server-only intenta el retiro
+      // CONFIRMADO — jamás se libera sin confirmación.
+      await cancelCprStorageUpload(begin.intent.intentId);
+      const resolution = await resolveCprUploadIntentObject({
+        intentId: begin.intent.intentId,
+        bucketId: begin.intent.bucketId,
+        objectPath: begin.intent.objectPath,
+      });
+      revalidatePath("/evidences");
+      if (resolution.resolved) {
+        return {
+          error: `La evidencia se creó, pero el archivo no pudo registrarse y fue retirado (${finalized.error ?? "error desconocido"}). Intenta adjuntarlo de nuevo.`,
+        };
+      }
+      return {
+        error:
+          "La evidencia se creó, pero el archivo no pudo registrarse: quedó pendiente de retiro físico y seguirá contando en tu almacenamiento hasta completarse la limpieza.",
+      };
+    }
   }
 
   revalidatePath("/evidences");
@@ -119,7 +175,7 @@ export async function validateEvidenceAction(
   formData: FormData
 ): Promise<EvidenceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 
@@ -154,34 +210,55 @@ export async function deleteEvidenceAction(
   _prev: EvidenceActionState,
   formData: FormData
 ): Promise<EvidenceActionState> {
-  const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  // La sesión y la organización activa siguen siendo requisito de entrada;
+  // la autorización REAL del borrado la aplica la RPC (espejo de la RLS).
+  await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 
-  const { data, error } = await supabase
-    .from("evidences")
-    .delete()
-    .eq("id", String(formData.get("id") ?? ""))
-    .eq("organization_id", org.organizationId)
-    .select("id");
+  // T9F.3 · §18: la RPC atómica queue_and_delete_evidence (0101 §3) encola
+  // el objeto físico como pending_delete (con su tamaño REAL, o NULL si es
+  // desconocido) Y elimina la fila en UNA transacción — la marca nace ANTES
+  // de perder la referencia. La autorización es el ESPEJO exacto de la
+  // política RLS de DELETE y el guard de integridad sigue vigente.
+  const { data, error } = await supabase.rpc("queue_and_delete_evidence", {
+    p_evidence_id: String(formData.get("id") ?? ""),
+  });
 
   if (error) {
+    const denied =
+      error.message.includes("DELETE_NOT_ALLOWED") || error.message.includes("EVIDENCE_NOT_FOUND");
     return {
-      error: evidenceErrorMessage(
-        error.message,
-        "No fue posible eliminar la evidencia."
-      ),
+      error: denied
+        ? "No se eliminó: la evidencia no existe, está validada o tu rol no permite eliminarla."
+        : evidenceErrorMessage(error.message, "No fue posible eliminar la evidencia."),
     };
   }
-  if ((data ?? []).length === 0) {
-    return {
-      error:
-        "No se eliminó: la evidencia no existe, está validada o tu rol no permite eliminarla.",
-    };
+  const payload = data as { deleted?: unknown; object?: { bucket_id?: unknown; object_path?: unknown } | null } | null;
+  if (!payload || payload.deleted !== true) {
+    return { error: "No fue posible eliminar la evidencia." };
+  }
+
+  // Fila fuera y objeto encolado. El retiro físico es server-only y se
+  // CONFIRMA en la cola: deleted libera cuota; delete_failed sigue contando.
+  let pendingRemoval = false;
+  const queued = payload.object;
+  if (queued && queued.bucket_id === "evidences" && typeof queued.object_path === "string") {
+    const { removed } = await removeQueuedStorageObject({
+      bucketId: "evidences",
+      objectPath: queued.object_path,
+    });
+    if (!removed) pendingRemoval = true;
   }
 
   revalidatePath("/evidences");
+  if (pendingRemoval) {
+    return {
+      error:
+        "La evidencia se eliminó, pero su archivo quedó pendiente de retiro físico y seguirá contando en tu almacenamiento hasta completarse la limpieza.",
+    };
+  }
   return { error: null };
 }
 
@@ -195,7 +272,7 @@ export async function linkEvidenceAction(
   formData: FormData
 ): Promise<EvidenceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 

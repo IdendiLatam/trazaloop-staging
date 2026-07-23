@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate } from "@/server/actions/module-plans";
 import { getTechnicalPassport } from "@/lib/db/textiles-passport";
 import {
   createPassportShareLink,
@@ -44,7 +44,7 @@ export async function createPassportShareLinkAction(input: {
 }): Promise<ShareActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const passport = await getTechnicalPassport(g.organizationId, input.passportId);
@@ -69,7 +69,7 @@ export async function revokePassportShareLinkAction(
 ): Promise<ShareActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const { error } = await revokePassportShareLink(g.organizationId, linkId);
@@ -86,7 +86,7 @@ export async function setPassportShareLinkDisabledAction(
 ): Promise<ShareActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const { error } = await setPassportShareLinkDisabled(g.organizationId, linkId, disabled);
@@ -103,7 +103,7 @@ export async function updatePassportShareLinkExpiryAction(
 ): Promise<ShareActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const { error } = await updatePassportShareLinkExpiry(g.organizationId, linkId, expiryFromChoice(expiryChoice));

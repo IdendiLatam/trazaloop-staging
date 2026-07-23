@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate } from "@/server/actions/module-plans";
 import {
   getTextileSupplierUsage,
   getTextileMaterialUsage,
@@ -61,7 +61,7 @@ type GateOk = { organizationId: string; roleCode: string };
 async function gate(): Promise<{ ok: GateOk | null; error: string | null }> {
   const access = await requireTextilesForAction();
   if (access.org === null) return { ok: null, error: access.error };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { ok: null, error: mutateCheck.error };
   return {
     ok: { organizationId: access.org.organizationId, roleCode: access.org.roleCode },

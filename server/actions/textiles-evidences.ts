@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate, checkStorageAvailable } from "@/server/actions/plans";
+import { checkTextilesCanMutate, checkTextilesResourceLimit, checkTextilesStorageAvailable } from "@/server/actions/module-plans";
 import {
   textileEvidenceBelongsToOrg,
   textileEntityBelongsToOrg,
@@ -15,6 +15,7 @@ import {
   recordTextileUploadIntentCleanupRpc,
   getTextileEvidenceUploadIntent,
   listExpiredPendingTextileUploadIntents,
+  listFailedTextileUploadIntents,
   listRecentlyExpiredTextileUploadIntents,
   textileEvidenceExistsForPath,
   getTextileEvidenceObjectInfo,
@@ -52,7 +53,7 @@ import { cleanText, isOneOf, validateCatalogName } from "@/lib/domain/textiles-c
  *    {organization_id}/textiles/{evidence_id}/{filename} — el primer
  *    segmento sigue siendo la organización, como en CPR (D-T5-01);
  *  · cuota global de almacenamiento verificada antes de subir
- *    (checkStorageAvailable); NO se aplica checkResourceLimit("evidences")
+ *    (checkTextilesStorageAvailable); NO se aplica checkTextilesResourceLimit("evidences")
  *    porque ese límite cuenta la tabla CPR y los planes por módulo están
  *    fuera de alcance (documentado en el reporte T5);
  *  · cambiar estado exige admin/quality (validado aquí Y por el trigger
@@ -77,7 +78,7 @@ type GateOk = { organizationId: string; roleCode: string };
 async function gate(): Promise<{ ok: GateOk | null; error: string | null }> {
   const access = await requireTextilesForAction();
   if (access.org === null) return { ok: null, error: access.error };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { ok: null, error: mutateCheck.error };
   return {
     ok: { organizationId: access.org.organizationId, roleCode: access.org.roleCode },
@@ -164,6 +165,19 @@ async function cleanupExpiredUploadIntents(
   limit = 3
 ): Promise<void> {
   try {
+    // T9F.4 · Bloqueador 5: los intentos FAILED sin resolución confirmada
+    // SIGUEN contando sus bytes — el mismo barrido oportunista los resuelve
+    // (retiro REAL inspeccionado → record marca 'expired' solo si se
+    // confirmó; un fallo los deja como candidatos contabilizados).
+    const failed = await listFailedTextileUploadIntents(organizationId, limit);
+    for (const intent of failed) {
+      if (await textileEvidenceExistsForPath(organizationId, intent.objectPath)) {
+        await recordTextileUploadIntentCleanupRpc(actorId, intent.id, false);
+        continue;
+      }
+      const removed = await removeTextileEvidenceObject(intent.id);
+      await recordTextileUploadIntentCleanupRpc(actorId, intent.id, removed);
+    }
     const expired = await listExpiredPendingTextileUploadIntents(organizationId, limit);
     for (const intent of expired) {
       // Barrera: jamás retirar el archivo de una evidencia registrada.
@@ -216,6 +230,21 @@ function beginErrorMessage(code: string): string {
     return "Extensión de archivo no permitida (.pdf, .png, .jpg, .jpeg, .webp, .docx, .xlsx o .csv).";
   }
   if (code.includes("ROLE_NOT_ALLOWED")) return UPLOAD_ROLE_ERROR;
+  // T9F.3 · Reservas atómicas en BD (0101 §6): la propia base rechaza el
+  // begin cuando el módulo no está operable o la RESERVA (unidad + bytes,
+  // contando las reservas activas de toda la organización) no cabe.
+  if (code.includes("MODULE_ACCESS_BLOCKED")) {
+    return "El módulo Textiles no está disponible para cargar evidencias (plan vencido, deshabilitado o sin asignar).";
+  }
+  if (code.includes("EVIDENCE_LIMIT_EXCEEDED")) {
+    return "Tu plan alcanzó el límite de evidencias del módulo Textiles (las cargas en curso también cuentan). Mejora el plan para continuar.";
+  }
+  if (code.includes("STORAGE_QUOTA_EXCEEDED")) {
+    return "No hay capacidad de almacenamiento disponible para este archivo (las cargas en curso también comprometen espacio).";
+  }
+  if (code.includes("STORAGE_UNVERIFIABLE") || code.includes("USAGE_UNVERIFIABLE") || code.includes("QUOTA_UNVERIFIABLE")) {
+    return "No fue posible verificar los límites o la capacidad disponible. Inténtalo nuevamente.";
+  }
   return "No fue posible iniciar la carga. Intenta de nuevo.";
 }
 
@@ -248,6 +277,12 @@ export async function beginTextileEvidenceUploadAction(
   if (!g.ok) return fail(g.error ?? "Sin acceso.");
   if (!canUploadTextileEvidence(g.ok.roleCode)) return fail(UPLOAD_ROLE_ERROR);
 
+  // T9F.2 · Bloqueador 1: límite de EVIDENCIAS del plan del módulo Textiles
+  // ANTES de emitir cualquier autorización de subida (Demo: 1; Full/Extra:
+  // ilimitadas; fail-closed si el conteo no puede verificarse).
+  const limitCheck = await checkTextilesResourceLimit("evidences");
+  if (!limitCheck.allowed) return fail(limitCheck.error ?? "Límite del plan alcanzado.");
+
   // T9E.2 · La METADATA FUNCIONAL se valida PRIMERO (mismo esquema de
   // dominio que usaba la finalización): título, tipo, fechas y vigencias
   // inválidas se rechazan antes de emitir cualquier autorización de subida.
@@ -277,7 +312,7 @@ export async function beginTextileEvidenceUploadAction(
   }
   const declared = { name: fileName, type: declaredMime, size: declaredSize };
 
-  const storageCheck = await checkStorageAvailable(declared.size);
+  const storageCheck = await checkTextilesStorageAvailable(declared.size);
   if (!storageCheck.allowed) return fail(storageCheck.error ?? "Sin almacenamiento disponible.");
 
   const actorId = await currentUserId();
@@ -312,6 +347,11 @@ export async function beginTextileEvidenceUploadAction(
   const signed = await createTextileEvidenceSignedUploadUrl(objectPath);
   if (!signed) {
     await markTextileEvidenceUploadFailedRpc(intentId);
+    // T9F.4 · §17: el failed queda contabilizado hasta resolución REAL —
+    // aquí el retiro inspeccionado confirma la (in)existencia del objeto y
+    // solo esa confirmación libera los bytes.
+    const removed = await removeTextileEvidenceObject(intentId);
+    await recordTextileUploadIntentCleanupRpc(actorId, intentId, removed);
     return fail("No fue posible autorizar la carga. Intenta de nuevo.");
   }
 
@@ -375,10 +415,12 @@ export async function finalizeTextileEvidenceUploadAction(
   });
   if (objectError) {
     if (intent.status === "pending") {
-      if (objectInfo) {
-        await removeTextileEvidenceObject(intent.id);
-      }
       await markTextileEvidenceUploadFailedRpc(intent.id);
+      // T9F.4 · §17: el resultado del retiro se INSPECCIONA y se registra —
+      // solo un retiro confirmado ('expired') libera los bytes; el fallo
+      // deja el intento failed como candidato contabilizado.
+      const removed = await removeTextileEvidenceObject(intent.id);
+      await recordTextileUploadIntentCleanupRpc(userId, intent.id, removed);
     }
     return { error: objectError };
   }
@@ -399,11 +441,13 @@ export async function finalizeTextileEvidenceUploadAction(
       storedContentType: objectInfo?.mimeType ?? null,
     });
     if (signatureError) {
-      // Contenido que no corresponde al tipo declarado: se retira el objeto
-      // (si el retiro falla, el intento failed conserva la ruta como
-      // candidato recuperable de limpieza) y el intento queda failed.
-      await removeTextileEvidenceObject(intent.id);
+      // Contenido que no corresponde al tipo declarado: el intento queda
+      // failed y el retiro se INSPECCIONA (T9F.4 · §17) — solo la
+      // confirmación libera los bytes; el fallo lo deja como candidato
+      // contabilizado y recuperable por el barrido.
       await markTextileEvidenceUploadFailedRpc(intent.id);
+      const removed = await removeTextileEvidenceObject(intent.id);
+      await recordTextileUploadIntentCleanupRpc(userId, intent.id, removed);
       return { error: signatureError };
     }
   }

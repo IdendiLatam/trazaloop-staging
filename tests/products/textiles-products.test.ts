@@ -228,7 +228,7 @@ console.log("\n— Server actions y rutas —");
 
 check("18. Todas las server actions pasan por la triple guarda + modo lectura", () => {
   assert(actionsSrc.includes("requireTextilesForAction"), "sin guard del módulo");
-  assert(actionsSrc.includes("checkOrganizationCanMutate"), "sin verificación de solo lectura");
+  assert(actionsSrc.includes("checkTextilesCanMutate"), "sin verificación de solo lectura (T9F.1: por módulo)");
   const exported = (actionsSrc.match(/export async function \w+Action/g) ?? []).length;
   const gates = (actionsSrc.match(/await gate\(\)/g) ?? []).length;
   // setActive/removeAssociation son helpers con gate propio usados por 4 actions delgadas.

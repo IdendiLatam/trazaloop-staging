@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkCprCanMutate } from "@/server/actions/module-plans";
 import {
   listLatestCalculations,
   listCalculationsForBatch,
@@ -39,7 +39,7 @@ export async function calculateRecycledContentAction(
   // cálculos existentes, pero no generar nuevos. No cambia la RPC
   // calculate_recycled_content ni la metodología: solo agrega esta
   // barrera antes de invocarla.
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const supabase = await createServerClient();

@@ -392,12 +392,12 @@ console.log("\nTrazaloop · corrección: lenguaje visible reemplazado (Bloqueant
 
 check("14. No quedan textos visibles \"Registrar feedback\" en rutas principales de la empresa", () => {
   const mainRoutes = [
-    "../../app/(app)/(shell)/evidences/page.tsx",
-    "../../app/(app)/(shell)/traceability/page.tsx",
-    "../../app/(app)/(shell)/guided-flow/page.tsx",
-    "../../app/(app)/(shell)/audit-support/calculations/[id]/page.tsx",
-    "../../app/(app)/(shell)/recycled-content/output-batches/[id]/page.tsx",
-    "../../app/(app)/(shell)/implementation/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/evidences/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/traceability/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/guided-flow/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/audit-support/calculations/[id]/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/implementation/page.tsx",
     "../../app/(app)/platform/page.tsx",
     "../../app/(app)/platform/organizations/[id]/page.tsx",
     "../../components/domain/platform/organizations-table.tsx",
@@ -411,12 +411,12 @@ check("14. No quedan textos visibles \"Registrar feedback\" en rutas principales
 
 check("15. Los enlaces principales de crear ticket van a /support/new (nunca a /implementation/feedback)", () => {
   const mainRoutes = [
-    "../../app/(app)/(shell)/evidences/page.tsx",
-    "../../app/(app)/(shell)/traceability/page.tsx",
-    "../../app/(app)/(shell)/guided-flow/page.tsx",
-    "../../app/(app)/(shell)/audit-support/calculations/[id]/page.tsx",
-    "../../app/(app)/(shell)/recycled-content/output-batches/[id]/page.tsx",
-    "../../app/(app)/(shell)/implementation/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/evidences/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/traceability/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/guided-flow/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/audit-support/calculations/[id]/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/implementation/page.tsx",
   ];
   for (const route of mainRoutes) {
     const source = readSource(route);
@@ -523,7 +523,7 @@ console.log("\nTrazaloop · corrección final: lenguaje visible de Feedback reem
 
 check("7-8. No quedan textos visibles \"Feedback histórico abierto\" ni \"Feedback histórico crítico\"", () => {
   const routes = [
-    "../../app/(app)/(shell)/implementation/page.tsx",
+    "../../app/(app)/(shell)/(cpr)/implementation/page.tsx",
     "../../app/(app)/platform/organizations/[id]/page.tsx",
     "../../components/domain/platform/organizations-table.tsx",
   ];

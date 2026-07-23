@@ -1,7 +1,7 @@
 "use server";
 
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate } from "@/server/actions/module-plans";
 import { revalidatePath } from "next/cache";
 import {
   getTechnicalPassport,
@@ -39,7 +39,7 @@ export async function generateTextilePassportSnapshotAction(
 ): Promise<PassportActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   // El pasaporte debe existir y ser de la organización activa (la RPC lo
@@ -62,7 +62,7 @@ export async function changeTextilePassportStatusAction(
   const g = await gate();
   if (g.error) return { error: g.error };
   if (!isTextilePassportStatus(toStatus)) return { error: "Estado no válido." };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const passport = await getTechnicalPassport(g.organizationId, passportId);
@@ -94,7 +94,7 @@ export async function createTextilePassportDraftAction(input: {
 }): Promise<PassportActionState & { passportId?: string }> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkOrganizationCanMutate();
+  const mutate = await checkTextilesCanMutate();
   if (!mutate.allowed) return { error: mutate.error };
 
   const referenceId = cleanText(input.referenceId);

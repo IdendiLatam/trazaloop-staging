@@ -187,7 +187,7 @@ check("20. Tipo de archivo inválido se rechaza (incluido SVG, a propósito)", (
 
 check("21. La ficha de empresa expone un campo de logo para que la impresión de TrazaDocs lo use", () => {
   const printPage = fs.readFileSync(
-    path.resolve(__dirname, "../../app/(app)/(print)/trazadocs/[id]/print/page.tsx"),
+    path.resolve(__dirname, "../../app/(app)/(print)/(cpr)/trazadocs/[id]/print/page.tsx"),
     "utf8"
   );
   assert(printPage.includes("company?.logoUrl") || printPage.includes("company.logoUrl"), "la impresión de TrazaDocs debía leer el logo de la empresa");
@@ -196,7 +196,7 @@ check("21. La ficha de empresa expone un campo de logo para que la impresión de
 
 check("22. Si no hay logo, la impresión no se rompe (sin <img> con src vacío)", () => {
   const printPage = fs.readFileSync(
-    path.resolve(__dirname, "../../app/(app)/(print)/trazadocs/[id]/print/page.tsx"),
+    path.resolve(__dirname, "../../app/(app)/(print)/(cpr)/trazadocs/[id]/print/page.tsx"),
     "utf8"
   );
   // El logo debe estar detrás de un condicional (renderizado solo si

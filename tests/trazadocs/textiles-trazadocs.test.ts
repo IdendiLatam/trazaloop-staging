@@ -245,7 +245,7 @@ check("16. Rutas /textiles/trazadocs y /textiles/trazadocs/[documentId] existen 
 check("17. Reutilización real del motor: cero tablas nuevas; misma RPC de transición/versionado; mismo límite de plan", () => {
   assert(!/create\s+table/i.test(sqlCode), "0082 no debía crear tablas (el motor TrazaDocs se reutiliza)");
   assert(actionsSrc.includes("changeDocumentStatus"), "las transiciones textiles usan la RPC del motor (estado+versión atómicos)");
-  assert(actionsSrc.includes('checkResourceLimit("documents_trazadocs")'), "la creación textil respeta el mismo límite de plan de TrazaDocs");
+  assert(actionsSrc.includes('checkTextilesResourceLimit("documents_trazadocs")'), "la creación textil respeta el mismo límite de plan de TrazaDocs (T9F.1: del plan del módulo)");
   assert(
     actionsSrc.includes("buildSectionsFromBlueprint") && actionsSrc.includes("buildInitialVersionSnapshot"),
     "la creación reutiliza los builders del dominio TrazaDocs"

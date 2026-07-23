@@ -170,19 +170,20 @@ export async function insertFileDocument(
 
 /** Sube el archivo al bucket privado trazadocs-documents. Ruta fija por
  *  versión: {organization_id}/document_files/{document_id}/{version}/{file_name}. */
+/** T9F.4 · §12: la RUTA ya no se construye aquí — la decide la BASE al crear
+ *  el intent (begin_cpr_storage_upload) a partir de la fila del documento, y
+ *  esta función solo sube los bytes a ESA ruta reservada. */
 export async function uploadFileDocumentFile(
-  orgId: string,
-  documentId: string,
-  version: number,
+  objectPath: string,
   bytes: ArrayBuffer,
-  fileName: string,
   contentType: string
 ): Promise<{ storagePath: string | null; error: string | null }> {
   const supabase = await createServerClient();
-  const path = `${orgId}/document_files/${documentId}/v${version}/${fileName}`;
-  const { error } = await supabase.storage.from("trazadocs-documents").upload(path, bytes, { contentType });
+  const { error } = await supabase.storage
+    .from("trazadocs-documents")
+    .upload(objectPath, bytes, { contentType });
   if (error) return { storagePath: null, error: "No fue posible subir el archivo. Intenta de nuevo." };
-  return { storagePath: path, error: null };
+  return { storagePath: objectPath, error: null };
 }
 
 export async function getFileDocumentDownloadUrl(storagePath: string): Promise<string | null> {
@@ -215,19 +216,57 @@ export async function updateFileDocumentMetadata(
   return { error: null };
 }
 
-export async function deleteFileDocument(orgId: string, id: string): Promise<{ error: string | null }> {
+/** T9F.3 · Objeto físico encolado por la RPC de borrado (cada uno con SU
+ *  propio tamaño; null = tamaño desconocido, que también cuenta). */
+export type QueuedStorageObject = {
+  bucketId: "evidences" | "trazadocs-documents";
+  objectPath: string;
+  sizeBytes: number | null;
+};
+
+/** T9F.3 · §18: borra un BORRADOR mediante la RPC atómica
+ *  queue_and_delete_trazadoc_draft (0101 §3): en UNA transacción encola el
+ *  archivo actual y TODAS las versiones (cada objeto con SU tamaño) como
+ *  pending_delete y elimina las filas. La autorización es el ESPEJO exacto
+ *  de la política RLS de DELETE; el error de Supabase SIEMPRE se inspecciona. */
+export async function queueAndDeleteFileDocumentDraft(
+  id: string
+): Promise<{ objects: QueuedStorageObject[]; error: string | null }> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("trazadoc_file_documents")
-    .delete()
-    .eq("organization_id", orgId)
-    .eq("id", id)
-    .select("id");
-  if (error) return { error: "No fue posible eliminar el documento." };
-  if ((data ?? []).length === 0) {
-    return { error: "Solo se pueden eliminar documentos en borrador que tú creaste o que administras." };
+  const { data, error } = await supabase.rpc("queue_and_delete_trazadoc_draft", {
+    p_file_document_id: id,
+  });
+  if (error) {
+    const message = error.message.includes("DELETE_NOT_ALLOWED")
+      ? "Solo se pueden eliminar documentos en borrador que tú creaste o que administras."
+      : error.message.includes("DOCUMENT_NOT_FOUND")
+        ? "El documento no existe o no pertenece a tu empresa."
+        : "No fue posible eliminar el documento.";
+    return { objects: [], error: message };
   }
-  return { error: null };
+  const payload = data as { deleted?: unknown; objects?: unknown } | null;
+  if (!payload || payload.deleted !== true || !Array.isArray(payload.objects)) {
+    return { objects: [], error: "No fue posible eliminar el documento." };
+  }
+  const objects: QueuedStorageObject[] = [];
+  for (const raw of payload.objects as Array<Record<string, unknown>>) {
+    const bucketId = raw.bucket_id;
+    const objectPath = raw.object_path;
+    if (
+      (bucketId !== "evidences" && bucketId !== "trazadocs-documents") ||
+      typeof objectPath !== "string" ||
+      objectPath === ""
+    ) {
+      continue;
+    }
+    const size = raw.size_bytes;
+    objects.push({
+      bucketId,
+      objectPath,
+      sizeBytes: size === null || size === undefined ? null : Number(size),
+    });
+  }
+  return { objects, error: null };
 }
 
 export async function changeFileDocumentStatus(
@@ -252,18 +291,18 @@ export async function changeFileDocumentStatus(
  * NUNCA usar changeFileDocumentStatus para esto: esa función siempre
  * incrementa current_version, dejando un documento recién creado en v2.
  */
+/** T9F.4 · §15: la finalización recibe el INTENT — la ruta, el nombre y el
+ *  MIME salen de la reserva durable (jamás del navegador) y la RPC v2 de
+ *  0101 consume la reserva en la MISMA transacción que fija los campos. */
 export async function finalizeFileDocumentInitialVersion(
-  id: string,
-  file: { storagePath: string; fileName: string; mimeType: string; sizeBytes: number },
+  intentId: string,
+  sizeBytes: number,
   note: string | null
 ): Promise<{ error: string | null }> {
   const supabase = await createServerClient();
-  const { error } = await supabase.rpc("finalize_trazadoc_file_document_initial_version", {
-    p_file_document_id: id,
-    p_storage_path: file.storagePath,
-    p_file_name: file.fileName,
-    p_mime_type: file.mimeType,
-    p_size_bytes: file.sizeBytes,
+  const { error } = await supabase.rpc("finalize_trazadoc_file_document_initial_version_v2", {
+    p_intent_id: intentId,
+    p_file_size_bytes: sizeBytes,
     p_change_note: note,
   });
   if (error) return { error: error.message ?? "No fue posible finalizar la creación del documento." };
@@ -273,36 +312,89 @@ export async function finalizeFileDocumentInitialVersion(
 /** Corrección (Bloqueante 4): limpia la fila temporal si algo falla
  *  después de crearla pero antes de terminar la subida — nunca deja un
  *  borrador con storage_path vacío visible en el maestro. */
-export async function deleteFileDocumentRow(orgId: string, id: string): Promise<{ error: string | null }> {
+export async function deleteFileDocumentRow(_orgId: string, id: string): Promise<{ error: string | null }> {
+  // T9F.4 · §9: el DELETE directo fue retirado de la RLS — el descarte del
+  // borrador VACÍO (sin objeto ni versiones) pasa por la RPC controlada,
+  // que valida creador/rol, estado draft y storage_path vacío.
   const supabase = await createServerClient();
-  const { error } = await supabase.from("trazadoc_file_documents").delete().eq("organization_id", orgId).eq("id", id);
+  const { error } = await supabase.rpc("discard_empty_trazadoc_file_document", {
+    p_file_document_id: id,
+  });
   return { error: error ? "No fue posible limpiar el borrador incompleto." : null };
 }
 
-/** Corrección (Bloqueante 3): borra un objeto del bucket si la RPC de
- *  reemplazo falla DESPUÉS de subir el archivo nuevo — evita archivos
- *  huérfanos. Nunca lanza: es limpieza best-effort, no crítica para el
- *  resultado que ve el usuario. */
-export async function deleteFileDocumentStorageObject(storagePath: string): Promise<void> {
+/** T9F.3 · §21: objetos físicos COMPLETOS de un documento del maestro —
+ *  archivo actual + todas las versiones, CADA UNO con SU PROPIO tamaño
+ *  (jamás el tamaño del archivo actual copiado a las rutas históricas y
+ *  jamás un simple string[]). Deduplicado por ruta conservando el mayor
+ *  tamaño CONOCIDO; sizeBytes null = desconocido (también cuenta). */
+export type FileDocumentStorageObject = {
+  bucketId: "trazadocs-documents";
+  storagePath: string;
+  sizeBytes: number | null;
+  sourceType: "trazadoc_current" | "trazadoc_version";
+  sourceId: string;
+};
+
+export async function listFileDocumentStorageObjects(
+  orgId: string,
+  id: string
+): Promise<{ objects: FileDocumentStorageObject[]; error: string | null }> {
   const supabase = await createServerClient();
-  await supabase.storage.from("trazadocs-documents").remove([storagePath]);
+  const [{ data: doc, error: docError }, { data: versions, error: verError }] = await Promise.all([
+    supabase
+      .from("trazadoc_file_documents")
+      .select("id, storage_path, size_bytes")
+      .eq("organization_id", orgId)
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("trazadoc_file_document_versions")
+      .select("id, storage_path, size_bytes")
+      .eq("organization_id", orgId)
+      .eq("file_document_id", id),
+  ]);
+  if (docError || verError) return { objects: [], error: "No fue posible leer las versiones del documento." };
+
+  const byPath = new Map<string, FileDocumentStorageObject>();
+  const add = (
+    storagePath: string | null,
+    sizeBytes: unknown,
+    sourceType: FileDocumentStorageObject["sourceType"],
+    sourceId: string
+  ) => {
+    if (!storagePath || storagePath === "") return;
+    const size = sizeBytes === null || sizeBytes === undefined ? null : Number(sizeBytes);
+    const existing = byPath.get(storagePath);
+    if (!existing) {
+      byPath.set(storagePath, { bucketId: "trazadocs-documents", storagePath, sizeBytes: size, sourceType, sourceId });
+      return;
+    }
+    // Misma ruta referenciada por varias versiones: conserva el MAYOR
+    // tamaño conocido (conservador; coherente con la vista de uso).
+    if (size !== null && (existing.sizeBytes === null || size > existing.sizeBytes)) {
+      existing.sizeBytes = size;
+    }
+  };
+  if (doc) add(doc.storage_path as string | null, doc.size_bytes, "trazadoc_current", doc.id as string);
+  for (const v of versions ?? []) {
+    add(v.storage_path as string | null, v.size_bytes, "trazadoc_version", v.id as string);
+  }
+  return { objects: [...byPath.values()], error: null };
 }
 
+/** T9F.4 · §14-§15: el reemplazo también consume su RESERVA — la RPC v2 de
+ *  0101 toma ruta/nombre/MIME del intent y reserva el objeto NUEVO sin
+ *  liberar el anterior (que pasa a versión histórica y sigue contando). */
 export async function replaceFileDocumentFile(
-  id: string,
-  storagePath: string,
-  fileName: string,
-  mimeType: string,
+  intentId: string,
   sizeBytes: number,
   note: string | null
 ): Promise<{ newVersion: number | null; error: string | null }> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase.rpc("replace_trazadoc_file_document", {
-    p_file_document_id: id,
-    p_storage_path: storagePath,
-    p_file_name: fileName,
-    p_mime_type: mimeType,
-    p_size_bytes: sizeBytes,
+  const { data, error } = await supabase.rpc("replace_trazadoc_file_document_v2", {
+    p_intent_id: intentId,
+    p_file_size_bytes: sizeBytes,
     p_change_note: note,
   });
   if (error || data == null) return { newVersion: null, error: error?.message ?? "No fue posible reemplazar el archivo." };

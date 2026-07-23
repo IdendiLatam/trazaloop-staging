@@ -178,12 +178,12 @@ check("Extra: el título y la categoría del borrador son obligatorios", () => {
 console.log("\nTrazaloop · maestro de documentos: consumo de almacenamiento y límites de plan\n");
 
 check("9. Documento descargable consume almacenamiento (checkStorageAvailable)", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkStorageAvailable(");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkStorageAvailable(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkCprStorageAvailable(");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkCprStorageAvailable(");
 });
 
 check("10. Demo cuenta documentos vivos y descargables dentro del límite de 2 (documents_trazadocs)", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", 'checkResourceLimit("documents_trazadocs")');
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", 'checkCprResourceLimit("documents_trazadocs")');
   // El límite documents_trazadocs (0050) es UNO SOLO — no existe un
   // recurso separado para documentos descargables — así que un documento
   // vivo y uno descargable cuentan contra el mismo tope de 2 en Demo.
@@ -209,13 +209,13 @@ check("13. Extra usa cuota de 5 GB (independiente del límite de 25 MB por archi
 console.log("\nTrazaloop · maestro de documentos: modo solo lectura (suspended/cancelled)\n");
 
 check("14. Suspended no puede subir documento", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkOrganizationCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "uploadFileDocumentAction", "checkCprCanMutate()");
 });
 
 check("15. Suspended no puede editar metadatos", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "updateFileDocumentMetadataAction", "checkOrganizationCanMutate()");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkOrganizationCanMutate()");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", "checkOrganizationCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "updateFileDocumentMetadataAction", "checkCprCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "replaceFileDocumentFileAction", "checkCprCanMutate()");
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", "checkCprCanMutate()");
 });
 
 check("16. Suspended sí puede ver el maestro (nunca se bloquea lectura)", () => {
@@ -225,7 +225,10 @@ check("16. Suspended sí puede ver el maestro (nunca se bloquea lectura)", () =>
     assert(fnStart !== -1, `no se encontró ${readFn}`);
     const fnEnd = source.indexOf("\n}", fnStart);
     const fnBody = source.slice(fnStart, fnEnd);
-    assert(!fnBody.includes("checkOrganizationCanMutate"), `${readFn} es de solo lectura, nunca debía bloquearse por estado de plan`);
+    // T9F.1: la lectura sigue sin bloquearse por estado de plan/cuenta
+    // (checkCprCanMutate). El gate de acceso comercial del MÓDULO
+    // (requireCprForAction) en exportaciones/descargas es distinto y sí aplica.
+    assert(!fnBody.includes("checkOrganizationCanMutate") && !fnBody.includes("checkCprCanMutate"), `${readFn} es de solo lectura, nunca debía bloquearse por estado de plan`);
   }
 });
 
@@ -291,7 +294,9 @@ check("22-23. Eliminar borrador solo funciona en draft; approved no se elimina",
 console.log("\nTrazaloop · maestro de documentos: aislamiento entre empresas\n");
 
 check("24. CSV no incluye datos de otra organización", () => {
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireActiveOrg()");
+  // T9F.1: la organización sigue saliendo SOLO de la sesión — ahora vía
+  // requireCprForAction(), que internamente ejecuta requireActiveOrg().
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireCprForAction()");
   const source = readSource("../../server/actions/trazadocs-master.ts");
   const fnStart = source.indexOf("export async function exportDocumentMasterCsvAction");
   const fnEnd = source.indexOf("\n}", fnStart);
@@ -447,10 +452,17 @@ check("Corrección 11. Si falla la RPC después de subir el reemplazo, se intent
   const fnStart = source.indexOf("export async function replaceFileDocumentFileAction");
   const nextFnStart = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextFnStart);
-  assert(fnBody.includes("deleteFileDocumentStorageObject(storagePath)"), "debía intentarse limpiar el objeto huérfano si replaceFileDocumentFile fallaba");
-  const rpcCallIndex = fnBody.indexOf("replaceFileDocumentFile(id,");
-  const cleanupIndex = fnBody.indexOf("deleteFileDocumentStorageObject(storagePath)");
-  assert(rpcCallIndex !== -1 && cleanupIndex !== -1 && cleanupIndex > rpcCallIndex, "la limpieza debía ocurrir después del intento de RPC, dentro del manejo de su error");
+  // T9F.4 (§11-§17): el objeto YA tiene referencia durable — el INTENT se
+  // creó ANTES del upload — así que la compensación es la RESOLUCIÓN
+  // server-only del intent (retiro inspeccionado; sin confirmación, los
+  // bytes siguen contando). Invariante estrictamente más fuerte que la
+  // compensación registrar-y-retirar de T9F.3.
+  const beginIndex = fnBody.indexOf("beginCprStorageUpload({");
+  const uploadIdx = fnBody.indexOf("uploadFileDocumentFile(");
+  assert(beginIndex !== -1 && uploadIdx !== -1 && beginIndex < uploadIdx, "el intent durable (begin) debía crearse ANTES de subir el archivo de reemplazo");
+  const rpcCallIndex = fnBody.indexOf("replaceFileDocumentFile(begin.intent.intentId");
+  const cleanupIndex = fnBody.lastIndexOf("resolveCprUploadIntentObject({");
+  assert(rpcCallIndex !== -1 && cleanupIndex !== -1 && cleanupIndex > rpcCallIndex, "la resolución server-only del intent debía ocurrir después del intento de RPC, dentro del manejo de su error");
 });
 
 if (failures > 0) {

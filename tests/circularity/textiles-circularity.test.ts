@@ -325,7 +325,7 @@ const actionsSrc = read("server/actions/textiles-circularity.ts");
 
 check("41. Las server actions validan acceso al módulo Textil, organización activa y rol", () => {
   assert(actionsSrc.includes("requireTextilesForAction"), "falta la triple guarda");
-  assert(actionsSrc.includes("checkOrganizationCanMutate"), "falta el modo solo lectura");
+  assert(actionsSrc.includes("checkTextilesCanMutate"), "falta el modo solo lectura (T9F.1: por módulo)");
   assert(actionsSrc.includes("canUploadTextileEvidence"), "falta el pre-check de rol de escritura");
   assert(actionsSrc.includes("canSetTextileEvidenceStatus"), "falta el pre-check de finalización admin/quality");
   const rpcGuard = /organization_modules[\s\S]*?module_code = 'textiles'/;

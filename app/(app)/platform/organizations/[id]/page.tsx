@@ -23,7 +23,6 @@ import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { getPlanLimits } from "@/lib/db/plans";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
-import { PlanChangeForm } from "@/components/domain/plans/plan-change-form";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
 import { OrganizationModulesSection } from "@/components/domain/platform/organization-modules-section";
@@ -80,26 +79,30 @@ export default async function PlatformOrganizationDetailPage({
         </p>
       </header>
 
-      {planDetail.usage ? (
-        <section className="space-y-3">
-          <h2 className="eyebrow">Plan y uso</h2>
-          <PlanUsageCard usage={planDetail.usage} limits={planLimits} />
-        </section>
-      ) : null}
-
-      {planDetail.canManage ? (
-        <PlanChangeForm
-          organizationId={id}
-          currentPlanCode={planDetail.usage?.planCode ?? "demo"}
-          currentStatus={planDetail.usage?.planStatus ?? "active"}
-        />
-      ) : null}
-
+      {/* T9F.1: la sección OPERATIVA es "Módulos y planes de la empresa".
+          El plan general legacy (organization_subscriptions) se muestra más
+          abajo SOLO como información heredada: no gobierna los módulos y ya
+          no es editable desde esta consola (el PlanChangeForm se retiró para
+          eliminar el control comercial contradictorio). */}
       <OrganizationModulesSection
         organizationId={id}
         modules={moduleDetail.modules}
         canManage={moduleDetail.canManage}
       />
+
+      {planDetail.usage ? (
+        <section className="space-y-3">
+          <h2 className="eyebrow">Plan heredado (informativo)</h2>
+          <p className="max-w-2xl text-xs text-ink-soft">
+            Información heredada de la suscripción general (organization_subscriptions). Desde
+            T9F.1 <strong>no controla</strong> el acceso, los límites ni el almacenamiento de los
+            módulos: cada módulo se gestiona arriba, en &ldquo;Módulos y planes de la
+            empresa&rdquo;. El uso y la cuota mostrados aquí son los agregados históricos a nivel
+            de organización.
+          </p>
+          <PlanUsageCard usage={planDetail.usage} limits={planLimits} />
+        </section>
+      ) : null}
 
       <dl className="divide-y divide-hairline rounded-lg border border-hairline bg-surface">
         {rows.map(([label, value]) => (
@@ -172,7 +175,10 @@ export default async function PlatformOrganizationDetailPage({
       </section>
 
       <section className="space-y-3">
-        <h2 className="eyebrow">Historial de plan</h2>
+        <h2 className="eyebrow">Historial de plan heredado</h2>
+        <p className="text-xs text-ink-soft">
+          Historial de la suscripción general anterior a los planes por módulo. Solo informativo.
+        </p>
         <PlanHistoryList history={planDetail.history} />
       </section>
     </div>

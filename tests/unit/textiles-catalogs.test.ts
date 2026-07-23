@@ -158,7 +158,8 @@ console.log("\nTrazaloop · Textil T3: actions y rutas\n");
 
 check("10. Todas las mutaciones pasan por la triple guarda + solo lectura de plataforma", () => {
   assert(ACTIONS.includes("requireTextilesForAction"), "las actions debían usar la guarda compartida del módulo");
-  assert(ACTIONS.includes("checkOrganizationCanMutate"), "debían respetar el modo solo lectura");
+  // T9F.1: mismo bloqueo (cuenta suspendida/cancelada) + acceso comercial del módulo, vía checkTextilesCanMutate.
+  assert(ACTIONS.includes("checkTextilesCanMutate"), "debían respetar el modo solo lectura");
   // 5 create + 5 update + 1 setActive compartido (los 5 toggles delegan en él).
   const gateCalls = (ACTIONS.match(/await gate\(\)/g) ?? []).length;
   assert(gateCalls === 11, `cada mutación debía abrir con gate() (hay ${gateCalls})`);

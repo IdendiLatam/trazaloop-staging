@@ -269,7 +269,7 @@ check("25. Todas las actions pasan por la triple guarda + rol de escritura", () 
   assert(exported >= 17, `esperaba ≥17 actions exportadas (hay ${exported})`);
   assert(gates >= exported - 2, `todas las actions (salvo 2 delegadas) debían llamar gate() (${gates}/${exported})`);
   assert(actionsSrc.includes("requireTextilesForAction"), "gate debía usar requireTextilesForAction");
-  assert(actionsSrc.includes("checkOrganizationCanMutate"), "gate debía respetar el modo solo lectura");
+  assert(actionsSrc.includes("checkTextilesCanMutate"), "gate debía respetar el modo solo lectura (T9F.1: por módulo)");
   assert(actionsSrc.includes("canUploadTextileEvidence(access.org.roleCode)"), "gate debía pre-verificar el rol de escritura");
   assert(actionsSrc.includes("textileOrderBelongsToOrg") && actionsSrc.includes("textileInputLotBelongsToOrg"), "las relaciones debían verificarse dentro de la organización");
 });

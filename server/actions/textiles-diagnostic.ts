@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate } from "@/server/actions/module-plans";
 import {
   getActiveTextileQuestions,
   getLatestTextileDiagnostic,
@@ -25,7 +25,7 @@ import {
  *  1. requireActiveOrg (organization_id JAMÁS del cliente);
  *  2. módulo Textil accesible: flag TEXTILES_MODULE_ENABLED + habilitación
  *     en organization_modules (misma regla que el guard de /textiles);
- *  3. checkOrganizationCanMutate (Bloqueante 3, transversal de plataforma):
+ *  3. checkTextilesCanMutate (Bloqueante 3, transversal de plataforma):
  *     suscripción suspended/cancelled = SOLO LECTURA.
  */
 
@@ -37,7 +37,7 @@ export async function startTextileDiagnosticAction(): Promise<TextileDiagnosticA
   if (gate.org === null) return { error: gate.error };
   const org = gate.org;
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const latest = await getLatestTextileDiagnostic(org.organizationId);
@@ -82,7 +82,7 @@ export async function saveTextileDiagnosticAnswersAction(
 
   if (answers.length === 0) return { error: null };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const questions = await getActiveTextileQuestions();
@@ -148,7 +148,7 @@ export async function completeTextileDiagnosticAction(
   const gate = await requireTextilesForAction();
   if (gate.org === null) return { error: gate.error };
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const [sections, questions, answersMap] = await Promise.all([

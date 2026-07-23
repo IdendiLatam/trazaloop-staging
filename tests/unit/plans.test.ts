@@ -276,11 +276,13 @@ check("Corrección 1. Demo oculta recomendaciones del diagnóstico en la UI, no 
   const limit = findLimit(DEMO_LIMITS, "diagnostic_recommendations_enabled")!;
   assert(isPlanFeatureEnabled(limit) === false, "Demo no debía tener recomendaciones avanzadas habilitadas");
   const diagnosticPage = fs.readFileSync(
-    path.resolve(__dirname, "../../app/(app)/(shell)/diagnostic/page.tsx"),
+    path.resolve(__dirname, "../../app/(app)/(shell)/(cpr)/diagnostic/page.tsx"),
     "utf8"
   );
+  // T9F.1: el interruptor se consulta por MÓDULO CPR (mismo recurso, mismo
+  // resultado para el plan del módulo).
   assert(
-    diagnosticPage.includes('checkFeatureEnabled("diagnostic_recommendations_enabled")'),
+    diagnosticPage.includes('checkCprFeatureEnabled("diagnostic_recommendations_enabled")'),
     "la página de diagnóstico debía consultar el interruptor de plan antes de mostrar recomendaciones"
   );
   assert(
@@ -300,7 +302,7 @@ check("Corrección 2. Demo no puede validar importaciones (bloqueado desde el pr
   const validateFnStart = importsSource.indexOf("export async function validateImportCsvAction");
   const validateFnBody = importsSource.slice(validateFnStart, validateFnStart + 800);
   assert(
-    validateFnBody.includes('checkFeatureEnabled("imports_enabled")'),
+    validateFnBody.includes('checkCprFeatureEnabled("imports_enabled")'),
     "validateImportCsvAction debía revisar imports_enabled ANTES de crear import_jobs/import_job_rows"
   );
 
@@ -308,7 +310,7 @@ check("Corrección 2. Demo no puede validar importaciones (bloqueado desde el pr
   const legacyFnStart = legacyImportSource.indexOf("export async function validateImportAction");
   const legacyFnBody = legacyImportSource.slice(legacyFnStart, legacyFnStart + 800);
   assert(
-    legacyFnBody.includes('checkFeatureEnabled("imports_enabled")'),
+    legacyFnBody.includes('checkCprFeatureEnabled("imports_enabled")'),
     "el importador anterior (validateImportAction) también debía quedar bloqueado en Demo"
   );
 });
@@ -316,7 +318,7 @@ check("Corrección 2. Demo no puede validar importaciones (bloqueado desde el pr
 check("Corrección 3. Demo no crea import_jobs al intentar validar (el chequeo va ANTES del primer INSERT)", () => {
   const importsSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/imports.ts"), "utf8");
   const validateFnStart = importsSource.indexOf("export async function validateImportCsvAction");
-  const checkIndex = importsSource.indexOf('checkFeatureEnabled("imports_enabled")', validateFnStart);
+  const checkIndex = importsSource.indexOf('checkCprFeatureEnabled("imports_enabled")', validateFnStart);
   const firstInsertIndex = importsSource.indexOf('.from("import_jobs")', validateFnStart);
   assert(checkIndex !== -1 && firstInsertIndex !== -1, "no se encontraron ambos puntos a comparar");
   assert(
@@ -404,9 +406,12 @@ check("Corrección 7 (caso 10-12). Suspended/cancelled bloquean iniciar/guardar/
     const fnStart = diagnosticSource.indexOf(`export async function ${fnName}`);
     assert(fnStart !== -1, `no se encontró ${fnName} en diagnostic.ts`);
     const fnBody = diagnosticSource.slice(fnStart, fnStart + 500);
+    // T9F.1: el guard es checkCprCanMutate(), que CONSERVA el bloqueo por
+    // estado de cuenta (suspended/cancelled) y suma el acceso comercial del
+    // módulo CPR.
     assert(
-      fnBody.includes("checkOrganizationCanMutate()"),
-      `${fnName} debía revisar checkOrganizationCanMutate (bloquea si suspended/cancelled) antes de escribir`
+      fnBody.includes("checkCprCanMutate()"),
+      `${fnName} debía revisar checkCprCanMutate (bloquea si suspended/cancelled) antes de escribir`
     );
   }
 });
@@ -438,8 +443,9 @@ check("Corrección 9 (caso 15). TrazaDocs no permite mutaciones si la cuenta est
   // solo chequeo ahí cubre las 6, nunca duplicado en cada action.
   const transitionStart = trazadocsSource.indexOf("async function transition(");
   const transitionBody = trazadocsSource.slice(transitionStart, transitionStart + 700);
+  // T9F.1: mismo bloqueo por estado de cuenta, ahora vía checkCprCanMutate().
   assert(
-    transitionBody.includes("checkOrganizationCanMutate()"),
+    transitionBody.includes("checkCprCanMutate()"),
     "el helper compartido transition() debía revisar el estado de la suscripción para las 6 transiciones de estado a la vez"
   );
 
@@ -456,7 +462,7 @@ check("Corrección 9 (caso 15). TrazaDocs no permite mutaciones si la cuenta est
     const fnStart = trazadocsSource.indexOf(`export async function ${fnName}`);
     assert(fnStart !== -1, `no se encontró ${fnName} en trazadocs.ts`);
     const fnBody = trazadocsSource.slice(fnStart, fnStart + 400);
-    assert(fnBody.includes("checkOrganizationCanMutate()"), `${fnName} debía revisar el estado de la suscripción`);
+    assert(fnBody.includes("checkCprCanMutate()"), `${fnName} debía revisar el estado de la suscripción`);
   }
 });
 
@@ -483,7 +489,19 @@ function assertMutateGuard(filePath: string, fnName: string) {
   assert(fnStart !== -1, `no se encontró ${fnName} en ${filePath}`);
   const nextExportIdx = source.indexOf("export async function", fnStart + 1);
   const fnBody = source.slice(fnStart, nextExportIdx === -1 ? fnStart + 900 : nextExportIdx);
-  assert(fnBody.includes("checkOrganizationCanMutate()"), `${fnName} (${filePath}) debía revisar checkOrganizationCanMutate antes de escribir`);
+  // T9F.1: el guard depende del ÁMBITO del archivo. Acciones CPR usan
+  // checkCprCanMutate() y las Textiles checkTextilesCanMutate() — ambos
+  // CONSERVAN el bloqueo por estado de cuenta (suspended/cancelled) y suman
+  // el acceso comercial del módulo. Los recursos org-globales (equipo,
+  // ajustes/logo) siguen con checkOrganizationCanMutate() legacy.
+  const isTextiles = /textiles-/.test(filePath);
+  const isOrgGlobal = /\/(team|settings)\.ts$/.test(filePath);
+  const expected = isOrgGlobal
+    ? "checkOrganizationCanMutate()"
+    : isTextiles
+      ? "checkTextilesCanMutate()"
+      : "checkCprCanMutate()";
+  assert(fnBody.includes(expected), `${fnName} (${filePath}) debía revisar ${expected} antes de escribir`);
 }
 
 check("1-2. Suspended no puede editar ni eliminar proveedor", () => {

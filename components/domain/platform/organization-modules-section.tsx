@@ -157,6 +157,14 @@ export function OrganizationModulesSection({
                       <dd className="inline">{formatBytes(m.storageLimitBytes)}</dd>
                     </div>
                     <div>
+                      <dt className="inline font-medium">Almacenamiento utilizado:</dt>{" "}
+                      <dd className="inline">
+                        {m.storageUsedBytes === null
+                          ? "—"
+                          : `${(m.storageUsedBytes / 1048576).toFixed(m.storageUsedBytes > 0 && m.storageUsedBytes < 1048576 ? 2 : 1)} MB`}
+                      </dd>
+                    </div>
+                    <div>
                       <dt className="inline font-medium">Inicio:</dt>{" "}
                       <dd className="inline">{formatDate(m.accessStartedAt)}</dd>
                     </div>

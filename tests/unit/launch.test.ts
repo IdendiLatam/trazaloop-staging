@@ -412,7 +412,7 @@ check("11-13. El paso de documento usa hasDocumentMasterItem (documento vivo O d
 console.log("\nTrazaloop · corrección: lenguaje de lanzamiento actualizado (Bloqueante 4)\n");
 
 check("14. No queda el texto \"El cálculo de contenido reciclado llega en el siguiente sprint\"", () => {
-  const dashboardSource = readSource("../../app/(app)/(shell)/dashboard/page.tsx");
+  const dashboardSource = readSource("../../app/(app)/(shell)/(cpr)/dashboard/page.tsx");
   const normalized = dashboardSource.replace(/\s+/g, " ");
   assert(!normalized.includes("llega en el siguiente sprint"), "el dashboard ya no debía decir que el cálculo llega en un sprint futuro — ya existe");
 });

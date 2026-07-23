@@ -198,7 +198,7 @@ check("16. Las actions no usan service_role y mantienen las guardas de módulo",
     guard.includes("isTextilesModuleEnabled") && guard.includes("organizationHasTextiles") && guard.includes("requireActiveOrg"),
     "el guard debía validar flag + habilitación + empresa activa"
   );
-  assert(ACTIONS.includes("checkOrganizationCanMutate"), "el modo solo lectura de plataforma debía seguir");
+  assert(ACTIONS.includes("checkTextilesCanMutate"), "el modo solo lectura de plataforma debía seguir (T9F.1: por módulo)");
 });
 
 check("17. Los textos siguen hablando de preparación (advertencia intacta)", () => {

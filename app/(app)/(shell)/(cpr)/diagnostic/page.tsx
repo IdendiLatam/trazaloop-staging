@@ -12,7 +12,7 @@ import {
 } from "@/lib/db/diagnostic";
 import { READINESS_LABEL, type ReadinessLevel } from "@/lib/diagnostic/scoring";
 import { startDiagnosticFormAction } from "@/server/actions/diagnostic";
-import { checkFeatureEnabled } from "@/server/actions/plans";
+import { checkCprFeatureEnabled } from "@/server/actions/module-plans";
 import { DiagnosticWizard } from "@/components/domain/diagnostic/wizard";
 import { Button } from "@/components/ui/button";
 import { InfoAlert } from "@/components/ui/alert";
@@ -30,7 +30,7 @@ export default async function DiagnosticPage() {
     getDiagnosticSections(),
     getActiveQuestions(),
     getLatestDiagnostic(org.organizationId),
-    checkFeatureEnabled("diagnostic_recommendations_enabled"),
+    checkCprFeatureEnabled("diagnostic_recommendations_enabled"),
   ]);
   // Bloqueante 1 (Sprint 10A, corrección): Demo SIEMPRE puede tomar y ver
   // el resultado del diagnóstico (respuestas "No", nivel de preparación,

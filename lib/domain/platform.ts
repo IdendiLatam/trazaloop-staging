@@ -157,7 +157,11 @@ export type PlatformOrgDraftInput = {
   contactEmail?: string | null;
   adminName?: string | null;
   adminEmail: string;
-  /** Sprint 10A (Parte 4): opcional — si el superadmin no elige, cae en 'demo'. */
+  /** Sprint 10A (Parte 4): opcional — si el superadmin no elige, cae en 'demo'.
+   *  @deprecated T9F.1: parámetro LEGACY. El server action lo fuerza SIEMPRE a
+   *  'demo' (la suscripción general se crea solo por compatibilidad y NO
+   *  gobierna los módulos). El plan real se asigna POR MÓDULO después de la
+   *  creación, desde "Módulos y planes de la empresa". */
   planCode?: PlanCode | null;
 };
 

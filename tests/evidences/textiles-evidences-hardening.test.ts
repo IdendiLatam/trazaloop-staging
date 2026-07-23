@@ -117,13 +117,14 @@ check("6. Delete de storage SOLO en el prefijo textil, con roles y safe_uuid", (
 
 check("7. La limpieza de huérfanos existe, es tolerante a fallos y no enmascara el error", () => {
   // T9E.1 (carga directa): si el insert de la evidencia falla tras la
-  // subida, la finalización retira el objeto (removeTextileEvidenceObject,
-  // best-effort sin lanzar) y deja el intento en 'failed' como registro
-  // recuperable; la limpieza oportunista corre acotada y en try/catch.
-  // T9E.2: firma/objeto inválidos → retiro + intento failed vía RPC; el
-  // fallo del insert es imposible de dejar a medias (RPC atómica 0097).
+  // subida, la finalización deja el intento en 'failed' y T9F.4 · §17
+  // ENDURECE el ciclo: el retiro se INSPECCIONA (removeTextileEvidenceObject
+  // devuelve el resultado REAL) y se registra en la RPC de limpieza — solo
+  // un retiro confirmado libera los bytes; el fallo deja el intento failed
+  // como candidato CONTABILIZADO. La limpieza oportunista corre acotada y
+  // en try/catch, y ahora barre también los failed.
   assert(
-    /removeTextileEvidenceObject\(intent\.id\);[\s\S]{0,240}markTextileEvidenceUploadFailedRpc\(intent\.id\)/.test(actionsSrc),
+    /markTextileEvidenceUploadFailedRpc\(intent\.id\);[\s\S]{0,420}const removed = await removeTextileEvidenceObject\(intent\.id\);[\s\S]{0,160}recordTextileUploadIntentCleanupRpc\([a-zA-Z]+, intent\.id, removed\)/.test(actionsSrc),
     "falta la limpieza del objeto subido cuando el registro no procede"
   );
   assert(

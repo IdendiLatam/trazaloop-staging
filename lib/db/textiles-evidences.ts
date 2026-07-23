@@ -454,18 +454,25 @@ export async function beginTextileEvidenceUploadRpc(input: {
   fileMimeType: string;
   metadata: TextileEvidenceIntentMetadata;
   ttlMinutes: number;
+  /** T9F.3 · §28: misma clave ⇒ MISMO intent y una sola reserva (la RPC v2
+   *  resuelve la idempotencia bajo el mismo advisory lock de la reserva). */
+  idempotencyKey?: string | null;
 }): Promise<
   | { intentId: string; objectPath: string; errorCode: null }
   | { intentId: null; objectPath: null; errorCode: string }
 > {
   const supabase = await createServerClient();
-  const { data, error } = await supabase.rpc("begin_textile_evidence_upload", {
+  // T9F.3: la RPC v2 (0101 §6) conserva TODAS las validaciones de 0097 y
+  // añade acceso del módulo + RESERVA ATÓMICA de unidad y bytes bajo
+  // advisory locks. La firma histórica de 0097 sigue existiendo (delega).
+  const { data, error } = await supabase.rpc("begin_textile_evidence_upload_v2", {
     p_organization_id: input.organizationId,
     p_file_name: input.fileName,
     p_file_size_bytes: input.fileSizeBytes,
     p_file_mime_type: input.fileMimeType,
     p_metadata: input.metadata,
     p_ttl_minutes: input.ttlMinutes,
+    p_idempotency_key: input.idempotencyKey ?? null,
   });
   if (error || !data) {
     return { intentId: null, objectPath: null, errorCode: error?.message ?? "RPC_FAILED" };
@@ -576,6 +583,25 @@ export async function listExpiredPendingTextileUploadIntents(
     .eq("status", "pending")
     .lt("expires_at", new Date().toISOString())
     .order("expires_at", { ascending: true })
+    .limit(limit);
+  return (data ?? []).map((r) => mapIntent(r as Record<string, unknown>));
+}
+
+/** T9F.4 · Bloqueador 5: intentos FAILED del propio usuario — mientras no
+ * exista resolución confirmada ('expired' SOLO se marca tras retiro
+ * verificado, 0097) sus bytes SIGUEN contando; el barrido oportunista los
+ * resuelve igual que a los pendientes vencidos. */
+export async function listFailedTextileUploadIntents(
+  organizationId: string,
+  limit: number
+): Promise<TextileEvidenceUploadIntentRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("textile_evidence_upload_intents")
+    .select(INTENT_COLUMNS)
+    .eq("organization_id", organizationId)
+    .eq("status", "failed")
+    .order("created_at", { ascending: true })
     .limit(limit);
   return (data ?? []).map((r) => mapIntent(r as Record<string, unknown>));
 }

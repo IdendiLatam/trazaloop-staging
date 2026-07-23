@@ -92,7 +92,7 @@ check("4. begin exige módulo + rol y valida tamaño/MIME/extensión DECLARADOS"
   assert(begin.includes("isAllowedTextileEvidenceMime"), "begin sin validación de MIME");
   assert(begin.includes("isAllowedTextileEvidenceExtension"), "begin sin validación de extensión");
   assert(begin.includes("TEXTILE_EVIDENCE_MAX_FILE_BYTES"), "begin sin límite de tamaño");
-  assert(begin.includes("checkStorageAvailable"), "begin sin verificación de cuota");
+  assert(begin.includes("checkTextilesStorageAvailable"), "begin sin verificación de cuota (T9F.1: cuota del módulo Textiles)");
 });
 
 check("5. T9E.2: la ruta EXACTA nace en la RPC de BD (gen_random_uuid + saneo) — el cliente jamás la envía", () => {
@@ -207,12 +207,16 @@ check("11. T9E.2: insert + consumo son UNA transacción (RPC 0097); sin INSERT d
 
 check("12. Fallo tras la subida: objeto retirado + intento failed vía RPC — jamás fila inconsistente", () => {
   const fin = ACTIONS.split("export async function finalizeTextileEvidenceUploadAction")[1] ?? "";
+  // T9F.4 · §17: primero el intento queda failed (jamás finalizable) y
+  // DESPUÉS el retiro se INSPECCIONA y se registra — solo la confirmación
+  // libera los bytes; el objeto rechazado nunca desaparece de la
+  // contabilidad sin retiro verificado.
   assert(
-    /objectError[\s\S]{0,500}removeTextileEvidenceObject[\s\S]{0,300}markTextileEvidenceUploadFailedRpc/.test(fin),
+    /objectError[\s\S]{0,500}markTextileEvidenceUploadFailedRpc[\s\S]{0,420}removeTextileEvidenceObject[\s\S]{0,200}recordTextileUploadIntentCleanupRpc/.test(fin),
     "objeto inválido → retiro + intento failed (RPC)"
   );
   assert(
-    /signatureError[\s\S]{0,500}removeTextileEvidenceObject[\s\S]{0,300}markTextileEvidenceUploadFailedRpc/.test(fin),
+    /signatureError[\s\S]{0,600}markTextileEvidenceUploadFailedRpc[\s\S]{0,420}removeTextileEvidenceObject[\s\S]{0,200}recordTextileUploadIntentCleanupRpc/.test(fin),
     "firma inválida → retiro + intento failed (RPC) SIN crear evidencia"
   );
   // La atomicidad de la RPC garantiza que un fallo del insert revierte el

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
-import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkTextilesCanMutate, checkTextilesResourceLimit } from "@/server/actions/module-plans";
 import {
   textileSupplierBelongsToOrg,
   textileFiberTypeIsActive,
@@ -27,7 +27,7 @@ import {
  *
  * Todas las mutaciones: (1) triple guarda del módulo (flag + empresa activa
  * + habilitación); (2) modo solo lectura de plataforma
- * (checkOrganizationCanMutate); (3) validación de dominio (nombre, enums,
+ * (checkTextilesCanMutate); (3) validación de dominio (nombre, enums,
  * correo) ANTES de tocar la BD; (4) organization_id SIEMPRE de la empresa
  * activa (jamás del cliente) y edición filtrada por organization_id — la
  * RLS de 0073 y las FKs compuestas re-verifican todo en BD. Errores:
@@ -53,7 +53,7 @@ type GateOk = { organizationId: string };
 async function gate(): Promise<{ ok: GateOk | null; error: string | null }> {
   const access = await requireTextilesForAction();
   if (access.org === null) return { ok: null, error: access.error };
-  const mutateCheck = await checkOrganizationCanMutate();
+  const mutateCheck = await checkTextilesCanMutate();
   if (!mutateCheck.allowed) return { ok: null, error: mutateCheck.error };
   return { ok: { organizationId: access.org.organizationId }, error: null };
 }
@@ -109,6 +109,11 @@ export async function createTextileSupplierAction(
 ): Promise<TextileCatalogActionState> {
   const g = await gate();
   if (!g.ok) return { error: g.error };
+  // T9F.2 · Bloqueador 1: límite del plan del MÓDULO Textiles ANTES del
+  // INSERT (conteo real en BD vía check_module_resource_allowance; Demo
+  // limitado, Full/Extra ilimitados; fail-closed si no puede verificarse).
+  const limitCheck = await checkTextilesResourceLimit("suppliers");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
   const validated = validateSupplierInput(input);
   if (validated.row === null) return { error: validated.error };
 
@@ -211,6 +216,11 @@ export async function createTextileMaterialAction(
 ): Promise<TextileCatalogActionState> {
   const g = await gate();
   if (!g.ok) return { error: g.error };
+  // T9F.2 · Bloqueador 1: límite del plan del MÓDULO Textiles ANTES del
+  // INSERT (conteo real en BD vía check_module_resource_allowance; Demo
+  // limitado, Full/Extra ilimitados; fail-closed si no puede verificarse).
+  const limitCheck = await checkTextilesResourceLimit("materials");
+  if (!limitCheck.allowed) return { error: limitCheck.error };
   const validated = await validateMaterialInput(g.ok.organizationId, input);
   if (validated.row === null) return { error: validated.error };
 

@@ -2,7 +2,33 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkFeatureEnabled } from "@/server/actions/plans";
+import { checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
+import { requireCprForAction } from "@/lib/auth/require-cpr-module";
+import type { ResourceCode } from "@/lib/plans/types";
+
+/** Recurso de plan_limits que consume cada entidad importable (null = la
+ *  entidad no tiene límite propio en el catálogo: consumos y composiciones
+ *  son relaciones, y las familias no están limitadas). */
+function importEntityResourceCode(entity: ImportEntityType): ResourceCode | null {
+  switch (entity) {
+    case "supplier":
+      return "suppliers";
+    case "material":
+      return "materials";
+    case "evidence":
+      return "evidences";
+    case "product":
+      return "products";
+    case "input_batch":
+      return "input_batches";
+    case "production_order":
+      return "production_orders";
+    case "output_batch":
+      return "output_batches";
+    default:
+      return null;
+  }
+}
 import { createServerClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/csv";
 import {
@@ -16,7 +42,7 @@ import { templateHeader, templateFilename, TEMPLATE_COLUMNS } from "@/lib/import
 import { parseImportCsv } from "@/lib/imports/parse";
 import { validateRows } from "@/lib/imports/validators";
 import type { RowValidationResult } from "@/lib/imports/types";
-import { getReferenceData, getLookupMaps, insertBusinessRow } from "@/lib/db/imports";
+import { getReferenceData, getLookupMaps, insertBusinessRows } from "@/lib/db/imports";
 
 const IMPORT_ROLES = ["admin", "quality", "consultant"] as const;
 
@@ -48,7 +74,9 @@ export async function getImportTemplatesAction(): Promise<ImportTemplateInfo[]> 
 export async function downloadImportTemplateAction(
   entityType: string
 ): Promise<{ filename: string; csv: string; error: string | null }> {
-  await requireActiveOrg();
+  // T9F.1: las plantillas de importación son parte del módulo CPR.
+  const gate = await requireCprForAction();
+  if (gate.error !== null) return { filename: "", csv: "", error: gate.error };
   if (!isImportEntity(entityType)) {
     return { filename: "", csv: "", error: "Entidad no soportada." };
   }
@@ -114,7 +142,7 @@ export async function validateImportCsvAction(
   // Sprint 10A (Bloqueante 2): Demo bloquea importaciones desde el PRIMER
   // paso — validar ya crea import_jobs/import_job_rows reales, no es un
   // paso "sin efecto" que se pueda dejar pasar.
-  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { ...emptyPreview, error: featureCheck.error };
 
   const entityRaw = String(formData.get("entity_type") ?? "");
@@ -235,7 +263,7 @@ export async function commitImportAction(
   }
 
   // Sprint 10A (Parte 8): Demo no incluye importaciones.
-  const featureCheck = await checkFeatureEnabled("imports_enabled");
+  const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { ...emptyCommit, error: featureCheck.error };
 
   const jobId = String(formData.get("import_job_id") ?? "");
@@ -312,15 +340,35 @@ export async function commitImportAction(
     };
   }
 
+  // T9F.2 · §9: validación de INCREMENTO MASIVO — conteo_actual +
+  // filas_a_insertar (las que NO se saltarán por existir) debe caber en el
+  // límite del plan del MÓDULO CPR ANTES del primer INSERT. Si excede, la
+  // operación completa se rechaza: jamás una inserción parcial que supere el
+  // límite. (Hoy Demo no alcanza este punto — imports_enabled=0 —, pero el
+  // cierre no depende de esa coincidencia de catálogo.)
+  const limitedResource = importEntityResourceCode(entity);
+  const toInsertCount = fresh.filter((r) => !r.skipExisting).length;
+  if (limitedResource && toInsertCount > 0) {
+    const limitCheck = await checkCprResourceLimit(limitedResource, toInsertCount);
+    if (!limitCheck.allowed) {
+      return { ...emptyCommit, error: limitCheck.error };
+    }
+  }
+
   const maps = await getLookupMaps(org.organizationId, entity);
   let imported = 0;
   let skipped = 0;
   let failed = 0;
 
+  // T9F.3 · §11: la escritura de negocio es UN ÚNICO INSERT multi-fila (una
+  // sola transacción). El trigger de límites de 0101 ve el acumulado de la
+  // propia transacción: si el plan no admite TODAS las filas — incluso por
+  // consumo CONCURRENTE posterior al pre-check de arriba — PostgreSQL
+  // revierte la operación completa. Jamás quedan filas parciales.
+  const pending: Array<{ jobRowId: string; normalized: Record<string, unknown> }> = [];
   for (let i = 0; i < fresh.length; i++) {
     const row = existingRows[i];
     const r = fresh[i];
-
     if (r.skipExisting) {
       skipped += 1;
       await supabase
@@ -330,25 +378,44 @@ export async function commitImportAction(
         .eq("organization_id", org.organizationId);
       continue;
     }
+    pending.push({ jobRowId: row.id, normalized: r.normalized });
+  }
 
-    const { id, error } = await insertBusinessRow(org.organizationId, entity, r.normalized, maps);
-    if (error || !id) {
-      failed += 1;
+  const bulk = await insertBusinessRows(
+    org.organizationId,
+    entity,
+    pending.map((p) => p.normalized),
+    maps
+  );
+  if (bulk.error || !bulk.ids) {
+    failed = pending.length;
+    const message = bulk.limitExceeded
+      ? "Tu plan alcanzó el límite de este recurso: la importación completa fue rechazada sin insertar ninguna fila. Mejora el plan del módulo para continuar."
+      : "No fue posible crear los registros: la importación completa fue revertida sin insertar ninguna fila. Inténtalo nuevamente.";
+    console.error("[imports] commit masivo revertido", {
+      op: "commitImportAction",
+      entity,
+      rows: pending.length,
+      code: bulk.limitExceeded ? "RESOURCE_LIMIT_EXCEEDED" : "bulk_insert_failed",
+    });
+    for (const p of pending) {
       await supabase
         .from("import_job_rows")
         .update({
           status: "error",
-          normalized_data: r.normalized,
-          errors: [{ field: null, message: error ?? "No fue posible crear el registro." }],
+          normalized_data: p.normalized,
+          errors: [{ field: null, message }],
         })
-        .eq("id", row.id)
+        .eq("id", p.jobRowId)
         .eq("organization_id", org.organizationId);
-    } else {
-      imported += 1;
+    }
+  } else {
+    imported = bulk.ids.length;
+    for (let i = 0; i < pending.length; i++) {
       await supabase
         .from("import_job_rows")
-        .update({ status: "imported", normalized_data: r.normalized, created_entity_id: id })
-        .eq("id", row.id)
+        .update({ status: "imported", normalized_data: pending[i].normalized, created_entity_id: bulk.ids[i] })
+        .eq("id", pending[i].jobRowId)
         .eq("organization_id", org.organizationId);
     }
   }

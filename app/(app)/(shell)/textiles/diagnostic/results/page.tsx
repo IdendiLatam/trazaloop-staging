@@ -26,7 +26,7 @@ import {
   type TextileAnswerValue,
   type TextileMaturityLevel,
 } from "@/lib/domain/textiles-diagnostic";
-import { checkFeatureEnabled } from "@/server/actions/plans";
+import { checkTextilesFeatureEnabled } from "@/server/actions/module-plans";
 
 const LEVEL_TONE: Record<TextileMaturityLevel, string> = {
   inicial: "border-danger/30 bg-danger/5 text-danger",
@@ -43,7 +43,7 @@ export default async function TextileDiagnosticResultsPage() {
     getTextileDiagnosticSections(),
     getActiveTextileQuestions(),
     getLatestTextileDiagnostic(org.organizationId),
-    checkFeatureEnabled("diagnostic_recommendations_enabled"),
+    checkTextilesFeatureEnabled("diagnostic_recommendations_enabled"),
   ]);
   const recommendationsEnabled = recommendationsFeature.allowed;
 
