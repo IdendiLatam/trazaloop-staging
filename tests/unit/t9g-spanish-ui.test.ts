@@ -191,8 +191,11 @@ check("3. Términos obligatorios del glosario presentes en la interfaz", () => {
   assert(recycled.includes("lote producido / lote final"), "«lote producido / lote final» requerido");
   const inputLots = fs.existsSync(path.join(ROOT, "app/(app)/(shell)/textiles/traceability/input-lots/page.tsx"));
   assert(inputLots, "la ruta de «Lotes de entrada» debía existir");
-  const authLayout = read("app/(auth)/layout.tsx");
-  assert(authLayout.includes("NTC 6632 · UNE-EN 15343"), "«NTC 6632 · UNE-EN 15343» requerido");
+  const moduleRegistry = read("lib/modules/registry.ts");
+  assert(
+    moduleRegistry.includes('headerBadge: "NTC 6632 · UNE-EN 15343"'),
+    "«NTC 6632 · UNE-EN 15343» debía conservarse en la identidad del módulo CPR"
+  );
   const catalog = read("lib/modules/catalog.ts");
   assert(catalog.includes('"Trazaloop Textiles"'), "«Trazaloop Textiles» requerido");
 });

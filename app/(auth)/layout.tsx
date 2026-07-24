@@ -13,18 +13,19 @@ export default function AuthLayout({
         <Wordmark inverted />
         <div className="space-y-3">
           <p className="eyebrow !text-emerald-200/80">
-            NTC 6632 · UNE-EN 15343
+            Plataforma modular de trazabilidad
           </p>
           <h1 className="max-w-sm text-3xl font-semibold leading-snug tracking-tight">
-            Pasa de declarar contenido reciclado a poder demostrarlo.
+            Convierte la trazabilidad en evidencia verificable.
           </h1>
           <p className="max-w-sm text-sm leading-relaxed text-emerald-100/80">
-            Trazabilidad lote a lote, evidencias y cálculo defendible para
-            prepararte frente a auditorías y revisión de cumplimiento normativo.
+            Gestiona trazabilidad, documentación técnica, evidencias y preparación
+            para auditorías en módulos especializados para productos, procesos y
+            cadenas de valor.
           </p>
         </div>
         <p className="code text-xs text-emerald-200/60">
-          Trazaloop CPR · beta controlada
+          Trazaloop · beta / lanzamiento controlado
         </p>
       </aside>
 

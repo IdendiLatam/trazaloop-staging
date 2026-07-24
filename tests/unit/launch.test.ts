@@ -420,7 +420,10 @@ check("14. No queda el texto \"El cálculo de contenido reciclado llega en el si
 check("15. No queda el texto \"núcleo v0.1\"", () => {
   const authLayoutSource = readSource("../../app/(auth)/layout.tsx");
   assert(!authLayoutSource.includes("núcleo v0.1"), "el layout de autenticación ya no debía mostrar la etiqueta de versión interna 'núcleo v0.1'");
-  assert(authLayoutSource.includes("beta controlada"), "debía usar el lenguaje vigente de beta / lanzamiento controlado");
+  assert(
+    authLayoutSource.includes("beta / lanzamiento controlado"),
+    "debía usar el lenguaje vigente de beta / lanzamiento controlado"
+  );
 });
 
 console.log("\nTrazaloop · corrección: completed_steps/progress_percent cuentan documentos descargables del Maestro\n");

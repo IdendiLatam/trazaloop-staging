@@ -206,7 +206,12 @@ check("15. El shell /textiles enlaza los catálogos y la landing pública NO los
   const shell = readSource("../../app/(app)/(shell)/textiles/page.tsx");
   assert(shell.includes("/textiles/catalogs") && shell.includes("Catálogos textiles"), "el shell debía enlazar catálogos");
   const landing = readSource("../../app/page.tsx");
-  assert(!landing.includes("/textiles"), "la landing pública no debía enlazar rutas del módulo privado");
+  const privateTextilesLink =
+    /href\s*=\s*(?:["'`]\/textiles(?:\/[^"'`]*)?["'`]|\{\s*["'`]\/textiles(?:\/[^"'`]*)?["'`]\s*\})/;
+  assert(
+    !privateTextilesLink.test(landing),
+    "la landing pública no debía enlazar directamente rutas privadas de /textiles"
+  );
 });
 
 check("16. La página de catálogos muestra el aviso de no certificación", () => {

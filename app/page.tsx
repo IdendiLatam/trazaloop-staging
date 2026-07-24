@@ -4,14 +4,17 @@
 // destino del botón "Entrar" a la plataforma.
 //
 // Sprint T1 (DL-16/DL-17): el hero comunica "Trazaloop" — la PLATAFORMA
-// modular — y los módulos (CPR disponible; Textil/Quality/Construcción
-// próximamente) se presentan en las tarjetas de abajo. Trazaloop CPR es
+// modular — y los módulos (CPR y Textiles disponibles;
+// Quality/Construcción próximamente) se presentan en las tarjetas de abajo.
+// Trazaloop CPR es
 // el primer módulo, nunca "toda la plataforma".
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { Wordmark } from "@/components/layout/logo";
+import { getCommercialModuleByKey } from "@/lib/modules/catalog";
+import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
 
 const COMING_SOON_MESSAGE = "Este módulo estará disponible próximamente.";
 
@@ -20,7 +23,10 @@ export default async function PublicLandingPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const cprHref = user ? "/modules" : "/login";
+  const entryHref = user ? "/modules" : "/login";
+  const textilesModule = getCommercialModuleByKey("textiles");
+  const textilesAvailable =
+    textilesModule?.status === "functional" && isTextilesModuleEnabled();
 
   return (
     <div className="min-h-screen bg-paper">
@@ -53,7 +59,7 @@ export default async function PublicLandingPage() {
           </p>
           <div className="flex flex-wrap gap-3 pt-2">
             <Link
-              href={cprHref}
+              href={entryHref}
               className="rounded-md bg-loop px-5 py-2.5 text-sm font-semibold text-white hover:bg-loop-deep"
             >
               Entrar
@@ -77,27 +83,54 @@ export default async function PublicLandingPage() {
               Trazabilidad, documentación técnica, evidencias y cálculo de contenido reciclado en
               procesos asociados a NTC 6632 y UNE-EN 15343.
             </span>
-            <Link href={cprHref} className="mt-2 text-sm font-medium text-loop hover:underline">
+            <Link href={entryHref} className="mt-2 text-sm font-medium text-loop hover:underline">
               Entrar →
             </Link>
           </div>
 
-          <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-paper p-5 opacity-70">
-            <span className="inline-flex w-fit rounded-full border border-hairline bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft">
-              Próximamente
-            </span>
-            <span className="text-lg font-semibold">Trazaloop Textiles</span>
-            <span className="text-sm text-ink-soft">
-              Trazabilidad de productos de confección, composición de fibras, evidencias,
-              circularidad y pasaporte técnico textil. {COMING_SOON_MESSAGE}
-            </span>
-            <button
-              type="button"
-              disabled
-              className="mt-2 w-fit cursor-not-allowed rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-ink-soft"
+          <div
+            className={`flex flex-col gap-2 rounded-lg border p-5 ${
+              textilesAvailable
+                ? "border-loop/30 bg-loop/5"
+                : "border-hairline bg-paper opacity-70"
+            }`}
+          >
+            <span
+              className={`inline-flex w-fit rounded-full border bg-surface px-2 py-0.5 text-[11px] font-medium ${
+                textilesAvailable
+                  ? "border-loop/30 text-loop-deep"
+                  : "border-hairline text-ink-soft"
+              }`}
             >
-              Próximamente
-            </button>
+              {textilesAvailable ? "Disponible" : "Próximamente"}
+            </span>
+
+            <span className="text-lg font-semibold">
+              {textilesModule?.name ?? "Trazaloop Textiles"}
+            </span>
+
+            <span className="text-sm text-ink-soft">
+              {textilesModule?.description ??
+                "Trazabilidad de productos de confección, composición de fibras, evidencias, circularidad y pasaporte técnico textil."}
+              {!textilesAvailable ? ` ${COMING_SOON_MESSAGE}` : null}
+            </span>
+
+            {textilesAvailable ? (
+              <Link
+                href={entryHref}
+                className="mt-2 text-sm font-medium text-loop hover:underline"
+              >
+                Entrar →
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="mt-2 w-fit cursor-not-allowed rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-ink-soft"
+              >
+                Próximamente
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-paper p-5 opacity-70">
