@@ -49,7 +49,7 @@ export default async function MaterialsPage({
         </p>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           La clasificación de origen define qué podrá contarse como reciclado en
-          el cálculo (Sprint 4). El material recuperado en el mismo proceso nunca
+          el cálculo. El material recuperado en el mismo proceso nunca
           cuenta; el postindustrial no cuenta por defecto y solo puede
           reclasificarse con justificación y evidencia.
         </p>

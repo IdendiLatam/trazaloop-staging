@@ -47,9 +47,6 @@ export default async function PublicLandingPage() {
 
       <main className="mx-auto max-w-5xl space-y-10 px-6 pb-20 pt-10">
         <section className="space-y-4">
-          <span className="inline-flex rounded-full border border-amber/40 bg-amber/10 px-3 py-1 text-xs font-medium text-amber">
-            Beta / lanzamiento controlado
-          </span>
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-ink">
             Trazaloop
           </h1>

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Trazaloop",
+  title: "Trazaloop — Plataforma modular de trazabilidad",
   description:
-    "Trazabilidad y contenido reciclado para plásticos — NTC 6632 / UNE-EN 15343.",
+    "Plataforma modular para gestionar trazabilidad, documentación técnica, evidencias y preparación técnica de productos, procesos y cadenas de valor.",
 };
 
 export default function RootLayout({

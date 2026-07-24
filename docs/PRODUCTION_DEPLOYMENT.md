@@ -1,6 +1,13 @@
 # Trazaloop · Despliegue en producción
 
-Guía para llevar Trazaloop v0.5.x (fase piloto) a un proyecto de producción.
+> **Para la versión 1.0.0 usa
+> [`docs/releases/V1.0.0_PRODUCTION_READINESS.md`](releases/V1.0.0_PRODUCTION_READINESS.md).**
+> Ese documento es el procedimiento vigente y detallado (creación del
+> proyecto, dry-run de migraciones, verificación de base vacía,
+> superadministrador, GO/NO-GO). Esta guía se conserva como resumen
+> histórico y de referencia rápida.
+
+Guía general para llevar Trazaloop a un proyecto de producción.
 Complementa `docs/STAGING_DEPLOYMENT.md` (misma mecánica) con los cuidados
 propios de producción. **Regla de oro:** en producción no se ejecutan
 `test:rls` ni `seed:demo` (crean datos de prueba); las verificaciones son de
@@ -20,8 +27,11 @@ npx supabase link --project-ref REF_DE_PRODUCCION
 npx supabase db push
 ```
 
-Deben aplicar `0001 … 0032` en orden. Verifica el estado con
-`npx supabase migration list`.
+Deben aplicar `0001 … 0102` en orden (94 archivos; la numeración salta de
+`0006` a `0015` por motivos históricos). Verifica el estado con
+`npx supabase migration list`: no debe quedar ninguna migración solo-local
+ni solo-remota. Antes de aplicar, ensaya con `npx supabase db push
+--dry-run`.
 
 ## 3. Verificar semillas
 
@@ -54,13 +64,19 @@ Supabase → Authentication → URL Configuration:
 Settings → Environment Variables, entorno **Production** únicamente:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL        → URL del proyecto de PRODUCCIÓN
-NEXT_PUBLIC_SUPABASE_ANON_KEY   → anon key de PRODUCCIÓN
-SUPABASE_SERVICE_ROLE_KEY       → service key de PRODUCCIÓN (solo scripts)
-ACTIVE_ORG_COOKIE_SECRET        → secreto NUEVO (openssl rand -base64 32);
-                                  distinto del de staging
-NEXT_PUBLIC_SITE_URL            → https://app.tudominio.com
+NEXT_PUBLIC_SUPABASE_URL              → URL del proyecto de PRODUCCIÓN
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  → clave pública de PRODUCCIÓN
+SUPABASE_SECRET_KEY                   → clave secreta de PRODUCCIÓN
+TEXTILES_MODULE_ENABLED               → true
+ACTIVE_ORG_COOKIE_SECRET              → secreto NUEVO (openssl rand -base64 32);
+                                        distinto del de staging
+NEXT_PUBLIC_SITE_URL                  → https://app.tudominio.com
 ```
+
+Los nombres heredados `NEXT_PUBLIC_SUPABASE_ANON_KEY` y
+`SUPABASE_SERVICE_ROLE_KEY` se siguen aceptando como respaldo temporal,
+pero las variables principales son las de arriba. Comprueba la presencia
+(nunca los valores) con `npm run precheck:env`.
 
 Con `NEXT_PUBLIC_SITE_URL` productivo (sin `vercel.app` ni `staging`), el
 badge «Ambiente staging» desaparece automáticamente.
@@ -85,6 +101,8 @@ real del piloto.
 
 - `npm run test:rls` (crea usuarios y datos de prueba) → solo staging/local.
 - `npm run seed:demo` (datos demo) → solo staging.
+- `npm run cleanup:staging` (borra datos) → **jamás** contra producción.
+- `supabase db reset --linked` y `supabase migration repair` → nunca.
 - Nunca borrar ni editar migraciones aplicadas: corregir siempre hacia
   adelante con una migración nueva.
 

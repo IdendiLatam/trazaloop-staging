@@ -45,8 +45,7 @@ export default async function LegalAcceptPage({
         <p className="eyebrow">Antes de continuar</p>
         <h1 className="text-2xl font-semibold tracking-tight">Términos de uso y política de privacidad</h1>
         <p className="mt-2 max-w-xl text-sm text-ink-soft">
-          Trazaloop está en beta / lanzamiento controlado. Antes de continuar, necesitamos que
-          aceptes los siguientes documentos.
+          Antes de continuar, necesitamos que aceptes los siguientes documentos.
         </p>
       </div>
 

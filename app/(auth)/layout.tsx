@@ -1,4 +1,5 @@
 import { Wordmark } from "@/components/layout/logo";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 /**
  * Layout de autenticación: riel de marca a la izquierda (desktop) y tarjeta
@@ -25,7 +26,7 @@ export default function AuthLayout({
           </p>
         </div>
         <p className="code text-xs text-emerald-200/60">
-          Trazaloop · beta / lanzamiento controlado
+          {APP_VERSION_LABEL}
         </p>
       </aside>
 

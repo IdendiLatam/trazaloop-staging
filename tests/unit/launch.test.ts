@@ -417,12 +417,26 @@ check("14. No queda el texto \"El cálculo de contenido reciclado llega en el si
   assert(!normalized.includes("llega en el siguiente sprint"), "el dashboard ya no debía decir que el cálculo llega en un sprint futuro — ya existe");
 });
 
-check("15. No queda el texto \"núcleo v0.1\"", () => {
+// v1.0.0: esta comprobación histórica exigía que el riel de autenticación
+// mostrara "beta / lanzamiento controlado" (el lenguaje vigente cuando se
+// escribió). Con la versión oficial ese lenguaje queda PROHIBIDO, no
+// requerido. La aserción no se elimina: se INVIERTE y se refuerza —
+// prohíbe a la vez la etiqueta interna antigua ("núcleo v0.1") y toda
+// etiqueta de producto no oficial. La protección es más estricta que antes.
+check("15. El riel de autenticación no muestra etiquetas de versión interna ni de producto no oficial", () => {
   const authLayoutSource = readSource("../../app/(auth)/layout.tsx");
   assert(!authLayoutSource.includes("núcleo v0.1"), "el layout de autenticación ya no debía mostrar la etiqueta de versión interna 'núcleo v0.1'");
   assert(
-    authLayoutSource.includes("beta / lanzamiento controlado"),
-    "debía usar el lenguaje vigente de beta / lanzamiento controlado"
+    !/beta/i.test(authLayoutSource),
+    "v1.0.0: el layout de autenticación no debe presentar Trazaloop como beta"
+  );
+  assert(
+    !/lanzamiento controlado|versi[oó]n preliminar|versi[oó]n de prueba/i.test(authLayoutSource),
+    "v1.0.0: el layout de autenticación no debe presentar Trazaloop como versión no oficial"
+  );
+  assert(
+    authLayoutSource.includes("Plataforma modular de trazabilidad"),
+    "el login debe seguir comunicando la identidad modular de la plataforma"
   );
 });
 

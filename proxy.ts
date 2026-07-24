@@ -9,9 +9,18 @@ import { createServerClient } from "@supabase/ssr";
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // Clave PÚBLICA (siempre sujeta a RLS). Nombre vigente
+  // NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, con respaldo temporal en el
+  // heredado NEXT_PUBLIC_SUPABASE_ANON_KEY — misma jerarquía que
+  // lib/supabase/server.ts y lib/supabase/browser.ts. Aquí NUNCA entra una
+  // clave secreta.
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    publishableKey!,
     {
       cookies: {
         getAll() {

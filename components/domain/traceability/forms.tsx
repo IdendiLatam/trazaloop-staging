@@ -300,7 +300,7 @@ export function CompositionForm({
         <input type="checkbox" name="is_same_process" className="h-4 w-4 accent-[var(--loop)]" />
         Material recuperado en el mismo proceso
         <span className="text-xs text-ink-soft">
-          (se usará en el cálculo del Sprint 4; nunca cuenta como reciclado)
+          (se usará en el cálculo de contenido reciclado; nunca cuenta como reciclado)
         </span>
       </label>
       <Button type="submit" disabled={pending} className="!w-auto">

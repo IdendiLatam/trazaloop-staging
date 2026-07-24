@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { APP_VERSION_LABEL } from "@/lib/version";
-import { isStagingEnvironment } from "@/lib/env";
+import { environmentBadgeLabel } from "@/lib/env";
 import { requireSession } from "@/lib/auth/require-session";
 import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getActiveOrganization } from "@/lib/db/organizations";
@@ -70,9 +70,13 @@ export default async function ShellLayout({
       <div className="flex min-h-screen flex-col">
         {/* Barra superior: empresa activa siempre visible */}
         <header className="no-print relative flex items-center justify-between border-b border-hairline bg-surface px-6 py-3">
-          {isStagingEnvironment() ? (
+          {/* Distintivo de ambiente: null en Production (nunca se muestra),
+              «Ambiente staging» en Preview y «Entorno local» en desarrollo.
+              Decidido por VERCEL_TARGET_ENV / VERCEL_ENV, jamás por el
+              nombre del dominio (lib/env.ts). */}
+          {environmentBadgeLabel() ? (
             <span className="rounded-full border border-amber/40 bg-amber/10 px-2.5 py-0.5 text-xs font-medium text-amber">
-              Ambiente staging
+              {environmentBadgeLabel()}
             </span>
           ) : null}
           <details className="group lg:hidden">

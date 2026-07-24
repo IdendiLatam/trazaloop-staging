@@ -32,7 +32,7 @@ export default async function ImportPage() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Importar catálogos</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Solo CSV en este sprint. Descarga la plantilla, complétala y valida
+          El formato admitido es CSV. Descarga la plantilla, complétala y valida
           antes de importar.
         </p>
         <p className="mt-1 text-sm text-ink-soft">

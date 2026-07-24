@@ -3,12 +3,14 @@
 ## 1. Qué es el portal público
 
 `/` ahora es una página pública — accesible sin iniciar sesión — que
-presenta Trazaloop y sus módulos: **Trazaloop CPR** (disponible) y
-Trazaloop Textil / Quality / Construcción (próximamente, sin
+presenta Trazaloop y sus módulos: **Trazaloop CPR** y **Trazaloop
+Textiles** (disponibles), y Quality / Construcción (próximamente, sin
 funcionalidad todavía). Una sola cuenta de Trazaloop da acceso a todos
-los módulos disponibles; nunca hay logins separados por módulo. El
-portal deja claro que Trazaloop está en **beta / lanzamiento
-controlado**.
+los módulos disponibles; nunca hay logins separados por módulo.
+
+> Actualizado en **v1.0.0**: el portal ya NO presenta Trazaloop como
+> «beta / lanzamiento controlado». Esa insignia se retiró al publicar la
+> primera versión oficial.
 
 ## 2. Términos de uso y política de privacidad
 

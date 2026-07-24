@@ -55,8 +55,8 @@ export default async function CatalogIndexPage() {
           Catálogos de {org.organizationName}
         </h1>
         <p className="text-sm text-ink-soft">
-          Los catálogos alimentan la trazabilidad (Sprint 3) y el cálculo
-          (Sprint 4). Puedes crearlos aquí o importarlos por CSV.
+          Los catálogos alimentan la trazabilidad y el cálculo de contenido
+          reciclado. Puedes crearlos aquí o importarlos por CSV.
         </p>
       </header>
 

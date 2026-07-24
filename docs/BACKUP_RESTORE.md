@@ -1,6 +1,10 @@
 # Trazaloop · Backups y restauración
 
-Estrategia mínima para la fase piloto (v0.5.x) con Supabase Cloud.
+Estrategia de respaldo y restauración con Supabase Cloud.
+
+> Para el procedimiento completo de la versión oficial, ver
+> `docs/releases/V1.0.0_PRODUCTION_READINESS.md` y
+> `docs/releases/V1.0.0_ROLLBACK.md`.
 
 ## Backups
 
