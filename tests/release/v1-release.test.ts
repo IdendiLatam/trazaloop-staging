@@ -936,6 +936,239 @@ check("24e. El proxy (middleware) usa la publishable key con fallback, nunca un 
 });
 
 // ===========================================================================
+console.log("\n§13 · Scripts legales: publicación y reversión\n");
+
+const PUBLISH_SQL = "scripts/release/v1/publish-legal-v2.sql";
+const ROLLBACK_SQL = "scripts/release/v1/rollback-legal-v2.sql";
+
+/** Quita comentarios de línea SQL para analizar solo sentencias. */
+const sqlCode = (s: string) => s.replace(/^\s*--.*$/gm, "");
+/** Quita además los literales entre comillas simples. */
+const sqlBare = (s: string) => sqlCode(s).replace(/'(?:[^']|'')*'/g, "''");
+
+check("25. Existe el script de rollback legal", () => {
+  assert(exists(ROLLBACK_SQL), "debe existir scripts/release/v1/rollback-legal-v2.sql");
+  const s = read(ROLLBACK_SQL);
+  assert(s.includes("NO SE HA EJECUTADO"), "el rollback debe declarar que no se ha ejecutado");
+});
+
+check("26. El estado v1 se valida por igualdad EXACTA, nunca con LIKE/ILIKE", () => {
+  const s = read(PUBLISH_SQL);
+  // Igualdad exacta de título y contenido contra los literales de 0066.
+  assert(
+    /and title\s+=\s+c_terms_v1_title/.test(s) && /and content\s+=\s+c_terms_v1_content/.test(s),
+    "terms/v1 debe validarse por igualdad exacta de título y contenido"
+  );
+  assert(
+    /and title\s+=\s+c_privacy_v1_title/.test(s) &&
+      /and content\s+=\s+c_privacy_v1_content/.test(s),
+    "privacy/v1 debe validarse por igualdad exacta de título y contenido"
+  );
+  // Prohibido cualquier LIKE/ILIKE que compare el CONTENIDO o TÍTULO de v1
+  // contra un prefijo (el defecto corregido en esta pasada).
+  assert(
+    !/(content|title)\s+i?like\s+'(Esta es|Términos de uso de Trazaloop \(|Política de privacidad de Trazaloop \()/i.test(
+      s
+    ),
+    "la validación de v1 no debe usar coincidencias parciales con LIKE/ILIKE"
+  );
+  assert(
+    !/content\s+like\s+/i.test(sqlCode(s)),
+    "no debe quedar ningún `content LIKE` en el script"
+  );
+});
+
+check("26b. El script incorpora los literales exactos de la migración 0066", () => {
+  const migration = read("supabase/migrations/0066_legal_documents_and_acceptances.sql");
+  const s = read(PUBLISH_SQL);
+  // Fragmentos textuales que deben coincidir carácter por carácter.
+  const fragments = [
+    "Términos de uso de Trazaloop (versión preliminar)",
+    "Política de privacidad de Trazaloop (versión preliminar)",
+    "Esta es una versión preliminar de los términos de uso de Trazaloop, publicada para la beta / lanzamiento controlado de Trazaloop CPR.",
+    "Esta es una versión preliminar de la política de privacidad de Trazaloop, publicada para la beta / lanzamiento controlado de Trazaloop CPR.",
+  ];
+  for (const f of fragments) {
+    assert(migration.includes(f), `la migración 0066 debía contener: ${f.slice(0, 50)}…`);
+    assert(
+      s.includes(f),
+      `el script debe replicar literalmente el texto de 0066: ${f.slice(0, 50)}…`
+    );
+  }
+  // Huella md5 declarada como diagnóstico reproducible.
+  assert(
+    /c_terms_v1_md5\s+constant text := '[0-9a-f]{32}'/.test(s) &&
+      /c_privacy_v1_md5\s+constant text := '[0-9a-f]{32}'/.test(s),
+    "deben declararse las huellas md5 del texto v1 esperado"
+  );
+});
+
+check("27. Ninguno de los dos scripts contiene metacomandos de psql", () => {
+  // Se declaran compatibles con el SQL Editor de Supabase: por tanto NO
+  // pueden contener \pset, \echo, \timing, etc.
+  for (const f of [PUBLISH_SQL, ROLLBACK_SQL]) {
+    const s = read(f);
+    const meta = s.match(/^\\\w+/gm);
+    assert(
+      meta === null,
+      `${f} declara compatibilidad con SQL Editor pero contiene metacomandos psql: ${meta?.join(", ")}`
+    );
+    assert(
+      /SQL Editor/i.test(s),
+      `${f} debe declarar explícitamente su compatibilidad de ejecución`
+    );
+  }
+});
+
+check("28. Ambos scripts protegen contra ejecución concurrente", () => {
+  for (const f of [PUBLISH_SQL, ROLLBACK_SQL]) {
+    const s = read(f);
+    assert(
+      s.includes("pg_advisory_xact_lock"),
+      `${f} debe tomar un advisory transaction lock (se libera solo al terminar la txn)`
+    );
+    assert(
+      /for update/i.test(sqlCode(s)),
+      `${f} debe bloquear explícitamente las filas relevantes`
+    );
+  }
+  // Misma clave en ambos: deben excluirse mutuamente.
+  const keyOf = (f: string) => read(f).match(/c_lock_key constant bigint := (\d+)/)?.[1];
+  const k1 = keyOf(PUBLISH_SQL);
+  const k2 = keyOf(ROLLBACK_SQL);
+  assert(!!k1 && k1 === k2, `publicar y revertir deben compartir la clave de lock (${k1} vs ${k2})`);
+});
+
+check("29. Ambos scripts exigen ROW_COUNT exacto con GET DIAGNOSTICS", () => {
+  for (const f of [PUBLISH_SQL, ROLLBACK_SQL]) {
+    const s = read(f);
+    assert(
+      /get diagnostics\s+v_rows\s*=\s*row_count/i.test(s),
+      `${f} debe usar GET DIAGNOSTICS … ROW_COUNT`
+    );
+    const exact = s.match(/if v_rows <> 2 then/g) ?? [];
+    assert(
+      exact.length >= 2,
+      `${f} debe exigir exactamente 2 filas en cada paso de escritura (encontrados ${exact.length})`
+    );
+  }
+});
+
+check("30. La publicación censa filas v2 en CUALQUIER estado", () => {
+  const s = read(PUBLISH_SQL);
+  // El censo se hace por version='v2' sin filtrar por status.
+  const censusIdx = s.indexOf("where version = 'v2'");
+  assert(censusIdx !== -1, "debe existir un censo por version = 'v2'");
+  const censusStmt = s.slice(s.lastIndexOf("select", censusIdx), censusIdx + 200);
+  assert(
+    !/and status\s*=\s*'active'\s*$/m.test(censusStmt.split("where version = 'v2'")[0]),
+    "el censo no debe restringirse a filas activas"
+  );
+  assert(
+    s.includes("ESTADO v2 INESPERADO"),
+    "debe abortar explícitamente ante cualquier combinación v2 no admitida"
+  );
+  // Debe contemplar draft y archived en la explicación del fallo.
+  assert(
+    /draft/i.test(s) && /archivado/i.test(s),
+    "debe contemplar expresamente los estados draft y archived"
+  );
+  assert(
+    s.includes("legal_documents_one_active_per_type") &&
+      s.includes("legal_documents_type_version_uniq"),
+    "debe documentar las restricciones reales de 0066 en las que NO se apoya para detectar el error"
+  );
+});
+
+check("31. Ambos scripts son transaccionales", () => {
+  for (const f of [PUBLISH_SQL, ROLLBACK_SQL]) {
+    const s = read(f);
+    assert(/^begin;$/m.test(s), `${f} debe abrir una transacción explícita`);
+    assert(/^commit;$/m.test(s), `${f} debe cerrar la transacción explícitamente`);
+  }
+});
+
+check("32. El rollback no borra ni altera: sin DELETE, TRUNCATE, DROP ni ALTER", () => {
+  const bare = sqlBare(read(ROLLBACK_SQL));
+  for (const rx of [
+    /\bdelete\s+from\b/i,
+    /\btruncate\b/i,
+    /\bdrop\s+\w+/i,
+    /\balter\s+\w+/i,
+  ]) {
+    assert(!rx.test(bare), `el rollback no debe contener ${rx}`);
+  }
+  const s = read(ROLLBACK_SQL);
+  assert(
+    s.includes("set status = 'archived'") && s.includes("set status = 'active'"),
+    "el rollback debe archivar v2 y reactivar v1 mediante UPDATE de estado"
+  );
+});
+
+check("32b. El rollback exige las precondiciones exactas", () => {
+  const s = read(ROLLBACK_SQL);
+  assert(
+    /v_v2_terms_active\s+<> 1/.test(s) && /v_v2_privacy_active <> 1/.test(s),
+    "debe exigir exactamente 1 terms/v2 y 1 privacy/v2 activos"
+  );
+  assert(
+    /v_v1_terms_arch\s+<> 1/.test(s) && /v_v1_privacy_arch\s+<> 1/.test(s),
+    "debe exigir exactamente 1 terms/v1 y 1 privacy/v1 archivados"
+  );
+});
+
+check("33. Los scripts legales NO se añadieron como migración", () => {
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
+  for (const name of ["publish-legal", "rollback-legal", "legal-v2", "legal_v2"]) {
+    assert(
+      !migrations.some((f) => f.toLowerCase().includes(name)),
+      `ningún archivo de migración debe llamarse como el script operativo (${name})`
+    );
+  }
+  // Y siguen sin existir migraciones nuevas.
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
+  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+});
+
+check("34. La publicación está bloqueada por aprobación legal (fail-closed)", () => {
+  const s = read(PUBLISH_SQL);
+  assert(
+    /c_legal_approval_confirmed constant boolean := false/.test(s),
+    "el script debe estar bloqueado por defecto (aprobación legal en false)"
+  );
+  assert(
+    /if not c_legal_approval_confirmed then[\s\S]{0,200}raise exception/.test(s),
+    "debe abortar si no hay aprobación legal declarada"
+  );
+});
+
+check("35. El informe legal declara los bloqueos y los requisitos pendientes", () => {
+  const doc = read("docs/releases/V1.0.0_LEGAL_REVIEW.md");
+  assert(/NO-GO/.test(doc), "el informe debe mantener el estado NO-GO");
+  assert(
+    /pendiente de redacción y aprobación jurídica/i.test(doc),
+    "debe declarar que la política de privacidad sigue pendiente"
+  );
+  // Los 13 requisitos pendientes.
+  for (let i = 1; i <= 13; i++) {
+    const id = `P-${String(i).padStart(2, "0")}`;
+    assert(doc.includes(id), `el informe debe listar el requisito ${id}`);
+  }
+  // Las frases riesgosas marcadas.
+  for (const id of ["L-3a", "L-3b", "L-3c", "L-3d", "L-3e"]) {
+    assert(doc.includes(id), `el informe debe marcar la frase ${id} para revisión legal`);
+  }
+  assert(
+    /sin perder los datos ya cargados/.test(doc),
+    "debe citarse la promesa absoluta marcada (L-3a)"
+  );
+  assert(
+    !/cumple la legislación colombiana|conforme a la ley colombiana/i.test(doc),
+    "el informe NO debe afirmar cumplimiento normativo"
+  );
+});
+
+// ===========================================================================
 console.log("");
 if (failures > 0) {
   console.error(`\n${failures} comprobación(es) de release FALLARON.\n`);
