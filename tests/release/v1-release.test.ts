@@ -1486,6 +1486,354 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
 });
 
 // ===========================================================================
+console.log("\n§15 · Ruta A — alcance del lanzamiento esencial\n");
+
+const ROUTE_A = "docs/releases/V1.0.0_ROUTE_A_SCOPE.md";
+const READINESS = "docs/releases/V1.0.0_PRODUCTION_READINESS.md";
+const SMOKE = "docs/releases/V1.0.0_SMOKE_TESTS.md";
+
+/** Ficheros de UI (.tsx) con los comentarios eliminados. */
+function uiSources(): { file: string; code: string }[] {
+  const out: { file: string; code: string }[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(entry.name)) {
+        out.push({
+          file: rel,
+          code: read(rel).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""),
+        });
+      }
+    }
+  };
+  walk("app");
+  walk("components");
+  walk("lib");
+  walk("server");
+  return out;
+}
+
+check("50. Existe el documento de alcance de Ruta A", () => {
+  assert(exists(ROUTE_A), `debe existir ${ROUTE_A}`);
+  const s = read(ROUTE_A);
+  for (const sec of [
+    "Alcance INCLUIDO",
+    "Alcance APLAZADO",
+    "Contratación y pagos",
+    "Demo sigue siendo un plan comercial",
+  ]) {
+    assert(s.includes(sec), `${ROUTE_A} debe incluir la sección «${sec}»`);
+  }
+});
+
+check("51. Demo sigue siendo plan comercial en el alcance", () => {
+  const s = read(ROUTE_A);
+  assert(
+    /Demo es un plan comercial real/.test(s),
+    "el alcance debe declarar Demo como plan comercial real"
+  );
+  assert(
+    /no una versión experimental/.test(s),
+    "debe negarse expresamente que Demo sea una versión experimental"
+  );
+  // Full y Extra: mismas funciones, distinto almacenamiento.
+  assert(
+    /Full.*Extra.*cuota de almacenamiento/.test(s.replace(/\s+/g, " ")),
+    "debe conservarse la diferencia Full/Extra por almacenamiento"
+  );
+});
+
+check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximamente", () => {
+  const s = read(ROUTE_A);
+  assert(/Trazaloop CPR/.test(s) && /Trazaloop Textiles/.test(s), "ambos módulos en el alcance");
+  assert(
+    /Quality.*Próximamente|Próximamente.*Quality/.test(s.replace(/\n/g, " ")),
+    "Quality debe seguir como Próximamente"
+  );
+  assert(
+    /Construcción/.test(s),
+    "Trazaloop Construcción debe figurar como Próximamente"
+  );
+  // El catálogo del código no cambió.
+  assert(FUNCTIONAL_MODULE_CODES.length === 2, "siguen siendo 2 los módulos funcionales");
+  for (const key of ["quality", "construccion"]) {
+    assert(
+      getCommercialModuleByKey(key)?.status === "coming_soon",
+      `${key} debe seguir en coming_soon`
+    );
+  }
+});
+
+check("53. Mercado Pago no se presenta como integrado", () => {
+  // En la interfaz: ninguna mención.
+  for (const { file, code } of uiSources()) {
+    assert(
+      !/mercado\s*pago/i.test(code),
+      `${file} no debe mencionar Mercado Pago: no está integrado en v1.0.0`
+    );
+  }
+  // En el alcance: declarado aplazado.
+  const s = read(ROUTE_A);
+  assert(
+    /Mercado Pago/.test(s) && /No existe código de pagos/.test(s),
+    "el alcance debe declarar Mercado Pago como aplazado y sin código"
+  );
+  assert(
+    /no procesa.{0,30}tarjetas/i.test(s.replace(/\s+/g, " ")),
+    "debe declararse que Trazaloop no procesa tarjetas"
+  );
+});
+
+check("54. No se promete renovación automática técnica", () => {
+  for (const { file, code } of uiSources()) {
+    assert(
+      !/renovaci[oó]n autom|se renueva autom|renovar autom|renovaremos autom/i.test(code),
+      `${file} no debe prometer renovación automática: no existe en v1.0.0`
+    );
+  }
+  const s = read(ROUTE_A);
+  assert(
+    /No existe renovación automática/i.test(s),
+    "el alcance debe negar expresamente la renovación automática"
+  );
+  assert(
+    /No existe aviso automático/i.test(s),
+    "el alcance debe negar los avisos automáticos de renovación"
+  );
+  // La activación es manual, por el superadministrador.
+  assert(
+    /activación de Full o Extra la realiza el \*\*superadministrador\*\*|Activación de Full o Extra/i.test(s),
+    "debe declararse que la activación la realiza el superadministrador"
+  );
+});
+
+check("55. GA4 y GTM no están activos en el código ni en las dependencias", () => {
+  const FORBIDDEN = [
+    /\bgtag\s*\(/,
+    /googletagmanager\.com/i,
+    /google-analytics\.com/i,
+    /window\.dataLayer/,
+    /\bGTM-[A-Z0-9]{4,}/,
+  ];
+  for (const { file, code } of uiSources()) {
+    for (const rx of FORBIDDEN) {
+      assert(!rx.test(code), `${file} contiene analítica activa (${rx}) — aplazada en v1.0.0`);
+    }
+  }
+  // Ni dependencias de analítica/mercadeo.
+  const pkg = JSON.parse(read("package.json")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+  const bad = deps.filter((d) =>
+    /analytic|gtag|gtm|segment|mixpanel|posthog|hotjar|mailchimp|sendgrid/i.test(d)
+  );
+  assert(bad.length === 0, `dependencias de analítica/mercadeo no permitidas: ${bad.join(", ")}`);
+});
+
+check("56. No existe consentimiento de mercadeo activo", () => {
+  for (const { file, code } of uiSources()) {
+    assert(
+      !/consentimiento de mercadeo|acepto recibir|autorizo.{0,40}(novedades|ofertas|promocion)/i.test(code),
+      `${file} no debe implementar consentimiento de mercadeo: aplazado en v1.0.0`
+    );
+  }
+  const s = read(ROUTE_A);
+  assert(
+    /sin consentimiento de mercadeo/i.test(s),
+    "el alcance debe declarar que no hay consentimiento de mercadeo"
+  );
+});
+
+check("57. No se clasifica ninguna cookie analítica como necesaria", () => {
+  const s = read(ROUTE_A);
+  // Las cookies permitidas son solo las técnicas.
+  assert(
+    /tz-active-org/.test(s),
+    "el alcance debe inventariar la cookie técnica tz-active-org"
+  );
+  assert(
+    !/Google Analytics.{0,80}necesaria|GA4.{0,80}necesaria/i.test(s.replace(/\s+/g, " ")),
+    "GA4 nunca puede clasificarse como cookie necesaria"
+  );
+  // La política de cookies mantiene la prohibición.
+  const cookiePolicy = read("docs/legal/V1.0.0_COOKIE_POLICY_DRAFT.md");
+  assert(
+    /NO son cookies estrictamente necesarias/i.test(cookiePolicy),
+    "la política de cookies debe seguir negando que GA4/GTM sean necesarias"
+  );
+  // Y el alcance explica por qué no hay banner.
+  assert(
+    /no existen\s*\n?\s*cookies opcionales|no existen cookies opcionales/i.test(s),
+    "debe explicarse que no hay banner porque no hay cookies opcionales"
+  );
+});
+
+check("58. Los ocho documentos legales siguen marcados como borradores", () => {
+  const BANNER = "BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR";
+  for (const name of LEGAL_DRAFTS) {
+    assert(draft(name).includes(BANNER), `${name} debe seguir marcado como borrador`);
+  }
+});
+
+check("59. c_legal_approval_confirmed sigue en false", () => {
+  const s = read(PUBLISH_SQL);
+  assert(
+    /c_legal_approval_confirmed constant boolean := false/.test(s),
+    "el script de publicación debe seguir bloqueado"
+  );
+  // Y el aplazamiento formal está documentado.
+  const review = read("docs/releases/V1.0.0_LEGAL_REVIEW.md");
+  assert(
+    /APLAZADAS|aplazad/i.test(review),
+    "el informe legal debe declarar el aplazamiento formal de la publicación"
+  );
+});
+
+check("60. El SMTP personalizado sigue siendo gate de usuarios externos", () => {
+  const s = read(ROUTE_A);
+  assert(
+    /SMTP personalizado/i.test(s),
+    "el alcance debe exigir SMTP personalizado"
+  );
+  for (const bloqueado of [
+    "registro público",
+    "confirmación de cuentas",
+    "invitaciones externas",
+    "recuperación de contraseña",
+    "correos de seguridad",
+  ]) {
+    assert(
+      new RegExp(bloqueado, "i").test(s),
+      `el gate de SMTP debe cubrir: ${bloqueado}`
+    );
+  }
+  // Production técnico puede prepararse ANTES del SMTP.
+  const readiness = read(READINESS);
+  assert(
+    /Puede completarse SIN SMTP personalizado|puede prepararse ANTES del SMTP/i.test(readiness),
+    "debe declararse que el hito A puede completarse sin SMTP personalizado"
+  );
+  assert(
+    /solo puede usarse en staging y pruebas|solo sirve para staging|solo se admite para staging/i.test(
+      readiness + s
+    ),
+    "el SMTP de Supabase debe seguir restringido a staging y pruebas"
+  );
+});
+
+check("61. La documentación distingue despliegue técnico de apertura comercial", () => {
+  for (const f of [ROUTE_A, READINESS]) {
+    const s = read(f);
+    assert(
+      /despliegue técnico/i.test(s) && /apertura comercial/i.test(s),
+      `${f} debe distinguir despliegue técnico de apertura comercial`
+    );
+  }
+  const s = read(ROUTE_A);
+  assert(/hito A/i.test(s) && /hito B/i.test(s), "el alcance debe nombrar ambos hitos");
+  // El readiness separa los gates.
+  const readiness = read(READINESS);
+  assert(
+    /GO TÉCNICO \(hito A\)/.test(readiness),
+    "el readiness debe tener una lista GO técnica propia del hito A"
+  );
+  assert(
+    /APERTURA COMERCIAL \(hito B\)/i.test(readiness),
+    "el readiness debe tener los gates del hito B separados"
+  );
+});
+
+check("62. El checklist de Production no exige funciones aplazadas", () => {
+  const readiness = read(READINESS);
+  // Extraer solo el bloque de GO técnico (hito A).
+  const start = readiness.indexOf("### 14.1 GO TÉCNICO");
+  const end = readiness.indexOf("### 14.3");
+  assert(start !== -1 && end !== -1, "deben existir las secciones 14.1 y 14.3");
+  const goTecnico = readiness.slice(start, end);
+  for (const aplazada of [
+    /mercado\s*pago/i,
+    /google analytics/i,
+    /tag manager/i,
+    /banner de cookies/i,
+    /consentimiento de mercadeo/i,
+    /renovación automática/i,
+    /exportación integral/i,
+    /eliminación automatizada/i,
+  ]) {
+    assert(
+      !aplazada.test(goTecnico),
+      `el GO técnico no debe exigir una función aplazada (${aplazada})`
+    );
+  }
+  // Y los smoke tests declaran el alcance.
+  const smoke = read(SMOKE);
+  assert(
+    /Alcance Ruta A/i.test(smoke),
+    "los smoke tests deben declarar el alcance de Ruta A"
+  );
+  assert(
+    /No se prueba nada de lo aplazado/i.test(smoke),
+    "los smoke tests deben declarar que no prueban lo aplazado"
+  );
+});
+
+check("63. El estado del registro público está documentado como riesgo", () => {
+  const s = read(ROUTE_A);
+  assert(
+    /registro público está ABIERTO/i.test(s),
+    "el alcance debe declarar que el registro público está abierto"
+  );
+  assert(
+    /signUpAction/.test(s),
+    "debe citarse la evidencia real del código (signUpAction)"
+  );
+  assert(
+    /medida operativa temporal/i.test(s),
+    "deben proponerse medidas operativas temporales"
+  );
+  assert(
+    /REQUIERE DECISIÓN DE PRODUCTO/i.test(s),
+    "la bandera de registro controlado debe marcarse como decisión de producto"
+  );
+  assert(
+    /No se implementa en esta pasada/i.test(s),
+    "debe declararse que la corrección no se implementó"
+  );
+  // Y no se implementó de verdad: sigue sin haber kill switch.
+  const auth = read("server/actions/auth.ts");
+  assert(
+    auth.includes("supabase.auth.signUp"),
+    "el flujo de registro no debe haberse alterado en esta pasada"
+  );
+});
+
+check("64. Los pendientes jurídicos se clasifican en A / B / C", () => {
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  assert(
+    /Necesario para el \*\*despliegue técnico\*\*|Necesario para el.{0,20}despliegue técnico/i.test(gaps),
+    "debe existir la clase A"
+  );
+  assert(
+    /apertura comercial pública/i.test(gaps),
+    "debe existir la clase B"
+  );
+  assert(/Aplazado/i.test(gaps), "debe existir la clase C");
+  // Ningún hueco se borró: los 13 bloqueadores siguen.
+  for (let i = 1; i <= 13; i++) {
+    const id = `B-${String(i).padStart(2, "0")}`;
+    assert(gaps.includes(id), `el bloqueador ${id} no debe eliminarse`);
+  }
+  // Y la regla de que aplazar no elimina el requisito.
+  assert(
+    /vuelve a ser\s*\n?\s*exigible|no lo elimina/i.test(gaps),
+    "debe declararse que aplazar la función no elimina el requisito jurídico"
+  );
+});
+
+// ===========================================================================
 console.log("");
 if (failures > 0) {
   console.error(`\n${failures} comprobación(es) de release FALLARON.\n`);

@@ -17,6 +17,32 @@ verificación y reversión para producción.
 > El despliegue todavía no se ha realizado. La fecha se fija al ejecutar el
 > procedimiento de `docs/releases/V1.0.0_PRODUCTION_READINESS.md`.
 
+### Alcance — Ruta A (lanzamiento esencial)
+
+v1.0.0 sigue la **Ruta A**: se publica el producto que ya existe y
+funciona, sin construir funciones nuevas para llegar a la versión oficial.
+El alcance oficial está en **`docs/releases/V1.0.0_ROUTE_A_SCOPE.md`**.
+
+**Aplazado a versiones posteriores** (no existe en el código):
+
+- Mercado Pago, cobros en plataforma, suscripciones y **renovación
+  automática**; avisos automáticos de renovación.
+- Google Analytics 4, Google Tag Manager, cookies opcionales y banner de
+  cookies.
+- Consentimiento de mercadeo, correos de mercadeo y preferencias de
+  comunicaciones.
+- Exportación integral automatizada, eliminación automatizada y
+  automatización del ciclo de conservación 30/90/120 días.
+
+**Contratación y pagos en v1.0.0:** proceso **externo**. La contratación y
+la facturación ocurren fuera de Trazaloop; la activación de Full o Extra la
+realiza el **superadministrador**. Trazaloop no procesa tarjetas ni
+credenciales bancarias y no tiene renovación automática.
+
+**Dos hitos separados:** el **despliegue técnico** puede prepararse y
+verificarse; la **apertura comercial pública** conserva sus gates (paquete
+jurídico mínimo aprobado y SMTP personalizado probado).
+
 ### Plataforma
 
 - Trazaloop se presenta como **plataforma modular de trazabilidad**, no
@@ -175,6 +201,11 @@ verificación y reversión para producción.
 
 ### Documentación y herramientas de release
 
+- `docs/releases/V1.0.0_ROUTE_A_SCOPE.md` — **alcance oficial de v1.0.0**:
+  qué entra, qué se aplaza, contratación manual, y la separación entre
+  despliegue técnico y apertura comercial.
+- `docs/legal/` — ocho borradores del paquete jurídico y de privacidad,
+  todos marcados **BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR**.
 - `docs/releases/V1.0.0_PRODUCTION_READINESS.md` — procedimiento completo
   de puesta en producción.
 - `docs/releases/V1.0.0_SMOKE_TESTS.md` — pruebas manuales posteriores al

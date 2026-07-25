@@ -1,7 +1,14 @@
 # Trazaloop · Despliegue en producción
 
 > **Para la versión 1.0.0 usa
-> [`docs/releases/V1.0.0_PRODUCTION_READINESS.md`](releases/V1.0.0_PRODUCTION_READINESS.md).**
+> [`docs/releases/V1.0.0_PRODUCTION_READINESS.md`](releases/V1.0.0_PRODUCTION_READINESS.md)**
+> y el alcance oficial
+> [`docs/releases/V1.0.0_ROUTE_A_SCOPE.md`](releases/V1.0.0_ROUTE_A_SCOPE.md).
+>
+> v1.0.0 sigue la **Ruta A — lanzamiento esencial**: sin pagos integrados,
+> sin analítica, sin mercadeo y sin cookies opcionales. La contratación es
+> un proceso externo y la activación de Full/Extra la hace el
+> superadministrador.
 > Ese documento es el procedimiento vigente y detallado (creación del
 > proyecto, dry-run de migraciones, verificación de base vacía,
 > superadministrador, GO/NO-GO). Esta guía se conserva como resumen
