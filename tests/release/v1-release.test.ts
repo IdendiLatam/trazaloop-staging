@@ -2307,6 +2307,209 @@ check("74. No se tocaron migraciones ni el bloqueo legal", () => {
 });
 
 // ===========================================================================
+console.log("\n§17 · Página general «Acerca de Trazaloop»\n");
+
+const ABOUT_PAGE = "app/legal/page.tsx";
+/** Texto visible de la página, sin comentarios de código. */
+const aboutText = () =>
+  read(ABOUT_PAGE)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+check("75. La página general se presenta como plataforma modular", () => {
+  const s = aboutText();
+  assert(
+    /plataforma modular de trazabilidad y gestión de\s+información técnica para empresas/.test(
+      s.replace(/\s+/g, " ")
+    ) || /plataforma modular/i.test(s),
+    "la definición general debe presentar Trazaloop como plataforma modular"
+  );
+  assert(
+    /dos módulos\s*\n?\s*funcionales/i.test(s.replace(/\s+/g, " ")),
+    "debe declararse que integra dos módulos funcionales"
+  );
+  // Se conserva la estructura visual histórica.
+  assert(read(ABOUT_PAGE).includes('<p className="eyebrow">Acerca de Trazaloop</p>'), "debe conservarse el eyebrow");
+  assert(s.includes("Qué hace Trazaloop y qué no"), "debe conservarse el encabezado h1");
+  assert(read(ABOUT_PAGE).includes("APP_VERSION_LABEL"), "debe conservarse el pie con la versión");
+});
+
+check("76. Se mencionan Trazaloop CPR y Trazaloop Textiles", () => {
+  const s = aboutText();
+  assert(/Trazaloop CPR/.test(s), "debe mencionarse Trazaloop CPR");
+  assert(/Trazaloop Textiles/.test(s), "debe mencionarse Trazaloop Textiles");
+  // Con contenido propio de cada módulo, no solo el nombre.
+  assert(
+    /composición de fibras/i.test(s) && /pasaportes técnicos textiles/i.test(s),
+    "Textiles debe describirse con sus funciones propias"
+  );
+  assert(
+    /contenido reciclado por lote producido/i.test(s),
+    "CPR debe describirse con sus funciones propias"
+  );
+});
+
+check("77. La definición general ya no limita Trazaloop a plásticos", () => {
+  const s = aboutText();
+  assert(
+    !/empresas transformadoras de pl[aá]sticos/i.test(s),
+    "la página general no debe definir Trazaloop como herramienta para empresas transformadoras de plásticos"
+  );
+  assert(
+    !/herramienta de gestión de información técnica para\s+empresas transformadoras/i.test(
+      s.replace(/\s+/g, " ")
+    ),
+    "no debe conservarse la definición antigua limitada a plásticos"
+  );
+  // El primer párrafo —la definición— no puede acotarse a un solo material.
+  const firstIdx = s.indexOf("Trazaloop es una");
+  assert(firstIdx !== -1, "debe existir la definición general");
+  const firstPara = s.slice(firstIdx, firstIdx + 260);
+  assert(
+    !/pl[aá]stico/i.test(firstPara),
+    "la definición general no debe acotarse a plásticos"
+  );
+});
+
+check("78. Las normas permanecen asociadas EXCLUSIVAMENTE a CPR", () => {
+  const s = aboutText().replace(/\s+/g, " ");
+  assert(/NTC 6632:2022/.test(s), "debe conservarse NTC 6632:2022");
+  assert(/UNE-EN\s*15343:2008/.test(s), "debe conservarse UNE-EN 15343:2008");
+
+  // Delimitar el párrafo de CPR y el de Textiles.
+  const cprIdx = s.indexOf("Trazaloop CPR");
+  const texIdx = s.indexOf("Trazaloop Textiles");
+  assert(cprIdx !== -1 && texIdx !== -1 && cprIdx < texIdx, "CPR debe describirse antes que Textiles");
+  const cprPara = s.slice(cprIdx, texIdx);
+  const afterTex = s.slice(texIdx);
+
+  // Las normas viven dentro del párrafo de CPR…
+  assert(
+    /NTC 6632:2022/.test(cprPara) && /UNE-EN\s*15343:2008/.test(cprPara),
+    "las normas deben estar dentro de la descripción de CPR"
+  );
+  // …y NUNCA se atribuyen a Textiles ni a nada posterior.
+  assert(
+    !/NTC 6632|UNE-EN\s*15343/.test(afterTex),
+    "las normas NO deben atribuirse a Trazaloop Textiles ni al texto posterior"
+  );
+});
+
+check("79. No se afirma que Trazaloop emita certificaciones", () => {
+  const s = aboutText();
+  assert(
+    /Trazaloop no emite certificaciones/.test(s),
+    "debe conservarse la declaración de que no emite certificaciones"
+  );
+  // Ninguna afirmación positiva de certificar o garantizar cumplimiento.
+  for (const rx of [
+    /Trazaloop certifica/i,
+    /certificamos/i,
+    /garantiza(mos)? (el )?cumplimiento/i,
+    /garantiza(mos)? la conformidad/i,
+    /emite certificad/i,
+  ]) {
+    assert(!rx.test(s), `la página no debe afirmar ${rx}`);
+  }
+  assert(
+    /no\s+certifica productos ni procesos/i.test(s.replace(/\s+/g, " ")),
+    "debe negarse expresamente que certifique productos ni procesos"
+  );
+  assert(
+    /no garantiza la aceptación de la información durante\s+una auditoría/i.test(
+      s.replace(/\s+/g, " ")
+    ),
+    "debe negarse que garantice la aceptación en una auditoría"
+  );
+});
+
+check("80. Se indica que no sustituye a los organismos de certificación", () => {
+  const s = aboutText().replace(/\s+/g, " ");
+  assert(
+    /no sustituye a los organismos de\s*certificación/i.test(s),
+    "debe declararse que no sustituye a los organismos de certificación"
+  );
+  // Y se conservan las tres declaraciones de responsabilidad.
+  assert(
+    /Los resultados dependen de la información ingresada/.test(s),
+    "debe conservarse la declaración sobre la dependencia de los datos"
+  );
+  assert(
+    /La responsabilidad de la información corresponde a cada empresa/.test(s),
+    "debe conservarse la declaración de responsabilidad de la empresa"
+  );
+});
+
+check("81. Quality y Construcción NO se presentan como funcionales", () => {
+  const s = aboutText();
+  // No deben aparecer en la página general como módulos activos.
+  assert(
+    !/Trazaloop Quality/i.test(s) && !/Trazaloop Construcción/i.test(s),
+    "la página general no debe listar Quality ni Construcción entre los módulos funcionales"
+  );
+  // Y en el catálogo siguen en coming_soon (fuente canónica).
+  for (const key of ["quality", "construccion"]) {
+    assert(
+      getCommercialModuleByKey(key)?.status === "coming_soon",
+      `${key} debe seguir en coming_soon`
+    );
+  }
+  assert(FUNCTIONAL_MODULE_CODES.length === 2, "siguen siendo 2 los módulos funcionales");
+  // La portada los mantiene como «Próximamente».
+  const landing = read("app/page.tsx");
+  assert(
+    landing.includes("Trazaloop Quality") &&
+      landing.includes("Trazaloop Construcción") &&
+      landing.includes("Próximamente"),
+    "la portada debe seguir mostrándolos como Próximamente"
+  );
+});
+
+check("81b. Se conserva la terminología acordada", () => {
+  const s = aboutText().replace(/\s+/g, " ");
+  assert(
+    /órdenes o corridas de producción/i.test(s),
+    "debe conservarse «orden / corrida de producción»"
+  );
+  assert(
+    /lote producido/i.test(s),
+    "debe conservarse «lote producido»"
+  );
+  assert(
+    /trazabilidad lote a lote/i.test(s),
+    "debe conservarse «trazabilidad lote a lote»"
+  );
+});
+
+check("81c. La página no se convirtió en documento jurídico", () => {
+  const s = aboutText();
+  for (const rx of [
+    /cláusula/i,
+    /términos y condiciones/i,
+    /política de privacidad/i,
+    /NIT\b/,
+    /razón social/i,
+    /jurisdicción/i,
+    /ley aplicable/i,
+  ]) {
+    assert(!rx.test(s), `la página «Acerca de» no debe incluir contenido jurídico (${rx})`);
+  }
+});
+
+check("82. No se modificaron migraciones y no existe 0103", () => {
+  const dir = path.join(ROOT, "supabase", "migrations");
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+  const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
+  assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
+  assert(
+    numbers[numbers.length - 1] === 102,
+    `la última migración debe seguir siendo 0102, es ${numbers[numbers.length - 1]}`
+  );
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 103);
+  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+});
+
+// ===========================================================================
 console.log("");
 if (failures > 0) {
   console.error(`\n${failures} comprobación(es) de release FALLARON.\n`);

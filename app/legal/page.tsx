@@ -1,4 +1,12 @@
-// Página pública y estática: qué hace y qué no hace Trazaloop (Sprint 5E).
+// Página pública y estática: qué hace y qué no hace Trazaloop.
+//
+// Superficie GENERAL de la plataforma (enlazada desde la portada, el shell
+// autenticado, el registro y el login): describe Trazaloop como plataforma
+// modular y sus módulos funcionales. No es una página del módulo CPR, así
+// que no puede definir el producto entero por uno solo de sus módulos.
+//
+// Las normas NTC 6632:2022 y UNE-EN 15343:2008 pertenecen EXCLUSIVAMENTE a
+// la descripción de Trazaloop CPR y nunca se atribuyen a Textiles.
 import Link from "next/link";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
@@ -14,33 +22,53 @@ export default function LegalPage() {
 
       <div className="mt-6 space-y-4 text-sm leading-relaxed text-ink">
         <p>
-          Trazaloop es una herramienta de gestión de información técnica para
-          empresas transformadoras de plásticos: organiza catálogos,
-          evidencias, trazabilidad lote a lote y el cálculo de contenido
-          reciclado por lote producido conforme a criterios de las normas
-          técnicas NTC 6632:2022 y UNE-EN 15343:2008, con snapshots
-          inmutables, niveles de defendibilidad y dossiers técnicos
-          imprimibles como preparación frente a auditorías y revisión de
-          cumplimiento normativo.
+          Trazaloop es una plataforma modular de trazabilidad y gestión de
+          información técnica para empresas. Actualmente integra dos módulos
+          funcionales:
         </p>
         <p>
-          <strong>Trazaloop no emite certificaciones.</strong> Los resultados,
-          niveles de defendibilidad y dossiers que produce la plataforma son
-          consolidados técnicos basados en la información registrada por la
-          empresa; no constituyen por sí mismos una certificación ni un
-          pronunciamiento de terceros.
+          <strong>Trazaloop CPR</strong> permite organizar catálogos,
+          proveedores, materiales, productos, evidencias, órdenes o corridas de
+          producción y trazabilidad lote a lote. También apoya el cálculo y la
+          documentación del contenido reciclado por lote producido, tomando
+          como referencia los criterios de la NTC 6632:2022 y la UNE-EN
+          15343:2008.
+        </p>
+        <p>
+          <strong>Trazaloop Textiles</strong> permite gestionar la trazabilidad
+          de productos textiles y de confección, composición de fibras,
+          proveedores, materiales, órdenes, lotes, evidencias, criterios de
+          circularidad y pasaportes técnicos textiles privados.
+        </p>
+        <p>
+          Según las funciones disponibles en cada módulo, Trazaloop puede
+          generar registros consolidados, snapshots, niveles de defendibilidad,
+          documentos técnicos, dossiers y pasaportes que apoyan la gestión
+          interna, la preparación documental y los procesos de auditoría o
+          revisión técnica.
+        </p>
+        <p>
+          <strong>Trazaloop no emite certificaciones.</strong> La plataforma no
+          certifica productos ni procesos, no sustituye a los organismos de
+          certificación y no garantiza la aceptación de la información durante
+          una auditoría. Los cálculos, niveles de defendibilidad, dossiers,
+          pasaportes y demás resultados son consolidados técnicos construidos a
+          partir de la información registrada por cada empresa.
         </p>
         <p>
           <strong>Los resultados dependen de la información ingresada.</strong>{" "}
-          La calidad del cálculo y de la trazabilidad refleja la calidad de
-          los datos, evidencias y validaciones que cada empresa registra y
-          mantiene.
+          La calidad, exactitud y utilidad de la trazabilidad, los cálculos y
+          los documentos reflejan la calidad de los datos, evidencias,
+          clasificaciones y validaciones que cada empresa registra y mantiene.
         </p>
         <p>
-          <strong>La responsabilidad del uso es del usuario.</strong> Cada
-          empresa es responsable del uso que haga de la plataforma, de la
-          veracidad de su información y de las declaraciones que realice a
-          partir de ella.
+          <strong>
+            La responsabilidad de la información corresponde a cada empresa.
+          </strong>{" "}
+          Cada organización es responsable de la veracidad, integridad,
+          actualización y uso de los datos registrados, así como de las
+          declaraciones o decisiones que realice a partir de los resultados
+          generados por la plataforma.
         </p>
       </div>
 
