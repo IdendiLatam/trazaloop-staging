@@ -8,6 +8,7 @@ import {
 } from "@/server/actions/trazadocs";
 import { SectionEditor } from "./section-editor";
 import type { DocumentDetail } from "@/lib/db/trazadocs";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
@@ -15,15 +16,16 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 const initial: TrazadocsActionState = { error: null };
 
 /** Editor por secciones (Parte 7/18). `hints` es un mapa
- *  blueprint_section_id → tip, ya resuelto en el servidor (las secciones
- *  personalizadas no tienen hint). */
+ *  blueprint_section_id → tip, ya resuelto Y AUTORIZADO en el servidor según
+ *  el acceso comercial del módulo CPR (Demo recibe solo el aviso fijo; las
+ *  secciones personalizadas no tienen hint). */
 export function DocumentEditor({
   document,
   hints,
   readOnly,
 }: {
   document: DocumentDetail;
-  hints: Record<string, string | null>;
+  hints: Record<string, ResolvedHint>;
   readOnly: boolean;
 }) {
   const [state, formAction, pending] = useActionState(updateDocumentSectionsAction, initial);

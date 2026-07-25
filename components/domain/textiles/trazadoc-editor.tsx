@@ -12,6 +12,7 @@ import {
   createNewTextileTrazadocVersionAction,
   type TextileTrazadocsActionState,
 } from "@/server/actions/textiles-trazadocs";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 
 /**
  * Trazaloop · Sprint T8 (Textil) · Editor del documento TrazaDocs Textil:
@@ -25,7 +26,9 @@ type SectionView = {
   title: string;
   content: string;
   isRequired: boolean;
-  hint: string | null;
+  /** Hint YA AUTORIZADO en servidor según el acceso comercial del módulo
+   *  Textiles (Demo recibe únicamente el aviso fijo, sin enlaces). */
+  hint: ResolvedHint | null;
 };
 
 const initialState: TextileTrazadocsActionState = { error: null };

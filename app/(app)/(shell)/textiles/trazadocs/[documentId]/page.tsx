@@ -14,6 +14,8 @@ import {
   listTextileTrazadocVersions,
   listTextileTrazadocsTemplates,
 } from "@/lib/db/textiles-trazadocs";
+import { resolveModuleHintsForOrg } from "@/lib/db/hint-access";
+import { TEXTILES_MODULE_CODE } from "@/lib/modules/catalog";
 import {
   TEXTILE_TRAZADOCS_DISCLAIMER,
   TEXTILE_TRAZADOCS_MODULE_LINKS,
@@ -44,7 +46,14 @@ export default async function TextileTrazadocDetailPage({
     listTextileTrazadocVersions(org.organizationId, doc.id),
     listTextileTrazadocsTemplates(),
   ]);
-  const hintBySectionId = new Map(hints.map((h) => [h.id, h.hint ?? null]));
+  // Acceso comercial POR MÓDULO, resuelto en servidor para Textiles: en Demo
+  // el mapa serializado al cliente lleva solo el aviso fijo; el contenido
+  // administrado y sus enlaces no se envían (lib/db/hint-access.ts).
+  const hintBySectionId = await resolveModuleHintsForOrg({
+    organizationId: org.organizationId,
+    moduleCode: TEXTILES_MODULE_CODE,
+    sections: hints,
+  });
   const blueprint = templates.find((t) => t.blueprintId === doc.blueprintId) ?? null;
   const moduleLinks = blueprint ? TEXTILE_TRAZADOCS_MODULE_LINKS[blueprint.code] ?? [] : [];
 
@@ -100,7 +109,7 @@ export default async function TextileTrazadocDetailPage({
           title: s.title,
           content: s.content,
           isRequired: s.isRequired,
-          hint: s.blueprintSectionId ? hintBySectionId.get(s.blueprintSectionId) ?? null : null,
+          hint: s.blueprintSectionId ? hintBySectionId[s.blueprintSectionId] ?? null : null,
         }))}
         canEdit={canEditDocument(role, status)}
         canSubmit={canSubmitForReview(role, status)}

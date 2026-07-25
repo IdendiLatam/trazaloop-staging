@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SectionHint } from "@/components/ui/section-hint";
 import type { DocumentSectionRow } from "@/lib/db/trazadocs";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 
 /** Una sección dentro del editor (Parte 18): título, textarea, botón "i",
  *  indicador de obligatoria e indicador de contenido vacío. El nombre del
@@ -13,7 +14,8 @@ export function SectionEditor({
   readOnly,
 }: {
   section: DocumentSectionRow;
-  hint: string | null;
+  /** Hint YA AUTORIZADO en servidor (Demo recibe solo el aviso fijo). */
+  hint: ResolvedHint | null;
   readOnly: boolean;
 }) {
   const [value, setValue] = useState(section.content);

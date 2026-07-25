@@ -8,6 +8,9 @@ import { requireSession } from "@/lib/auth/require-session";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTrazadocDocumentAction } from "@/server/actions/trazadocs";
 import { getBlueprintSections } from "@/lib/db/trazadocs";
+import { resolveModuleHintsForOrg } from "@/lib/db/hint-access";
+import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { canDeleteDraftDocument } from "@/lib/domain/trazadocs";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
@@ -41,10 +44,19 @@ export default async function TrazaDocEditPage({
   // Los hints viven en las secciones del blueprint, no en las del
   // documento (que solo guardan contenido vivo) — se resuelven aparte
   // solo si el documento viene de una estructura sugerida.
-  const hints: Record<string, string | null> = {};
+  //
+  // El acceso comercial se aplica AQUÍ, en servidor y para el módulo CPR:
+  // en Demo el mapa que se serializa al cliente contiene únicamente el
+  // aviso fijo — el texto administrado y sus enlaces nunca salen del
+  // servidor (lib/db/hint-access.ts).
+  let hints: Record<string, ResolvedHint> = {};
   if (doc.blueprintId) {
     const blueprintSections = await getBlueprintSections(doc.blueprintId);
-    for (const s of blueprintSections) hints[s.id] = s.hint;
+    hints = await resolveModuleHintsForOrg({
+      organizationId: org.organizationId,
+      moduleCode: CPR_MODULE_CODE,
+      sections: blueprintSections,
+    });
   }
 
   return (

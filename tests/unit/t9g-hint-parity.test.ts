@@ -110,7 +110,7 @@ check("4. Con contenido, el botón «i» se muestra (mismo icono, aria y estilos
 check("5. Sin contenido, el botón «i» NO se muestra ni abre panel vacío", () => {
   const hint = read(SHARED_HINT);
   assert(
-    hint.includes("if (!hasHintContent(hint)) return null;"),
+    hint.includes("if (!hint || !hasHintContent(hint.text)) return null;"),
     "sin contenido el componente debía retornar null (ni botón, ni panel, ni error)"
   );
   assert(hint.includes('from "@/lib/domain/hint-links"'), "la decisión de contenido vive en la lógica pura compartida");

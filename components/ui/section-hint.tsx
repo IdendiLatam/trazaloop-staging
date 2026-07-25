@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { HintText } from "@/components/ui/hint-text";
 import { hasHintContent } from "@/lib/domain/hint-links";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 
 /**
  * Trazaloop · Sprint T9G · Botón "i" COMPARTIDO de tips/hints. Un solo
@@ -16,8 +17,15 @@ import { hasHintContent } from "@/lib/domain/hint-links";
  * - Contenido largo: el panel permite desplazamiento (max-h + overflow).
  * - El contenido pasa por el renderizador seguro compartido (HintText):
  *   admite saltos de línea y enlaces seguros; nunca interpreta HTML.
+ *
+ * ACCESO COMERCIAL POR MÓDULO: el hint llega YA AUTORIZADO desde el servidor
+ * (lib/db/hint-access.ts sobre la regla canónica de lib/modules/access.ts).
+ * En Demo el objeto recibido contiene ÚNICAMENTE el aviso fijo: este
+ * componente no oculta nada, sencillamente nunca recibe el contenido
+ * administrado ni sus enlaces. El aviso se muestra dentro del MISMO panel,
+ * con los mismos estilos, cierre y accesibilidad — nunca un área vacía.
  */
-export function SectionHint({ hint }: { hint: string | null }) {
+export function SectionHint({ hint }: { hint: ResolvedHint | null }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -33,7 +41,7 @@ export function SectionHint({ hint }: { hint: string | null }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  if (!hasHintContent(hint)) return null;
+  if (!hint || !hasHintContent(hint.text)) return null;
 
   return (
     <div className="inline-block">
@@ -51,7 +59,14 @@ export function SectionHint({ hint }: { hint: string | null }) {
       {open ? (
         <div className="mt-1.5 max-w-xl rounded-md border border-loop/20 bg-loop/5 px-3 py-2">
           <div className="max-h-64 overflow-y-auto whitespace-pre-wrap text-xs text-ink-soft">
-            <HintText text={hint as string} />
+            {hint.restricted ? (
+              <>
+                <p className="font-semibold text-ink">{hint.title}</p>
+                <p className="mt-1">{hint.text}</p>
+              </>
+            ) : (
+              <HintText text={hint.text} />
+            )}
           </div>
           <button
             type="button"
