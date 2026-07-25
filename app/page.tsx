@@ -15,6 +15,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { Wordmark } from "@/components/layout/logo";
 import { getCommercialModuleByKey } from "@/lib/modules/catalog";
 import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
+import { isPublicRegistrationEnabled } from "@/lib/auth/public-registration";
 
 const COMING_SOON_MESSAGE = "Este módulo estará disponible próximamente.";
 
@@ -24,6 +25,10 @@ export default async function PublicLandingPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const entryHref = user ? "/modules" : "/login";
+  // Kill switch server-only: con el registro cerrado no se ofrece «Crear
+  // cuenta Demo», porque llevaría a un formulario que el servidor va a
+  // rechazar. La barrera real está en signUpAction, no aquí.
+  const registrationOpen = isPublicRegistrationEnabled();
   const textilesModule = getCommercialModuleByKey("textiles");
   const textilesAvailable =
     textilesModule?.status === "functional" && isTextilesModuleEnabled();
@@ -36,12 +41,21 @@ export default async function PublicLandingPage() {
           <Link href="/login" className="text-ink-soft hover:text-loop hover:underline">
             Iniciar sesión
           </Link>
-          <Link
-            href="/register"
-            className="rounded-md bg-loop px-4 py-2 font-semibold text-white hover:bg-loop-deep"
-          >
-            Crear cuenta Demo
-          </Link>
+          {registrationOpen ? (
+            <Link
+              href="/register"
+              className="rounded-md bg-loop px-4 py-2 font-semibold text-white hover:bg-loop-deep"
+            >
+              Crear cuenta Demo
+            </Link>
+          ) : (
+            <a
+              href="mailto:contacto@idendi.org"
+              className="rounded-md bg-loop px-4 py-2 font-semibold text-white hover:bg-loop-deep"
+            >
+              Solicitar acceso
+            </a>
+          )}
         </nav>
       </header>
 
@@ -61,12 +75,21 @@ export default async function PublicLandingPage() {
             >
               Entrar
             </Link>
-            <Link
-              href="/register"
-              className="rounded-md border border-hairline bg-surface px-5 py-2.5 text-sm font-medium hover:border-loop"
-            >
-              Crear cuenta Demo
-            </Link>
+            {registrationOpen ? (
+              <Link
+                href="/register"
+                className="rounded-md border border-hairline bg-surface px-5 py-2.5 text-sm font-medium hover:border-loop"
+              >
+                Crear cuenta Demo
+              </Link>
+            ) : (
+              <a
+                href="mailto:contacto@idendi.org"
+                className="rounded-md border border-hairline bg-surface px-5 py-2.5 text-sm font-medium hover:border-loop"
+              >
+                Solicitar acceso
+              </a>
+            )}
           </div>
         </section>
 

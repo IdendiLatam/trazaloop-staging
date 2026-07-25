@@ -56,6 +56,11 @@ export default async function AcceptInvitePage({
         <p className="text-sm text-ink-soft">
           Inicia sesión o crea una cuenta para ver los detalles de esta invitación.
         </p>
+        {/* «Crear cuenta» se conserva SIEMPRE, también con el registro
+            público cerrado: quien llega aquí trae un enlace de invitación,
+            y /register muestra el formulario cuando el token existe, sigue
+            pendiente y no ha expirado. El servidor exige además que el
+            correo coincida con el invitado. */}
         <div className="flex gap-3">
           <Link
             href={`/login?next=${encodeURIComponent(returnHere)}`}

@@ -6,6 +6,10 @@ import { clearActiveOrgCookie } from "@/lib/auth/active-organization";
 import { isSafeAcceptInviteNext, postAuthDestinationPath } from "@/lib/domain/team";
 import { getPostAuthDestinationAction } from "@/server/actions/team";
 import { getMyLegalAcceptanceStatusAction } from "@/server/actions/legal";
+import {
+  REGISTRATION_CLOSED_MESSAGE,
+  resolveRegistrationGate,
+} from "@/lib/auth/public-registration";
 
 export type AuthActionState = { error: string | null };
 
@@ -88,6 +92,26 @@ export async function signUpAction(
   }
   if (password.length < 8) {
     return { error: "La contraseña debe tener al menos 8 caracteres." };
+  }
+
+  // ---------------------------------------------------------------------
+  // KILL SWITCH del registro público (v1.0.0 · Ruta A).
+  //
+  // Se evalúa ANTES de tocar Supabase: con el registro cerrado no se llama
+  // a auth.signUp, así que no se crea usuario, ni organización, ni
+  // membresía, ni se envía correo alguno.
+  //
+  // La única excepción es una persona INVITADA, y se concede solo tras
+  // verificar en servidor que existe una invitación pendiente, vigente y
+  // con ESTE mismo correo — nunca por el parámetro `next`, que lo controla
+  // el cliente.
+  //
+  // El mensaje es genérico a propósito: no revela la configuración interna
+  // ni si el correo existía.
+  // ---------------------------------------------------------------------
+  const gate = await resolveRegistrationGate({ email, next });
+  if (!gate.allowed) {
+    return { error: REGISTRATION_CLOSED_MESSAGE };
   }
 
   const supabase = await createServerClient();

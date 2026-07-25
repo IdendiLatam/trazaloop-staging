@@ -1,85 +1,83 @@
-"use client";
+// Server Component (v1.0.0): consulta el kill switch server-only del
+// registro público ANTES de renderizar nada. Depende de process.env y de
+// una verificación en base de datos → nunca se prerenderiza en build.
+export const dynamic = "force-dynamic";
 
-import { useActionState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { signUpAction, type AuthActionState } from "@/server/actions/auth";
-import { Field } from "@/components/ui/field";
-import { Button } from "@/components/ui/button";
-import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
+import { shouldRenderRegistrationForm } from "@/lib/auth/public-registration";
+import { RegisterForm } from "@/components/domain/auth/register-form";
 
-const initial: AuthActionState = { error: null };
+/**
+ * Registro de cuenta.
+ *
+ * Con el registro público HABILITADO se muestra el formulario de siempre.
+ *
+ * Con el registro público DESHABILITADO se muestra una pantalla controlada
+ * y **no se renderiza ningún formulario funcional**. Ocultar el formulario
+ * no es la barrera: la barrera está en `signUpAction`, que rechaza la
+ * creación de cuentas en servidor. Esto es solo la parte visible.
+ *
+ * Excepción: quien llega con un enlace de invitación cuyo token existe,
+ * sigue pendiente y no ha expirado sí ve el formulario, para poder
+ * completar su onboarding. El servidor exige además que el correo coincida
+ * con el invitado.
+ */
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const showForm = await shouldRenderRegistrationForm(next ?? null);
 
-function RegisterForm() {
-  const [state, formAction, pending] = useActionState(signUpAction, initial);
-  const params = useSearchParams();
-  const next = params.get("next");
-  const hasPendingInviteLink = Boolean(next && next.startsWith("/accept-invite"));
+  if (showForm) {
+    return <RegisterForm />;
+  }
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="eyebrow">Nueva cuenta</p>
-        <h2 className="text-2xl font-semibold tracking-tight">Crea tu cuenta</h2>
-        <p className="text-sm text-ink-soft">
-          {hasPendingInviteLink
-            ? "Después de crear tu cuenta, continuarás con tu invitación."
-            : "Después crearás tu empresa y activarás sus módulos."}
-        </p>
+        <p className="eyebrow">Acceso</p>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          Registro no disponible
+        </h2>
       </header>
 
-      {hasPendingInviteLink ? (
-        <InfoAlert message="Tienes una invitación pendiente para unirte a una empresa en Trazaloop. Crea tu cuenta para continuar." />
-      ) : null}
-      <ErrorAlert message={state.error} />
+      <div className="rounded-md border border-hairline bg-surface px-4 py-3 text-sm text-ink-soft">
+        <p>
+          El registro público no está disponible en este momento. La creación
+          de cuentas se gestiona a través del equipo de Trazaloop.
+        </p>
+        <p className="mt-3">
+          Si tu empresa ya trabaja con Trazaloop, pide a la persona
+          administradora que te envíe una invitación: con ese enlace podrás
+          crear tu cuenta y unirte a su equipo.
+        </p>
+      </div>
 
-      <form action={formAction} className="space-y-4">
-        {next ? <input type="hidden" name="next" value={next} /> : null}
-        <Field
-          label="Nombre completo"
-          name="full_name"
-          type="text"
-          autoComplete="name"
-          required
-        />
-        <Field
-          label="Correo"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-        />
-        <Field
-          label="Contraseña"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={8}
-          hint="Mínimo 8 caracteres."
-          required
-        />
-        <Button type="submit" disabled={pending}>
-          {pending ? "Creando cuenta…" : "Crear cuenta"}
-        </Button>
-      </form>
-
-      <p className="text-sm text-ink-soft">
-        ¿Ya tienes cuenta?{" "}
-        <Link
-          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
-          className="font-medium text-loop hover:underline"
-        >
-          Inicia sesión
-        </Link>
-      </p>
+      <div className="space-y-2 text-sm text-ink-soft">
+        <p>
+          ¿Ya tienes cuenta?{" "}
+          <Link href="/login" className="font-medium text-loop hover:underline">
+            Inicia sesión
+          </Link>
+        </p>
+        <p>
+          ¿Quieres conocer Trazaloop? Escríbenos a{" "}
+          <a
+            href="mailto:contacto@idendi.org"
+            className="font-medium text-loop hover:underline"
+          >
+            contacto@idendi.org
+          </a>
+          .
+        </p>
+        <p className="mt-2 text-center text-xs text-ink-soft">
+          <Link href="/legal" className="hover:underline">
+            Acerca de Trazaloop
+          </Link>
+        </p>
+      </div>
     </div>
-  );
-}
-
-export default function RegisterPage() {
-  return (
-    <Suspense>
-      <RegisterForm />
-    </Suspense>
   );
 }

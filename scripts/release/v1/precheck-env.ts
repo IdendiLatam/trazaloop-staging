@@ -163,6 +163,12 @@ const REQUIRED: VarSpec[] = [
     description: "Kill switch global de Trazaloop Textiles (server-only).",
   },
   {
+    name: "PUBLIC_REGISTRATION_ENABLED",
+    description:
+      "Kill switch del registro público (server-only). Production técnico = false; " +
+      "Preview/staging = true. Solo «true» o «1» habilitan; fail-closed.",
+  },
+  {
     name: "ACTIVE_ORG_COOKIE_SECRET",
     optionalInLocal: true,
     description:
@@ -364,6 +370,75 @@ if (!isPresent("TEXTILES_MODULE_ENABLED")) {
     ok("Textiles encendido.");
   } else {
     warn("Textiles apagado en este entorno.", "Correcto solo si es deliberado.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Kill switch del REGISTRO PÚBLICO
+// ---------------------------------------------------------------------------
+//
+// El flag NO es un secreto: describe un modo de operación, no una
+// credencial. Por eso sí puede imprimirse su interpretación (HABILITADO /
+// DESHABILITADO) — nunca se imprime ninguna clave.
+//
+// Estado esperado por defecto:
+//   · production → DESHABILITADO (hito A: despliegue técnico sin usuarios
+//     externos). Se puede exigir lo contrario con --expect-registration.
+//   · preview    → habilitado o deshabilitado, ambos válidos.
+// ---------------------------------------------------------------------------
+console.log("");
+console.log("--- 5b. Kill switch del registro público ---");
+
+const REGISTRATION_VALID_VALUES = ["true", "false", "1", "0"];
+const registrationRaw = process.env.PUBLIC_REGISTRATION_ENABLED;
+const registrationOn = registrationRaw === "true" || registrationRaw === "1";
+
+/** Estado exigido explícitamente por el operador, si lo indicó. */
+const expectRegistration = flag("expect-registration"); // "enabled" | "disabled"
+
+if (!isPresent("PUBLIC_REGISTRATION_ENABLED")) {
+  // Ya contabilizado como fallo en la sección 1; aquí solo se explica.
+  console.log(
+    "     PUBLIC_REGISTRATION_ENABLED ausente → el registro queda " +
+      "DESHABILITADO (fail-closed, por diseño)."
+  );
+} else {
+  console.log(`     Interpretación: ${registrationOn ? "HABILITADO" : "DESHABILITADO"}`);
+
+  if (!REGISTRATION_VALID_VALUES.includes(registrationRaw ?? "")) {
+    fail(
+      "PUBLIC_REGISTRATION_ENABLED tiene un valor no admitido.",
+      `Valores admitidos: ${REGISTRATION_VALID_VALUES.join(", ")}. ` +
+        "Cualquier otro se comporta como DESHABILITADO, pero casi siempre " +
+        "es un error de configuración."
+    );
+  } else if (expectRegistration === "enabled" || expectRegistration === "disabled") {
+    // Comprobación explícita pedida por el operador.
+    const wanted = expectRegistration === "enabled";
+    if (registrationOn === wanted) {
+      ok(`El registro está ${wanted ? "HABILITADO" : "DESHABILITADO"}, como se esperaba.`);
+    } else {
+      fail(
+        `Se esperaba el registro ${wanted ? "HABILITADO" : "DESHABILITADO"}, ` +
+          `pero está ${registrationOn ? "HABILITADO" : "DESHABILITADO"}.`,
+        "Corrige PUBLIC_REGISTRATION_ENABLED y crea un deployment nuevo."
+      );
+    }
+  } else if (ENVIRONMENT.name === "production" && registrationOn) {
+    // Regla documentada por defecto para el hito técnico de Production.
+    fail(
+      "PUBLIC_REGISTRATION_ENABLED está HABILITADO en Production.",
+      "Para el hito A (despliegue técnico) debe valer false: /register no " +
+        "puede quedar abierto mientras siguen pendientes los gates de " +
+        "apertura comercial (paquete jurídico aprobado y SMTP personalizado " +
+        "probado). Si la apertura comercial ya fue autorizada, ejecuta este " +
+        "precheck con --expect-registration=enabled para declararlo de forma " +
+        "explícita."
+    );
+  } else if (ENVIRONMENT.name === "production") {
+    ok("Registro público DESHABILITADO en Production (correcto para el hito técnico).");
+  } else {
+    ok(`Registro ${registrationOn ? "habilitado" : "deshabilitado"} en este ambiente.`);
   }
 }
 

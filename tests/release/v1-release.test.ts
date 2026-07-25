@@ -44,6 +44,12 @@ import {
   TEXTILES_FLAG_ENV,
 } from "../../lib/modules/textiles";
 import { classifyHintUrl } from "../../lib/domain/hint-links";
+import {
+  isPublicRegistrationFlagEnabled,
+  isPublicRegistrationValueValid,
+  extractInvitationToken,
+  PUBLIC_REGISTRATION_FLAG_ENV,
+} from "../../lib/domain/public-registration";
 import { APP_VERSION, APP_VERSION_LABEL } from "../../lib/version";
 import {
   resolveDeploymentEnvironment,
@@ -1780,33 +1786,46 @@ check("62. El checklist de Production no exige funciones aplazadas", () => {
   );
 });
 
-check("63. El estado del registro público está documentado como riesgo", () => {
+// v1.0.0 · sexta pasada: este check exigía que el alcance declarara el
+// registro público ABIERTO y la corrección NO implementada. El riesgo se
+// RESOLVIÓ con el kill switch PUBLIC_REGISTRATION_ENABLED, de modo que la
+// aserción histórica ya no describe la realidad. No se elimina: se
+// INVIERTE y se REFUERZA — ahora exige que el registro esté cerrado por
+// configuración y que la barrera viva en el servidor. La protección es
+// más estricta que antes.
+check("63. El registro público está CERRADO por configuración, con barrera en servidor", () => {
   const s = read(ROUTE_A);
   assert(
-    /registro público está ABIERTO/i.test(s),
-    "el alcance debe declarar que el registro público está abierto"
+    !/registro público está ABIERTO/i.test(s),
+    "el alcance ya no debe declarar el registro como abierto: se implementó el kill switch"
+  );
+  assert(
+    /RESUELTO con kill switch|PUBLIC_REGISTRATION_ENABLED/.test(s),
+    "el alcance debe documentar el kill switch implementado"
+  );
+  assert(
+    /Production técnico.{0,40}`false`|`false` \| Registro público cerrado/i.test(
+      s.replace(/\s+/g, " ")
+    ),
+    "debe declararse que Production técnico va con el registro cerrado"
   );
   assert(
     /signUpAction/.test(s),
     "debe citarse la evidencia real del código (signUpAction)"
   );
   assert(
-    /medida operativa temporal/i.test(s),
-    "deben proponerse medidas operativas temporales"
+    /no es un mecanismo de autorización/i.test(s),
+    "debe advertirse que el kill switch no es un mecanismo de autorización"
   );
-  assert(
-    /REQUIERE DECISIÓN DE PRODUCTO/i.test(s),
-    "la bandera de registro controlado debe marcarse como decisión de producto"
-  );
-  assert(
-    /No se implementa en esta pasada/i.test(s),
-    "debe declararse que la corrección no se implementó"
-  );
-  // Y no se implementó de verdad: sigue sin haber kill switch.
+  // Y la barrera existe de verdad en el servidor, no solo en la UI.
   const auth = read("server/actions/auth.ts");
   assert(
-    auth.includes("supabase.auth.signUp"),
-    "el flujo de registro no debe haberse alterado en esta pasada"
+    auth.includes("resolveRegistrationGate"),
+    "signUpAction debe consultar el guard del registro"
+  );
+  assert(
+    auth.indexOf("resolveRegistrationGate") < auth.indexOf("supabase.auth.signUp"),
+    "el guard debe evaluarse antes de crear la cuenta"
   );
 });
 
@@ -1831,6 +1850,460 @@ check("64. Los pendientes jurídicos se clasifican en A / B / C", () => {
     /vuelve a ser\s*\n?\s*exigible|no lo elimina/i.test(gaps),
     "debe declararse que aplazar la función no elimina el requisito jurídico"
   );
+});
+
+// ===========================================================================
+console.log("\n§16 · Kill switch del registro público\n");
+
+const REG_PURE = "lib/domain/public-registration.ts";
+const REG_SERVER = "lib/auth/public-registration.ts";
+const AUTH_ACTIONS = "server/actions/auth.ts";
+const REGISTER_PAGE = "app/(auth)/register/page.tsx";
+
+check("65. La interpretación del flag es fail-closed", () => {
+  // Habilitan.
+  assert(isPublicRegistrationFlagEnabled("true") === true, "«true» debe habilitar");
+  assert(isPublicRegistrationFlagEnabled("1") === true, "«1» debe habilitar");
+  // Deshabilitan: ausencia, vacío, negativos y cualquier otro valor.
+  for (const raw of [
+    undefined,
+    null,
+    "",
+    " ",
+    "false",
+    "0",
+    "TRUE",
+    "True",
+    "yes",
+    "si",
+    "enabled",
+    "2",
+  ]) {
+    assert(
+      isPublicRegistrationFlagEnabled(raw) === false,
+      `«${String(raw)}» NO debía habilitar el registro (fail-closed)`
+    );
+  }
+});
+
+check("65b. Los valores admitidos por el precheck están acotados", () => {
+  for (const v of ["true", "false", "1", "0"]) {
+    assert(isPublicRegistrationValueValid(v), `${v} debe ser un valor admitido`);
+  }
+  for (const v of [undefined, null, "", "yes", "TRUE", "2"]) {
+    assert(
+      !isPublicRegistrationValueValid(v),
+      `«${String(v)}» no debe considerarse un valor admitido`
+    );
+  }
+});
+
+check("65c. La extracción del token de invitación es pura y sin autoridad", () => {
+  assert(
+    extractInvitationToken("/accept-invite?token=abc123") === "abc123",
+    "debe extraer el token de un next válido"
+  );
+  // Nada que no sea una ruta interna de invitación produce token.
+  for (const bad of [
+    null,
+    undefined,
+    "",
+    "/register",
+    "/accept-invite",
+    "//evil.com/accept-invite?token=abc",
+    "https://evil.com/accept-invite?token=abc",
+    "/accept-invite?otro=abc",
+    "/accept-invite?token=",
+  ]) {
+    assert(
+      extractInvitationToken(bad) === null,
+      `«${String(bad)}» no debía producir token`
+    );
+  }
+});
+
+check("66. La variable es server-only y NO lleva prefijo NEXT_PUBLIC_", () => {
+  assert(
+    PUBLIC_REGISTRATION_FLAG_ENV === "PUBLIC_REGISTRATION_ENABLED",
+    "el nombre oficial de la variable debe ser PUBLIC_REGISTRATION_ENABLED"
+  );
+  assert(
+    !PUBLIC_REGISTRATION_FLAG_ENV.startsWith("NEXT_PUBLIC_"),
+    "el kill switch jamás puede llevar prefijo NEXT_PUBLIC_"
+  );
+  // No debe existir en ningún sitio una variante pública.
+  const walkAll: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(entry.name)) walkAll.push(rel);
+    }
+  };
+  walk("app");
+  walk("components");
+  walk("lib");
+  walk("server");
+  for (const f of walkAll) {
+    assert(
+      !/NEXT_PUBLIC_PUBLIC_REGISTRATION|NEXT_PUBLIC_REGISTRATION/.test(read(f)),
+      `${f} no debe exponer el kill switch como variable pública`
+    );
+  }
+});
+
+check("66b. El módulo que lee el entorno es server-only", () => {
+  const s = read(REG_SERVER);
+  assert(
+    s.trimStart().startsWith('import "server-only"'),
+    "lib/auth/public-registration.ts debe empezar por import \"server-only\""
+  );
+  // El módulo puro NO lee process.env: por eso puede testearse por importación.
+  // Se comparan solo las sentencias: la documentación del módulo sí puede
+  // nombrar process.env para explicar por qué NO lo usa.
+  const pure = read(REG_PURE);
+  const pureCode = pure.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert(
+    !/process\.env/.test(pureCode),
+    "el módulo puro no debe leer process.env"
+  );
+  // Interpretación en UN solo lugar.
+  assert(
+    /raw === "true" \|\| raw === "1"/.test(pure),
+    "la interpretación del flag debe vivir en el módulo puro"
+  );
+  const otros = ["app", "components", "server"].flatMap((dir) => {
+    const out: string[] = [];
+    const walk = (d: string) => {
+      for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {
+        const rel = `${d}/${e.name}`;
+        if (e.isDirectory()) walk(rel);
+        else if (/\.tsx?$/.test(e.name)) out.push(rel);
+      }
+    };
+    walk(dir);
+    return out;
+  });
+  for (const f of otros) {
+    assert(
+      !/PUBLIC_REGISTRATION_ENABLED["'\]]?\s*===\s*["']true["']/.test(read(f)),
+      `${f} no debe reinterpretar la variable: use el módulo canónico`
+    );
+  }
+});
+
+check("66c. Ningún Client Component importa el módulo server-only", () => {
+  const clientFiles: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(e.name)) {
+        const s = read(rel);
+        if (/^\s*["']use client["']/m.test(s)) clientFiles.push(rel);
+      }
+    }
+  };
+  walk("app");
+  walk("components");
+  for (const f of clientFiles) {
+    const s = read(f);
+    assert(
+      !s.includes("@/lib/auth/public-registration"),
+      `${f} es un Client Component y no puede importar el kill switch server-only`
+    );
+    assert(
+      !s.includes("PUBLIC_REGISTRATION_ENABLED"),
+      `${f} es un Client Component y no debe leer la variable`
+    );
+  }
+});
+
+check("67. El guard del servidor corre ANTES de auth.signUp", () => {
+  const s = read(AUTH_ACTIONS);
+  const gateIdx = s.indexOf("resolveRegistrationGate");
+  const signUpIdx = s.indexOf("supabase.auth.signUp");
+  assert(gateIdx !== -1, "signUpAction debe consultar resolveRegistrationGate");
+  assert(signUpIdx !== -1, "debe seguir existiendo la llamada a auth.signUp");
+  assert(
+    gateIdx < signUpIdx,
+    "el guard debe evaluarse ANTES de llamar a auth.signUp"
+  );
+  // Retorno temprano: si no se permite, no se sigue.
+  assert(
+    /if \(!gate\.allowed\) \{[\s\S]{0,120}return \{ error: REGISTRATION_CLOSED_MESSAGE \}/.test(s),
+    "debe devolverse un error controlado y detenerse antes de crear nada"
+  );
+  // El cliente de Supabase se crea DESPUÉS del guard.
+  const clientIdx = s.indexOf("const supabase = await createServerClient();", gateIdx);
+  assert(
+    clientIdx > gateIdx,
+    "no debe crearse el cliente de Supabase antes de superar el guard"
+  );
+});
+
+check("67b. El mensaje de rechazo es genérico y no revela configuración", () => {
+  const s = read(REG_SERVER);
+  assert(
+    /REGISTRATION_CLOSED_MESSAGE =\s*\n?\s*"El registro público no está disponible en este momento\."/.test(s),
+    "debe usarse el mensaje genérico acordado"
+  );
+  // No debe filtrar el nombre de la variable ni su valor al usuario.
+  const msgIdx = s.indexOf("REGISTRATION_CLOSED_MESSAGE =");
+  const msg = s.slice(msgIdx, msgIdx + 200);
+  assert(
+    !/PUBLIC_REGISTRATION_ENABLED|process\.env/.test(msg),
+    "el mensaje no debe revelar la variable ni la configuración interna"
+  );
+});
+
+check("68. La excepción de invitación se verifica en SERVIDOR, no por el cliente", () => {
+  const s = read(REG_SERVER);
+  // Se consulta la base de datos.
+  assert(
+    s.includes('.from("team_invitations")'),
+    "la excepción debe verificarse contra team_invitations"
+  );
+  // Las cuatro condiciones exigidas.
+  assert(s.includes('.eq("status", "pending")'), "debe exigir invitación pendiente (no consumida)");
+  assert(s.includes('.eq("token", token)'), "debe exigir el token exacto");
+  assert(
+    /expiresAt\.getTime\(\) < Date\.now\(\)/.test(s),
+    "debe exigir que la invitación siga vigente"
+  );
+  assert(
+    /normalizeEmail\(String\(data\.email\)\) !== normalized/.test(s),
+    "debe exigir que el correo coincida con el invitado"
+  );
+  // Fail-closed ante error.
+  assert(
+    /catch \{[\s\S]{0,200}return false/.test(s),
+    "ante cualquier error la verificación debe devolver false"
+  );
+  // El parámetro `next` por sí solo no autoriza.
+  const pure = read(REG_PURE);
+  assert(
+    /SIN autoridad|no autoriza nada/i.test(pure),
+    "debe documentarse que el token de la URL no autoriza por sí mismo"
+  );
+});
+
+check("69. /register no renderiza formulario con el registro cerrado", () => {
+  const s = read(REGISTER_PAGE);
+  // Es Server Component: sin "use client".
+  assert(
+    !/^\s*["']use client["']/m.test(s),
+    "la página de registro debe ser un Server Component"
+  );
+  assert(
+    s.includes("shouldRenderRegistrationForm"),
+    "debe consultarse el kill switch antes de renderizar"
+  );
+  // Con el flag apagado, se devuelve la pantalla controlada.
+  assert(
+    /if \(showForm\) \{\s*\n\s*return <RegisterForm \/>;/.test(s),
+    "el formulario solo debe renderizarse cuando corresponde"
+  );
+  assert(
+    /Registro no disponible/.test(s),
+    "debe mostrarse una pantalla controlada"
+  );
+  // Sin formulario funcional en la rama cerrada.
+  const closedBranch = s.slice(s.indexOf("Registro no disponible"));
+  assert(
+    !/<form/.test(closedBranch) && !/<RegisterForm/.test(closedBranch),
+    "la pantalla cerrada no debe contener ningún formulario"
+  );
+  // Enlace a login y canal comercial.
+  assert(/href="\/login"/.test(closedBranch), "debe ofrecer enlace a /login");
+  assert(
+    /contacto@idendi\.org/.test(closedBranch),
+    "puede ofrecer el canal comercial"
+  );
+});
+
+check("69b. La pantalla cerrada no usa lenguaje prohibido ni promete fechas", () => {
+  const s = read(REGISTER_PAGE);
+  for (const rx of [/beta/i, /versi[oó]n de prueba/i, /lanzamiento controlado/i]) {
+    assert(!rx.test(s), `la pantalla de registro no debe decir ${rx}`);
+  }
+  assert(
+    !/pr[oó]ximamente estará|en \d+ (días|semanas|meses)|a partir del/i.test(s),
+    "no debe prometerse una fecha de apertura"
+  );
+  assert(
+    !/PUBLIC_REGISTRATION_ENABLED/.test(s),
+    "no debe revelarse el nombre de la variable"
+  );
+});
+
+check("69c. Con el registro abierto se conserva el formulario histórico", () => {
+  const form = read("components/domain/auth/register-form.tsx");
+  for (const campo of ['name="full_name"', 'name="email"', 'name="password"']) {
+    assert(form.includes(campo), `el formulario debe conservar el campo ${campo}`);
+  }
+  assert(form.includes("signUpAction"), "debe seguir usando signUpAction");
+  assert(form.includes("minLength={8}"), "debe conservarse el mínimo de 8 caracteres");
+  // Y conserva el flujo de invitación.
+  assert(
+    form.includes("/accept-invite"),
+    "debe conservarse el aviso de invitación pendiente"
+  );
+});
+
+check("70. El login sigue funcionando y no depende del registro público", () => {
+  const page = read("app/(auth)/login/page.tsx");
+  const form = read("components/domain/auth/login-form.tsx");
+  assert(form.includes("signInAction"), "el login debe seguir usando signInAction");
+  // El kill switch solo decide el enlace secundario, nunca el formulario.
+  assert(
+    !/if \(.*registrationOpen.*\)[\s\S]{0,80}return null/.test(form),
+    "el kill switch no puede impedir iniciar sesión"
+  );
+  assert(
+    page.includes("isPublicRegistrationEnabled"),
+    "la página de login lee el flag en servidor y lo pasa como prop"
+  );
+  // El formulario de login se renderiza siempre.
+  assert(
+    /return <LoginForm registrationOpen=/.test(page),
+    "el formulario de login debe renderizarse siempre"
+  );
+});
+
+check("70b. El superadministrador no depende del registro público", () => {
+  // Sin bypass por correo fijo en ninguna parte.
+  for (const f of [REG_SERVER, REG_PURE, AUTH_ACTIONS]) {
+    const s = read(f);
+    assert(
+      !/@[a-z0-9.-]+\.(com|org|co)\b/i.test(s.replace(/contacto@idendi\.org/g, "")),
+      `${f} no debe contener ningún correo fijo como bypass`
+    );
+    assert(
+      !/is_superadmin|platform_staff|superadmin/i.test(s),
+      `${f} no debe otorgar excepciones por superadministrador`
+    );
+  }
+  // El guard solo se aplica a la creación de cuentas, no al inicio de sesión.
+  const auth = read(AUTH_ACTIONS);
+  const signInIdx = auth.indexOf("export async function signInAction");
+  const signUpIdx = auth.indexOf("export async function signUpAction");
+  const signInBody = auth.slice(signInIdx, signUpIdx);
+  assert(
+    !signInBody.includes("resolveRegistrationGate"),
+    "signInAction NO debe consultar el kill switch: el login siempre funciona"
+  );
+});
+
+check("71. Las invitaciones legítimas siguen funcionando", () => {
+  // El enlace «Crear cuenta» de accept-invite se conserva sin condicionar.
+  const invite = read("app/accept-invite/page.tsx");
+  assert(
+    /href=\{`\/register\?next=\$\{encodeURIComponent\(returnHere\)\}`\}/.test(invite),
+    "accept-invite debe seguir ofreciendo crear cuenta con el token"
+  );
+  assert(
+    !/registrationOpen|isPublicRegistrationEnabled/.test(invite),
+    "el enlace de invitación no debe condicionarse al kill switch"
+  );
+  // La página de registro admite el caso de invitación.
+  const s = read(REGISTER_PAGE);
+  assert(
+    /invitaci[oó]n/i.test(s),
+    "la página de registro debe contemplar el caso de invitación"
+  );
+  // Y el login conserva la vía para invitados con el registro cerrado.
+  const loginForm = read("components/domain/auth/login-form.tsx");
+  assert(
+    /Crear cuenta con tu invitación/.test(loginForm),
+    "con el registro cerrado el login debe conservar la vía del invitado"
+  );
+});
+
+check("72. La variable está en .env.example y en el precheck", () => {
+  const env = read(".env.example");
+  assert(
+    /^PUBLIC_REGISTRATION_ENABLED=/m.test(env),
+    ".env.example debe declarar PUBLIC_REGISTRATION_ENABLED"
+  );
+  assert(
+    !/^NEXT_PUBLIC_PUBLIC_REGISTRATION/m.test(env),
+    "nunca debe declararse como variable pública"
+  );
+  assert(
+    /Production TÉCNICO.*false/.test(env.replace(/\s+/g, " ")),
+    ".env.example debe indicar false para Production técnico"
+  );
+
+  const pre = read("scripts/release/v1/precheck-env.ts");
+  assert(
+    /name: "PUBLIC_REGISTRATION_ENABLED"/.test(pre),
+    "el precheck debe incluir la variable en el contrato"
+  );
+  assert(
+    /HABILITADO|DESHABILITADO/.test(pre),
+    "el precheck puede imprimir el estado (el flag no es secreto)"
+  );
+});
+
+check("72b. El precheck exige registro cerrado para el hito técnico", () => {
+  const pre = read("scripts/release/v1/precheck-env.ts");
+  assert(
+    /ENVIRONMENT\.name === "production" && registrationOn/.test(pre),
+    "el precheck debe detectar registro habilitado en Production"
+  );
+  const failIdx = pre.indexOf('ENVIRONMENT.name === "production" && registrationOn');
+  const block = pre.slice(failIdx, failIdx + 700);
+  assert(/fail\(/.test(block), "debe ser un FALLO, no una advertencia");
+  assert(
+    /expect-registration/.test(pre),
+    "debe existir un argumento explícito para declarar el estado esperado"
+  );
+  // Y valores no admitidos también fallan.
+  assert(
+    /REGISTRATION_VALID_VALUES\.includes/.test(pre),
+    "el precheck debe validar que el valor sea uno de los admitidos"
+  );
+});
+
+check("73. La documentación cubre el kill switch", () => {
+  const scope = read(ROUTE_A);
+  const readiness = read(READINESS);
+  const smoke = read(SMOKE);
+  for (const [f, s] of [
+    [ROUTE_A, scope],
+    [READINESS, readiness],
+    [SMOKE, smoke],
+  ] as const) {
+    assert(
+      s.includes("PUBLIC_REGISTRATION_ENABLED"),
+      `${f} debe documentar la variable`
+    );
+  }
+  assert(
+    /deployment nuevo|nuevo deployment|Redeploy/i.test(readiness),
+    "debe recordarse que cambiar la variable exige un deployment nuevo"
+  );
+  assert(
+    /invitad/i.test(scope),
+    "el alcance debe explicar el trato de las personas invitadas"
+  );
+});
+
+check("74. No se tocaron migraciones ni el bloqueo legal", () => {
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
+  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  assert(
+    /c_legal_approval_confirmed constant boolean := false/.test(read(PUBLISH_SQL)),
+    "el script legal debe seguir bloqueado"
+  );
+  for (const name of LEGAL_DRAFTS) {
+    assert(
+      draft(name).includes("BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR"),
+      `${name} debe seguir marcado como borrador`
+    );
+  }
 });
 
 // ===========================================================================

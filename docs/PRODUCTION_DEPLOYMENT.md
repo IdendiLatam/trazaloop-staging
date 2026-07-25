@@ -75,6 +75,7 @@ NEXT_PUBLIC_SUPABASE_URL              → URL del proyecto de PRODUCCIÓN
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  → clave pública de PRODUCCIÓN
 SUPABASE_SECRET_KEY                   → clave secreta de PRODUCCIÓN
 TEXTILES_MODULE_ENABLED               → true
+PUBLIC_REGISTRATION_ENABLED           → false (registro cerrado, hito técnico)
 ACTIVE_ORG_COOKIE_SECRET              → secreto NUEVO (openssl rand -base64 32);
                                         distinto del de staging
 NEXT_PUBLIC_SITE_URL                  → https://app.tudominio.com
