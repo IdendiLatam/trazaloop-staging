@@ -1169,6 +1169,323 @@ check("35. El informe legal declara los bloqueos y los requisitos pendientes", (
 });
 
 // ===========================================================================
+console.log("\n§14 · Paquete jurídico y de privacidad (borradores)\n");
+
+const LEGAL_DIR = "docs/legal";
+const LEGAL_DRAFTS = [
+  "V1.0.0_TERMS_DRAFT.md",
+  "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
+  "V1.0.0_PRIVACY_NOTICE_DRAFT.md",
+  "V1.0.0_COOKIE_POLICY_DRAFT.md",
+  "V1.0.0_MARKETING_CONSENT_DRAFT.md",
+  "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md",
+  "V1.0.0_RETENTION_AND_DELETION_POLICY_DRAFT.md",
+  "V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md",
+];
+const draft = (name: string) => read(`${LEGAL_DIR}/${name}`);
+const allDrafts = () => LEGAL_DRAFTS.map(draft).join("\n\n");
+
+check("36. Existen los ocho borradores jurídicos", () => {
+  for (const name of LEGAL_DRAFTS) {
+    assert(exists(`${LEGAL_DIR}/${name}`), `falta el borrador ${LEGAL_DIR}/${name}`);
+  }
+  assert(LEGAL_DRAFTS.length === 8, "deben ser exactamente 8 borradores");
+});
+
+check("37. Todos llevan el encabezado BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR", () => {
+  const BANNER = "BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR";
+  for (const name of LEGAL_DRAFTS) {
+    const s = draft(name);
+    assert(s.includes(BANNER), `${name} debe contener «${BANNER}»`);
+    // Debe estar arriba: en las primeras líneas del archivo.
+    const head = s.split("\n").slice(0, 5).join("\n");
+    assert(head.includes(BANNER), `${name} debe llevar el aviso en la parte SUPERIOR`);
+  }
+});
+
+check("38. Ningún borrador declara cumplimiento legal", () => {
+  const FORBIDDEN = [
+    /cumple\s+(con\s+)?la\s+(legislación|ley|normativa)/i,
+    /conforme\s+a\s+la\s+ley\s+colombiana/i,
+    /da\s+cumplimiento\s+a\s+la\s+ley/i,
+    /cumplimiento\s+garantizado/i,
+    /jurídicamente\s+válido\s+y\s+definitivo/i,
+  ];
+  for (const name of LEGAL_DRAFTS) {
+    const s = draft(name);
+    for (const rx of FORBIDDEN) {
+      assert(!rx.test(s), `${name} no debe declarar cumplimiento legal (${rx})`);
+    }
+  }
+  // Y deben decir expresamente que NO lo declaran.
+  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md");
+  assert(
+    /no se declara que cumpla ninguna legislación/i.test(policy),
+    "la política debe declarar expresamente que no afirma cumplimiento"
+  );
+});
+
+check("39. El SMTP predeterminado de Supabase NO se presenta como apto para producción", () => {
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  assert(
+    /solo se admite para staging y pruebas/i.test(gaps) ||
+      /solo.*staging.*pruebas/i.test(gaps),
+    "los gaps deben restringir el SMTP de Supabase a staging y pruebas"
+  );
+  assert(
+    /no es apto para producción/i.test(gaps),
+    "debe declararse que el SMTP predeterminado no es apto para producción"
+  );
+  // Y debe figurar como bloqueador.
+  assert(
+    /B-01.*SMTP|SMTP.*producción.*🚫|Proveedor SMTP de producción/i.test(gaps),
+    "el proveedor SMTP de producción debe figurar como bloqueador"
+  );
+  // Nadie debe afirmar lo contrario en los demás borradores.
+  assert(
+    !/SMTP.{0,60}(apto|suficiente|válido) para producción/i.test(allDrafts()),
+    "ningún borrador debe presentar el SMTP temporal como apto para producción"
+  );
+});
+
+check("40. El consentimiento de mercadeo es separado, opcional y desmarcado", () => {
+  const m = draft("V1.0.0_MARKETING_CONSENT_DRAFT.md");
+  assert(/casilla separada/i.test(m), "debe exigir casilla separada");
+  assert(/opcional/i.test(m), "debe ser opcional");
+  assert(/desmarcada por defecto/i.test(m), "debe estar desmarcada por defecto");
+  assert(
+    /no\s+necesaria\s+para\s+crear/i.test(m) || /No necesaria/i.test(m),
+    "no debe ser necesaria para crear ni usar la cuenta"
+  );
+  assert(/revocable/i.test(m), "debe ser revocable");
+  // Separación estricta de comunicaciones necesarias.
+  for (const t of ["recuperación de contraseña", "invitaciones", "soporte", "seguridad"]) {
+    assert(
+      new RegExp(t, "i").test(m),
+      `debe declarar la separación respecto de: ${t}`
+    );
+  }
+  // Y NO debe mezclarse con la aceptación legal.
+  assert(
+    /independiente/i.test(m),
+    "debe declararse independiente de la aceptación legal"
+  );
+});
+
+check("41. GA4 no se clasifica como cookie necesaria", () => {
+  const c = draft("V1.0.0_COOKIE_POLICY_DRAFT.md");
+  assert(
+    /GA4 y GTM \*\*NO son cookies estrictamente necesarias\*\*|NO son cookies estrictamente necesarias/i.test(c),
+    "la política debe negar expresamente que GA4/GTM sean necesarias"
+  );
+  assert(
+    /Analítica.*opcional.*DESACTIVADA por defecto/i.test(c),
+    "la analítica debe ser opcional y estar desactivada por defecto"
+  );
+  // Search Console distinguido del rastreo por cookies.
+  assert(
+    /Google Search Console no es una cookie/i.test(c),
+    "debe distinguirse Search Console de las etiquetas del navegador"
+  );
+  // Categorías exigidas.
+  for (const cat of ["Necesarias", "Analítica", "Mercadeo"]) {
+    assert(new RegExp(cat, "i").test(c), `falta la categoría ${cat}`);
+  }
+});
+
+check("42. Se conserva el NO-GO jurídico y sus bloqueadores", () => {
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  assert(/NO-GO/.test(gaps), "los gaps deben mantener el NO-GO");
+  // Los trece bloqueadores exigidos.
+  for (let i = 1; i <= 13; i++) {
+    const id = `B-${String(i).padStart(2, "0")}`;
+    assert(gaps.includes(id), `debe listarse el bloqueador ${id}`);
+  }
+  // Decisiones abiertas heredadas.
+  assert(gaps.includes("L-2"), "la decisión L-2 debe seguir abierta");
+  // El informe de release sigue en NO-GO.
+  const review = read("docs/releases/V1.0.0_LEGAL_REVIEW.md");
+  assert(/NO-GO/.test(review), "el informe de release debe conservar el NO-GO");
+});
+
+check("43. El script de publicación sigue BLOQUEADO (no se desbloqueó)", () => {
+  const s = read(PUBLISH_SQL);
+  assert(
+    /c_legal_approval_confirmed constant boolean := false/.test(s),
+    "c_legal_approval_confirmed DEBE seguir en false"
+  );
+  assert(
+    !/c_legal_approval_confirmed constant boolean := true/.test(s),
+    "el script no debe haberse desbloqueado"
+  );
+  // Y los borradores no se cargaron en el script.
+  assert(
+    !s.includes("BORRADOR PARA REVISIÓN JURÍDICA"),
+    "los borradores no deben haberse trasladado todavía al script de publicación"
+  );
+});
+
+check("44. Los borradores identifican los módulos CPR y Textiles", () => {
+  for (const name of [
+    "V1.0.0_TERMS_DRAFT.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
+  ]) {
+    const s = draft(name);
+    assert(/Trazaloop CPR/.test(s), `${name} debe identificar Trazaloop CPR`);
+    assert(/Trazaloop Textiles/.test(s), `${name} debe identificar Trazaloop Textiles`);
+    assert(/NTC 6632/.test(s), `${name} debe mencionar NTC 6632`);
+    assert(/UNE-EN 15343/.test(s), `${name} debe mencionar UNE-EN 15343`);
+  }
+  // Y no deben atribuir a Trazaloop facultades de certificación: la
+  // cláusula «Qué NO es Trazaloop» debe enumerar todas las negaciones.
+  const terms = draft("V1.0.0_TERMS_DRAFT.md");
+  const negIdx = terms.indexOf("Qué NO es Trazaloop");
+  assert(negIdx !== -1, "los términos deben incluir la cláusula «Qué NO es Trazaloop»");
+  const negBlock = terms.slice(negIdx, terms.indexOf("###", negIdx + 10));
+  for (const negacion of [
+    "certifica productos",
+    "certifica procesos",
+    "reemplaza a organismos de certificación",
+    "garantiza la conformidad",
+    "garantiza la aceptación de una auditoría",
+    "emite conceptos jurídicos",
+    "garantiza resultados comerciales",
+  ]) {
+    assert(
+      negBlock.includes(negacion),
+      `la cláusula «Qué NO es Trazaloop» debe negar: ${negacion}`
+    );
+  }
+  assert(
+    /herramienta de gestión, soporte documental y[\s\S]{0,20}trazabilidad/.test(negBlock),
+    "debe describirse como herramienta de gestión, soporte documental y trazabilidad"
+  );
+});
+
+check("45. Se incluye el ciclo de conservación con máximo de 120 días", () => {
+  const r = draft("V1.0.0_RETENTION_AND_DELETION_POLICY_DRAFT.md");
+  for (const plazo of ["30 días", "90 días", "120 días"]) {
+    assert(r.includes(plazo), `la política de retención debe incluir ${plazo}`);
+  }
+  assert(
+    /máximo técnico ordinario/i.test(r),
+    "debe declararse el máximo técnico ordinario"
+  );
+  // La promesa absoluta retirada.
+  assert(
+    /se retira|sustituye/i.test(r) && r.includes("sin perder los datos ya cargados"),
+    "debe documentarse la retirada de la promesa «sin perder los datos ya cargados»"
+  );
+  // Y los términos ya no la usan como compromiso.
+  const terms = draft("V1.0.0_TERMS_DRAFT.md");
+  const clause = terms.slice(terms.indexOf("### 9.2"), terms.indexOf("## 10"));
+  assert(
+    !/sin perder los datos ya cargados/.test(clause) ||
+      /se retira|sustitución/i.test(clause),
+    "los términos no deben conservar la promesa absoluta como compromiso vigente"
+  );
+});
+
+check("46. Se identifica al operador con razón social y NIT correctos", () => {
+  const RAZON = "CORPORACIÓN INSTITUTO PARA EL DESARROLLO DEL ENTRETENIMIENTO DIGITAL";
+  const NIT = "901835846-6";
+  for (const name of [
+    "V1.0.0_TERMS_DRAFT.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
+    "V1.0.0_PRIVACY_NOTICE_DRAFT.md",
+    "V1.0.0_COOKIE_POLICY_DRAFT.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md",
+  ]) {
+    const s = draft(name);
+    assert(s.includes(RAZON), `${name} debe identificar la razón social exacta`);
+    assert(s.includes(NIT), `${name} debe incluir el NIT ${NIT}`);
+  }
+  // Datos de contacto oficiales, sin inventar otros.
+  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md");
+  assert(policy.includes("contacto@idendi.org"), "correo de privacidad correcto");
+  assert(policy.includes("Carrera 43A # 15 Sur – 15"), "dirección correcta");
+  assert(policy.includes("Medellín, Colombia"), "domicilio correcto");
+  const terms = draft("V1.0.0_TERMS_DRAFT.md");
+  assert(terms.includes("Jhorman Mena Ledezma"), "representante legal correcto");
+  assert(terms.includes("+57 324 3268865"), "teléfono correcto");
+  assert(terms.includes("https://www.trazaloop.com"), "dominio oficial correcto");
+  assert(
+    terms.includes("contacto@cirquiloconsultores.com"),
+    "correo de soporte correcto"
+  );
+});
+
+check("47. Cirquilo Consultores y el SMTP permanecen como pendientes", () => {
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  assert(
+    /Cirquilo Consultores/.test(gaps),
+    "los gaps deben mencionar a Cirquilo Consultores"
+  );
+  assert(
+    /identidad jurídica y NIT de Cirquilo Consultores/i.test(gaps),
+    "debe declararse pendiente la identidad jurídica y el NIT de Cirquilo"
+  );
+  assert(
+    /bloqueador contractual/i.test(gaps),
+    "Cirquilo debe marcarse como bloqueador contractual"
+  );
+  // También en el anexo de encargados.
+  const addendum = draft("V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md");
+  assert(
+    /PENDIENTES/i.test(addendum) && /Cirquilo/.test(addendum),
+    "el anexo debe marcar a Cirquilo como pendiente"
+  );
+});
+
+check("48. Los gaps clasifican cada requisito y contrastan con el código real", () => {
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  for (const estado of [
+    "IMPLEMENTADO",
+    "PARCIAL",
+    "AUSENTE",
+    "REQUIERE DECISIÓN",
+    "NO APLICA",
+  ]) {
+    assert(gaps.includes(estado), `los gaps deben usar la clasificación ${estado}`);
+  }
+  // Debe citar evidencia real del repositorio.
+  for (const ev of [
+    "user_legal_acceptances",
+    "REQUIRED_LEGAL_DOCUMENT_TYPES",
+    "tz-active-org",
+    "audit_log",
+    "cleanup-staging.ts",
+  ]) {
+    assert(gaps.includes(ev), `los gaps deben citar la evidencia real ${ev}`);
+  }
+  // Y reconocer lo que NO existe en el código.
+  assert(
+    /No hay código de pagos|no hay ningún código de GA4/i.test(gaps),
+    "los gaps deben declarar expresamente lo que no existe en el código"
+  );
+});
+
+check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
+  // Ningún borrador debe haberse convertido en migración.
+  const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
+  for (const f of migrations) {
+    assert(
+      !/terms|privacy|cookie|marketing|retention|addendum/i.test(f),
+      `ninguna migración debe corresponder a los borradores legales: ${f}`
+    );
+  }
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
+  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  // Los borradores viven en docs/legal, no en supabase/.
+  for (const name of LEGAL_DRAFTS) {
+    assert(
+      exists(`${LEGAL_DIR}/${name}`) && !exists(`supabase/${name}`),
+      `${name} debe vivir solo en ${LEGAL_DIR}`
+    );
+  }
+});
+
+// ===========================================================================
 console.log("");
 if (failures > 0) {
   console.error(`\n${failures} comprobación(es) de release FALLARON.\n`);
