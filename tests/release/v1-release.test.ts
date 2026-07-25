@@ -524,6 +524,231 @@ check("10b. La verificación falla de forma inequívoca ante datos empresariales
   );
 });
 
+// --- Compatibilidad con el SQL Editor de Supabase -------------------------
+// El verificador se ejecuta pegándolo en el SQL Editor, que NO interpreta
+// metacomandos de psql. Cualquier línea que empiece por barra invertida
+// rompe la ejecución completa.
+check("10c. El verificador NO contiene metacomandos de psql", () => {
+  const s = read(VERIFY_SQL);
+  const offenders = s
+    .split("\n")
+    .map((line, i) => ({ line, n: i + 1 }))
+    .filter(({ line }) => /^\s*\\/.test(line));
+  assert(
+    offenders.length === 0,
+    `el verificador contiene metacomandos psql en las líneas ${offenders
+      .map((o) => o.n)
+      .join(", ")}: no se ejecutaría en el SQL Editor de Supabase`
+  );
+  for (const meta of ["\\pset", "\\timing", "\\echo", "\\set", "\\quit", "\\q", "\\connect"]) {
+    assert(!s.includes(meta), `el verificador aún menciona el metacomando ${meta}`);
+  }
+  assert(
+    /SQL Editor/i.test(s),
+    "el verificador debe declarar explícitamente su compatibilidad de ejecución"
+  );
+});
+
+// --- Estructura REAL del superadministrador -------------------------------
+// public.platform_staff (0040) tiene role_code + status. NUNCA existió una
+// columna booleana de superadmin: usarla producía un error de columna
+// inexistente al ejecutar el script.
+check("10d. El verificador usa role_code/status y NUNCA una columna booleana de superadmin", () => {
+  const s = read(VERIFY_SQL);
+  assert(!/is_superadmin/i.test(s), "el verificador no debe referirse a is_superadmin");
+  assert(!/is_super_admin/i.test(s), "el verificador no debe referirse a is_super_admin");
+  assert(
+    /role_code\s*=\s*'superadmin'/.test(s),
+    "el superadministrador debe identificarse por role_code = 'superadmin'"
+  );
+  assert(
+    /status\s*=\s*'active'/.test(s),
+    "el superadministrador debe exigir status = 'active'"
+  );
+  // Nunca por separado: las dos condiciones deben ir juntas en cada consulta.
+  const superadminRefs = s.match(/role_code\s*=\s*'superadmin'[\s\S]{0,120}/g) ?? [];
+  assert(superadminRefs.length > 0, "debe existir al menos una consulta de superadministrador");
+  for (const ref of superadminRefs) {
+    assert(
+      /status\s*=\s*'active'/.test(ref) || /not\s*\(/.test(ref),
+      `una consulta de superadmin no exige status = 'active': ${ref.slice(0, 90)}`
+    );
+  }
+  // Y la migración real sigue siendo la fuente de verdad de esa estructura.
+  const m = read("supabase/migrations/0040_platform_staff.sql");
+  assert(
+    m.includes("role_code  text not null") && m.includes("status     text not null"),
+    "0040_platform_staff debe seguir definiendo role_code y status"
+  );
+  assert(
+    !/is_superadmin/i.test(m),
+    "la migración confirma que nunca existió una columna is_superadmin"
+  );
+});
+
+// --- Clasificación de audit_log -------------------------------------------
+// audit_log.organization_id es NULLABLE (0005). Contar la tabla entera
+// producía un NO-GO FALSO: las filas globales las escriben las propias
+// migraciones y la carga de datos globales.
+check("10e. audit_log NO se cuenta incondicionalmente como tabla empresarial", () => {
+  const s = read(VERIFY_SQL);
+  // Debe estar excluida de la derivación genérica por organization_id…
+  const exclusions = s.match(/table_name not in \('textile_fiber_types', 'audit_log'\)/g) ?? [];
+  assert(
+    exclusions.length >= 3,
+    `audit_log debe excluirse del censo genérico en la sección 2, 2b y el veredicto (encontradas ${exclusions.length})`
+  );
+  // …y no debe quedar ninguna exclusión antigua que solo cubriera las fibras.
+  assert(
+    !/table_name\s+<>\s+'textile_fiber_types'/.test(s),
+    "queda una exclusión antigua que trata audit_log como tabla empresarial completa"
+  );
+  // La migración confirma que la columna es NULLABLE (justifica el trato).
+  const audit = read("supabase/migrations/0005_audit.sql");
+  assert(
+    /organization_id uuid references public\.organizations \(id\),/.test(audit),
+    "0005_audit debe seguir declarando organization_id NULLABLE en audit_log"
+  );
+});
+
+check("10f. La auditoría empresarial exige organization_id NO NULL", () => {
+  const s = read(VERIFY_SQL);
+  const filter = "nullif(to_jsonb(a)->>''organization_id'', '''') is not null";
+  assert(
+    s.includes(filter),
+    "el censo empresarial de audit_log debe filtrar por organization_id NOT NULL"
+  );
+  // El filtro debe aplicarse tanto en el informe (sección 2) como en el
+  // veredicto: si solo estuviera en uno, el NO-GO volvería a ser falso.
+  assert(
+    (s.match(new RegExp(filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length >= 3,
+    "el filtro empresarial de audit_log debe usarse en la sección 2, 2b y el veredicto"
+  );
+});
+
+check("10g. La auditoría global (organization_id NULL) está PERMITIDA", () => {
+  const s = read(VERIFY_SQL);
+  assert(
+    s.includes("nullif(to_jsonb(a)->>'organization_id', '') is null"),
+    "debe existir una comprobación explícita de la auditoría global"
+  );
+  assert(
+    /organization_id NULL[^\n]*permitido|PERMITIDO/.test(s),
+    "el script debe declarar por escrito que la auditoría global está permitida"
+  );
+  assert(
+    /append-only/.test(s),
+    "debe advertir que audit_log es append-only y que esas filas no se borran"
+  );
+  // Nunca debe existir un NO-GO que dispare por el TOTAL de audit_log.
+  assert(
+    !/audit_log[^\n]{0,60}NO-GO/.test(s.replace(/organization_id NOT NULL[\s\S]{0,80}/g, "")),
+    "ningún NO-GO puede dispararse por el conteo total de audit_log"
+  );
+});
+
+check("10h. El verificador calcula audit_log total, global y empresarial", () => {
+  const s = read(VERIFY_SQL);
+  for (const alias of ["audit_log_total", "audit_log_global", "audit_log_empresarial"]) {
+    assert(s.includes(alias), `debe informar de ${alias}`);
+  }
+  for (const v of ["v_audit_total", "v_audit_global", "v_audit_business"]) {
+    assert(s.includes(v), `el veredicto debe calcular ${v}`);
+  }
+  assert(
+    /raise notice 'audit_log total/.test(s) &&
+      /raise notice 'audit_log global/.test(s) &&
+      /raise notice 'audit_log empresarial/.test(s),
+    "las tres cifras deben emitirse por RAISE NOTICE (lo único que ve el SQL Editor)"
+  );
+});
+
+// --- Momentos admitidos del superadministrador ----------------------------
+check("10i. Se aceptan 0 superadministradores antes de crearlo y 1 después", () => {
+  const s = read(VERIFY_SQL);
+  assert(
+    /esperado: 0 antes de crearlo, 1 después/.test(s),
+    "el informe debe explicar que 0 es válido antes del paso formal de creación"
+  );
+  // 0 superadmins NO puede ser un NO-GO: el umbral de error es > 1.
+  assert(
+    /if v_superadmins > 1 then/.test(s),
+    "solo MÁS de un superadministrador activo debe abortar"
+  );
+  assert(
+    !/if v_superadmins\s*(=|<)\s*0\s*then[\s\S]{0,200}raise exception/.test(s),
+    "cero superadministradores no debe producir NO-GO: aún no se ha creado"
+  );
+  assert(
+    !/if v_superadmins\s*(<>|!=)\s*1\s*then[\s\S]{0,200}raise exception/.test(s),
+    "exigir exactamente 1 superadministrador rompería la verificación previa a su creación"
+  );
+});
+
+check("10j. Las cuentas de Auth ajenas al superadministrador producen NO-GO", () => {
+  const s = read(VERIFY_SQL);
+  assert(
+    /if v_auth_non_super > 0 then[\s\S]{0,120}raise exception/.test(s),
+    "una cuenta de Auth que no sea el superadministrador debe abortar con error"
+  );
+  assert(
+    s.includes("NO-GO · HAY % CUENTA(S) DE AUTH QUE NO SON EL SUPERADMINISTRADOR"),
+    "el mensaje de NO-GO por cuentas de Auth debe ser inequívoco"
+  );
+  // Incoherencias entre auth.users y platform_staff: también NO-GO.
+  assert(
+    /if v_staff_orphan > 0 then[\s\S]{0,120}raise exception/.test(s),
+    "el personal de plataforma sin cuenta en auth.users debe abortar"
+  );
+  assert(
+    /if v_auth_users <> v_superadmins then[\s\S]{0,160}raise exception/.test(s),
+    "una incoherencia entre auth.users y los superadministradores activos debe abortar"
+  );
+  assert(
+    /if v_superadmins > 1 then[\s\S]{0,160}raise exception/.test(s),
+    "más de un superadministrador activo debe abortar"
+  );
+});
+
+// --- Contrato de solo lectura, reforzado ----------------------------------
+check("10k. El verificador conserva el contrato de SOLO LECTURA", () => {
+  const s = read(VERIFY_SQL);
+  const code = s.replace(/^\s*--.*$/gm, "").replace(/'(?:[^']|'')*'/g, "''");
+  for (const rx of [
+    /\binsert\b/i,
+    /\bupdate\b/i,
+    /\bdelete\b/i,
+    /\btruncate\b/i,
+    /\balter\b/i,
+    /\bdrop\b/i,
+    /\bcreate\s+(table|view|function|policy|index|schema|trigger)\b/i,
+    /\bgrant\b/i,
+    /\brevoke\b/i,
+    /\bmerge\b/i,
+    /\bcopy\b[\s\S]{0,40}\bfrom\b/i,
+  ]) {
+    assert(!rx.test(code), `el verificador contiene una sentencia prohibida (${rx})`);
+  }
+  // El bloque DO solo puede calcular: su EXECUTE dinámico debe ser un SELECT.
+  const dynamic = s.match(/execute format\('([^']+)'/g) ?? [];
+  assert(dynamic.length > 0, "debe existir el censo dinámico del veredicto");
+  for (const d of dynamic) {
+    assert(
+      /execute format\('select /.test(d),
+      `el EXECUTE dinámico debe ser un SELECT, no una escritura: ${d}`
+    );
+  }
+  assert(s.includes("begin read only;"), "la transacción debe seguir abriéndose READ ONLY");
+});
+
+check("10l. El verificador no declara por sí solo que Production está lista", () => {
+  const s = read(VERIFY_SQL);
+  assert(
+    /NO declara la producción lista para desplegar/i.test(s),
+    "el veredicto positivo debe aclarar que la decisión de despliegue es humana"
+  );
+});
+
 check("11. Ningún script de release imprime claves ni secretos", () => {
   const scripts = [
     "scripts/release/v1/precheck-env.ts",
