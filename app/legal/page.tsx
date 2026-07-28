@@ -76,6 +76,10 @@ export default function LegalPage() {
         <p>{APP_VERSION_LABEL}</p>
         <p className="mt-1">Última actualización de este texto: julio de 2026.</p>
         <p className="mt-3">
+          <Link href="/legal/paquete" className="text-loop hover:underline">
+            Documentos legales
+          </Link>
+          {" · "}
           <Link href="/login" className="text-loop hover:underline">
             Ir a iniciar sesión
           </Link>

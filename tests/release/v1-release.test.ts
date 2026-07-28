@@ -27,6 +27,7 @@
  *  17. los hints CPR y Textiles conservan enlaces HTTPS e internos seguros
  *  18. el login permanece general para Trazaloop
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -50,6 +51,23 @@ import {
   extractInvitationToken,
   PUBLIC_REGISTRATION_FLAG_ENV,
 } from "../../lib/domain/public-registration";
+import {
+  hasAcceptedAllRequiredDocuments,
+  pendingRequiredDocuments,
+  hasConfirmedAllLegalCheckboxes,
+} from "../../lib/domain/legal";
+import {
+  LEGAL_OPERATOR,
+  LEGAL_PACKAGE_APPROVED,
+  LEGAL_PACKAGE_APPROVAL_DATE,
+  LEGAL_PACKAGE_DOCUMENTS,
+  LEGAL_PACKAGE_DOCUMENT_DB_VERSION,
+  LEGAL_PACKAGE_DRAFT_BANNER,
+  LEGAL_PACKAGE_EFFECTIVE_DATE,
+  LEGAL_PACKAGE_VERSION,
+  LEGAL_TECH_PROVIDERS,
+  ESSENTIAL_COOKIES_PURPOSES,
+} from "../../lib/domain/legal-package";
 import { APP_VERSION, APP_VERSION_LABEL } from "../../lib/version";
 import {
   resolveDeploymentEnvironment,
@@ -1176,6 +1194,15 @@ const ROLLBACK_SQL = "scripts/release/v1/rollback-legal-v2.sql";
 const sqlCode = (s: string) => s.replace(/^\s*--.*$/gm, "");
 /** Quita además los literales entre comillas simples. */
 const sqlBare = (s: string) => sqlCode(s).replace(/'(?:[^']|'')*'/g, "''");
+/**
+ * Quita los documentos aprobados incrustados en literales entre comillas de
+ * dólar ($terms$…$terms$ y $privacy$…$privacy$). Su prosa jurídica no es
+ * código SQL y no debe analizarse como tal.
+ */
+const stripDocLiterals = (s: string) =>
+  s
+    .replace(/\$terms\$[\s\S]*?\$terms\$/g, "$terms$…$terms$")
+    .replace(/\$privacy\$[\s\S]*?\$privacy\$/g, "$privacy$…$privacy$");
 
 check("25. Existe el script de rollback legal", () => {
   assert(exists(ROLLBACK_SQL), "debe existir scripts/release/v1/rollback-legal-v2.sql");
@@ -1361,15 +1388,25 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
   assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
 });
 
-check("34. La publicación está bloqueada por aprobación legal (fail-closed)", () => {
+check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
   const s = read(PUBLISH_SQL);
   assert(
-    /c_legal_approval_confirmed constant boolean := false/.test(s),
-    "el script debe estar bloqueado por defecto (aprobación legal en false)"
+    /c_legal_approval_confirmed constant boolean := true;/.test(s),
+    "la aprobación legal del 27 de julio de 2026 debe estar declarada en true"
   );
   assert(
+    !/c_legal_approval_confirmed constant boolean := false/.test(s),
+    "no puede quedar ninguna declaración residual en false"
+  );
+  // El mecanismo fail-closed NO desaparece: si alguien la devuelve a false,
+  // el script sigue abortando antes de escribir.
+  assert(
     /if not c_legal_approval_confirmed then[\s\S]{0,200}raise exception/.test(s),
-    "debe abortar si no hay aprobación legal declarada"
+    "debe seguir abortando si se retira la aprobación"
+  );
+  assert(
+    /27 de julio de 2026/.test(s),
+    "el script debe llevar el comentario de aprobación del 27 de julio de 2026"
   );
 });
 
@@ -1400,37 +1437,141 @@ check("35. El informe legal declara los bloqueos y los requisitos pendientes", (
 });
 
 // ===========================================================================
-console.log("\n§14 · Paquete jurídico y de privacidad (borradores)\n");
+console.log("\n§14 · Paquete jurídico v1.0 aprobado y documentos auxiliares\n");
 
 const LEGAL_DIR = "docs/legal";
-const LEGAL_DRAFTS = [
-  "V1.0.0_TERMS_DRAFT.md",
-  "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
-  "V1.0.0_PRIVACY_NOTICE_DRAFT.md",
-  "V1.0.0_COOKIE_POLICY_DRAFT.md",
+
+/** Los SEIS documentos APROBADOS que componen el paquete jurídico v1.0.
+ *  Aprobación comunicada por la dirección del proyecto el 27 de julio de
+ *  2026. Ninguno conserva la marca de borrador. */
+const LEGAL_PACKAGE_SIX = [
+  "V1.0.0_TERMS_APPROVED.md",
+  "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
+  "V1.0.0_PRIVACY_NOTICE_APPROVED.md",
+  "V1.0.0_REGISTRATION_AUTHORIZATION_APPROVED.md",
+  "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md",
+  "V1.0.0_COOKIE_POLICY_APPROVED.md",
+];
+
+/** Los TRES documentos auxiliares que NO se aprobaron y siguen fuera de
+ *  alcance: la especificación de mercadeo, la política de conservación y la
+ *  auditoría de huecos. Conservan la marca de borrador. */
+const LEGAL_AUX_DRAFTS = [
   "V1.0.0_MARKETING_CONSENT_DRAFT.md",
-  "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md",
   "V1.0.0_RETENTION_AND_DELETION_POLICY_DRAFT.md",
   "V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md",
 ];
+
+/** Registro interno de la aprobación. Ni publicable ni jurídico. */
+const LEGAL_APPROVAL_RECORD = "V1.0.0_APPROVAL_RECORD.md";
+
+const LEGAL_DRAFTS = [...LEGAL_PACKAGE_SIX, ...LEGAL_AUX_DRAFTS];
 const draft = (name: string) => read(`${LEGAL_DIR}/${name}`);
 const allDrafts = () => LEGAL_DRAFTS.map(draft).join("\n\n");
 
-check("36. Existen los ocho borradores jurídicos", () => {
+check("36. Existen los seis aprobados, los tres auxiliares y el registro", () => {
   for (const name of LEGAL_DRAFTS) {
-    assert(exists(`${LEGAL_DIR}/${name}`), `falta el borrador ${LEGAL_DIR}/${name}`);
+    assert(exists(`${LEGAL_DIR}/${name}`), `falta el documento ${LEGAL_DIR}/${name}`);
   }
-  assert(LEGAL_DRAFTS.length === 8, "deben ser exactamente 8 borradores");
+  assert(LEGAL_PACKAGE_SIX.length === 6, "el paquete aprobado son seis documentos");
+  assert(LEGAL_AUX_DRAFTS.length === 3, "deben quedar tres auxiliares fuera de alcance");
+  assert(LEGAL_DRAFTS.length === 9, "nueve documentos en total en docs/legal");
+  // Y los borradores antiguos ya no existen con su nombre de borrador.
+  for (const viejo of [
+    "V1.0.0_TERMS_DRAFT.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
+    "V1.0.0_PRIVACY_NOTICE_DRAFT.md",
+    "V1.0.0_REGISTRATION_AUTHORIZATION_DRAFT.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md",
+    "V1.0.0_COOKIE_POLICY_DRAFT.md",
+  ]) {
+    assert(!exists(`${LEGAL_DIR}/${viejo}`), `${viejo} debió renombrarse a _APPROVED`);
+  }
+  assert(exists(`${LEGAL_DIR}/${LEGAL_APPROVAL_RECORD}`), "falta el registro de aprobación");
 });
 
-check("37. Todos llevan el encabezado BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR", () => {
+check("37. Los seis aprobados NO llevan la marca de borrador; los tres auxiliares sí", () => {
   const BANNER = "BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR";
-  for (const name of LEGAL_DRAFTS) {
+  for (const name of LEGAL_PACKAGE_SIX) {
     const s = draft(name);
-    assert(s.includes(BANNER), `${name} debe contener «${BANNER}»`);
-    // Debe estar arriba: en las primeras líneas del archivo.
+    assert(!s.includes(BANNER), `${name} NO debe conservar «${BANNER}»`);
+    assert(
+      !/pendiente de (aprobación|redacción) jurídica/i.test(s),
+      `${name} no puede seguir declarándose pendiente de aprobación`
+    );
+  }
+  // Los auxiliares no adoptados siguen identificados como tales.
+  for (const name of LEGAL_AUX_DRAFTS) {
+    const s = draft(name);
+    assert(s.includes(BANNER), `${name} debe conservar «${BANNER}»`);
     const head = s.split("\n").slice(0, 5).join("\n");
     assert(head.includes(BANNER), `${name} debe llevar el aviso en la parte SUPERIOR`);
+  }
+});
+
+check("37b. Los seis aprobados declaran aprobación, vigencia, versión y canales", () => {
+  for (const name of LEGAL_PACKAGE_SIX) {
+    const s = draft(name);
+    for (const [etiqueta, rx] of [
+      ["fecha de aprobación", /\*\*Fecha de aprobación:\*\* 27 de julio de 2026/],
+      ["fecha de entrada en vigor", /\*\*Fecha de entrada en vigor:\*\* 27 de julio de 2026/],
+      ["versión comercial", /\*\*Versión comercial:\*\* 1\.0/],
+      ["sitio", /\*\*Sitio:\*\* https:\/\/www\.trazaloop\.com/],
+      [
+        "responsable",
+        /\*\*Responsable:\*\* CORPORACIÓN INSTITUTO PARA EL DESARROLLO DEL ENTRETENIMIENTO DIGITAL/,
+      ],
+      ["NIT", /\*\*NIT:\*\* 901835846-6/],
+      ["canal legal", /\*\*Canal legal y de privacidad:\*\* contacto@idendi\.org/],
+      ["canal de soporte", /\*\*Canal de soporte técnico:\*\* contacto@cirquiloconsultores\.com/],
+    ] as const) {
+      assert(rx.test(s), `${name} debe declarar ${etiqueta}`);
+    }
+    // La aprobación se atribuye a la dirección del proyecto, nunca a una
+    // persona concreta: su identidad no consta en las instrucciones.
+    assert(
+      /aprobado por la dirección del proyecto el 27 de julio de 2026/i.test(
+        s.replace(/\n>\s*/g, " ").replace(/\s+/g, " ")
+      ),
+      `${name} debe atribuir la aprobación a la dirección del proyecto`
+    );
+    assert(
+      !/aprobado por (el|la) (abogad|doctor|dr\.|licenciad)/i.test(s),
+      `${name} no puede atribuir la aprobación a un profesional concreto`
+    );
+  }
+});
+
+check("37c. El registro interno de aprobación es completo y sin datos sensibles", () => {
+  const r = draft(LEGAL_APPROVAL_RECORD);
+  assert(/Paquete jurídico de Trazaloop v1\.0/i.test(r), "debe nombrar el paquete aprobado");
+  assert(/27 de julio de 2026/.test(r), "debe fijar la fecha de aprobación");
+  assert(
+    /comunicada por.{0,40}la dirección del proyecto/i.test(r.replace(/\s+/g, " ")),
+    "debe declarar que la aprobación la comunicó la dirección del proyecto"
+  );
+  assert(
+    /evidencia completa de la aprobación se conserva.{0,20}fuera de este repositorio/i.test(
+      r.replace(/\s+/g, " ")
+    ),
+    "debe declarar que la evidencia se conserva fuera del repositorio"
+  );
+  // Alcance: los seis documentos, cada uno por su archivo aprobado.
+  for (const name of LEGAL_PACKAGE_SIX) {
+    assert(r.includes(name), `el registro debe inventariar ${name}`);
+  }
+  // Los auxiliares figuran como FUERA de alcance.
+  for (const name of LEGAL_AUX_DRAFTS) {
+    assert(r.includes(name), `el registro debe declarar fuera de alcance ${name}`);
+  }
+  // Sin firmas, documentos personales ni información confidencial.
+  for (const rx of [
+    /firma (manuscrita|electrónica|digital) de/i,
+    /cédula (de ciudadanía )?n[úu]mero/i,
+    /documento de identidad n[úu]mero/i,
+    /confidencial:/i,
+  ]) {
+    assert(!rx.test(r), `el registro no puede contener ${rx}`);
   }
 });
 
@@ -1448,11 +1589,14 @@ check("38. Ningún borrador declara cumplimiento legal", () => {
       assert(!rx.test(s), `${name} no debe declarar cumplimiento legal (${rx})`);
     }
   }
-  // Y deben decir expresamente que NO lo declaran.
-  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md");
+  // La política aprobada cita su marco normativo de referencia SIN
+  // declarar cumplimiento: la aprobación no convierte el texto en un
+  // certificado de conformidad.
+  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md");
   assert(
-    /no se declara que cumpla ninguna legislación/i.test(policy),
-    "la política debe declarar expresamente que no afirma cumplimiento"
+    /Marco normativo tomado como referencia/i.test(policy) &&
+      /sin declarar cumplimiento/i.test(policy),
+    "la política debe citar su marco de referencia sin declarar cumplimiento"
   );
 });
 
@@ -1504,7 +1648,7 @@ check("40. El consentimiento de mercadeo es separado, opcional y desmarcado", ()
 });
 
 check("41. GA4 no se clasifica como cookie necesaria", () => {
-  const c = draft("V1.0.0_COOKIE_POLICY_DRAFT.md");
+  const c = draft("V1.0.0_COOKIE_POLICY_APPROVED.md");
   assert(
     /GA4 y GTM \*\*NO son cookies estrictamente necesarias\*\*|NO son cookies estrictamente necesarias/i.test(c),
     "la política debe negar expresamente que GA4/GTM sean necesarias"
@@ -1539,27 +1683,107 @@ check("42. Se conserva el NO-GO jurídico y sus bloqueadores", () => {
   assert(/NO-GO/.test(review), "el informe de release debe conservar el NO-GO");
 });
 
-check("43. El script de publicación sigue BLOQUEADO (no se desbloqueó)", () => {
+check("43. El script contiene EXACTAMENTE los textos aprobados", () => {
   const s = read(PUBLISH_SQL);
   assert(
-    /c_legal_approval_confirmed constant boolean := false/.test(s),
-    "c_legal_approval_confirmed DEBE seguir en false"
+    /c_legal_approval_confirmed constant boolean := true;/.test(s),
+    "c_legal_approval_confirmed debe estar en true tras la aprobación"
   );
-  assert(
-    !/c_legal_approval_confirmed constant boolean := true/.test(s),
-    "el script no debe haberse desbloqueado"
-  );
-  // Y los borradores no se cargaron en el script.
+  // Ninguna marca de borrador puede haberse colado.
   assert(
     !s.includes("BORRADOR PARA REVISIÓN JURÍDICA"),
-    "los borradores no deben haberse trasladado todavía al script de publicación"
+    "no puede trasladarse ninguna marca de borrador al script"
+  );
+
+  // Igualdad CARÁCTER POR CARÁCTER con los documentos aprobados. Los textos
+  // van en literales entre comillas de dólar, así que se extraen por sus
+  // etiquetas y se comparan enteros.
+  const entre = (tag: string) => {
+    const abre = s.indexOf(`$${tag}$`);
+    assert(abre !== -1, `falta el literal $${tag}$ en el script`);
+    const ini = abre + tag.length + 2;
+    const fin = s.indexOf(`$${tag}$`, ini);
+    assert(fin !== -1, `el literal $${tag}$ no está cerrado`);
+    return s.slice(ini, fin);
+  };
+  assert(
+    entre("terms") === draft("V1.0.0_TERMS_APPROVED.md"),
+    "c_terms_v2_content debe ser el texto EXACTO de V1.0.0_TERMS_APPROVED.md"
+  );
+  assert(
+    entre("privacy") === draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md"),
+    "c_privacy_v2_content debe ser el texto EXACTO de la política aprobada"
+  );
+
+  // Títulos visibles con la versión COMERCIAL 1.0.
+  assert(
+    /c_terms_v2_title constant text :=\s*\n\s*'Términos de uso de Trazaloop v1\.0';/.test(s),
+    "el título de los términos debe indicar Trazaloop v1.0"
+  );
+  assert(
+    /c_privacy_v2_title constant text :=\s*\n\s*'Política de privacidad y tratamiento de datos personales v1\.0';/.test(
+      s
+    ),
+    "el título de la política debe indicar la versión comercial 1.0"
+  );
+
+  // La versión INTERNA sigue siendo v2: v1 ya existe desde la 0066.
+  assert(
+    LEGAL_PACKAGE_DOCUMENT_DB_VERSION === "v2",
+    "la versión interna en legal_documents debe seguir siendo v2"
+  );
+  assert(
+    /\('terms',\s+'v2',\s+c_terms_v2_title/.test(s) &&
+      /\('privacy',\s+'v2',\s+c_privacy_v2_title/.test(s),
+    "los INSERT deben seguir usando la versión interna v2"
+  );
+});
+
+check("43b. La publicación no arrastra el DPA, el mercadeo ni la apertura del registro", () => {
+  const s = read(PUBLISH_SQL);
+  // Se analiza SOLO el andamiaje SQL: los documentos aprobados van dentro
+  // de literales entre comillas de dólar y su prosa no es código.
+  const sql = sqlBare(stripDocLiterals(s));
+
+  // El anexo de tratamiento NO se inserta como documento activo.
+  assert(
+    !/data_processing/i.test(sql),
+    "el script no debe insertar ningún documento de tipo data_processing"
+  );
+  // Ni consentimiento de mercadeo, ni kill switch de registro.
+  assert(!/mercadeo|marketing/i.test(sql), "el script no puede introducir mercadeo");
+  assert(
+    !/PUBLIC_REGISTRATION_ENABLED/.test(sql),
+    "el script de publicación jamás debe tocar el kill switch del registro"
+  );
+  // Ni DDL, ni borrados, ni cambios sobre aceptaciones históricas.
+  for (const rx of [
+    /\bdelete\s+from\b/i,
+    /\btruncate\b/i,
+    /\bdrop\b/i,
+    /\balter\s+table\b/i,
+    /\bcreate\s+(table|index|type|function)\b/i,
+  ]) {
+    assert(!rx.test(sql), `el script no puede contener ${rx}`);
+  }
+  assert(
+    !/update\s+public\.user_legal_acceptances|insert\s+into\s+public\.user_legal_acceptances|delete[\s\S]{0,40}user_legal_acceptances/i.test(
+      sql
+    ),
+    "el script no puede escribir sobre las aceptaciones históricas"
+  );
+  // Solo dos escrituras: archivar v1 y publicar v2.
+  const escrituras = sql.match(/\b(update|insert into)\s+public\.legal_documents\b/gi) ?? [];
+  assert(
+    escrituras.length === 2,
+    `solo se admiten 2 escrituras sobre legal_documents, hay ${escrituras.length}`
   );
 });
 
 check("44. Los borradores identifican los módulos CPR y Textiles", () => {
   for (const name of [
-    "V1.0.0_TERMS_DRAFT.md",
-    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
+    "V1.0.0_TERMS_APPROVED.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
   ]) {
     const s = draft(name);
     assert(/Trazaloop CPR/.test(s), `${name} debe identificar Trazaloop CPR`);
@@ -1569,7 +1793,7 @@ check("44. Los borradores identifican los módulos CPR y Textiles", () => {
   }
   // Y no deben atribuir a Trazaloop facultades de certificación: la
   // cláusula «Qué NO es Trazaloop» debe enumerar todas las negaciones.
-  const terms = draft("V1.0.0_TERMS_DRAFT.md");
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
   const negIdx = terms.indexOf("Qué NO es Trazaloop");
   assert(negIdx !== -1, "los términos deben incluir la cláusula «Qué NO es Trazaloop»");
   const negBlock = terms.slice(negIdx, terms.indexOf("###", negIdx + 10));
@@ -1593,50 +1817,97 @@ check("44. Los borradores identifican los módulos CPR y Textiles", () => {
   );
 });
 
-check("45. Se incluye el ciclo de conservación con máximo de 120 días", () => {
+check("45. La conservación se expresa por CRITERIOS, no por calendarios inventados", () => {
   const r = draft("V1.0.0_RETENTION_AND_DELETION_POLICY_DRAFT.md");
-  for (const plazo of ["30 días", "90 días", "120 días"]) {
-    assert(r.includes(plazo), `la política de retención debe incluir ${plazo}`);
+
+  // Los cinco criterios exigidos.
+  for (const criterio of [
+    /mientras exista la relación contractual o la cuenta/i,
+    /obligaciones legales/i,
+    /auditoría/i,
+    /defender reclamaciones|defensa de reclamaciones/i,
+    /suprime, anonimiza o bloquea|supresión, anonimización o bloqueo/i,
+    /canales de contacto/i,
+    /copias de respaldo/i,
+  ]) {
+    assert(criterio.test(r), `la política debe expresar el criterio ${criterio}`);
   }
-  assert(
-    /máximo técnico ordinario/i.test(r),
-    "debe declararse el máximo técnico ordinario"
-  );
-  // La promesa absoluta retirada.
+
+  // La promesa absoluta sigue documentada como RETIRADA.
   assert(
     /se retira|sustituye/i.test(r) && r.includes("sin perder los datos ya cargados"),
     "debe documentarse la retirada de la promesa «sin perder los datos ya cargados»"
   );
-  // Y los términos ya no la usan como compromiso.
-  const terms = draft("V1.0.0_TERMS_DRAFT.md");
-  const clause = terms.slice(terms.indexOf("### 9.2"), terms.indexOf("## 10"));
+
+  // El calendario de días concretos se conserva SOLO como opción descartada.
+  const anexoIdx = r.indexOf("Calendario propuesto y NO ADOPTADO");
+  assert(anexoIdx !== -1, "el calendario debe vivir en un anexo marcado NO ADOPTADO");
+  for (const plazo of ["30 días", "90 días", "120 días"]) {
+    const first = r.indexOf(plazo);
+    assert(
+      first === -1 || first > anexoIdx,
+      `«${plazo}» solo puede aparecer dentro del anexo no adoptado`
+    );
+  }
   assert(
-    !/sin perder los datos ya cargados/.test(clause) ||
-      /se retira|sustitución/i.test(clause),
-    "los términos no deben conservar la promesa absoluta como compromiso vigente"
+    /NO se adopta, NO se aplica y NO[\s>]+se traslada/i.test(r),
+    "debe declararse expresamente que el calendario no se adopta ni se traslada"
   );
+
+  // Y no se promete ninguna automatización inexistente.
+  assert(
+    /eliminación automática integral/i.test(r) && /no afirma/i.test(r),
+    "debe negarse expresamente la eliminación automática integral"
+  );
+});
+
+check("45b. Ningún documento publicable promete calendarios ni automatismos", () => {
+  const PUBLICABLES = [
+    "V1.0.0_TERMS_APPROVED.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
+    "V1.0.0_PRIVACY_NOTICE_APPROVED.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md",
+    "V1.0.0_COOKIE_POLICY_APPROVED.md",
+  ];
+  for (const name of PUBLICABLES) {
+    const s = draft(name);
+    assert(
+      !/ventana de exportación de \d+ días|máximo técnico ordinario|hasta \d+ días/i.test(s),
+      `${name} no debe fijar un calendario técnico que la plataforma no ejecuta`
+    );
+    assert(
+      !/sin perder los datos ya cargados/.test(s),
+      `${name} no debe conservar la promesa absoluta de conservación`
+    );
+    assert(
+      !/exportación automática|eliminación automática/i.test(s.replace(/no\s+(existe|afirma|garantiza)[^.]{0,120}/gi, "")),
+      `${name} no debe prometer exportación ni eliminación automática`
+    );
+  }
 });
 
 check("46. Se identifica al operador con razón social y NIT correctos", () => {
   const RAZON = "CORPORACIÓN INSTITUTO PARA EL DESARROLLO DEL ENTRETENIMIENTO DIGITAL";
   const NIT = "901835846-6";
   for (const name of [
-    "V1.0.0_TERMS_DRAFT.md",
-    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md",
-    "V1.0.0_PRIVACY_NOTICE_DRAFT.md",
-    "V1.0.0_COOKIE_POLICY_DRAFT.md",
-    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md",
+    "V1.0.0_TERMS_APPROVED.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
+    "V1.0.0_PRIVACY_NOTICE_APPROVED.md",
+    "V1.0.0_COOKIE_POLICY_APPROVED.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md",
   ]) {
     const s = draft(name);
     assert(s.includes(RAZON), `${name} debe identificar la razón social exacta`);
     assert(s.includes(NIT), `${name} debe incluir el NIT ${NIT}`);
   }
   // Datos de contacto oficiales, sin inventar otros.
-  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_DRAFT.md");
+  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md");
   assert(policy.includes("contacto@idendi.org"), "correo de privacidad correcto");
-  assert(policy.includes("Carrera 43A # 15 Sur – 15"), "dirección correcta");
+  // La dirección oficial es «Carrera 43A #15 Sur – 15»; se tolera el
+  // espacio tras la almohadilla por compatibilidad con la redacción previa.
+  assert(/Carrera 43A\s*#\s*15 Sur – 15/.test(policy), "dirección correcta");
   assert(policy.includes("Medellín, Colombia"), "domicilio correcto");
-  const terms = draft("V1.0.0_TERMS_DRAFT.md");
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
   assert(terms.includes("Jhorman Mena Ledezma"), "representante legal correcto");
   assert(terms.includes("+57 324 3268865"), "teléfono correcto");
   assert(terms.includes("https://www.trazaloop.com"), "dominio oficial correcto");
@@ -1661,7 +1932,7 @@ check("47. Cirquilo Consultores y el SMTP permanecen como pendientes", () => {
     "Cirquilo debe marcarse como bloqueador contractual"
   );
   // También en el anexo de encargados.
-  const addendum = draft("V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_DRAFT.md");
+  const addendum = draft("V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md");
   assert(
     /PENDIENTES/i.test(addendum) && /Cirquilo/.test(addendum),
     "el anexo debe marcar a Cirquilo como pendiente"
@@ -1890,7 +2161,7 @@ check("57. No se clasifica ninguna cookie analítica como necesaria", () => {
     "GA4 nunca puede clasificarse como cookie necesaria"
   );
   // La política de cookies mantiene la prohibición.
-  const cookiePolicy = read("docs/legal/V1.0.0_COOKIE_POLICY_DRAFT.md");
+  const cookiePolicy = read("docs/legal/V1.0.0_COOKIE_POLICY_APPROVED.md");
   assert(
     /NO son cookies estrictamente necesarias/i.test(cookiePolicy),
     "la política de cookies debe seguir negando que GA4/GTM sean necesarias"
@@ -1902,24 +2173,30 @@ check("57. No se clasifica ninguna cookie analítica como necesaria", () => {
   );
 });
 
-check("58. Los ocho documentos legales siguen marcados como borradores", () => {
+check("58. Solo los tres auxiliares no adoptados siguen marcados como borradores", () => {
   const BANNER = "BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR";
-  for (const name of LEGAL_DRAFTS) {
+  for (const name of LEGAL_AUX_DRAFTS) {
     assert(draft(name).includes(BANNER), `${name} debe seguir marcado como borrador`);
+  }
+  for (const name of LEGAL_PACKAGE_SIX) {
+    assert(!draft(name).includes(BANNER), `${name} ya no puede estar marcado como borrador`);
   }
 });
 
-check("59. c_legal_approval_confirmed sigue en false", () => {
+check("59. c_legal_approval_confirmed está en true por la aprobación del 27/07/2026", () => {
   const s = read(PUBLISH_SQL);
   assert(
-    /c_legal_approval_confirmed constant boolean := false/.test(s),
-    "el script de publicación debe seguir bloqueado"
+    /c_legal_approval_confirmed constant boolean := true;/.test(s),
+    "el script de publicación debe declarar la aprobación"
   );
-  // Y el aplazamiento formal está documentado.
-  const review = read("docs/releases/V1.0.0_LEGAL_REVIEW.md");
   assert(
-    /APLAZADAS|aplazad/i.test(review),
-    "el informe legal debe declarar el aplazamiento formal de la publicación"
+    /APROBACIÓN JURÍDICA · 27 DE JULIO DE 2026/.test(s),
+    "el script debe llevar el encabezado de aprobación fechado"
+  );
+  // Sigue sin haberse ejecutado en ningún ambiente.
+  assert(
+    /NO SE HA EJECUTADO TODAVÍA/.test(s),
+    "el script debe seguir declarando que no se ha ejecutado"
   );
 });
 
@@ -2515,15 +2792,15 @@ check("73. La documentación cubre el kill switch", () => {
   );
 });
 
-check("74. No se tocaron migraciones ni el bloqueo legal", () => {
+check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
   assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
   assert(
-    /c_legal_approval_confirmed constant boolean := false/.test(read(PUBLISH_SQL)),
-    "el script legal debe seguir bloqueado"
+    /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
+    "el script legal debe declarar la aprobación"
   );
-  for (const name of LEGAL_DRAFTS) {
+  for (const name of LEGAL_AUX_DRAFTS) {
     assert(
       draft(name).includes("BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR"),
       `${name} debe seguir marcado como borrador`
@@ -2732,6 +3009,759 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
   );
   const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 103);
   assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+});
+
+// ===========================================================================
+console.log("\n§18 · Paquete jurídico v1.0 preparado para revisión\n");
+
+/** Los borradores van justificados a 78 columnas: cualquier frase puede
+ *  venir partida por un salto de línea. Se comparan en una sola línea. */
+const flat = (s: string) => s.replace(/\s+/g, " ");
+/** Los seis documentos, tal como los verá el área jurídica. */
+const PKG = () => LEGAL_PACKAGE_SIX.map(draft).join("\n\n");
+/** Solo los textos destinados a publicarse (sin la auditoría interna). */
+const PUBLICABLE_TEXT = () =>
+  [
+    "V1.0.0_TERMS_APPROVED.md",
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
+    "V1.0.0_PRIVACY_NOTICE_APPROVED.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md",
+    "V1.0.0_COOKIE_POLICY_APPROVED.md",
+  ]
+    .map(draft)
+    .join("\n\n");
+
+check("83. Los textos cubren Trazaloop CPR y Trazaloop Textiles", () => {
+  for (const name of ["V1.0.0_TERMS_APPROVED.md", "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md"]) {
+    const s = draft(name);
+    assert(/Trazaloop CPR/.test(s), `${name} debe cubrir Trazaloop CPR`);
+    assert(/Trazaloop Textiles/.test(s), `${name} debe cubrir Trazaloop Textiles`);
+  }
+  // Los objetos propios de cada módulo aparecen en los términos.
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  for (const objeto of [
+    "órdenes o corridas de producción",
+    "lotes de entrada",
+    "TrazaDocs",
+    "composiciones",
+    "circularidad",
+    "pasaportes técnicos textiles",
+  ]) {
+    assert(terms.includes(objeto), `los términos deben cubrir: ${objeto}`);
+  }
+  // Las normas quedan atadas EXCLUSIVAMENTE a CPR.
+  assert(
+    /NTC 6632:2022/.test(terms) && /UNE-EN 15343:2008/.test(terms),
+    "los términos deben citar las normas con su año"
+  );
+  assert(
+    /únicamente\*{0,2} en el módulo Trazaloop CPR/i.test(terms),
+    "las normas deben limitarse expresamente al módulo CPR"
+  );
+});
+
+check("84. Los textos NO limitan Trazaloop al plástico ni a un solo módulo", () => {
+  const s = PUBLICABLE_TEXT();
+  assert(
+    !/plataforma (de|para) (la )?trazabilidad de pl[áa]stic/i.test(s),
+    "Trazaloop no puede definirse como plataforma de plásticos"
+  );
+  assert(
+    !/Trazaloop es una plataforma para .{0,80}reciclad/i.test(s.replace(/\s+/g, " ")),
+    "la definición general no puede reducirse al contenido reciclado"
+  );
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  assert(
+    /plataforma SaaS modular para empresas/i.test(terms),
+    "los términos deben definir Trazaloop como plataforma SaaS modular"
+  );
+  // Y los módulos futuros no se presentan como operativos.
+  assert(
+    /no está disponible/i.test(terms),
+    "los módulos futuros deben declararse no disponibles"
+  );
+});
+
+check("85. Ningún texto promete certificación", () => {
+  const s = flat(PKG());
+  for (const rx of [
+    /garantizamos (la|una) certificaci/i,
+    /asegura(mos)? (la|una) certificaci/i,
+    /obtendrás (la|una) certificaci/i,
+    /permite certificar/i,
+    /Trazaloop certifica/i,
+    /avala(mos)? (productos|procesos)/i,
+  ]) {
+    assert(!rx.test(s), `ningún documento puede prometer certificación (${rx})`);
+  }
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  for (const negacion of [
+    "certifica productos",
+    "certifica procesos",
+    "garantiza la obtención, renovación o ampliación de una certificación",
+  ]) {
+    assert(terms.includes(negacion), `los términos deben negar: ${negacion}`);
+  }
+  const policy = draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md");
+  assert(
+    /no certifica/i.test(policy) && /no garantiza/i.test(policy),
+    "la política también debe negar la certificación"
+  );
+});
+
+check("86. Demo, Full y Extra se describen como en el producto", () => {
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  for (const estado of ["Demo", "Full", "Extra"]) {
+    assert(new RegExp(`\\*\\*${estado}\\*\\*`).test(terms), `falta el estado ${estado}`);
+  }
+  assert(
+    /límites funcionales y de capacidad/i.test(terms),
+    "Demo debe describirse con límites funcionales y de capacidad"
+  );
+  assert(
+    /acceso funcional completo/i.test(terms),
+    "Full debe describirse como acceso funcional completo"
+  );
+  assert(
+    /puede ser diferente por módulo/i.test(terms),
+    "debe declararse que el acceso puede diferir por módulo"
+  );
+});
+
+check("87. Full y Extra se diferencian por almacenamiento, no por funciones", () => {
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  assert(
+    /Full y Extra no se diferencian funcionalmente/i.test(terms),
+    "debe declararse que Full y Extra no difieren funcionalmente"
+  );
+  assert(
+    /mayor capacidad de almacenamiento/i.test(terms),
+    "Extra debe describirse por su mayor capacidad de almacenamiento"
+  );
+  // Y coincide con la regla canónica del código.
+  const access = read("lib/modules/access.ts");
+  assert(
+    /EXACTAMENTE las mismas funcionalidades/i.test(access),
+    "el código debe seguir declarando la paridad funcional de Full y Extra"
+  );
+});
+
+check("88. El Demo temporal se describe como de 2 días", () => {
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  assert(
+    /Demo temporal durante 2 días/i.test(terms),
+    "los términos deben fijar el Demo temporal en 2 días"
+  );
+  // Y coincide con la migración que lo provisiona.
+  const m = read("supabase/migrations/0100_organization_module_access_modes_and_demo_trial.sql");
+  assert(
+    /interval '48 hours'/.test(m),
+    "la provisión automática debe seguir siendo de 48 horas"
+  );
+  // Y con el mensaje que ve la persona usuaria.
+  assert(
+    /durante 2 días/.test(read("lib/modules/messages.ts")),
+    "el aviso de la interfaz debe seguir hablando de 2 días"
+  );
+});
+
+check("89. No se promete pago integrado ni renovación automática", () => {
+  const s = flat(PUBLICABLE_TEXT());
+  assert(!/mercado\s*pago/i.test(s), "ningún documento puede nombrar una pasarela de pagos");
+  for (const rx of [
+    /se renuevan? autom/i,
+    /renovaremos autom/i,
+    /los planes se renuevan/i,
+    /aviso de renovación con \d+/i,
+    /pasarela inicial/i,
+  ]) {
+    assert(!rx.test(s), `ningún documento puede prometer pagos o renovación automática (${rx})`);
+  }
+  const terms = flat(draft("V1.0.0_TERMS_APPROVED.md"));
+  assert(
+    /no existe pago integrado, pasarela de pagos, renovación automática ni facturación automática/i.test(terms),
+    "los términos deben negar expresamente pagos, renovación y facturación automáticas"
+  );
+  assert(
+    /se gestionan de forma manual, por fuera de la plataforma/i.test(terms),
+    "debe declararse que la contratación se gestiona por fuera de la plataforma"
+  );
+});
+
+check("90. Se identifican operador, NIT y canales en todo el paquete", () => {
+  const RAZON = "CORPORACIÓN INSTITUTO PARA EL DESARROLLO DEL ENTRETENIMIENTO DIGITAL";
+  const NIT = "901835846-6";
+  for (const name of LEGAL_PACKAGE_SIX) {
+    const s = draft(name);
+    assert(s.includes(RAZON), `${name} debe identificar la razón social`);
+    assert(s.includes(NIT), `${name} debe incluir el NIT`);
+    assert(s.includes("contacto@idendi.org"), `${name} debe indicar el canal de privacidad`);
+  }
+  const terms = draft("V1.0.0_TERMS_APPROVED.md");
+  for (const dato of [
+    "Jhorman Mena Ledezma",
+    "Director General",
+    "Medellín, Colombia",
+    "+57 324 3268865",
+    "contacto@cirquiloconsultores.com",
+    "https://www.trazaloop.com",
+  ]) {
+    assert(terms.includes(dato), `los términos deben incluir ${dato}`);
+  }
+  // Y el módulo de dominio dice exactamente lo mismo.
+  assert(LEGAL_OPERATOR.legalName === RAZON, "lib debe declarar la misma razón social");
+  assert(LEGAL_OPERATOR.taxId === NIT, "lib debe declarar el mismo NIT");
+  assert(
+    LEGAL_OPERATOR.supportEmail === "contacto@cirquiloconsultores.com",
+    "lib debe declarar el correo de soporte correcto"
+  );
+});
+
+check("91. Se cubren Supabase, Vercel y Resend, sin ubicación garantizada", () => {
+  for (const name of [
+    "V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md",
+    "V1.0.0_CLIENT_DATA_PROCESSING_ADDENDUM_APPROVED.md",
+  ]) {
+    const s = flat(draft(name));
+    for (const p of ["Supabase", "Vercel", "Resend"]) {
+      assert(s.includes(p), `${name} debe declarar el proveedor ${p}`);
+    }
+    assert(
+      /transmisión internacional|transferencia internacional|tratarse fuera/i.test(s),
+      `${name} debe explicar el tratamiento internacional`
+    );
+    assert(
+      /medidas contractuales, técnicas y legales/i.test(s),
+      `${name} debe sujetar el tratamiento internacional a medidas aplicables`
+    );
+  }
+  // No se afirma una ubicación única o permanente.
+  const s = flat(PUBLICABLE_TEXT());
+  assert(
+    !/(alojad|almacenad|ubicad)[oa]s? (siempre|únicamente|exclusivamente) en/i.test(s),
+    "no puede afirmarse una ubicación única de la infraestructura"
+  );
+  const policy = flat(draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md"));
+  assert(
+    /no afirma\*{0,2} que la información se aloje de forma única o permanente/i.test(policy),
+    "la política debe negar expresamente una ubicación única o permanente"
+  );
+  // Y el módulo de dominio lista los mismos tres proveedores.
+  assert(
+    LEGAL_TECH_PROVIDERS.map((p) => p.name).join(",") === "Supabase,Vercel,Resend",
+    "lib debe listar exactamente Supabase, Vercel y Resend"
+  );
+});
+
+check("92. Se cubren los derechos de los titulares y su procedimiento", () => {
+  const policy = flat(draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md"));
+  for (const derecho of [
+    "Conocer",
+    "Actualizar",
+    "Rectificar",
+    "Suprimir",
+    "Revocar la autorización",
+    "Solicitar prueba de la autorización",
+    "Presentar quejas",
+  ]) {
+    assert(policy.includes(derecho), `falta el derecho: ${derecho}`);
+  }
+  // Procedimiento real, con canal e identificación.
+  assert(
+    /verificar la identidad/i.test(policy),
+    "el procedimiento debe contemplar la verificación de identidad"
+  );
+  assert(
+    /remitirá la solicitud a dicha empresa/i.test(policy),
+    "debe explicarse la remisión al responsable cuando el dato lo registró un cliente"
+  );
+  // Sin inventar plazos distintos de los legales.
+  assert(
+    /No se ofrecen plazos ni niveles de servicio distintos de los legales/i.test(policy),
+    "no pueden ofrecerse plazos distintos de los legales"
+  );
+  assert(
+    !/responderemos en \d+ (días|horas)|plazo máximo de \d+ días hábiles/i.test(policy),
+    "la política no debe inventar plazos concretos de respuesta"
+  );
+});
+
+check("93. Se cubren las cookies estrictamente necesarias, sin banner", () => {
+  const c = draft("V1.0.0_COOKIE_POLICY_APPROVED.md");
+  for (const fin of [
+    "autenticación",
+    "sesión",
+    "selección de empresa activa",
+    "seguridad",
+    "funcionamiento técnico",
+  ]) {
+    assert(c.includes(fin), `el aviso de cookies debe cubrir: ${fin}`);
+  }
+  assert(
+    /no hay cookies opcionales/i.test(c),
+    "debe declararse que no hay cookies opcionales"
+  );
+  assert(
+    /no existe ni se requiere un banner/i.test(c),
+    "debe explicarse por qué no hay banner de consentimiento"
+  );
+  // Y el módulo de dominio declara las mismas cinco finalidades.
+  assert(
+    ESSENTIAL_COOKIES_PURPOSES.length === 5,
+    "lib debe declarar las cinco finalidades esenciales"
+  );
+  for (const fin of ESSENTIAL_COOKIES_PURPOSES) {
+    assert(c.includes(fin), `lib y el aviso deben coincidir en: ${fin}`);
+  }
+});
+
+check("94. No existe consentimiento de mercadeo en el paquete ni en el código", () => {
+  // Ningún documento del paquete recoge autorización de mercadeo.
+  for (const name of LEGAL_PACKAGE_SIX) {
+    const s = flat(draft(name)).replace(
+      /\bno\w*\s+(se\s+)?(solicita\w*|hay|existe\w*|se\s+añade|realiza\w*|usamos)[^.]{0,180}/gi,
+      ""
+    );
+    assert(
+      !/casilla de mercadeo|autorización de mercadeo|autorizo.{0,60}(novedades|ofertas)/i.test(s),
+      `${name} no debe recoger consentimiento de mercadeo`
+    );
+  }
+  const policy = flat(draft("V1.0.0_PRIVACY_AND_DATA_PROCESSING_POLICY_APPROVED.md"));
+  assert(
+    /No se solicita autorización de mercadeo/i.test(policy),
+    "la política debe declarar que no se solicita autorización de mercadeo"
+  );
+  // La especificación de mercadeo queda fuera del alcance.
+  const m = draft("V1.0.0_MARKETING_CONSENT_DRAFT.md");
+  assert(
+    /FUERA DEL ALCANCE DE LA v1\.0\.0/i.test(m),
+    "la especificación de mercadeo debe declararse fuera de alcance"
+  );
+  // Y el formulario de aceptación solo tiene las dos casillas obligatorias.
+  const form = read("components/domain/legal/accept-legal-form.tsx");
+  const inputs = form.match(/name="[^"]+"/g) ?? [];
+  assert(
+    inputs.length === 2 &&
+      inputs.includes('name="confirm_terms"') &&
+      inputs.includes('name="confirm_privacy"'),
+    `el muro de aceptación debe tener exactamente dos casillas: ${inputs.join(", ")}`
+  );
+});
+
+check("95. El paquete v1.0 está aprobado y su espejo en código coincide", () => {
+  const BANNER = "BORRADOR PARA REVISIÓN JURÍDICA — NO PUBLICAR";
+  // Los seis aprobados, sin marca de borrador.
+  for (const name of LEGAL_PACKAGE_SIX) {
+    assert(!draft(name).includes(BANNER), `${name} no puede llevar la marca de borrador`);
+  }
+  // Los tres auxiliares, con la marca arriba.
+  for (const name of LEGAL_AUX_DRAFTS) {
+    const s = draft(name);
+    assert(
+      s.split("\n").slice(0, 5).join("\n").includes(BANNER),
+      `${name} debe llevar el aviso arriba`
+    );
+  }
+  // El espejo en código.
+  assert(LEGAL_PACKAGE_APPROVED === true, "LEGAL_PACKAGE_APPROVED debe estar en true");
+  assert(
+    /export const LEGAL_PACKAGE_APPROVED = true/.test(read("lib/domain/legal-package.ts")),
+    "la constante debe estar declarada en true de forma literal"
+  );
+  assert(
+    LEGAL_PACKAGE_DRAFT_BANNER === BANNER,
+    "el aviso del módulo de dominio debe ser idéntico al de los auxiliares"
+  );
+  // Versión y fechas.
+  assert(LEGAL_PACKAGE_VERSION === "1.0", "la versión comercial debe ser 1.0");
+  assert(
+    LEGAL_PACKAGE_APPROVAL_DATE === "27 de julio de 2026",
+    "la fecha de aprobación debe ser el 27 de julio de 2026"
+  );
+  assert(
+    LEGAL_PACKAGE_EFFECTIVE_DATE === "27 de julio de 2026",
+    "la entrada en vigor debe ser el 27 de julio de 2026"
+  );
+  // Y los seis documentos están inventariados en el código, ya renombrados.
+  assert(LEGAL_PACKAGE_DOCUMENTS.length === 6, "el paquete son seis documentos");
+  for (const d of LEGAL_PACKAGE_DOCUMENTS) {
+    assert(exists(d.source), `no existe el archivo fuente ${d.source}`);
+    assert(/_APPROVED\.md$/.test(d.source), `${d.source} debe apuntar al documento aprobado`);
+  }
+  // Ninguna referencia residual a un borrador del paquete.
+  assert(
+    !/_DRAFT\.md/.test(read("lib/domain/legal-package.ts")),
+    "el módulo no puede seguir apuntando a borradores"
+  );
+});
+
+check("96. La página del paquete lo presenta vigente sin duplicar el articulado", () => {
+  const page = read("app/legal/paquete/page.tsx");
+  // Ya no hay aviso de borrador.
+  assert(
+    !page.includes("LEGAL_PACKAGE_DRAFT_BANNER"),
+    "la página no debe mostrar el aviso de borrador"
+  );
+  assert(
+    !/!LEGAL_PACKAGE_APPROVED/.test(page),
+    "la página no debe seguir condicionando el contenido a la falta de aprobación"
+  );
+  // Presenta el paquete como vigente, con su versión y su fecha.
+  assert(
+    /LEGAL_PACKAGE_EFFECTIVE_DATE/.test(page) && /LEGAL_PACKAGE_VERSION/.test(page),
+    "la página debe declarar versión y fecha de entrada en vigor"
+  );
+  assert(/vigente/i.test(page), "la página debe declarar el paquete vigente");
+  // Da acceso a los seis: enlaces a /terms y /privacy, y textos servidos.
+  assert(
+    page.includes('href="/terms"') && page.includes('href="/privacy"'),
+    "la página debe enlazar los dos documentos versionados"
+  );
+  for (const constante of [
+    "PRIVACY_NOTICE_FULL",
+    "REGISTRATION_AUTHORIZATION_TEXT",
+    "ESSENTIAL_COOKIES_INVENTORY",
+    "LEGAL_PACKAGE_DOCUMENTS",
+  ]) {
+    assert(page.includes(constante), `la página debe servir ${constante}`);
+  }
+  // Conserva operador, proveedores y cookies esenciales.
+  assert(page.includes("LEGAL_OPERATOR"), "debe conservar los datos del operador");
+  assert(page.includes("LEGAL_TECH_PROVIDERS"), "debe conservar Supabase, Vercel y Resend");
+  assert(
+    page.includes("ESSENTIAL_COOKIES_PURPOSES"),
+    "debe conservar las finalidades de las cookies esenciales"
+  );
+  // No puede incrustar una segunda copia del articulado ni leer la base.
+  assert(
+    !/Cláusula|CLÁUSULA|## \d+\./.test(page),
+    "la página no debe incrustar articulado jurídico"
+  );
+  assert(
+    !/legal_documents/.test(page.replace(/^\s*\/\/.*$/gm, "")),
+    "la página del paquete no debe leer ni escribir documentos versionados"
+  );
+  // Ni presentar los auxiliares no adoptados como políticas vigentes: no
+  // se nombran, no se enlazan y no aparecen en el inventario del código.
+  for (const aux of LEGAL_AUX_DRAFTS) {
+    assert(!page.includes(aux), `la página no debe referirse a ${aux}`);
+  }
+  const visible = page.replace(/^\s*\/\/.*$/gm, "");
+  assert(
+    !/consentimiento de mercadeo|autorización de mercadeo|política de conservación/i.test(visible),
+    "la página no debe presentar los documentos auxiliares como políticas vigentes"
+  );
+  // La única mención admisible al mercadeo es su NEGACIÓN.
+  const menciones = visible.match(/[^.]*mercadeo[^.]*/gi) ?? [];
+  for (const m of menciones) {
+    assert(/\bno\b/i.test(m), `toda mención al mercadeo debe ser una negación: ${m.trim()}`);
+  }
+});
+
+check("97. /terms y /privacy siguen leyendo los documentos activos de la base", () => {
+  for (const [ruta, tipo] of [
+    ["app/terms/page.tsx", "terms"],
+    ["app/privacy/page.tsx", "privacy"],
+  ] as const) {
+    const p = read(ruta);
+    assert(
+      new RegExp(`getActiveLegalDocumentByType\\("${tipo}"\\)`).test(p),
+      `${ruta} debe leer el documento activo de tipo ${tipo}`
+    );
+    assert(/doc\.content/.test(p), `${ruta} debe renderizar el contenido de la base`);
+    assert(/doc\.version/.test(p), `${ruta} debe mostrar la versión del documento`);
+    // Nada de una segunda copia incrustada del texto legal.
+    assert(
+      !/CORPORACIÓN INSTITUTO|901835846-6|## \d+\./.test(p),
+      `${ruta} no puede incrustar una segunda copia del texto legal`
+    );
+  }
+  // Y la lectura sigue pasando por la capa de datos, no por el módulo de
+  // dominio del paquete.
+  assert(
+    /getActiveLegalDocumentByType/.test(read("lib/db/legal.ts")),
+    "la lectura debe seguir viviendo en lib/db/legal.ts"
+  );
+});
+
+check("97b. El bloqueo fail-closed sigue evaluándose antes de cualquier escritura", () => {
+  const s = read(PUBLISH_SQL);
+  const bloqueo = s.indexOf("if not c_legal_approval_confirmed then");
+  const primeraEscritura = Math.min(
+    ...["update public.legal_documents", "insert into public.legal_documents"]
+      .map((k) => s.indexOf(k))
+      .filter((i) => i !== -1)
+  );
+  assert(
+    bloqueo !== -1 && bloqueo < primeraEscritura,
+    "el bloqueo debe evaluarse antes de la primera escritura"
+  );
+  // Y la validación exacta del contenido vigente v1 sigue intacta.
+  assert(
+    /and content       = c_terms_v1_content/.test(s) &&
+      /and content       = c_privacy_v1_content/.test(s),
+    "debe conservarse la comparación exacta con el texto vigente de la 0066"
+  );
+  assert(
+    /c_terms_v1_md5   constant text := '7e30e6abb716d7d472b1b2d27e660a37'/.test(s) &&
+      /c_privacy_v1_md5 constant text := '9f3719ca5e83a6566ad8743d101e7d3f'/.test(s),
+    "deben conservarse las huellas md5 de diagnóstico del estado v1"
+  );
+  // Advisory lock, transacción y conteos exactos.
+  assert(/pg_advisory_xact_lock\(c_lock_key\)/.test(s), "debe conservarse el advisory lock");
+  assert(/c_lock_key constant bigint := 1000010001/.test(s), "la clave del lock no puede cambiar");
+  assert(/^\s*begin;/im.test(s) && /commit;\s*$/m.test(s.trim()), "debe seguir siendo transaccional");
+  assert(
+    (s.match(/get diagnostics v_rows = row_count;/g) ?? []).length === 2,
+    "deben conservarse los dos conteos exactos"
+  );
+  assert(
+    /if v_rows <> 2 then/.test(s),
+    "los conteos deben seguir exigiendo exactamente 2 filas"
+  );
+  assert(
+    (s.match(/VERIFICACIÓN FALLIDA/g) ?? []).length >= 6,
+    "deben conservarse las verificaciones finales dentro de la transacción"
+  );
+});
+
+check("98. Los scripts de publicación y reversión siguen siendo seguros", () => {
+  for (const f of [PUBLISH_SQL, ROLLBACK_SQL]) {
+    const bare = sqlBare(stripDocLiterals(read(f)));
+    for (const rx of [/\bdelete\s+from\b/i, /\btruncate\b/i, /\bdrop\s+table\b/i, /\balter\s+table\b/i]) {
+      assert(!rx.test(bare), `${f} no debe contener ${rx}`);
+    }
+    assert(/^\s*begin;/im.test(bare) && /commit;\s*$/im.test(bare.trim()), `${f} debe ser transaccional`);
+    assert(/pg_advisory_xact_lock/.test(bare), `${f} debe tomar el advisory lock`);
+  }
+  // La reversión no depende del texto publicado: sigue siendo aplicable
+  // aunque el contenido de v2 haya cambiado con la aprobación jurídica.
+  const rb = read(ROLLBACK_SQL);
+  assert(
+    !/c_terms_v2_content|c_privacy_v2_content/.test(rb),
+    "el rollback no debe depender del texto concreto de v2"
+  );
+  assert(
+    /status = 'archived'/.test(rb) && /status = 'active'/.test(rb),
+    "el rollback debe archivar v2 y reactivar v1"
+  );
+  // Misma clave de lock que la publicación: ambos se excluyen mutuamente.
+  assert(
+    /c_lock_key constant bigint := 1000010001/.test(rb),
+    "el rollback debe usar la MISMA clave de advisory lock que la publicación"
+  );
+  // Precondiciones exactas y conteos, sin pérdida de historial.
+  assert(
+    /v_v2_terms_active   <> 1[\s\S]{0,200}raise exception/.test(rb),
+    "el rollback debe abortar si no se cumplen sus precondiciones"
+  );
+  assert(
+    (rb.match(/get diagnostics v_rows = row_count;/g) ?? []).length === 2,
+    "el rollback debe conservar sus dos conteos exactos"
+  );
+  assert(
+    /La reversión NUNCA debe perder historial/.test(rb),
+    "el rollback debe verificar que siguen existiendo las cuatro filas"
+  );
+  // Y jamás toca las aceptaciones históricas.
+  assert(
+    !/user_legal_acceptances/.test(sqlBare(rb)),
+    "el rollback no puede escribir sobre las aceptaciones históricas"
+  );
+});
+
+check("99. La aceptación queda versionada y con evidencia suficiente", () => {
+  // La comparación es por documento (id), no por tipo: una versión nueva
+  // invalida la aceptación anterior sin borrarla.
+  const activosV1 = [{ id: "doc-t-v1", documentType: "terms" as const, version: "v1" }];
+  const activosV2 = [{ id: "doc-t-v2", documentType: "terms" as const, version: "v2" }];
+  const aceptado = [{ legalDocumentId: "doc-t-v1" }];
+  assert(
+    hasAcceptedAllRequiredDocuments(activosV1, aceptado),
+    "quien aceptó la versión vigente debe estar al día"
+  );
+  assert(
+    !hasAcceptedAllRequiredDocuments(activosV2, aceptado),
+    "al publicarse una versión nueva, la aceptación anterior deja de contar"
+  );
+  assert(
+    pendingRequiredDocuments(activosV2, aceptado).length === 1,
+    "la versión nueva debe aparecer como pendiente"
+  );
+  // Evidencia conservada por la migración histórica.
+  const m = read("supabase/migrations/0066_legal_documents_and_acceptances.sql");
+  for (const campo of ["legal_document_id", "document_type", "version", "accepted_at", "ip_address", "user_agent"]) {
+    assert(m.includes(campo), `la evidencia debe conservar ${campo}`);
+  }
+  assert(
+    /Sin UPDATE\/DELETE/i.test(m),
+    "las aceptaciones deben seguir siendo inmutables"
+  );
+  // Sin prometer firma digital certificada.
+  assert(
+    !/firma digital certificada/i.test(PUBLICABLE_TEXT().replace(/no (constituye|es)[^.]{0,120}/gi, "")),
+    "no puede afirmarse que exista firma digital certificada"
+  );
+});
+
+check("100. Las dos casillas se revalidan en servidor", () => {
+  const action = read("server/actions/legal.ts");
+  assert(
+    /confirm_terms/.test(action) && /confirm_privacy/.test(action),
+    "el servidor debe leer las dos casillas"
+  );
+  assert(
+    /hasConfirmedAllLegalCheckboxes/.test(action),
+    "el servidor debe usar la validación pura de las casillas"
+  );
+  // La función pura falla cerrado.
+  assert(!hasConfirmedAllLegalCheckboxes({}), "sin casillas debe rechazar");
+  assert(
+    !hasConfirmedAllLegalCheckboxes({ confirm_terms: "on" }),
+    "con una sola casilla debe rechazar"
+  );
+  assert(
+    hasConfirmedAllLegalCheckboxes({ confirm_terms: "on", confirm_privacy: "on" }),
+    "con las dos casillas debe aceptar"
+  );
+  // La aceptación sigue delegando en la RPC, que decide los documentos.
+  assert(
+    /accept_active_legal_documents/.test(read("lib/db/legal.ts")),
+    "la escritura debe seguir pasando por la RPC SECURITY DEFINER"
+  );
+});
+
+check("101. Los documentos preliminares anteriores no se publican como definitivos", () => {
+  // Lo vigente en la base sigue siendo v1, sembrado por la migración 0066.
+  const m = read("supabase/migrations/0066_legal_documents_and_acceptances.sql");
+  assert(
+    m.includes("Términos de uso de Trazaloop (versión preliminar)"),
+    "la migración histórica no debe modificarse"
+  );
+  // Y el hueco está declarado como tal, no dado por resuelto.
+  const gaps = draft("V1.0.0_LEGAL_IMPLEMENTATION_GAPS.md");
+  assert(
+    /sigue siendo el preliminar limitado a CPR/i.test(gaps),
+    "los gaps deben reconocer que lo vigente sigue limitado a CPR"
+  );
+  // Los seis aprobados SÍ se presentan como vigentes, con fecha y versión.
+  for (const name of LEGAL_PACKAGE_SIX) {
+    const s = draft(name);
+    assert(/\*\*Estado:\*\* VIGENTE/.test(s), `${name} debe declararse VIGENTE`);
+    assert(
+      !/pendiente de (aprobación|redacción) jurídica/i.test(s),
+      `${name} no puede seguir declarándose pendiente de aprobación`
+    );
+  }
+  // Pero ninguno afirma estar YA cargado en la base: la publicación es un
+  // paso posterior que este cambio no ejecuta.
+  for (const name of LEGAL_PACKAGE_SIX) {
+    assert(
+      !/ya publicado en la base|cargado en `legal_documents`/i.test(draft(name)),
+      `${name} no puede afirmar que ya está publicado en la base de datos`
+    );
+  }
+  // Y no se coló contenido jurídico en ninguna migración.
+  for (const f of fs.readdirSync(path.join(ROOT, "supabase", "migrations"))) {
+    const s = read(`supabase/migrations/${f}`);
+    assert(
+      !s.includes("BORRADOR PARA REVISIÓN JURÍDICA") && !s.includes("901835846-6"),
+      `${f} no debe contener contenido del paquete jurídico`
+    );
+  }
+});
+
+check("102. El registro público sigue cerrado y el aviso no lo abre", () => {
+  // Fail-closed: sin variable, cerrado.
+  assert(!isPublicRegistrationFlagEnabled(undefined), "sin valor, el registro debe estar cerrado");
+  assert(!isPublicRegistrationFlagEnabled("false"), "con false, cerrado");
+  // La página sigue consultando el guard antes de renderizar el formulario.
+  const page = read("app/(auth)/register/page.tsx");
+  assert(
+    /shouldRenderRegistrationForm/.test(page),
+    "el registro debe seguir decidiéndose en servidor"
+  );
+  // El aviso de privacidad se añadió DENTRO del formulario, no fuera del guard.
+  const form = read("components/domain/auth/register-form.tsx");
+  assert(
+    form.includes("PRIVACY_NOTICE_SHORT"),
+    "el formulario debe mostrar el aviso de privacidad"
+  );
+  assert(
+    !/PUBLIC_REGISTRATION_ENABLED|process\.env/.test(form),
+    "el formulario de cliente no puede leer el kill switch"
+  );
+  assert(
+    /^PUBLIC_REGISTRATION_ENABLED=$/m.test(read(".env.example")),
+    ".env.example no debe traer el registro habilitado por defecto"
+  );
+});
+
+check("103. No se modificaron migraciones y no existe 0103", () => {
+  const dir = path.join(ROOT, "supabase", "migrations");
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+  const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
+  assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
+  assert(
+    numbers[numbers.length - 1] === 102,
+    `la última migración debe seguir siendo 0102, es ${numbers[numbers.length - 1]}`
+  );
+  assert(
+    files.filter((f) => Number(f.slice(0, 4)) >= 103).length === 0,
+    "no debe existir 0103 ni posterior"
+  );
+  // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.
+  assert(
+    !exists("supabase/migrations/0103_legal_package.sql"),
+    "el paquete jurídico no puede convertirse en migración"
+  );
+});
+
+check("104. Los SHA-256 declarados coinciden con los ocho archivos reales", () => {
+  const RELEASE_DOC = "docs/releases/V1.0.0_LEGAL_PACKAGE_V1.md";
+  assert(exists(RELEASE_DOC), `debe existir ${RELEASE_DOC}`);
+  const doc = read(RELEASE_DOC);
+
+  const HASHED = [
+    ...LEGAL_PACKAGE_SIX.map((n) => `${LEGAL_DIR}/${n}`),
+    PUBLISH_SQL,
+    ROLLBACK_SQL,
+  ];
+  assert(HASHED.length === 8, "deben publicarse los hashes de ocho archivos");
+
+  for (const rel of HASHED) {
+    const real = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(path.join(ROOT, rel)))
+      .digest("hex");
+    // La tabla del documento asocia cada ruta con su hash en la misma fila.
+    const fila = doc
+      .split("\n")
+      .find((l) => l.includes(`\`${rel}\``) && /\b[0-9a-f]{64}\b/.test(l));
+    assert(fila !== undefined, `${RELEASE_DOC} debe publicar el SHA-256 de ${rel}`);
+    const declarado = (fila as string).match(/\b[0-9a-f]{64}\b/)?.[0];
+    assert(
+      declarado === real,
+      `SHA-256 de ${rel}: declarado ${declarado ?? "(ninguno)"}, real ${real}`
+    );
+  }
+
+  // Y el documento refleja el estado aprobado, no el de revisión.
+  assert(
+    /c_legal_approval_confirmed = true/.test(doc) && /LEGAL_PACKAGE_APPROVED = true/.test(doc),
+    "el documento de entrega debe declarar los dos interruptores en true"
+  );
+  assert(
+    /27 de julio de 2026/.test(doc),
+    "el documento de entrega debe fechar la aprobación"
+  );
+  assert(
+    /registro público.{0,40}cerrado|PUBLIC_REGISTRATION_ENABLED.{0,30}sin cambios/i.test(
+      doc.replace(/\s+/g, " ")
+    ),
+    "el documento debe recordar que el registro sigue cerrado"
+  );
 });
 
 // ===========================================================================

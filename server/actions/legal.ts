@@ -3,7 +3,13 @@
 import { headers } from "next/headers";
 import { requireSession } from "@/lib/auth/require-session";
 import { listActiveLegalDocuments, listMyLegalAcceptances, acceptActiveLegalDocuments } from "@/lib/db/legal";
-import { hasAcceptedAllRequiredDocuments, pendingRequiredDocuments, type ActiveLegalDocumentSummary } from "@/lib/domain/legal";
+import {
+  hasAcceptedAllRequiredDocuments,
+  pendingRequiredDocuments,
+  hasConfirmedAllLegalCheckboxes,
+  LEGAL_ACCEPT_INCOMPLETE_MESSAGE,
+  type ActiveLegalDocumentSummary,
+} from "@/lib/domain/legal";
 import type { LegalDocumentRow } from "@/lib/db/legal";
 
 /**
@@ -41,9 +47,17 @@ export async function acceptLegalDocumentsAction(
 ): Promise<LegalActionState> {
   await requireSession();
 
-  const confirmed = formData.get("confirm") === "on" || formData.get("confirm") === "true";
-  if (!confirmed) {
-    return { error: "Debes marcar la casilla de aceptación para continuar." };
+  // v1.0.0: dos casillas separadas y ambas obligatorias — aceptar los
+  // términos y autorizar el tratamiento de datos son manifestaciones
+  // distintas. Se sigue admitiendo el campo histórico `confirm` para no
+  // romper formularios ya renderizados en una pestaña abierta.
+  const legacy = formData.get("confirm");
+  const values: Record<string, string | null> = {
+    confirm_terms: (formData.get("confirm_terms") as string | null) ?? (legacy as string | null),
+    confirm_privacy: (formData.get("confirm_privacy") as string | null) ?? (legacy as string | null),
+  };
+  if (!hasConfirmedAllLegalCheckboxes(values)) {
+    return { error: LEGAL_ACCEPT_INCOMPLETE_MESSAGE };
   }
 
   const hdrs = await headers();

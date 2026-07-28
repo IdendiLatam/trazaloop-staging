@@ -7,6 +7,7 @@ import { signUpAction, type AuthActionState } from "@/server/actions/auth";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
+import { PRIVACY_NOTICE_SHORT } from "@/lib/domain/legal-package";
 
 /**
  * Formulario de registro (Client Component).
@@ -69,6 +70,23 @@ function RegisterFormFields() {
           hint="Mínimo 8 caracteres."
           required
         />
+        {/* Aviso de privacidad breve en el momento de recoger los datos.
+            La aceptación formal (dos casillas separadas y versionadas) se
+            registra en /legal/accept, que es donde queda la prueba. */}
+        <div className="space-y-2 rounded-md border border-hairline bg-surface px-3 py-3 text-xs text-ink-soft">
+          <p>
+            Al crear tu cuenta deberás aceptar los{" "}
+            <Link href="/terms" className="text-loop hover:underline">
+              Términos de uso
+            </Link>{" "}
+            y la{" "}
+            <Link href="/privacy" className="text-loop hover:underline">
+              Política de tratamiento de datos personales y privacidad
+            </Link>{" "}
+            de Trazaloop, en casillas separadas.
+          </p>
+          <p>{PRIVACY_NOTICE_SHORT}</p>
+        </div>
         <Button type="submit" disabled={pending}>
           {pending ? "Creando cuenta…" : "Crear cuenta"}
         </Button>

@@ -28,6 +28,34 @@ export const REQUIRED_LEGAL_DOCUMENT_TYPES: readonly LegalDocumentType[] = ["ter
 
 export const LEGAL_ACCEPT_CHECKBOX_TEXT = "Acepto los términos de uso y la política de privacidad.";
 
+/**
+ * v1.0.0 · La aceptación se presenta en DOS casillas separadas, porque son
+ * dos manifestaciones distintas: aceptar un contrato y autorizar el
+ * tratamiento de datos personales. Ambas son OBLIGATORIAS para usar la
+ * plataforma — la separación es de claridad, no de opcionalidad.
+ *
+ * No existe ni debe añadirse una tercera casilla de mercadeo: las
+ * comunicaciones comerciales quedan fuera del alcance de la v1.0.0.
+ */
+export const LEGAL_ACCEPT_TERMS_CHECKBOX_TEXT =
+  "Acepto los Términos de uso de Trazaloop.";
+
+export const LEGAL_ACCEPT_PRIVACY_CHECKBOX_TEXT =
+  "He leído la Política de tratamiento de datos personales y privacidad, y autorizo el " +
+  "tratamiento de mis datos personales para las finalidades necesarias del servicio.";
+
+/** Los dos campos del formulario de aceptación. Ambos requeridos. */
+export const LEGAL_ACCEPT_FIELDS = ["confirm_terms", "confirm_privacy"] as const;
+export type LegalAcceptField = (typeof LEGAL_ACCEPT_FIELDS)[number];
+
+/** ¿Vienen marcadas TODAS las casillas obligatorias? Pura, sin FormData. */
+export function hasConfirmedAllLegalCheckboxes(values: Record<string, string | null>): boolean {
+  return LEGAL_ACCEPT_FIELDS.every((f) => values[f] === "on" || values[f] === "true");
+}
+
+export const LEGAL_ACCEPT_INCOMPLETE_MESSAGE =
+  "Debes marcar las dos casillas para continuar: los términos de uso y la autorización de tratamiento de datos.";
+
 /** Corrección (Bloqueante 2): mensaje de error para server actions
  *  críticas que revisan aceptación legal (assertMyLegalAcceptance,
  *  server/actions/legal.ts) — vive aquí y no en el archivo "use server"
