@@ -99,7 +99,7 @@ export const TRAZADOCS_GROUP: ModuleNavGroup = {
 
 export const CPR_SHELL_MODULE: ShellModuleDefinition = {
   key: "cpr",
-  name: "Trazaloop CPR",
+  name: "Trazaloop PCR",
   headerBadge: "NTC 6632 · UNE-EN 15343",
   homePath: "/dashboard",
   // CPR es el módulo por defecto del shell: cualquier ruta no reclamada por

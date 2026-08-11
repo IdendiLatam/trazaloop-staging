@@ -127,3 +127,23 @@ export async function changeOrganizationPlan(
   if (error) return { error: error.message || "No fue posible cambiar el plan de la empresa." };
   return { error: null };
 }
+
+/**
+ * PCR-01 (punto 16) · Plan comercial EFECTIVO de la organización, derivado de
+ * organization_modules (la autoridad desde T9F.1) vía la RPC autorizada
+ * get_organization_effective_plan (0103). Es la fuente que gobiernan los
+ * recursos TRANSVERSALES (equipo: roles_enabled / team_members): la copia
+ * legacy de organization_subscriptions queda solo para el estado
+ * administrativo de la cuenta (suspended/cancelled) y lecturas informativas.
+ * Fail-closed: ante cualquier error se responde 'demo' (jamás se amplían
+ * permisos por un fallo de lectura).
+ */
+export async function getOrganizationEffectivePlanCode(orgId: string): Promise<PlanCode> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("get_organization_effective_plan", {
+    p_organization_id: orgId,
+  });
+  if (error) return "demo";
+  const code = typeof data === "string" ? data : null;
+  return code === "full" || code === "extra" ? code : "demo";
+}

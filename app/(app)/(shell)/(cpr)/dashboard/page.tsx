@@ -41,7 +41,7 @@ export default async function DashboardPage() {
       <header className="space-y-1">
         <p className="eyebrow">Panel general</p>
         <h1 className="text-2xl font-semibold tracking-tight">
-          Trazaloop CPR
+          Trazaloop PCR
         </h1>
         <p className="text-sm text-ink-soft">
           Gestiona diagnóstico, catálogos, evidencias, trazabilidad, cálculo de contenido

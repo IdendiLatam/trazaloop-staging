@@ -296,7 +296,7 @@ check("4. CPR conserva su identidad normativa NTC 6632 · UNE-EN 15343", () => {
   );
   const cpr = getCommercialModuleByKey("cpr");
   assert(cpr !== null, "el módulo CPR debe existir en el catálogo");
-  assert(cpr!.name === "Trazaloop CPR", `el nombre comercial es «${cpr!.name}»`);
+  assert(cpr!.name === "Trazaloop PCR", `el nombre comercial es «${cpr!.name}» (PCR-01: denominación PCR)`);
   assert(
     cpr!.description.includes("NTC 6632") && cpr!.description.includes("UNE-EN 15343"),
     "la descripción de CPR debe conservar ambas normas"
@@ -813,7 +813,7 @@ check("11b. El precheck distingue Development, Preview y Production", () => {
 // ===========================================================================
 console.log("\n§7 · Integridad de las migraciones\n");
 
-check("12. Las migraciones 0001–0102 existen y no se han tocado en este release", () => {
+check("12. Las migraciones 0001–0103 existen sin renumeraciones ni duplicados", () => {
   const dir = path.join(ROOT, "supabase", "migrations");
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files
@@ -822,22 +822,22 @@ check("12. Las migraciones 0001–0102 existen y no se han tocado en este releas
     .sort((a, b) => a - b);
   assert(numbers[0] === 1, `la primera migración es ${numbers[0]}, se esperaba 0001`);
   assert(
-    numbers[numbers.length - 1] === 102,
-    `la última migración es ${numbers[numbers.length - 1]}, se esperaba 0102`
+    numbers[numbers.length - 1] === 103,
+    `la última migración es ${numbers[numbers.length - 1]}, se esperaba 0103 (PCR-01)`
   );
   // Nadie debe haber renumerado ni duplicado un prefijo.
   const dupes = numbers.filter((n, i) => i > 0 && n === numbers[i - 1]);
   assert(dupes.length === 0, `prefijos de migración duplicados: ${dupes.join(", ")}`);
 });
 
-check("13. No existe ninguna migración 0103 ni posterior", () => {
+check("13. No existe ninguna migración 0104 ni posterior (solo la 0103 autorizada por PCR-01)", () => {
   const dir = path.join(ROOT, "supabase", "migrations");
   const beyond = fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
+    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 104);
   assert(
     beyond.length === 0,
-    `esta fase no debía crear migraciones nuevas, pero existen: ${beyond.join(", ")}`
+    `PCR-01 solo autoriza la 0103; existen posteriores: ${beyond.join(", ")}`
   );
 });
 
@@ -1384,8 +1384,8 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
     );
   }
   // Y siguen sin existir migraciones nuevas.
-  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
-  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 104);
+  assert(beyond.length === 0, `PCR-01 solo autoriza la 0103; no debe existir 0104 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
@@ -1976,8 +1976,8 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
       `ninguna migración debe corresponder a los borradores legales: ${f}`
     );
   }
-  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
-  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 104);
+  assert(beyond.length === 0, `PCR-01 solo autoriza la 0103; no debe existir 0104 ni posterior: ${beyond.join(", ")}`);
   // Los borradores viven en docs/legal, no en supabase/.
   for (const name of LEGAL_DRAFTS) {
     assert(
@@ -2794,8 +2794,8 @@ check("73. La documentación cubre el kill switch", () => {
 
 check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
-  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 103);
-  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 104);
+  assert(beyond.length === 0, `PCR-01 solo autoriza la 0103; no debe existir 0104 ni posterior: ${beyond.join(", ")}`);
   assert(
     /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
     "el script legal debe declarar la aprobación"
@@ -2836,9 +2836,9 @@ check("75. La página general se presenta como plataforma modular", () => {
   assert(read(ABOUT_PAGE).includes("APP_VERSION_LABEL"), "debe conservarse el pie con la versión");
 });
 
-check("76. Se mencionan Trazaloop CPR y Trazaloop Textiles", () => {
+check("76. Se mencionan Trazaloop PCR y Trazaloop Textiles", () => {
   const s = aboutText();
-  assert(/Trazaloop CPR/.test(s), "debe mencionarse Trazaloop CPR");
+  assert(/Trazaloop PCR/.test(s), "debe mencionarse Trazaloop PCR (PCR-01: denominación comercial)");
   assert(/Trazaloop Textiles/.test(s), "debe mencionarse Trazaloop Textiles");
   // Con contenido propio de cada módulo, no solo el nombre.
   assert(
@@ -2847,7 +2847,7 @@ check("76. Se mencionan Trazaloop CPR y Trazaloop Textiles", () => {
   );
   assert(
     /contenido reciclado por lote producido/i.test(s),
-    "CPR debe describirse con sus funciones propias"
+    "PCR debe describirse con sus funciones propias"
   );
 });
 
@@ -2873,15 +2873,15 @@ check("77. La definición general ya no limita Trazaloop a plásticos", () => {
   );
 });
 
-check("78. Las normas permanecen asociadas EXCLUSIVAMENTE a CPR", () => {
+check("78. Las normas permanecen asociadas EXCLUSIVAMENTE al módulo PCR", () => {
   const s = aboutText().replace(/\s+/g, " ");
   assert(/NTC 6632:2022/.test(s), "debe conservarse NTC 6632:2022");
   assert(/UNE-EN\s*15343:2008/.test(s), "debe conservarse UNE-EN 15343:2008");
 
   // Delimitar el párrafo de CPR y el de Textiles.
-  const cprIdx = s.indexOf("Trazaloop CPR");
+  const cprIdx = s.indexOf("Trazaloop PCR");
   const texIdx = s.indexOf("Trazaloop Textiles");
-  assert(cprIdx !== -1 && texIdx !== -1 && cprIdx < texIdx, "CPR debe describirse antes que Textiles");
+  assert(cprIdx !== -1 && texIdx !== -1 && cprIdx < texIdx, "PCR debe describirse antes que Textiles");
   const cprPara = s.slice(cprIdx, texIdx);
   const afterTex = s.slice(texIdx);
 
@@ -3004,11 +3004,11 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
   assert(
-    numbers[numbers.length - 1] === 102,
-    `la última migración debe seguir siendo 0102, es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === 103,
+    `la última migración debe ser la 0103 (PCR-01), es ${numbers[numbers.length - 1]}`
   );
-  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 103);
-  assert(beyond.length === 0, `no debe existir 0103 ni posterior: ${beyond.join(", ")}`);
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 104);
+  assert(beyond.length === 0, `PCR-01 solo autoriza la 0103; no debe existir 0104 ni posterior: ${beyond.join(", ")}`);
 });
 
 // ===========================================================================
@@ -3704,12 +3704,12 @@ check("103. No se modificaron migraciones y no existe 0103", () => {
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
   assert(
-    numbers[numbers.length - 1] === 102,
-    `la última migración debe seguir siendo 0102, es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === 103,
+    `la última migración debe ser la 0103 (PCR-01), es ${numbers[numbers.length - 1]}`
   );
   assert(
-    files.filter((f) => Number(f.slice(0, 4)) >= 103).length === 0,
-    "no debe existir 0103 ni posterior"
+    files.filter((f) => Number(f.slice(0, 4)) >= 104).length === 0,
+    "PCR-01 solo autoriza la 0103; no debe existir 0104 ni posterior"
   );
   // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.
   assert(

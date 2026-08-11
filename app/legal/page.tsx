@@ -27,7 +27,7 @@ export default function LegalPage() {
           funcionales:
         </p>
         <p>
-          <strong>Trazaloop CPR</strong> permite organizar catálogos,
+          <strong>Trazaloop PCR</strong> permite organizar catálogos,
           proveedores, materiales, productos, evidencias, órdenes o corridas de
           producción y trazabilidad lote a lote. También apoya el cálculo y la
           documentación del contenido reciclado por lote producido, tomando

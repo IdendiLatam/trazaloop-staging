@@ -35,7 +35,7 @@ const BEGIN_ERROR_MESSAGES: Record<string, string> = {
   ALREADY_HAS_FILE: "Este registro ya tiene un archivo asociado.",
   PATH_ALREADY_FINALIZED: "Ya existe un archivo finalizado en esa ruta.",
   FILE_SIZE_INVALID:
-    "El tamaño del archivo no es válido para el plan del módulo (evidencia CPR 20 MB; TrazaDocs 10 MB en Demo y 25 MB en Full/Extra).",
+    "El tamaño del archivo no es válido para el plan del módulo (evidencia PCR 20 MB; TrazaDocs 10 MB en Demo y 25 MB en Full/Extra).",
   FILE_MIME_INVALID: "El tipo del archivo no es válido.",
   FILE_REQUIRED: "El archivo es obligatorio.",
   EVIDENCE_NOT_FOUND: "La evidencia no existe.",

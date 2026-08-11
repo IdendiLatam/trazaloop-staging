@@ -99,7 +99,7 @@ export type TicketModule = (typeof TICKET_MODULES)[number];
 
 export const TICKET_MODULE_LABEL: Record<TicketModule, string> = {
   platform: "Plataforma",
-  cpr: "Trazaloop CPR",
+  cpr: "Trazaloop PCR",
   trazadocs: "TrazaDocs",
   diagnostic: "Diagnóstico",
   catalog: "Catálogos",

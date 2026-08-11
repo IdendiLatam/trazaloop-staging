@@ -93,10 +93,10 @@ check("6. El guard valida flag + organización habilitada y responde 404", () =>
 check("7. La landing comunica Trazaloop como plataforma y CPR como módulo", () => {
   const landing = readSource("../../app/page.tsx");
   const hero = landing.slice(landing.indexOf("<h1"), landing.indexOf("</h1>"));
-  assert(hero.includes("Trazaloop") && !hero.includes("Trazaloop CPR"), "el hero debía decir 'Trazaloop', no 'Trazaloop CPR'");
+  assert(hero.includes("Trazaloop") && !hero.includes("Trazaloop PCR"), "el hero debía decir 'Trazaloop', no 'Trazaloop PCR'");
   assert(landing.includes("Plataforma modular para gestionar trazabilidad"), "debía usar el subtítulo de plataforma");
-  assert(landing.includes("Trazaloop CPR"), "CPR debía seguir presente como módulo disponible");
-  assert(landing.includes("NTC 6632") && landing.includes("UNE-EN 15343"), "las normas CPR viven en la tarjeta del módulo");
+  assert(landing.includes("Trazaloop PCR"), "PCR debía seguir presente como módulo disponible (PCR-01)");
+  assert(landing.includes("NTC 6632") && landing.includes("UNE-EN 15343"), "las normas del módulo PCR viven en la tarjeta del módulo");
 });
 
 check("8. El portal /modules usa la clave 'textiles' y nunca expone el enlace sin flag+habilitación", () => {

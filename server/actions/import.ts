@@ -11,6 +11,7 @@ import {
   type ImportEntity,
   type ImportRowError,
 } from "@/lib/import-templates";
+import { INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE } from "@/lib/domain/traceability-validation";
 
 
 export type ImportValidation = {
@@ -197,15 +198,18 @@ async function validateRows(
         });
         return;
       }
-      if (quantity !== "") {
-        const n = Number(quantity);
-        if (Number.isNaN(n) || n <= 0) {
-          errors.push({
-            row: line,
-            message: `"quantity_kg" debe ser un número mayor que 0.`,
-          });
-          return;
-        }
+      // PCR-01.1 (blocker 1): la cantidad es OBLIGATORIA también en este
+      // importador — vacía, 0, negativa o no numérica se rechazan con el
+      // mensaje canónico. validateRows corre en validateImportAction Y en la
+      // revalidación previa al commit, así que ambos pasos quedan cubiertos;
+      // el trigger de 0103 sigue siendo la barrera final en BD.
+      const n = Number(quantity);
+      if (quantity === "" || Number.isNaN(n) || n <= 0) {
+        errors.push({
+          row: line,
+          message: INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE,
+        });
+        return;
       }
     }
   });
@@ -392,7 +396,7 @@ export async function commitImportAction(
           residue_type: row.residue_type || null,
           provenance: row.provenance || null,
           received_date: row.received_date,
-          quantity_kg: row.quantity_kg === "" ? null : Number(row.quantity_kg),
+          quantity_kg: Number(row.quantity_kg), // PCR-01.1: obligatoria; el trigger 0103 es la barrera final
           storage_location: row.storage_location || null,
           notes: row.notes || null,
         };

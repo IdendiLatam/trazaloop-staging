@@ -5,20 +5,27 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { SupportBadge } from "@/components/domain/catalog/support-badge";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { listMaterials, listClassifications } from "@/lib/db/catalog";
+import { searchMaterials, getMaterial, listClassifications } from "@/lib/db/catalog";
+import { listEvidencesForTargets } from "@/lib/db/evidences";
 import { createServerClient } from "@/lib/supabase/server";
 import { deleteMaterialAction } from "@/server/actions/catalog";
 import { MaterialForm, ReclassifyForm } from "@/components/domain/catalog/forms";
+import { LinkedEvidenceList, ViewEvidenceButton } from "@/components/domain/evidences/view-link";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
+import { SuccessAlert } from "@/components/ui/alert";
 
 export default async function MaterialsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; q?: string; page?: string; created?: string; updated?: string; focus?: string }>;
 }) {
   const org = await requireActiveOrg();
   const supabase = await createServerClient();
-  const [materials, classifications, { data: evidenceRows }] = await Promise.all([
-    listMaterials(org.organizationId),
+  const params = await searchParams;
+
+  // PCR-01 (punto 9): búsqueda + paginación reales en servidor.
+  const [result, classifications, { data: evidenceRows }] = await Promise.all([
+    searchMaterials(org.organizationId, { q: params.q, page: params.page }),
     listClassifications(),
     supabase
       .from("evidences")
@@ -26,8 +33,45 @@ export default async function MaterialsPage({
       .eq("organization_id", org.organizationId)
       .order("name"),
   ]);
-  const { edit } = await searchParams;
-  const editing = materials.find((m) => m.id === edit);
+  const materials = result.rows;
+  const editing =
+    materials.find((m) => m.id === params.edit) ??
+    (params.edit ? await getMaterial(org.organizationId, params.edit) : undefined) ??
+    undefined;
+
+  // PCR-01.1 (blockers 3/4): el registro creado/actualizado/enfocado se
+  // muestra aunque quede fuera de la página actual — se resuelve por id
+  // (getter, jamás el listado completo) y se fija al inicio sin duplicarlo.
+  const focusId = params.created ?? params.updated ?? params.focus ?? null;
+  const focusedRecord = focusId
+    ? materials.find((r) => r.id === focusId) ??
+      (await getMaterial(org.organizationId, focusId)) ??
+      null
+    : null;
+  const visibleRows =
+    focusedRecord && !materials.some((r) => r.id === focusedRecord.id)
+      ? [focusedRecord, ...materials]
+      : materials;
+
+  // PCR-01 (punto 11): evidencias vinculadas (enlaces genéricos) por material.
+  const evidencesByMaterial = await listEvidencesForTargets(
+    org.organizationId,
+    "material",
+    visibleRows.map((r) => r.id)
+  );
+
+  // PCR-01 (puntos 2 y 7): confirmaciones + resaltado.
+  const highlightId = focusId;
+  const highlightChip = params.created
+    ? "Creado correctamente"
+    : params.updated
+      ? "Guardado correctamente"
+      : null;
+  const confirmation = params.created
+    ? "Material creado correctamente."
+    : params.updated
+      ? "Cambios guardados correctamente."
+      : null;
 
   const canApprove = org.roleCode === "admin" || org.roleCode === "quality";
   const classByCode = new Map(classifications.map((c) => [c.code, c]));
@@ -73,7 +117,22 @@ export default async function MaterialsPage({
         ) : null}
       </section>
 
-      {materials.length === 0 ? (
+      <div className="rounded-lg border border-hairline bg-surface p-4">
+        <ListSearchForm
+          basePath="/catalog/materials"
+          q={params.q ?? ""}
+          placeholder="Buscar por nombre o clasificación…"
+        />
+      </div>
+
+      <SuccessAlert message={confirmation} />
+
+      {visibleRows.length === 0 && params.q ? (
+        <p className="text-sm text-ink-soft">
+          Sin resultados para esta búsqueda.{" "}
+          <Link href="/catalog/materials" className="text-loop underline">Limpiar búsqueda</Link>.
+        </p>
+      ) : visibleRows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
           <p className="text-sm font-medium">Aún no tienes materiales registrados.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
@@ -83,7 +142,7 @@ export default async function MaterialsPage({
         </div>
       ) : (
         <ul className="space-y-3">
-          {materials.map((m) => {
+          {visibleRows.map((m) => {
             const cls = classByCode.get(m.classification_code);
             const reclassTarget =
               cls?.can_reclassify_to != null
@@ -91,12 +150,25 @@ export default async function MaterialsPage({
                 : null;
             const alreadyReclassified = m.reclassified_to_code !== null;
 
+            const isHighlighted = highlightId === m.id;
+            const linked = evidencesByMaterial[m.id] ?? [];
             return (
-              <li key={m.id} className="rounded-lg border border-hairline bg-surface p-4">
+              <li
+                key={m.id}
+                id={`registro-${m.id}`}
+                className={`rounded-lg border bg-surface p-4 ${
+                  isHighlighted ? "border-loop ring-2 ring-loop/30" : "border-hairline"
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       {m.name}
+                      {isHighlighted && highlightChip ? (
+                        <span className="rounded-full border border-loop/30 bg-loop/5 px-2 py-0.5 text-xs font-medium text-loop-deep">
+                          {highlightChip}
+                        </span>
+                      ) : null}
                       {(alreadyReclassified
                         ? classByCode.get(m.reclassified_to_code!)?.eligible_as_recycled
                         : cls?.eligible_as_recycled) ? (
@@ -124,12 +196,22 @@ export default async function MaterialsPage({
                       {m.origin_evidence_name
                         ? `${m.origin_evidence_name} · ${m.origin_evidence_status}`
                         : "sin asociar"}
+                      {m.origin_support_evidence_id ? (
+                        <span className="ml-2 inline-flex">
+                          <ViewEvidenceButton evidenceId={m.origin_support_evidence_id} compact />
+                        </span>
+                      ) : null}
                       {alreadyReclassified ? (
                         <span className="block">
                           Evidencia de reclasificación:{" "}
                           {m.reclassification_evidence_name
                             ? `${m.reclassification_evidence_name} · ${m.reclassification_evidence_status}`
                             : "sin asociar"}
+                          {m.reclassification_evidence_id ? (
+                            <span className="ml-2 inline-flex">
+                              <ViewEvidenceButton evidenceId={m.reclassification_evidence_id} compact />
+                            </span>
+                          ) : null}
                         </span>
                       ) : null}
                     </p>
@@ -155,6 +237,12 @@ export default async function MaterialsPage({
                   </div>
                 </div>
 
+                {linked.length > 0 ? (
+                  <div className="mt-3 border-t border-hairline pt-3">
+                    <LinkedEvidenceList evidences={linked} />
+                  </div>
+                ) : null}
+
                 {reclassTarget && !alreadyReclassified ? (
                   canApprove ? (
                     <ReclassifyForm
@@ -175,6 +263,14 @@ export default async function MaterialsPage({
           })}
         </ul>
       )}
+
+      <ListPagination
+        basePath="/catalog/materials"
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        extraParams={{ q: params.q }}
+      />
     </div>
   );
 }

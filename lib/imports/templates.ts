@@ -86,7 +86,7 @@ export const TEMPLATE_COLUMNS: Record<ImportEntityType, TemplateColumn[]> = {
     },
     { key: "provenance", required: false, description: "Procedencia del material (opcional)." },
     { key: "received_date", required: true, description: "Fecha de recepción, formato AAAA-MM-DD." },
-    { key: "quantity_kg", required: false, description: "Cantidad recibida en kg, mayor que 0 (opcional)." },
+    { key: "quantity_kg", required: true, description: "Cantidad recibida en kg, obligatoria y mayor que 0." },
     { key: "storage_location", required: false, description: "Ubicación de almacenamiento (opcional)." },
     { key: "notes", required: false, description: "Notas (opcional)." },
   ],

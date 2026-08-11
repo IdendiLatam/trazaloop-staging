@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { checkCprResourceLimit, checkCprCanMutate } from "@/server/actions/module-plans";
@@ -44,19 +45,26 @@ export async function upsertSupplierAction(
   }
 
   const payload = { name, tax_id: taxId, contact };
-  const { error } = id
-    ? await supabase
-        .from("suppliers")
-        .update(payload)
-        .eq("id", id)
-        .eq("organization_id", org.organizationId)
-    : await supabase
-        .from("suppliers")
-        .insert({ ...payload, organization_id: org.organizationId });
-
-  if (error) return { error: errMessage(error) };
+  if (id) {
+    const { error } = await supabase
+      .from("suppliers")
+      .update(payload)
+      .eq("id", id)
+      .eq("organization_id", org.organizationId);
+    if (error) return { error: errMessage(error) };
+    revalidatePath("/catalog/suppliers");
+    // PCR-01 (punto 7): cierre de edición + confirmación visible.
+    redirect(`/catalog/suppliers?updated=${id}#registro-${id}`);
+  }
+  const { data: created, error } = await supabase
+    .from("suppliers")
+    .insert({ ...payload, organization_id: org.organizationId })
+    .select("id")
+    .single();
+  if (error || !created) return { error: errMessage(error) };
   revalidatePath("/catalog/suppliers");
-  return { error: null };
+  // PCR-01 (punto 2): confirmar y llevar la vista al registro creado.
+  redirect(`/catalog/suppliers?created=${created.id}#registro-${created.id}`);
 }
 
 export async function deleteSupplierAction(formData: FormData) {
@@ -92,19 +100,26 @@ export async function upsertFamilyAction(
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const payload = { name, description };
-  const { error } = id
-    ? await supabase
-        .from("product_families")
-        .update(payload)
-        .eq("id", id)
-        .eq("organization_id", org.organizationId)
-    : await supabase
-        .from("product_families")
-        .insert({ ...payload, organization_id: org.organizationId });
-
-  if (error) return { error: errMessage(error) };
+  if (id) {
+    const { error } = await supabase
+      .from("product_families")
+      .update(payload)
+      .eq("id", id)
+      .eq("organization_id", org.organizationId);
+    if (error) return { error: errMessage(error) };
+    revalidatePath("/catalog/families");
+    // PCR-01 (punto 7): la edición de familias era el caso reportado sin
+    // retroalimentación — ahora cierra la edición y confirma sobre la fila.
+    redirect(`/catalog/families?updated=${id}#registro-${id}`);
+  }
+  const { data: created, error } = await supabase
+    .from("product_families")
+    .insert({ ...payload, organization_id: org.organizationId })
+    .select("id")
+    .single();
+  if (error || !created) return { error: errMessage(error) };
   revalidatePath("/catalog/families");
-  return { error: null };
+  redirect(`/catalog/families?created=${created.id}#registro-${created.id}`);
 }
 
 export async function deleteFamilyAction(formData: FormData) {
@@ -160,19 +175,24 @@ export async function upsertProductAction(
     family_id: familyId,
     declared_recycled_percent: declared,
   };
-  const { error } = id
-    ? await supabase
-        .from("products")
-        .update(payload)
-        .eq("id", id)
-        .eq("organization_id", org.organizationId)
-    : await supabase
-        .from("products")
-        .insert({ ...payload, organization_id: org.organizationId });
-
-  if (error) return { error: errMessage(error) };
+  if (id) {
+    const { error } = await supabase
+      .from("products")
+      .update(payload)
+      .eq("id", id)
+      .eq("organization_id", org.organizationId);
+    if (error) return { error: errMessage(error) };
+    revalidatePath("/catalog/products");
+    redirect(`/catalog/products?updated=${id}#registro-${id}`);
+  }
+  const { data: created, error } = await supabase
+    .from("products")
+    .insert({ ...payload, organization_id: org.organizationId })
+    .select("id")
+    .single();
+  if (error || !created) return { error: errMessage(error) };
   revalidatePath("/catalog/products");
-  return { error: null };
+  redirect(`/catalog/products?created=${created.id}#registro-${created.id}`);
 }
 
 export async function deleteProductAction(formData: FormData) {
@@ -215,19 +235,24 @@ export async function upsertMaterialAction(
   }
 
   const payload = { name, classification_code: classification };
-  const { error } = id
-    ? await supabase
-        .from("materials")
-        .update(payload)
-        .eq("id", id)
-        .eq("organization_id", org.organizationId)
-    : await supabase
-        .from("materials")
-        .insert({ ...payload, organization_id: org.organizationId });
-
-  if (error) return { error: errMessage(error) };
+  if (id) {
+    const { error } = await supabase
+      .from("materials")
+      .update(payload)
+      .eq("id", id)
+      .eq("organization_id", org.organizationId);
+    if (error) return { error: errMessage(error) };
+    revalidatePath("/catalog/materials");
+    redirect(`/catalog/materials?updated=${id}#registro-${id}`);
+  }
+  const { data: created, error } = await supabase
+    .from("materials")
+    .insert({ ...payload, organization_id: org.organizationId })
+    .select("id")
+    .single();
+  if (error || !created) return { error: errMessage(error) };
   revalidatePath("/catalog/materials");
-  return { error: null };
+  redirect(`/catalog/materials?created=${created.id}#registro-${created.id}`);
 }
 
 export async function deleteMaterialAction(formData: FormData) {
@@ -290,5 +315,5 @@ export async function reclassifyMaterialAction(
   }
 
   revalidatePath("/catalog/materials");
-  return { error: null };
+  redirect(`/catalog/materials?updated=${id}#registro-${id}`);
 }

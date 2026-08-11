@@ -150,3 +150,253 @@ export async function listMaterials(orgId: string): Promise<Material[]> {
     };
   });
 }
+
+// ===========================================================================
+// PCR-01 (punto 9) · Búsqueda + paginación de listados de catálogo.
+// Funciones ADITIVAS: las list* de arriba siguen intactas para selects,
+// flujo guiado, dossier e importaciones. Todo respeta organization_id + RLS.
+// ===========================================================================
+import {
+  normalizePageQuery,
+  pageRange,
+  sanitizeSearchTerm,
+  type PageResult,
+} from "@/lib/domain/pagination";
+
+export type CatalogPageInput = { q?: string | null; page?: string | number | null };
+
+export async function searchSuppliers(
+  orgId: string,
+  query: CatalogPageInput
+): Promise<PageResult<Supplier>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("suppliers")
+    .select("id, name, tax_id, contact", { count: "exact" })
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(`name.ilike.%${term}%,tax_id.ilike.%${term}%,contact.ilike.%${term}%`);
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request.order("name").range(from, to);
+  return { rows: (data as Supplier[]) ?? [], total: count ?? 0, page, pageSize };
+}
+
+export async function searchFamilies(
+  orgId: string,
+  query: CatalogPageInput
+): Promise<PageResult<ProductFamily>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("product_families")
+    .select("id, name, description", { count: "exact" })
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(`name.ilike.%${term}%,description.ilike.%${term}%`);
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request.order("name").range(from, to);
+  return { rows: (data as ProductFamily[]) ?? [], total: count ?? 0, page, pageSize };
+}
+
+export async function searchProducts(
+  orgId: string,
+  query: CatalogPageInput
+): Promise<PageResult<Product>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("products")
+    .select("id, code, name, family_id, declared_recycled_percent, product_families(name)", {
+      count: "exact",
+    })
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(`code.ilike.%${term}%,name.ilike.%${term}%`);
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request.order("code").range(from, to);
+  return {
+    rows: (data ?? []).map((p) => {
+      const fam = p.product_families as unknown as { name: string } | null;
+      return {
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        family_id: p.family_id,
+        family_name: fam?.name ?? null,
+        declared_recycled_percent:
+          p.declared_recycled_percent === null ? null : Number(p.declared_recycled_percent),
+      };
+    }),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+export async function searchMaterials(
+  orgId: string,
+  query: CatalogPageInput
+): Promise<PageResult<Material>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("materials")
+    .select(
+      "id, name, classification_code, reclassified_to_code, reclassification_justification, origin_support_evidence_id, reclassification_evidence_id, material_classifications!materials_classification_code_fkey(label)",
+      { count: "exact" }
+    )
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(`name.ilike.%${term}%,classification_code.ilike.%${term}%`);
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request.order("name").range(from, to);
+
+  // Misma hidratación de evidencias de soporte que listMaterials, acotada a
+  // la página actual.
+  const evidenceIds = Array.from(
+    new Set(
+      (data ?? [])
+        .flatMap((m) => [m.origin_support_evidence_id, m.reclassification_evidence_id])
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const evidenceById = new Map<string, { name: string; status: string }>();
+  if (evidenceIds.length > 0) {
+    const { data: evs } = await supabase
+      .from("evidences")
+      .select("id, name, status")
+      .eq("organization_id", orgId)
+      .in("id", evidenceIds);
+    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+  }
+
+  return {
+    rows: (data ?? []).map((m) => {
+      const cls = m.material_classifications as unknown as { label: string } | null;
+      const originEv = m.origin_support_evidence_id
+        ? evidenceById.get(m.origin_support_evidence_id) ?? null
+        : null;
+      const reclassEv = m.reclassification_evidence_id
+        ? evidenceById.get(m.reclassification_evidence_id) ?? null
+        : null;
+      return {
+        id: m.id,
+        name: m.name,
+        classification_code: m.classification_code,
+        classification_label: cls?.label ?? m.classification_code,
+        reclassified_to_code: m.reclassified_to_code,
+        reclassification_justification: m.reclassification_justification,
+        origin_support_evidence_id: m.origin_support_evidence_id,
+        reclassification_evidence_id: m.reclassification_evidence_id,
+        origin_evidence_name: originEv?.name ?? null,
+        origin_evidence_status: originEv?.status ?? null,
+        reclassification_evidence_name: reclassEv?.name ?? null,
+        reclassification_evidence_status: reclassEv?.status ?? null,
+      };
+    }),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+// Getters por id (PCR-01): con paginación, el registro en edición puede no
+// estar en la página actual. Mismas formas de datos que los listados.
+export async function getSupplier(orgId: string, id: string): Promise<Supplier | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("suppliers")
+    .select("id, name, tax_id, contact")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as Supplier | null) ?? null;
+}
+
+export async function getFamily(orgId: string, id: string): Promise<ProductFamily | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("product_families")
+    .select("id, name, description")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return (data as ProductFamily | null) ?? null;
+}
+
+export async function getProduct(orgId: string, id: string): Promise<Product | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("products")
+    .select("id, code, name, family_id, declared_recycled_percent, product_families(name)")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const fam = data.product_families as unknown as { name: string } | null;
+  return {
+    id: data.id,
+    code: data.code,
+    name: data.name,
+    family_id: data.family_id,
+    family_name: fam?.name ?? null,
+    declared_recycled_percent:
+      data.declared_recycled_percent === null ? null : Number(data.declared_recycled_percent),
+  };
+}
+
+export async function getMaterial(orgId: string, id: string): Promise<Material | null> {
+  const supabase = await createServerClient();
+  const { data: m } = await supabase
+    .from("materials")
+    .select(
+      "id, name, classification_code, reclassified_to_code, reclassification_justification, origin_support_evidence_id, reclassification_evidence_id, material_classifications!materials_classification_code_fkey(label)"
+    )
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (!m) return null;
+
+  const evidenceIds = [m.origin_support_evidence_id, m.reclassification_evidence_id].filter(
+    (v): v is string => Boolean(v)
+  );
+  const evidenceById = new Map<string, { name: string; status: string }>();
+  if (evidenceIds.length > 0) {
+    const { data: evs } = await supabase
+      .from("evidences")
+      .select("id, name, status")
+      .eq("organization_id", orgId)
+      .in("id", evidenceIds);
+    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+  }
+  const cls = m.material_classifications as unknown as { label: string } | null;
+  const originEv = m.origin_support_evidence_id
+    ? evidenceById.get(m.origin_support_evidence_id) ?? null
+    : null;
+  const reclassEv = m.reclassification_evidence_id
+    ? evidenceById.get(m.reclassification_evidence_id) ?? null
+    : null;
+  return {
+    id: m.id,
+    name: m.name,
+    classification_code: m.classification_code,
+    classification_label: cls?.label ?? m.classification_code,
+    reclassified_to_code: m.reclassified_to_code,
+    reclassification_justification: m.reclassification_justification,
+    origin_support_evidence_id: m.origin_support_evidence_id,
+    reclassification_evidence_id: m.reclassification_evidence_id,
+    origin_evidence_name: originEv?.name ?? null,
+    origin_evidence_status: originEv?.status ?? null,
+    reclassification_evidence_name: reclassEv?.name ?? null,
+    reclassification_evidence_status: reclassEv?.status ?? null,
+  };
+}

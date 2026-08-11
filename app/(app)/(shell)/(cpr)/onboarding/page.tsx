@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="eyebrow">{org.organizationName}</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Bienvenido a Trazaloop CPR</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Bienvenido a Trazaloop PCR</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
           Sigue estos primeros pasos para empezar a usar la plataforma con tus datos reales — no se
           carga ningún dato de ejemplo automáticamente.

@@ -40,7 +40,7 @@ export async function requireCprForAction(): Promise<
   const org = await requireActiveOrg();
   const access = await resolveModuleAccessForOrg(org.organizationId, CPR_MODULE_CODE);
   if (!access.allowed) {
-    return { org: null, error: moduleAccessDeniedMessage("Trazaloop CPR", access.reason) };
+    return { org: null, error: moduleAccessDeniedMessage("Trazaloop PCR", access.reason) };
   }
   return { org, error: null };
 }

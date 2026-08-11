@@ -355,3 +355,207 @@ export async function getTraceabilityMetrics(orgId: string): Promise<Traceabilit
     ).length,
   };
 }
+
+// ===========================================================================
+// PCR-01 (punto 9) · Búsqueda + paginación de listados de trazabilidad.
+// Funciones ADITIVAS: las list* de arriba siguen intactas para selects,
+// genealogía, flujo guiado, dossier e importaciones. Todo respeta
+// organization_id + RLS. Los getters por id existen porque, con paginación,
+// el registro en edición (?edit=) o expandido (?order=/?batch=) puede no
+// estar en la página actual.
+// ===========================================================================
+import {
+  normalizePageQuery,
+  pageRange,
+  sanitizeSearchTerm,
+  type PageResult,
+} from "@/lib/domain/pagination";
+
+export type TracePageInput = { q?: string | null; page?: string | number | null };
+
+const INPUT_BATCH_SELECT =
+  "id, batch_code, supplier_id, material_id, site_id, residue_type, provenance, received_date, quantity_kg, storage_location, notes, suppliers(name), materials(name), sites(name), batch_consumption(mass_kg)";
+
+function mapInputBatchRow(b: Record<string, unknown>): InputBatch {
+  const supplier = b.suppliers as unknown as { name: string } | null;
+  const material = b.materials as unknown as { name: string } | null;
+  const site = b.sites as unknown as { name: string } | null;
+  const consumption = (b.batch_consumption as unknown as { mass_kg: number }[]) ?? [];
+  return {
+    id: b.id as string,
+    batch_code: b.batch_code as string,
+    supplier_id: b.supplier_id as string,
+    supplier_name: supplier?.name ?? "—",
+    material_id: b.material_id as string,
+    material_name: material?.name ?? "—",
+    site_id: (b.site_id as string | null) ?? null,
+    site_name: site?.name ?? null,
+    residue_type: (b.residue_type as string | null) ?? null,
+    provenance: (b.provenance as string | null) ?? null,
+    received_date: b.received_date as string,
+    quantity_kg: num(b.quantity_kg),
+    storage_location: (b.storage_location as string | null) ?? null,
+    notes: (b.notes as string | null) ?? null,
+    consumed_kg: consumption.reduce((acc, c) => acc + Number(c.mass_kg), 0),
+  };
+}
+
+export async function searchInputBatches(
+  orgId: string,
+  query: TracePageInput & { supplierId?: string; materialId?: string }
+): Promise<PageResult<InputBatch>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("input_batches")
+    .select(INPUT_BATCH_SELECT, { count: "exact" })
+    .eq("organization_id", orgId);
+  if (query.supplierId) request = request.eq("supplier_id", query.supplierId);
+  if (query.materialId) request = request.eq("material_id", query.materialId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(
+      `batch_code.ilike.%${term}%,provenance.ilike.%${term}%,storage_location.ilike.%${term}%`
+    );
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request
+    .order("received_date", { ascending: false })
+    .range(from, to);
+  return {
+    rows: ((data ?? []) as unknown as Record<string, unknown>[]).map(mapInputBatchRow),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+export async function getInputBatch(orgId: string, id: string): Promise<InputBatch | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("input_batches")
+    .select(INPUT_BATCH_SELECT)
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return data ? mapInputBatchRow(data as unknown as Record<string, unknown>) : null;
+}
+
+const ORDER_SELECT =
+  "id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, sites(name)";
+
+function mapOrderRow(o: Record<string, unknown>): ProductionOrder {
+  const site = o.sites as unknown as { name: string } | null;
+  return {
+    id: o.id as string,
+    order_code: o.order_code as string,
+    order_date: o.order_date as string,
+    status: o.status as string,
+    site_id: (o.site_id as string | null) ?? null,
+    site_name: site?.name ?? null,
+    pretreatment: (o.pretreatment as string | null) ?? null,
+    process_variables: o.process_variables,
+    notes: (o.notes as string | null) ?? null,
+  };
+}
+
+export async function searchProductionOrders(
+  orgId: string,
+  query: TracePageInput
+): Promise<PageResult<ProductionOrder>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("production_orders")
+    .select(ORDER_SELECT, { count: "exact" })
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(`order_code.ilike.%${term}%,pretreatment.ilike.%${term}%`);
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request
+    .order("order_date", { ascending: false })
+    .range(from, to);
+  return {
+    rows: ((data ?? []) as unknown as Record<string, unknown>[]).map(mapOrderRow),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+export async function getProductionOrder(
+  orgId: string,
+  id: string
+): Promise<ProductionOrder | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("production_orders")
+    .select(ORDER_SELECT)
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return data ? mapOrderRow(data as unknown as Record<string, unknown>) : null;
+}
+
+const OUTPUT_BATCH_SELECT =
+  "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code), products(code, name)";
+
+function mapOutputBatchRow(b: Record<string, unknown>): OutputBatch {
+  const po = b.production_orders as unknown as { order_code: string } | null;
+  const p = b.products as unknown as { code: string; name: string } | null;
+  return {
+    id: b.id as string,
+    batch_code: b.batch_code as string,
+    production_order_id: b.production_order_id as string,
+    production_order_code: po?.order_code ?? "—",
+    product_id: (b.product_id as string | null) ?? null,
+    product_label: p ? `${p.code} · ${p.name}` : null,
+    produced_date: (b.produced_date as string | null) ?? null,
+    produced_quantity_kg: num(b.produced_quantity_kg),
+    characteristics: (b.characteristics as string | null) ?? null,
+    intended_application: (b.intended_application as string | null) ?? null,
+    storage_location: (b.storage_location as string | null) ?? null,
+    notes: (b.notes as string | null) ?? null,
+  };
+}
+
+export async function searchOutputBatches(
+  orgId: string,
+  query: TracePageInput
+): Promise<PageResult<OutputBatch>> {
+  const { q, page, pageSize } = normalizePageQuery(query);
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("output_batches")
+    .select(OUTPUT_BATCH_SELECT, { count: "exact" })
+    .eq("organization_id", orgId);
+  const term = sanitizeSearchTerm(q);
+  if (term) {
+    request = request.or(
+      `batch_code.ilike.%${term}%,characteristics.ilike.%${term}%,intended_application.ilike.%${term}%`
+    );
+  }
+  const { from, to } = pageRange(page, pageSize);
+  const { data, count } = await request
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  return {
+    rows: ((data ?? []) as unknown as Record<string, unknown>[]).map(mapOutputBatchRow),
+    total: count ?? 0,
+    page,
+    pageSize,
+  };
+}
+
+export async function getOutputBatch(orgId: string, id: string): Promise<OutputBatch | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batches")
+    .select(OUTPUT_BATCH_SELECT)
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  return data ? mapOutputBatchRow(data as unknown as Record<string, unknown>) : null;
+}

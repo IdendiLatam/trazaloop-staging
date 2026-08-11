@@ -267,7 +267,7 @@ check("21. /modules mantiene CPR disponible y los demás módulos deshabilitados
   const source = readSource("../../app/(app)/modules/page.tsx");
   const catalog = readSource("../../lib/modules/catalog.ts");
   assert(source.includes("COMMERCIAL_MODULES") && source.includes("getActiveOrgModuleStatuses"), "/modules debía consumir el catálogo canónico y el estado en servidor");
-  assert(catalog.includes("Trazaloop CPR"), "el catálogo debía incluir Trazaloop CPR");
+  assert(catalog.includes("Trazaloop PCR"), "el catálogo debía incluir Trazaloop PCR (PCR-01: denominación comercial)");
   for (const mod of ["Trazaloop Textiles", "Trazaloop Quality", "Trazaloop Construcción"]) {
     assert(catalog.includes(mod), `el catálogo debía incluir ${mod}`);
   }

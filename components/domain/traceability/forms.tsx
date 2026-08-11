@@ -14,7 +14,8 @@ import {
 } from "@/server/actions/traceability";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
-import { ErrorAlert } from "@/components/ui/alert";
+import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
+import { ProcessVariablesEditor } from "@/components/domain/traceability/process-variables-editor";
 
 const initial: TraceActionState = { error: null };
 
@@ -106,12 +107,14 @@ export function InputBatchForm({
         <Select label="Tipo de residuo (opcional)" name="residue_type" options={RESIDUE_OPTIONS} defaultValue={editing?.residue_type ?? ""} />
         <Field label="Procedencia (opcional)" name="provenance" defaultValue={editing?.provenance ?? ""} />
         <Field
-          label="Cantidad kg (opcional)"
+          label="Cantidad (kg)"
           name="quantity_kg"
           type="number"
           min={0.0001}
           step="0.0001"
+          required
           defaultValue={editing?.quantity_kg ?? ""}
+          hint="Obligatoria y mayor que 0 kg: sostiene la trazabilidad cuantitativa del lote."
         />
         <Field label="Ubicación de almacenamiento (opcional)" name="storage_location" defaultValue={editing?.storage_location ?? ""} />
         <Field label="Notas (opcional)" name="notes" defaultValue={editing?.notes ?? ""} />
@@ -175,12 +178,7 @@ export function ProductionOrderForm({
         </label>
         <Select label="Sede (opcional)" name="site_id" options={sites} defaultValue={editing?.site_id ?? ""} />
         <Field label="Pretratamiento (opcional)" name="pretreatment" defaultValue={editing?.pretreatment ?? ""} />
-        <Field
-          label="Variables de proceso, JSON (opcional)"
-          name="process_variables"
-          defaultValue={editing?.process_variables ? JSON.stringify(editing.process_variables) : ""}
-          hint='Por ejemplo: {"temperatura_c": 210, "rpm": 90}'
-        />
+        <ProcessVariablesEditor initialValue={editing?.process_variables ?? null} />
         <Field label="Notas (opcional)" name="notes" defaultValue={editing?.notes ?? ""} />
       </div>
       <Button type="submit" disabled={pending} className="!w-auto">
@@ -264,6 +262,7 @@ export function ConsumptionForm({
   return (
     <form action={formAction} className="space-y-3">
       <ErrorAlert message={state.error} />
+      <SuccessAlert message={state.success ?? null} />
       <input type="hidden" name="production_order_id" value={productionOrderId} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Select label="Lote de entrada" name="input_batch_id" options={inputBatches} required />
@@ -290,6 +289,7 @@ export function CompositionForm({
   return (
     <form action={formAction} className="space-y-3">
       <ErrorAlert message={state.error} />
+      <SuccessAlert message={state.success ?? null} />
       <input type="hidden" name="output_batch_id" value={outputBatchId} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Select label="Material" name="material_id" options={materials} required />

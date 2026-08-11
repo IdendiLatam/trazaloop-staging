@@ -12,7 +12,7 @@ import {
 import { uploadFileToIntentPath } from "@/lib/storage/direct-upload";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
-import { ErrorAlert } from "@/components/ui/alert";
+import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
 
 const initial: EvidenceActionState = { error: null };
 
@@ -160,6 +160,7 @@ export function EvidenceLinkForm({
   return (
     <form action={formAction} className="space-y-4">
       <ErrorAlert message={state.error} />
+      <SuccessAlert message={state.warning ? null : state.success ?? null} />
       {state.warning ? (
         <p
           role="status"

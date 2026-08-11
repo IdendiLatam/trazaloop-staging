@@ -5,6 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { removeQueuedStorageObject } from "@/lib/db/storage-deletion";
+import { createEvidenceSignedUrl } from "@/lib/db/evidences";
 import { checkCprResourceLimit, checkCprStorageAvailable, checkCprCanMutate } from "@/server/actions/module-plans";
 import {
   beginCprStorageUpload,
@@ -16,7 +17,7 @@ import {
   compensateFailedCprUpload,
 } from "@/server/actions/cpr-upload-verification";
 
-export type EvidenceActionState = { error: string | null; warning?: string | null };
+export type EvidenceActionState = { error: string | null; warning?: string | null; success?: string | null };
 
 /**
  * Crea una evidencia y, si viene archivo, lo sube al bucket privado con la
@@ -442,5 +443,23 @@ export async function linkEvidenceAction(
         "La evidencia quedó asociada, pero no contará para el cálculo hasta que esté validada.",
     };
   }
-  return { error: null };
+  // PCR-01 (punto 2): confirmación inequívoca al asociar (también cuando el
+  // enlace ya existía pero se actualizó el soporte del material).
+  return { error: null, success: "Evidencia asociada correctamente." };
+}
+
+
+/**
+ * PCR-01 (punto 1) · URL firmada BAJO DEMANDA para ver el archivo de una
+ * evidencia de la empresa activa. La firma se emite con la sesión real
+ * (RLS de Storage `evidences_select` aplica) y con verificación explícita
+ * de pertenencia multiempresa en lib/db/evidences.ts. TTL corto; la URL no
+ * se persiste. Nunca vuelve pública una evidencia privada.
+ */
+export async function getEvidenceViewUrlAction(
+  evidenceId: string
+): Promise<{ url: string | null; error: string | null }> {
+  const org = await requireActiveOrg();
+  if (!evidenceId) return { url: null, error: "Falta la evidencia a abrir." };
+  return createEvidenceSignedUrl(org.organizationId, evidenceId);
 }

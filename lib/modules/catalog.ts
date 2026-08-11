@@ -55,7 +55,7 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
   {
     key: "cpr",
     moduleCode: CPR_MODULE_CODE,
-    name: "Trazaloop CPR",
+    name: "Trazaloop PCR",
     description:
       "Trazabilidad y contenido reciclado para plásticos (NTC 6632 / UNE-EN 15343): diagnóstico, catálogos, evidencias, trazabilidad y TrazaDocs.",
     status: "functional",

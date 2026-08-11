@@ -13,6 +13,7 @@
  * se sobrescribe nada. Un duplicado DENTRO del mismo archivo sí es ERROR
  * (no hay forma segura de saber cuál de las dos filas debería ganar).
  */
+import { INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE } from "@/lib/domain/traceability-validation";
 import { RESIDUE_TYPES } from "./types";
 import {
   normalizeText,
@@ -198,7 +199,12 @@ function validateInputBatch(row: Record<string, string>, ref: ReferenceData): Dr
   const material = normalizeText(row.material_name);
   const residue = normalizeText(row.residue_type);
   const received = normalizeRequiredDate(row.received_date, "La fecha de recepción (received_date)");
-  const quantity = normalizeOptionalPositiveNumber(row.quantity_kg, '"quantity_kg"');
+  // PCR-01 (punto 10): la cantidad es OBLIGATORIA también al importar —
+  // la importación crea lotes NUEVOS y el trigger 0103 la exigiría igual.
+  const quantityRaw = normalizeText(row.quantity_kg);
+  const quantity = quantityRaw
+    ? normalizeOptionalPositiveNumber(row.quantity_kg, '"quantity_kg"')
+    : ({ ok: false, error: INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE } as const);
 
   if (!code) err(d, "batch_code", 'El campo "batch_code" es obligatorio.');
   if (!supplier) {
@@ -215,7 +221,7 @@ function validateInputBatch(row: Record<string, string>, ref: ReferenceData): Dr
     err(d, "residue_type", `"residue_type" debe ser uno de: ${RESIDUE_TYPES.join(", ")}.`);
   }
   if (!received.ok) err(d, "received_date", received.error);
-  if (!quantity.ok) err(d, "quantity_kg", quantity.error);
+  if (!quantity.ok) err(d, "quantity_kg", quantity.error ?? INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE);
 
   if (d.errors.length > 0) return d;
 

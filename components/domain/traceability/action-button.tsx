@@ -102,6 +102,11 @@ export function LinkEvidenceInline({
         {pending ? "Asociando…" : "Asociar evidencia"}
       </button>
       {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
+      {state.success ? (
+        <span role="status" className="text-xs font-medium text-loop-deep">
+          {state.success}
+        </span>
+      ) : null}
     </form>
   );
 }

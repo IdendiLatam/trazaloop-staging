@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { checkCprResourceLimit, checkCprCanMutate } from "@/server/actions/module-plans";
@@ -14,8 +15,14 @@ import {
   getTraceabilityMetrics,
 } from "@/lib/db/traceability";
 import { validateImportAction, commitImportAction } from "@/server/actions/import";
+import { validateInputBatchValues } from "@/lib/domain/traceability-validation";
+import {
+  validateProcessVariableRows,
+  serializeProcessVariableRows,
+  type ProcessVariableRow,
+} from "@/lib/domain/process-variables";
 
-export type TraceActionState = { error: string | null };
+export type TraceActionState = { error: string | null; success?: string | null };
 
 const DUPLICATE = "Ya existe un registro con ese código en tu empresa.";
 const GENERIC = "No fue posible guardar. Verifica los datos e intenta de nuevo.";
@@ -73,17 +80,10 @@ function readInputBatchForm(formData: FormData) {
   };
 }
 
-function validateInputBatch(v: ReturnType<typeof readInputBatchForm>) {
-  if (!v.batch_code) return "El código del lote es obligatorio.";
-  if (!v.supplier_id) return "El proveedor es obligatorio.";
-  if (!v.material_id) return "El material es obligatorio.";
-  if (!v.received_date) return "La fecha de recepción es obligatoria.";
-  if (v.quantity_kg !== "") {
-    const n = Number(v.quantity_kg);
-    if (Number.isNaN(n) || n <= 0) return "La cantidad debe ser un número mayor que 0.";
-  }
-  return null;
-}
+// PCR-01 (punto 10): la validación pura vive en lib/domain/traceability-
+// validation.ts (los archivos "use server" solo exportan funciones async).
+// La cantidad es ahora OBLIGATORIA y > 0 para crear y para editar.
+const validateInputBatch = validateInputBatchValues;
 
 export async function createInputBatchAction(
   _prev: TraceActionState,
@@ -112,23 +112,29 @@ export async function createInputBatchAction(
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.from("input_batches").insert({
-    organization_id: org.organizationId,
-    batch_code: v.batch_code,
-    supplier_id: v.supplier_id,
-    material_id: v.material_id,
-    site_id: v.site_id,
-    residue_type: v.residue_type,
-    provenance: v.provenance,
-    received_date: v.received_date,
-    quantity_kg: v.quantity_kg === "" ? null : Number(v.quantity_kg),
-    storage_location: v.storage_location,
-    notes: v.notes,
-  });
+  const { data: created, error } = await supabase
+    .from("input_batches")
+    .insert({
+      organization_id: org.organizationId,
+      batch_code: v.batch_code,
+      supplier_id: v.supplier_id,
+      material_id: v.material_id,
+      site_id: v.site_id,
+      residue_type: v.residue_type,
+      provenance: v.provenance,
+      received_date: v.received_date,
+      quantity_kg: Number(v.quantity_kg),
+      storage_location: v.storage_location,
+      notes: v.notes,
+    })
+    .select("id")
+    .single();
 
-  if (error) return { error: dbError(error) };
+  if (error || !created) return { error: dbError(error) };
   revalidatePath("/traceability/input-batches");
-  return { error: null };
+  // PCR-01 (punto 2): confirmar, mantener contexto y llevar la vista al
+  // registro recién creado (ancla + resaltado en la página).
+  redirect(`/traceability/input-batches?created=${created.id}#lote-${created.id}`);
 }
 
 export async function updateInputBatchAction(
@@ -164,7 +170,7 @@ export async function updateInputBatchAction(
       residue_type: v.residue_type,
       provenance: v.provenance,
       received_date: v.received_date,
-      quantity_kg: v.quantity_kg === "" ? null : Number(v.quantity_kg),
+      quantity_kg: Number(v.quantity_kg),
       storage_location: v.storage_location,
       notes: v.notes,
     })
@@ -173,7 +179,9 @@ export async function updateInputBatchAction(
 
   if (error) return { error: dbError(error) };
   revalidatePath("/traceability/input-batches");
-  return { error: null };
+  // PCR-01 (punto 7): cierre de edición + confirmación visible sobre el
+  // registro actualizado (la página muestra "Cambios guardados correctamente.").
+  redirect(`/traceability/input-batches?updated=${id}#lote-${id}`);
 }
 
 export async function deleteInputBatchAction(
@@ -232,23 +240,43 @@ function readOrderForm(formData: FormData) {
     status: String(formData.get("status") ?? "draft"),
     site_id: String(formData.get("site_id") ?? "") || null,
     pretreatment: String(formData.get("pretreatment") ?? "").trim() || null,
-    process_variables: String(formData.get("process_variables") ?? "").trim(),
+    // PCR-01 (punto 13): el editor humano envía filas serializadas + el
+    // indicador de conservar un formato heredado no representable.
+    process_variables_rows: String(formData.get("process_variables_rows") ?? ""),
+    process_variables_keep_legacy: String(formData.get("process_variables_keep_legacy") ?? "") === "1",
     notes: String(formData.get("notes") ?? "").trim() || null,
   };
 }
 
 const ORDER_STATUSES = ["draft", "in_progress", "closed", "cancelled"];
 
-function parseProcessVariables(raw: string): { value: unknown; error: string | null } {
-  if (!raw) return { value: null, error: null };
+/**
+ * PCR-01 (punto 13) · Convierte las filas del editor (cliente NO confiable)
+ * al formato canónico JSONB. `keepLegacy` conserva intacto el valor heredado
+ * que no pudo representarse como filas (jamás pérdida silenciosa).
+ */
+function resolveProcessVariables(
+  rowsJson: string,
+  keepLegacy: boolean,
+  currentValue: unknown
+): { value: unknown; skipUpdate: boolean; error: string | null } {
+  if (keepLegacy) return { value: currentValue ?? null, skipUpdate: true, error: null };
+  if (!rowsJson) return { value: null, skipUpdate: false, error: null };
+  let rows: ProcessVariableRow[];
   try {
-    return { value: JSON.parse(raw), error: null };
+    const parsed = JSON.parse(rowsJson);
+    if (!Array.isArray(parsed)) throw new Error("no-array");
+    rows = parsed.map((r) => ({
+      name: typeof r?.name === "string" ? r.name : "",
+      value: typeof r?.value === "string" ? r.value : String(r?.value ?? ""),
+      unit: typeof r?.unit === "string" ? r.unit : "",
+    }));
   } catch {
-    return {
-      value: null,
-      error: 'Las variables de proceso deben ser JSON válido (por ejemplo: {"temperatura_c": 210}).',
-    };
+    return { value: null, skipUpdate: false, error: "Las variables de proceso no son válidas. Recarga la página e intenta de nuevo." };
   }
+  const invalid = validateProcessVariableRows(rows);
+  if (invalid) return { value: null, skipUpdate: false, error: invalid };
+  return { value: serializeProcessVariableRows(rows), skipUpdate: false, error: null };
 }
 
 export async function createProductionOrderAction(
@@ -268,27 +296,38 @@ export async function createProductionOrderAction(
   const limitCheck = await checkCprResourceLimit("production_orders");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
-  const pv = parseProcessVariables(v.process_variables);
+  const pv = resolveProcessVariables(
+    v.process_variables_rows,
+    false, // una orden nueva no tiene valor heredado que conservar
+    null
+  );
   if (pv.error) return { error: pv.error };
   if (!(await assertSameOrg("sites", v.site_id, org.organizationId))) {
     return { error: "La sede no pertenece a tu empresa." };
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.from("production_orders").insert({
-    organization_id: org.organizationId,
-    order_code: v.order_code,
-    order_date: v.order_date,
-    status: v.status,
-    site_id: v.site_id,
-    pretreatment: v.pretreatment,
-    process_variables: pv.value,
-    notes: v.notes,
-  });
+  const { data: created, error } = await supabase
+    .from("production_orders")
+    .insert({
+      organization_id: org.organizationId,
+      order_code: v.order_code,
+      order_date: v.order_date,
+      status: v.status,
+      site_id: v.site_id,
+      pretreatment: v.pretreatment,
+      process_variables: pv.value,
+      notes: v.notes,
+    })
+    .select("id")
+    .single();
 
-  if (error) return { error: dbError(error) };
+  if (error || !created) return { error: dbError(error) };
   revalidatePath("/traceability/production-orders");
-  return { error: null };
+  // PCR-01 (punto 14): tras crear la orden, la aplicación lleva al usuario
+  // DIRECTAMENTE a la sección "Materiales / lotes consumidos" de esa orden,
+  // con confirmación y guía del siguiente paso (banner en la página).
+  redirect(`/traceability/production-orders?order=${created.id}&created=1#consumos-${created.id}`);
 }
 
 export async function updateProductionOrderAction(
@@ -304,13 +343,28 @@ export async function updateProductionOrderAction(
   if (!ORDER_STATUSES.includes(v.status)) return { error: "Estado no válido." };
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
-  const pv = parseProcessVariables(v.process_variables);
+
+  const supabase = await createServerClient();
+
+  // Valor actual: necesario para conservar un formato heredado intacto.
+  const { data: current } = await supabase
+    .from("production_orders")
+    .select("process_variables")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!current) return { error: "La orden no existe o no pertenece a tu empresa." };
+
+  const pv = resolveProcessVariables(
+    v.process_variables_rows,
+    v.process_variables_keep_legacy,
+    current.process_variables
+  );
   if (pv.error) return { error: pv.error };
   if (!(await assertSameOrg("sites", v.site_id, org.organizationId))) {
     return { error: "La sede no pertenece a tu empresa." };
   }
 
-  const supabase = await createServerClient();
   const { error } = await supabase
     .from("production_orders")
     .update({
@@ -327,7 +381,8 @@ export async function updateProductionOrderAction(
 
   if (error) return { error: dbError(error) };
   revalidatePath("/traceability/production-orders");
-  return { error: null };
+  // PCR-01 (punto 7): confirmación inequívoca de la edición.
+  redirect(`/traceability/production-orders?updated=${id}#orden-${id}`);
 }
 
 export async function deleteProductionOrderAction(
@@ -406,7 +461,9 @@ export async function addBatchConsumptionAction(
     };
   }
   revalidatePath("/traceability/production-orders");
-  return { error: null };
+  // PCR-01 (punto 14): confirmación inmediata; el formulario permanece en la
+  // sección de consumos para seguir registrando lotes.
+  return { error: null, success: "Consumo registrado correctamente." };
 }
 
 export async function updateBatchConsumptionAction(
@@ -510,22 +567,28 @@ export async function createOutputBatchAction(
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.from("output_batches").insert({
-    organization_id: org.organizationId,
-    batch_code: v.batch_code,
-    production_order_id: v.production_order_id,
-    product_id: v.product_id,
-    produced_date: v.produced_date,
-    produced_quantity_kg: v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg),
-    characteristics: v.characteristics,
-    intended_application: v.intended_application,
-    storage_location: v.storage_location,
-    notes: v.notes,
-  });
+  const { data: created, error } = await supabase
+    .from("output_batches")
+    .insert({
+      organization_id: org.organizationId,
+      batch_code: v.batch_code,
+      production_order_id: v.production_order_id,
+      product_id: v.product_id,
+      produced_date: v.produced_date,
+      produced_quantity_kg: v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg),
+      characteristics: v.characteristics,
+      intended_application: v.intended_application,
+      storage_location: v.storage_location,
+      notes: v.notes,
+    })
+    .select("id")
+    .single();
 
-  if (error) return { error: dbError(error) };
+  if (error || !created) return { error: dbError(error) };
   revalidatePath("/traceability/output-batches");
-  return { error: null };
+  // PCR-01 (punto 2): confirmar y abrir la composición del lote recién
+  // creado — el siguiente paso lógico del flujo.
+  redirect(`/traceability/output-batches?batch=${created.id}&created=1#lote-${created.id}`);
 }
 
 export async function updateOutputBatchAction(
@@ -570,7 +633,8 @@ export async function updateOutputBatchAction(
 
   if (error) return { error: dbError(error) };
   revalidatePath("/traceability/output-batches");
-  return { error: null };
+  // PCR-01 (punto 7): confirmación inequívoca de la edición.
+  redirect(`/traceability/output-batches?updated=${id}#lote-${id}`);
 }
 
 export async function deleteOutputBatchAction(
@@ -644,7 +708,7 @@ export async function addBatchCompositionAction(
     };
   }
   revalidatePath("/traceability/output-batches");
-  return { error: null };
+  return { error: null, success: "Material agregado a la composición correctamente." };
 }
 
 export async function updateBatchCompositionAction(

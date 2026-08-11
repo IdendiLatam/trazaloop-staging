@@ -98,7 +98,7 @@ export default async function PublicLandingPage() {
             <span className="inline-flex w-fit rounded-full border border-loop/30 bg-surface px-2 py-0.5 text-[11px] font-medium text-loop-deep">
               Disponible
             </span>
-            <span className="text-lg font-semibold">Trazaloop CPR</span>
+            <span className="text-lg font-semibold">Trazaloop PCR</span>
             <span className="text-sm text-ink-soft">
               Trazabilidad, documentación técnica, evidencias y cálculo de contenido reciclado en
               procesos asociados a NTC 6632 y UNE-EN 15343.

@@ -132,7 +132,8 @@ export function ImportWizard({
           <p className="mt-3 text-xs text-ink-soft">
             supplier_name y material_name deben existir en tus catálogos.
             residue_type (opcional): preconsumer, postconsumer, postindustrial,
-            virgin u other. received_date en formato AAAA-MM-DD.
+            virgin u other. received_date en formato AAAA-MM-DD. quantity_kg es
+            obligatoria y debe ser mayor que 0 (kg recibidos del lote).
           </p>
         ) : null}
       </section>

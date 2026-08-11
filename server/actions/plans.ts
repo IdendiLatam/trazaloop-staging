@@ -6,6 +6,7 @@ import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import {
   getOrganizationUsage,
   listAllOrganizationUsage,
+  getOrganizationEffectivePlanCode,
   getPlanLimits,
   listPlanDefinitions,
   listPlanHistory,
@@ -86,7 +87,12 @@ export async function checkResourceLimit(resourceCode: ResourceCode): Promise<{ 
   const statusCheck = checkPlanStatusBlocking(usage);
   if (!statusCheck.allowed) return statusCheck;
 
-  const limits = await getPlanLimits(usage.planCode);
+  // PCR-01 (punto 16): el LÍMITE comercial de los recursos transversales se
+  // resuelve con el plan EFECTIVO por módulos (0103) — organization_
+  // subscriptions ya solo aporta el estado administrativo de la cuenta.
+  // Demo→Full/Extra habilita de inmediato; Full→Demo vuelve a restringir.
+  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
+  const limits = await getPlanLimits(effectivePlanCode);
   const limit = findLimit(limits, resourceCode);
   if (!limit) return { allowed: true, error: null };
 
@@ -105,7 +111,12 @@ export async function checkFeatureEnabled(
   const statusCheck = checkPlanStatusBlocking(usage);
   if (!statusCheck.allowed) return statusCheck;
 
-  const limits = await getPlanLimits(usage.planCode);
+  // PCR-01 (punto 16): mismo criterio que checkResourceLimit — el plan que
+  // decide si la función está disponible es el EFECTIVO por módulos (0103),
+  // nunca la copia obsoleta de organization_subscriptions. Corrige el bug
+  // real Demo→Full de invitaciones (roles_enabled) de raíz y en servidor.
+  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
+  const limits = await getPlanLimits(effectivePlanCode);
   const limit = findLimit(limits, resourceCode);
   if (!limit) return { allowed: true, error: null };
 
