@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { orderMutationBlockedMessage } from "@/lib/domain/production-alerts";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import {
@@ -11,6 +12,7 @@ import {
   listProductionOrders,
   listComposition,
   getCompleteness,
+  listForwardUsesForOutputs,
 } from "@/lib/db/traceability";
 import { listEvidencesForTargets } from "@/lib/db/evidences";
 import { listProducts, listMaterials } from "@/lib/db/catalog";
@@ -90,12 +92,32 @@ export default async function OutputBatchesPage({
     batches.map((b) => b.id)
   );
 
+  // PCR-02 (Bloque F): dónde fue consumido después cada lote de la página.
+  // PCR-02.1 (§49): incluir también el lote en edición (puede no estar en la
+  // página actual) para poder fijar su orden productora si ya fue consumido.
+  const forwardUses = await listForwardUsesForOutputs(
+    org.organizationId,
+    Array.from(new Set([...batches.map((b) => b.id), ...(editing ? [editing.id] : [])]))
+  );
+
   // PCR-01 (puntos 2 y 7): confirmaciones + resaltado.
   const justCreated = params.created === "1" && openBatch;
   const highlightId = focusId;
 
   const completenessByBatch = new Map(completeness.map((c) => [c.output_batch_id, c]));
   const orderOptions = orders.map((o) => ({ value: o.id, label: o.order_code }));
+
+  // PCR-02.1 (§49): si el lote en edición ya fue consumido, su orden se fija.
+  const editingUses = editing ? (forwardUses[editing.id] ?? []) : [];
+  const editingLockOrder =
+    editing && editingUses.length > 0
+      ? {
+          label:
+            orderOptions.find((o) => o.value === editing.production_order_id)?.label ??
+            "Orden productora",
+          consumers: editingUses.map((u) => u.order_code).join(", "),
+        }
+      : undefined;
   const productOptions = products.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }));
   const materialOptions = materials.map((m) => ({ value: m.id, label: m.name }));
   const evidenceOptions = (evidenceRows ?? []).map((e) => ({ value: e.id, label: e.name }));
@@ -113,25 +135,36 @@ export default async function OutputBatchesPage({
         </p>
       </header>
 
-      {orders.length === 0 ? (
-        <p className="rounded-md border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-amber">
-          Necesitas al menos una{" "}
-          <Link href="/traceability/production-orders" className="font-semibold underline">
-            orden / corrida de producción
-          </Link>{" "}
-          antes de registrar lotes producidos / lotes finales.
-        </p>
-      ) : (
+      {editing ? (
         <section className="rounded-lg border border-hairline bg-surface p-5">
-          <h2 className="mb-4 text-sm font-semibold">
-            {editing ? `Editar: ${editing.batch_code}` : "Nuevo lote producido / lote final"}
-          </h2>
-          <OutputBatchForm orders={orderOptions} products={productOptions} editing={editing} />
-          {editing ? (
-            <Link href="/traceability/output-batches" className="mt-3 inline-block text-xs text-ink-soft hover:underline">
-              Cancelar edición
+          <h2 className="mb-4 text-sm font-semibold">Editar: {editing.batch_code}</h2>
+          <OutputBatchForm
+            orders={orderOptions}
+            products={productOptions}
+            editing={editing}
+            lockOrder={editingLockOrder}
+          />
+          <Link href="/traceability/output-batches" className="mt-3 inline-block text-xs text-ink-soft hover:underline">
+            Cancelar edición
+          </Link>
+        </section>
+      ) : (
+        // PCR-02 (Bloque G): el lote producido es una SALIDA de su orden, así
+        // que se registra desde el detalle de la orden (asociación automática,
+        // sin volver a preguntar la orden). Este listado queda como consulta,
+        // edición y composición.
+        <section className="rounded-lg border border-hairline bg-surface p-5">
+          <h2 className="mb-1 text-sm font-semibold">¿Registrar un lote producido?</h2>
+          <p className="text-sm text-ink-soft">
+            Los lotes producidos se registran desde su{" "}
+            <Link href="/traceability/production-orders" className="font-medium text-loop hover:underline">
+              Orden / corrida de producción
             </Link>
-          ) : null}
+            : abre la orden y usa «Registrar lote producido» en la sección
+            «Lotes producidos / salidas de la orden». Así el lote queda asociado
+            automáticamente a su orden y conserva su identidad si luego se
+            consume como producto intermedio en otra orden.
+          </p>
         </section>
       )}
 
@@ -183,15 +216,39 @@ export default async function OutputBatchesPage({
                       ) : null}
                     </p>
                     <p className="text-xs text-ink-soft">
+                      orden{" "}
+                      <Link
+                        href={`/traceability/production-orders/${b.production_order_id}`}
+                        className="text-loop hover:underline"
+                      >
+                        {b.production_order_code}
+                      </Link>
                       {[
-                        `orden ${b.production_order_code}`,
                         b.produced_date,
                         b.produced_quantity_kg !== null ? `${b.produced_quantity_kg} kg` : null,
                         b.intended_application,
                       ]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .map((part) => ` · ${part}`)
+                        .join("")}
                     </p>
+                    {(forwardUses[b.id] ?? []).length > 0 ? (
+                      <p className="mt-0.5 text-xs text-ink-soft">
+                        Consumido después en:{" "}
+                        {(forwardUses[b.id] ?? []).map((u, i) => (
+                          <span key={u.order_id}>
+                            {i > 0 ? " · " : ""}
+                            <Link
+                              href={`/traceability/production-orders/${u.order_id}`}
+                              className="text-loop hover:underline"
+                            >
+                              {u.order_code}
+                            </Link>{" "}
+                            ({u.mass_kg} kg)
+                          </span>
+                        ))}
+                      </p>
+                    ) : null}
                     {comp && comp.missing_items.length > 0 ? (
                       <p className="mt-1 text-xs text-danger">
                         Falta: {comp.missing_items.join(", ")}.
@@ -216,15 +273,29 @@ export default async function OutputBatchesPage({
                     >
                       {params.batch === b.id ? "Composición ▾" : "Composición"}
                     </Link>
+                    <Link
+                      href={`/traceability/genealogy?output=${b.id}`}
+                      className="text-sm text-loop hover:underline"
+                    >
+                      Genealogía
+                    </Link>
                     <Link href={`/traceability/output-batches?edit=${b.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>
-                    <ActionButton
-                      action={deleteOutputBatchAction}
-                      fields={{ id: b.id }}
-                      label="Eliminar"
-                      pendingLabel="Eliminando…"
-                    />
+                    {/* PCR-02.4 (§49/§50): con la orden productora cerrada o
+                        cancelada, el lote no puede eliminarse ni mutar su
+                        estructura — se corrige reabriendo la orden. Editar
+                        permanece: los campos DESCRIPTIVOS siguen siendo
+                        corregibles (los estructurales los vetan la server
+                        action y el trigger §2e). */}
+                    {!orderMutationBlockedMessage(b.production_order_status) ? (
+                      <ActionButton
+                        action={deleteOutputBatchAction}
+                        fields={{ id: b.id }}
+                        label="Eliminar"
+                        pendingLabel="Eliminando…"
+                      />
+                    ) : null}
                   </div>
                 </div>
 
@@ -271,18 +342,27 @@ export default async function OutputBatchesPage({
                                 {c.mass_kg} kg · {c.classification_code}
                               </p>
                             </div>
-                            <ActionButton
-                              action={deleteBatchCompositionAction}
-                              fields={{ id: c.id }}
-                              label="Eliminar"
-                              pendingLabel="Eliminando…"
-                            />
+                            {!orderMutationBlockedMessage(b.production_order_status) ? (
+                              <ActionButton
+                                action={deleteBatchCompositionAction}
+                                fields={{ id: c.id }}
+                                label="Eliminar"
+                                pendingLabel="Eliminando…"
+                              />
+                            ) : null}
                           </li>
                         ))}
                       </ul>
                     )}
 
-                    {materialOptions.length === 0 ? (
+                    {/* PCR-02.4 (§12): composición congelada con la orden
+                        productora cerrada — consulta y genealogía intactas. */}
+                    {orderMutationBlockedMessage(b.production_order_status) ? (
+                      <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
+                        La orden productora está cerrada o cancelada: la composición se consulta en
+                        modo auditoría. Reabre la orden para corregirla.
+                      </p>
+                    ) : materialOptions.length === 0 ? (
                       <p className="text-xs text-ink-soft">
                         Registra materiales en{" "}
                         <Link href="/catalog/materials" className="text-loop underline">Catálogos</Link>.

@@ -30,6 +30,12 @@ export type ProductionOrder = {
   pretreatment: string | null;
   process_variables: unknown;
   notes: string | null;
+  /** PCR-02 (Bloque I): presente en searchProductionOrders/getProductionOrder. */
+  created_at?: string | null;
+  /** PCR-02.3 · Candado histórico: primera entrada en closed/cancelled.
+   *  No nulo ⇒ la orden pertenece al historial y jamás puede eliminarse,
+   *  aunque haya sido reabierta (status in_progress). */
+  history_locked_at?: string | null;
 };
 
 export type ConsumptionRow = {
@@ -49,6 +55,9 @@ export type OutputBatch = {
   batch_code: string;
   production_order_id: string;
   production_order_code: string;
+  /** PCR-02.4 · Estado de la orden productora: si está closed/cancelled, la
+   *  estructura del lote (y su composición) está congelada en la UI. */
+  production_order_status: string;
   product_id: string | null;
   product_label: string | null;
   produced_date: string | null;
@@ -136,7 +145,9 @@ export async function listProductionOrders(orgId: string): Promise<ProductionOrd
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("production_orders")
-    .select("id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, sites(name)")
+    .select(
+      "id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, history_locked_at, sites(name)"
+    )
     .eq("organization_id", orgId)
     .order("order_date", { ascending: false });
   return (data ?? []).map((o) => {
@@ -151,6 +162,7 @@ export async function listProductionOrders(orgId: string): Promise<ProductionOrd
       pretreatment: o.pretreatment,
       process_variables: o.process_variables,
       notes: o.notes,
+      history_locked_at: (o.history_locked_at as string | null) ?? null,
     };
   });
 }
@@ -198,7 +210,7 @@ export async function listOutputBatches(orgId: string): Promise<OutputBatch[]> {
   const { data } = await supabase
     .from("output_batches")
     .select(
-      "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code), products(code, name)"
+      "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code, status), products(code, name)"
     )
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
@@ -210,6 +222,7 @@ export async function listOutputBatches(orgId: string): Promise<OutputBatch[]> {
       batch_code: b.batch_code,
       production_order_id: b.production_order_id,
       production_order_code: po?.order_code ?? "—",
+      production_order_status: (po as unknown as { status?: string })?.status ?? "",
       product_id: b.product_id,
       product_label: p ? `${p.code} · ${p.name}` : null,
       produced_date: b.produced_date,
@@ -365,6 +378,10 @@ export async function getTraceabilityMetrics(orgId: string): Promise<Traceabilit
 // estar en la página actual.
 // ===========================================================================
 import {
+  OPEN_PRODUCTION_ORDER_STATUSES,
+  PRODUCTION_ORDER_OPEN_ALERT_HOURS,
+} from "@/lib/domain/production-alerts";
+import {
   normalizePageQuery,
   pageRange,
   sanitizeSearchTerm,
@@ -442,7 +459,7 @@ export async function getInputBatch(orgId: string, id: string): Promise<InputBat
 }
 
 const ORDER_SELECT =
-  "id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, sites(name)";
+  "id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, created_at, history_locked_at, sites(name)";
 
 function mapOrderRow(o: Record<string, unknown>): ProductionOrder {
   const site = o.sites as unknown as { name: string } | null;
@@ -456,6 +473,8 @@ function mapOrderRow(o: Record<string, unknown>): ProductionOrder {
     pretreatment: (o.pretreatment as string | null) ?? null,
     process_variables: o.process_variables,
     notes: (o.notes as string | null) ?? null,
+    created_at: (o.created_at as string | null) ?? null,
+    history_locked_at: (o.history_locked_at as string | null) ?? null,
   };
 }
 
@@ -500,16 +519,17 @@ export async function getProductionOrder(
 }
 
 const OUTPUT_BATCH_SELECT =
-  "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code), products(code, name)";
+  "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code, status), products(code, name)";
 
 function mapOutputBatchRow(b: Record<string, unknown>): OutputBatch {
-  const po = b.production_orders as unknown as { order_code: string } | null;
+  const po = b.production_orders as unknown as { order_code: string; status?: string } | null;
   const p = b.products as unknown as { code: string; name: string } | null;
   return {
     id: b.id as string,
     batch_code: b.batch_code as string,
     production_order_id: b.production_order_id as string,
     production_order_code: po?.order_code ?? "—",
+    production_order_status: po?.status ?? "",
     product_id: (b.product_id as string | null) ?? null,
     product_label: p ? `${p.code} · ${p.name}` : null,
     produced_date: (b.produced_date as string | null) ?? null,
@@ -558,4 +578,241 @@ export async function getOutputBatch(orgId: string, id: string): Promise<OutputB
     .eq("id", id)
     .maybeSingle();
   return data ? mapOutputBatchRow(data as unknown as Record<string, unknown>) : null;
+}
+
+// ===========================================================================
+// PCR-02 · La Orden / corrida como eje: salidas de la orden, consumo interno
+// de lotes producidos (output_batch_consumption, 0104) y uso posterior.
+// Funciones ADITIVAS acotadas a organization_id + RLS.
+// ===========================================================================
+
+/** Salidas (lotes producidos) de UNA orden — Bloques A/B/C. */
+export async function listOrderOutputs(
+  orgId: string,
+  productionOrderId: string
+): Promise<OutputBatch[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batches")
+    .select(OUTPUT_BATCH_SELECT)
+    .eq("organization_id", orgId)
+    .eq("production_order_id", productionOrderId)
+    .order("created_at", { ascending: false });
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(mapOutputBatchRow);
+}
+
+/** Salidas mínimas para chips del listado de órdenes (ids de la página). */
+export async function listOutputsForOrders(
+  orgId: string,
+  orderIds: string[]
+): Promise<Record<string, { id: string; batch_code: string }[]>> {
+  const byOrder: Record<string, { id: string; batch_code: string }[]> = {};
+  if (orderIds.length === 0) return byOrder;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batches")
+    .select("id, batch_code, production_order_id")
+    .eq("organization_id", orgId)
+    .in("production_order_id", orderIds);
+  for (const row of data ?? []) {
+    (byOrder[row.production_order_id as string] ??= []).push({
+      id: row.id as string,
+      batch_code: row.batch_code as string,
+    });
+  }
+  return byOrder;
+}
+
+export type InternalConsumptionRow = {
+  id: string;
+  output_batch_id: string;
+  output_batch_code: string;
+  producer_order_id: string | null;
+  producer_order_code: string;
+  product_label: string | null;
+  mass_kg: number;
+  notes: string | null;
+  produced_quantity_kg: number | null;
+  output_total_consumed_kg: number;
+};
+
+/** Consumos INTERNOS de una orden (lotes producidos por otras órdenes) —
+ *  Bloques D/E. Incluye lo ya consumido del lote para la advertencia de
+ *  sobre-consumo (misma filosofía que listConsumption: advertir, no bloquear). */
+export async function listInternalConsumption(
+  orgId: string,
+  productionOrderId: string
+): Promise<InternalConsumptionRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batch_consumption")
+    .select(
+      "id, output_batch_id, mass_kg, notes, output_batches(batch_code, produced_quantity_kg, production_order_id, production_orders(order_code), products(code, name), output_batch_consumption(mass_kg))"
+    )
+    .eq("organization_id", orgId)
+    .eq("production_order_id", productionOrderId)
+    .order("created_at");
+  return (data ?? []).map((c) => {
+    const ob = c.output_batches as unknown as {
+      batch_code: string;
+      produced_quantity_kg: number | null;
+      production_order_id: string | null;
+      production_orders: { order_code: string } | null;
+      products: { code: string; name: string } | null;
+      output_batch_consumption: { mass_kg: number }[] | null;
+    } | null;
+    return {
+      id: c.id as string,
+      output_batch_id: c.output_batch_id as string,
+      output_batch_code: ob?.batch_code ?? "—",
+      producer_order_id: ob?.production_order_id ?? null,
+      producer_order_code: ob?.production_orders?.order_code ?? "—",
+      product_label: ob?.products ? `${ob.products.code} · ${ob.products.name}` : null,
+      mass_kg: Number(c.mass_kg),
+      notes: (c.notes as string | null) ?? null,
+      produced_quantity_kg: num(ob?.produced_quantity_kg),
+      output_total_consumed_kg: (ob?.output_batch_consumption ?? []).reduce(
+        (acc, r) => acc + Number(r.mass_kg),
+        0
+      ),
+    };
+  });
+}
+
+/** Opciones de lotes producidos consumibles por una orden: todos los de la
+ *  empresa EXCEPTO los producidos por esa misma orden (el trigger 0104 lo
+ *  bloquea igualmente en BD). */
+export const SELECTOR_OPTIONS_LIMIT = 20;
+
+export type BoundedOptions = {
+  options: { value: string; label: string }[];
+  total: number;
+  limit: number;
+};
+
+/** PCR-02.1 (hallazgo 4) · Opciones ACOTADAS de lotes producidos consumibles
+ *  por una orden: búsqueda server-side por código (ilike), excluye las
+ *  salidas de la PROPIA orden (regla de dominio: sin autoconsumo), siempre
+ *  filtrado por empresa y limitado a SELECTOR_OPTIONS_LIMIT resultados. */
+export async function listConsumableOutputs(
+  orgId: string,
+  consumingOrderId: string,
+  term = "",
+  limit: number = SELECTOR_OPTIONS_LIMIT
+): Promise<BoundedOptions> {
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("output_batches")
+    .select(
+      "id, batch_code, production_order_id, produced_quantity_kg, production_orders(order_code), products(code, name)",
+      { count: "exact" }
+    )
+    .eq("organization_id", orgId)
+    .neq("production_order_id", consumingOrderId);
+  const cleaned = term.trim().replace(/[%_]/g, "");
+  if (cleaned) request = request.ilike("batch_code", `%${cleaned}%`);
+  const { data, count } = await request
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const options = (data ?? []).map((b) => {
+    const po = b.production_orders as unknown as { order_code: string } | null;
+    const p = b.products as unknown as { code: string; name: string } | null;
+    const qty = b.produced_quantity_kg === null ? null : Number(b.produced_quantity_kg);
+    return {
+      value: b.id as string,
+      label: `${b.batch_code}${p ? ` · ${p.code}` : ""} (de ${po?.order_code ?? "—"}${qty !== null ? `, ${qty} kg` : ""})`,
+    };
+  });
+  return { options, total: count ?? options.length, limit };
+}
+
+/** PCR-02.1 (hallazgo 4) · Opciones ACOTADAS de lotes de entrada para el
+ *  selector de consumo externo (mismo contrato que listConsumableOutputs). */
+export async function searchInputBatchOptions(
+  orgId: string,
+  term = "",
+  limit: number = SELECTOR_OPTIONS_LIMIT
+): Promise<BoundedOptions> {
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("input_batches")
+    .select("id, batch_code, quantity_kg, materials(name), suppliers(name)", { count: "exact" })
+    .eq("organization_id", orgId);
+  const cleaned = term.trim().replace(/[%_]/g, "");
+  if (cleaned) request = request.ilike("batch_code", `%${cleaned}%`);
+  const { data, count } = await request
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const options = (data ?? []).map((b) => {
+    const m = b.materials as unknown as { name: string } | null;
+    const sp = b.suppliers as unknown as { name: string } | null;
+    return {
+      value: b.id as string,
+      label: `${b.batch_code} · ${m?.name ?? "—"} (${sp?.name ?? "—"})`,
+    };
+  });
+  return { options, total: count ?? options.length, limit };
+}
+
+/** PCR-02.1 (hallazgo 4) · Opciones ACOTADAS de evidencias para vincular
+ *  (sin cargar el universo completo; PCR-01.1 intacto: la vinculación sigue
+ *  usando las mismas acciones y visores). */
+export async function searchEvidenceOptions(
+  orgId: string,
+  term = "",
+  limit: number = SELECTOR_OPTIONS_LIMIT
+): Promise<BoundedOptions> {
+  const supabase = await createServerClient();
+  let request = supabase
+    .from("evidences")
+    .select("id, name", { count: "exact" })
+    .eq("organization_id", orgId);
+  const cleaned = term.trim().replace(/[%_]/g, "");
+  if (cleaned) request = request.ilike("name", `%${cleaned}%`);
+  const { data, count } = await request.order("name").limit(limit);
+  const options = (data ?? []).map((e) => ({ value: e.id as string, label: e.name as string }));
+  return { options, total: count ?? options.length, limit };
+}
+
+export type OutputForwardUse = { order_id: string; order_code: string; mass_kg: number };
+
+/** Dónde fue consumido después cada lote producido (Bloque F: lote
+ *  intermedio → orden posterior). Una consulta por página de lotes. */
+export async function listForwardUsesForOutputs(
+  orgId: string,
+  outputIds: string[]
+): Promise<Record<string, OutputForwardUse[]>> {
+  const byOutput: Record<string, OutputForwardUse[]> = {};
+  if (outputIds.length === 0) return byOutput;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batch_consumption")
+    .select("output_batch_id, mass_kg, production_order_id, production_orders(order_code)")
+    .eq("organization_id", orgId)
+    .in("output_batch_id", outputIds);
+  for (const row of data ?? []) {
+    const po = row.production_orders as unknown as { order_code: string } | null;
+    (byOutput[row.output_batch_id as string] ??= []).push({
+      order_id: row.production_order_id as string,
+      order_code: po?.order_code ?? "—",
+      mass_kg: Number(row.mass_kg),
+    });
+  }
+  return byOutput;
+}
+
+/** PCR-02 (Bloque I) · Conteo de órdenes abiertas hace más del umbral (72 h),
+ *  para el aviso mínimo del dashboard. Una sola consulta head/count. */
+export async function countStaleOpenOrders(orgId: string): Promise<number> {
+  const supabase = await createServerClient();
+  const cutoff = new Date(
+    Date.now() - PRODUCTION_ORDER_OPEN_ALERT_HOURS * 60 * 60 * 1000
+  ).toISOString();
+  const { count } = await supabase
+    .from("production_orders")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .in("status", [...OPEN_PRODUCTION_ORDER_STATUSES])
+    .lt("created_at", cutoff);
+  return count ?? 0;
 }

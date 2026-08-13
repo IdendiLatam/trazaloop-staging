@@ -209,7 +209,7 @@ export async function listTraceabilityChain(
     .eq("organization_id", orgId)
     .eq("production_order_id", productionOrderId)
     .order("created_at");
-  return (data ?? []).map((c) => {
+  const externalRows = (data ?? []).map((c) => {
     const ib = c.input_batches as unknown as {
       batch_code: string;
       received_date: string | null;
@@ -225,4 +225,33 @@ export async function listTraceabilityChain(
       received_date: ib?.received_date ?? null,
     };
   });
+
+  // PCR-02 (Bloque J): consumos de lotes PRODUCIDOS internos de la orden,
+  // presentados en el dossier con su procedencia interna (orden productora).
+  const { data: internal } = await supabase
+    .from("output_batch_consumption")
+    .select(
+      "mass_kg, output_batches(batch_code, produced_date, production_orders(order_code), products(code, name))"
+    )
+    .eq("organization_id", orgId)
+    .eq("production_order_id", productionOrderId)
+    .order("created_at");
+  const internalRows = (internal ?? []).map((c) => {
+    const ob = c.output_batches as unknown as {
+      batch_code: string;
+      produced_date: string | null;
+      production_orders: { order_code: string } | null;
+      products: { code: string; name: string } | null;
+    } | null;
+    return {
+      input_batch_code: ob?.batch_code ?? "—",
+      supplier_name: `Producción interna (${ob?.production_orders?.order_code ?? "orden no disponible"})`,
+      material_name: ob?.products ? `${ob.products.code} · ${ob.products.name}` : "Lote producido interno",
+      classification_code: null,
+      mass_kg: Number(c.mass_kg),
+      received_date: ob?.produced_date ?? null,
+    };
+  });
+
+  return [...externalRows, ...internalRows];
 }

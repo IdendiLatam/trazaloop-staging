@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import {
+  addOutputConsumptionAction,
   createInputBatchAction,
   updateInputBatchAction,
   createProductionOrderAction,
@@ -193,9 +194,18 @@ export function OutputBatchForm({
   orders,
   products,
   editing,
+  fixedOrder,
+  lockOrder,
 }: {
   orders: Option[];
   products: Option[];
+  /** PCR-02 (Bloque B): al crear DESDE el detalle de una orden, la
+   *  asociación orden→salida es automática y no se vuelve a preguntar. */
+  fixedOrder?: { id: string; label: string };
+  /** PCR-02.1 (§49): al EDITAR un lote ya consumido por otra orden, la
+   *  orden productora queda fija (la genealogía registrada no se
+   *  reescribe); los campos descriptivos siguen editables. */
+  lockOrder?: { label: string; consumers: string };
   editing?: {
     id: string;
     batch_code: string;
@@ -218,9 +228,29 @@ export function OutputBatchForm({
     <form action={formAction} className="space-y-4" key={editing?.id ?? "new"}>
       <ErrorAlert message={state.error} />
       {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
+      {fixedOrder && !editing ? (
+        <>
+          <input type="hidden" name="production_order_id" value={fixedOrder.id} />
+          <input type="hidden" name="return_to" value="order" />
+          <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
+            Salida de la orden <span className="code text-loop-deep">{fixedOrder.label}</span> — la asociación es automática.
+          </p>
+        </>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Código de lote producido / lote final" name="batch_code" defaultValue={editing?.batch_code} required />
-        <Select label="Orden / corrida de producción" name="production_order_id" options={orders} defaultValue={editing?.production_order_id} required />
+        {editing && lockOrder ? (
+          <div className="text-sm">
+            <span className="mb-1 block text-xs text-ink-soft">Orden / corrida de producción</span>
+            <input type="hidden" name="production_order_id" value={editing.production_order_id} />
+            <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
+              <span className="code text-loop-deep">{lockOrder.label}</span> — este lote ya fue
+              consumido por {lockOrder.consumers}; su orden productora no puede cambiarse.
+            </p>
+          </div>
+        ) : fixedOrder && !editing ? null : (
+          <Select label="Orden / corrida de producción" name="production_order_id" options={orders} defaultValue={editing?.production_order_id} required />
+        )}
         <Select
           label="Producto (opcional)"
           name="product_id"
@@ -306,6 +336,48 @@ export function CompositionForm({
       <Button type="submit" disabled={pending} className="!w-auto">
         {pending ? "Agregando…" : "Agregar a la composición"}
       </Button>
+    </form>
+  );
+}
+
+
+/** PCR-02 (Bloques D/E) · Consumo de un LOTE PRODUCIDO interno por la orden.
+ *  Convive con ConsumptionForm (lotes de entrada externos): dos orígenes
+ *  claramente distinguidos, una sola trazabilidad. */
+export function OutputConsumptionForm({
+  productionOrderId,
+  outputBatches,
+}: {
+  productionOrderId: string;
+  outputBatches: Option[];
+}) {
+  const [state, formAction, pending] = useActionState(addOutputConsumptionAction, initial);
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <ErrorAlert message={state.error} />
+      <SuccessAlert message={state.success ?? null} />
+      <input type="hidden" name="production_order_id" value={productionOrderId} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <Select
+            label="Lote producido interno"
+            name="output_batch_id"
+            options={outputBatches}
+            required
+            hint="Lotes producidos por OTRAS órdenes de tu empresa (producto intermedio reutilizable)."
+          />
+        </div>
+        <Field label="Masa consumida (kg)" name="mass_kg" type="number" min={0.0001} step="0.0001" required />
+      </div>
+      <Field label="Notas (opcional)" name="notes" />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md bg-loop px-3 py-2 text-sm font-semibold text-white hover:bg-loop-deep disabled:opacity-60"
+      >
+        {pending ? "Registrando…" : "Registrar consumo interno"}
+      </button>
     </form>
   );
 }

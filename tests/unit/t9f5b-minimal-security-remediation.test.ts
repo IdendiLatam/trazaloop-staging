@@ -522,12 +522,14 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0102_t9g_qa_finalizer_closure.sql",
     // PCR-01: única migración nueva autorizada por el sprint de hardening.
     "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
+    // PCR-02: única migración nueva autorizada por el sprint (consumo interno).
+    "0104_pcr02_internal_consumption_and_completeness.sql",
   ];
 
   assert(
     JSON.stringify(after0101) ===
       JSON.stringify(expectedAfter0101),
-    `después de 0101 solo deben existir 0102 (cierre QA) y 0103 (PCR-01) ` +
+    `después de 0101 solo deben existir 0102 (QA), 0103 (PCR-01) y 0104 (PCR-02) ` +
       `(hay: ${after0101.join(", ") || "ninguna"})`
   );
 });

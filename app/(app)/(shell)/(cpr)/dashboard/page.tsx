@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getOrganizationModules } from "@/lib/db/organizations";
-import { getTraceabilityMetrics } from "@/lib/db/traceability";
+import { getTraceabilityMetrics, countStaleOpenOrders } from "@/lib/db/traceability";
 import { getModulePlanUsageSummary } from "@/lib/db/module-access";
 import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
 import { getOrganizationOnboardingStatus } from "@/lib/db/onboarding";
@@ -23,9 +23,10 @@ export default async function DashboardPage() {
   // T9F.1: el plan, la cuota y el uso mostrados son los del MÓDULO CPR
   // (organization_modules + v_organization_module_usage), nunca el plan
   // legacy org-wide de organization_subscriptions.
-  const [modules, metrics, planSummary, onboarding, tickets] = await Promise.all([
+  const [modules, metrics, staleOpenOrders, planSummary, onboarding, tickets] = await Promise.all([
     getOrganizationModules(activeOrg.organizationId),
     getTraceabilityMetrics(activeOrg.organizationId),
+    countStaleOpenOrders(activeOrg.organizationId),
     getModulePlanUsageSummary(activeOrg.organizationId, CPR_MODULE_CODE),
     getOrganizationOnboardingStatus(activeOrg.organizationId),
     listSupportTickets(activeOrg.organizationId),
@@ -145,6 +146,17 @@ export default async function DashboardPage() {
               </div>
             ))}
           </dd>
+          {staleOpenOrders > 0 ? (
+            // PCR-02 (Bloque I): aviso mínimo, sin saturar el panel.
+            <p className="mt-3 rounded-md border border-amber/40 bg-amber/10 px-3 py-2 text-xs text-amber">
+              {staleOpenOrders === 1
+                ? "1 orden / corrida lleva abierta más de 72 horas."
+                : `${staleOpenOrders} órdenes / corridas llevan abiertas más de 72 horas.`}{" "}
+              <Link href="/traceability/production-orders" className="font-semibold underline">
+                Revisar órdenes
+              </Link>
+            </p>
+          ) : null}
         </div>
       </dl>
     </div>

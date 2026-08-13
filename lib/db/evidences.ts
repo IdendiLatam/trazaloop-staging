@@ -219,7 +219,8 @@ function targetHref(targetType: string, targetId: string): string | null {
     case "input_batch":
       return `/traceability/input-batches?focus=${targetId}#lote-${targetId}`;
     case "production_order":
-      return `/traceability/production-orders?order=${targetId}#orden-${targetId}`;
+      // PCR-02: el detalle de la orden muestra SIEMPRE el registro completo.
+      return `/traceability/production-orders/${targetId}#registro-${targetId}`;
     case "output_batch":
       return `/traceability/output-batches?batch=${targetId}#lote-${targetId}`;
     default:

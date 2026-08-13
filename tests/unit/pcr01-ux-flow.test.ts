@@ -40,8 +40,9 @@ const TRACE_ACTIONS = readSource("../../server/actions/traceability.ts");
 const CATALOG_ACTIONS = readSource("../../server/actions/catalog.ts");
 const EVIDENCE_ACTIONS = readSource("../../server/actions/evidences.ts");
 const EVIDENCES_DB = readSource("../../lib/db/evidences.ts");
-const ORDERS_PAGE = readSource(
-  "../../app/(app)/(shell)/(cpr)/traceability/production-orders/page.tsx"
+// PCR-02 (Bloque A): el eje del flujo de la orden es su DETALLE.
+const ORDER_DETAIL_PAGE = readSource(
+  "../../app/(app)/(shell)/(cpr)/traceability/production-orders/[id]/page.tsx"
 );
 const EVIDENCES_PAGE = readSource("../../app/(app)/(shell)/(cpr)/evidences/page.tsx");
 
@@ -65,23 +66,29 @@ check("2. El término de búsqueda se sanea para los filtros or/ilike", () => {
   assert(sanitizeSearchTerm("a_b") === "a\\_b", "los comodines del usuario se escapan");
 });
 
-check("3. Punto 14: crear orden → confirmación + sección de consumos", () => {
+check("3. Punto 14: crear orden → confirmación + sección de consumos (PCR-02: en el detalle)", () => {
+  // PCR-02: el redirect apunta al DETALLE de la orden creada, aterrizando en
+  // la misma sección de consumos y con los mismos textos pactados.
   assert(
-    TRACE_ACTIONS.includes("&created=1#consumos-"),
+    TRACE_ACTIONS.includes("created=1#consumos-"),
     "createProductionOrderAction debía redirigir a la sección de consumos de la orden creada"
   );
   assert(
-    ORDERS_PAGE.includes("Orden / corrida de producción creada correctamente."),
-    "la página debía confirmar con el texto pactado"
+    TRACE_ACTIONS.includes("/traceability/production-orders/${created.id}?created=1"),
+    "el destino debía ser el detalle de la orden (PCR-02, Bloque A)"
   );
   assert(
-    ORDERS_PAGE.includes(
+    ORDER_DETAIL_PAGE.includes("Orden / corrida de producción creada correctamente."),
+    "el detalle debía confirmar con el texto pactado"
+  );
+  assert(
+    ORDER_DETAIL_PAGE.includes(
       "Ahora registre los lotes y cantidades realmente consumidos en esta producción."
     ),
-    "la página debía guiar el siguiente paso con el texto pactado"
+    "el detalle debía guiar el siguiente paso con el texto pactado"
   );
   assert(
-    ORDERS_PAGE.includes("Materiales / lotes consumidos"),
+    ORDER_DETAIL_PAGE.includes("Materiales / lotes consumidos"),
     "la sección debía llamarse Materiales / lotes consumidos"
   );
   assert(
@@ -103,7 +110,15 @@ check("4. Punto 2: toda creación confirma y conserva el contexto", () => {
 
 check("5. Punto 7: toda edición confirma con 'Cambios guardados correctamente.'", () => {
   assert(TRACE_ACTIONS.includes("?updated=${id}#lote-${id}"), "ediciones de lotes");
-  assert(TRACE_ACTIONS.includes("?updated=${id}#orden-${id}"), "edición de orden");
+  // PCR-02: la edición de la orden confirma EN su detalle.
+  assert(
+    TRACE_ACTIONS.includes("/traceability/production-orders/${id}?updated=1#registro-${id}"),
+    "edición de orden (confirma en el detalle)"
+  );
+  assert(
+    ORDER_DETAIL_PAGE.includes("Cambios guardados correctamente."),
+    "el detalle debía mostrar la confirmación de edición"
+  );
   for (const entity of ["suppliers", "families", "products", "materials"]) {
     assert(
       CATALOG_ACTIONS.includes(`/catalog/${entity}?updated=`),
@@ -156,7 +171,8 @@ check("7. Punto 11: Registro→Evidencia y Evidencia→Registro", () => {
   assert(EVIDENCES_PAGE.includes("Utilizada en ("), "la página debía mostrar 'Utilizada en (n)'");
   const targetPages = [
     "../../app/(app)/(shell)/(cpr)/traceability/input-batches/page.tsx",
-    "../../app/(app)/(shell)/(cpr)/traceability/production-orders/page.tsx",
+    // PCR-02: las evidencias de la orden viven en su DETALLE (el eje).
+    "../../app/(app)/(shell)/(cpr)/traceability/production-orders/[id]/page.tsx",
     "../../app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx",
     "../../app/(app)/(shell)/(cpr)/catalog/suppliers/page.tsx",
     "../../app/(app)/(shell)/(cpr)/catalog/families/page.tsx",
@@ -224,11 +240,12 @@ check("10. PCR-01.1 (blocker 3): el registro created/updated/focus se fija aunqu
       `${rel} debía fijar el registro sin duplicarlo cuando ya está en la página`
     );
   }
-  // Órdenes y lotes producidos fijan también updated/focus además de order/batch.
+  // PCR-02: created/updated de órdenes aterrizan en el DETALLE (que muestra
+  // SIEMPRE el registro); el listado conserva el fijado por focus.
   const orders = readSource("../../app/(app)/(shell)/(cpr)/traceability/production-orders/page.tsx");
   assert(
-    orders.includes("params.updated ?? params.focus") && orders.includes("pinnedOrder"),
-    "órdenes debía fijar la orden updated/focus además de la expandida"
+    orders.includes("params.focus") && orders.includes("focusedOrder"),
+    "órdenes debía conservar el fijado por focus en el listado"
   );
   const outputs = readSource("../../app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx");
   assert(
@@ -246,7 +263,8 @@ check("11. PCR-01.1 (blocker 4): «Ir al registro» navega al registro concreto,
     ["product", "/catalog/products?focus=${targetId}#registro-${targetId}"],
     ["product_family", "/catalog/families?focus=${targetId}#registro-${targetId}"],
     ["input_batch", "/traceability/input-batches?focus=${targetId}#lote-${targetId}"],
-    ["production_order", "/traceability/production-orders?order=${targetId}#orden-${targetId}"],
+    // PCR-02: la orden tiene detalle propio — el registro concreto garantizado.
+    ["production_order", "/traceability/production-orders/${targetId}#registro-${targetId}"],
     ["output_batch", "/traceability/output-batches?batch=${targetId}#lote-${targetId}"],
   ] as const) {
     assert(hrefBlock.includes(expected), `el destino de ${type} debía ser el registro concreto: ${expected}`);

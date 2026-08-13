@@ -17,6 +17,12 @@ import {
 import { validateImportAction, commitImportAction } from "@/server/actions/import";
 import { validateInputBatchValues } from "@/lib/domain/traceability-validation";
 import {
+  orderMutationBlockedMessage,
+  orderDeletionBlockedMessage,
+  orderReopenAllowed,
+  ORDER_HISTORY_MESSAGE,
+} from "@/lib/domain/production-alerts";
+import {
   validateProcessVariableRows,
   serializeProcessVariableRows,
   type ProcessVariableRow,
@@ -52,6 +58,56 @@ async function assertSameOrg(
     .eq("organization_id", orgId)
     .maybeSingle();
   return Boolean(data);
+}
+
+/**
+ * PCR-02 (Bloque H) · La orden debe pertenecer a la empresa activa y admitir
+ * movimientos: sobre una orden cerrada o cancelada no se registran nuevos
+ * consumos ni salidas (los históricos no se tocan; reabrir = cambiar estado).
+ */
+/** PCR-02.4 · Resuelve la orden PRODUCTORA de un lote y aplica la guarda de
+ *  estado: la composición es estructura de trazabilidad y queda congelada
+ *  mientras esa orden esté cerrada/cancelada (§11 del brief). */
+async function assertOutputBatchOrderAcceptsMutations(
+  orgId: string,
+  outputBatchId: string | null
+): Promise<{ ok: boolean; error: string | null }> {
+  if (!outputBatchId) {
+    return { ok: false, error: "El lote producido / lote final es obligatorio." };
+  }
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("output_batches")
+    .select("id, production_order_id")
+    .eq("organization_id", orgId)
+    .eq("id", outputBatchId)
+    .maybeSingle();
+  if (!data) {
+    return { ok: false, error: "El lote producido no existe o no pertenece a tu empresa." };
+  }
+  return assertOrderAcceptsMutations(orgId, data.production_order_id as string);
+}
+
+async function assertOrderAcceptsMutations(
+  orgId: string,
+  productionOrderId: string | null
+): Promise<{ ok: boolean; error: string | null }> {
+  if (!productionOrderId) {
+    return { ok: false, error: "La orden / corrida de producción es obligatoria." };
+  }
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("production_orders")
+    .select("id, status")
+    .eq("organization_id", orgId)
+    .eq("id", productionOrderId)
+    .maybeSingle();
+  if (!data) {
+    return { ok: false, error: "La orden no existe o no pertenece a tu empresa." };
+  }
+  const blocked = orderMutationBlockedMessage(data.status as string);
+  if (blocked) return { ok: false, error: blocked };
+  return { ok: true, error: null };
 }
 
 // ===========================================================================
@@ -324,10 +380,10 @@ export async function createProductionOrderAction(
 
   if (error || !created) return { error: dbError(error) };
   revalidatePath("/traceability/production-orders");
-  // PCR-01 (punto 14): tras crear la orden, la aplicación lleva al usuario
-  // DIRECTAMENTE a la sección "Materiales / lotes consumidos" de esa orden,
-  // con confirmación y guía del siguiente paso (banner en la página).
-  redirect(`/traceability/production-orders?order=${created.id}&created=1#consumos-${created.id}`);
+  // PCR-01 punto 14 + PCR-02 Bloque A: tras crear la orden, la aplicación
+  // lleva al usuario DIRECTAMENTE al DETALLE de la orden (el eje del proceso),
+  // aterrizando en "Materiales / lotes consumidos" con confirmación y guía.
+  redirect(`/traceability/production-orders/${created.id}?created=1#consumos-${created.id}`);
 }
 
 export async function updateProductionOrderAction(
@@ -346,14 +402,23 @@ export async function updateProductionOrderAction(
 
   const supabase = await createServerClient();
 
-  // Valor actual: necesario para conservar un formato heredado intacto.
+  // Valor actual: necesario para conservar un formato heredado intacto y,
+  // desde PCR-02.3, para vetar la edición ordinaria de historial finalizado.
   const { data: current } = await supabase
     .from("production_orders")
-    .select("process_variables")
+    .select("process_variables, status")
     .eq("id", id)
     .eq("organization_id", org.organizationId)
     .maybeSingle();
   if (!current) return { error: "La orden no existe o no pertenece a tu empresa." };
+  // PCR-02.3 (§14/§34): una orden cerrada/cancelada no se edita por el
+  // formulario genérico — la reapertura es una acción explícita y auditada.
+  if (orderReopenAllowed(current.status as string)) {
+    return {
+      error:
+        "La orden está finalizada y se consulta en modo auditoría. Para corregirla usa «Reabrir orden»; el candado histórico se conserva.",
+    };
+  }
 
   const pv = resolveProcessVariables(
     v.process_variables_rows,
@@ -381,8 +446,9 @@ export async function updateProductionOrderAction(
 
   if (error) return { error: dbError(error) };
   revalidatePath("/traceability/production-orders");
-  // PCR-01 (punto 7): confirmación inequívoca de la edición.
-  redirect(`/traceability/production-orders?updated=${id}#orden-${id}`);
+  revalidatePath(`/traceability/production-orders/${id}`);
+  // PCR-01 punto 7 + PCR-02: la edición confirma EN el detalle de la orden.
+  redirect(`/traceability/production-orders/${id}?updated=1#registro-${id}`);
 }
 
 export async function deleteProductionOrderAction(
@@ -393,14 +459,38 @@ export async function deleteProductionOrderAction(
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
+  // PCR-02.2 (hallazgo A): una orden cerrada/cancelada es historial de
+  // trazabilidad y NO puede eliminarse (además, batch_consumption y
+  // output_batch_consumption cascadearían y borrarían consumos históricos).
+  // La guarda corre ANTES del delete; el trigger §2c de 0104 es la barrera
+  // final ante acceso directo a la API.
+  const orderId = String(formData.get("id") ?? "");
+  const { data: order } = await supabase
+    .from("production_orders")
+    .select("id, status, history_locked_at")
+    .eq("id", orderId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!order) return { error: "La orden no existe o no pertenece a tu empresa." };
+  // PCR-02.3: el bloqueo considera también el candado histórico — una orden
+  // reabierta (in_progress + candado) sigue siendo historial no eliminable.
+  const deletionBlocked = orderDeletionBlockedMessage(
+    order.status as string,
+    order.history_locked_at as string | null
+  );
+  if (deletionBlocked) return { error: deletionBlocked };
   const { data, error } = await supabase
     .from("production_orders")
     .delete()
-    .eq("id", String(formData.get("id") ?? ""))
+    .eq("id", orderId)
     .eq("organization_id", org.organizationId)
     .select("id");
 
   if (error) {
+    if (error.code === "23514" || /historial de trazabilidad/.test(error.message ?? "")) {
+      // Barrera §2d en BD: mismo mensaje semántico, nunca SQL crudo.
+      return { error: ORDER_HISTORY_MESSAGE };
+    }
     return {
       error:
         error.code === "23503"
@@ -418,6 +508,45 @@ export async function deleteProductionOrderAction(
 // ---------------------------------------------------------------------------
 // Consumos por orden
 // ---------------------------------------------------------------------------
+
+/** PCR-02.3 · Reapertura EXPLÍCITA de una orden finalizada (closed o
+ *  cancelled → in_progress). No toca el candado histórico (además, la BD lo
+ *  vuelve inmutable): la orden reabierta se corrige pero jamás se elimina.
+ *  Auditada por t_audit_production_orders como cualquier update. */
+export async function reopenProductionOrderAction(
+  _prev: TraceActionState,
+  formData: FormData
+): Promise<TraceActionState> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const supabase = await createServerClient();
+  const orderId = String(formData.get("id") ?? "");
+  const { data: order } = await supabase
+    .from("production_orders")
+    .select("id, status, history_locked_at")
+    .eq("id", orderId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!order) return { error: "La orden no existe o no pertenece a tu empresa." };
+  if (!orderReopenAllowed(order.status as string)) {
+    return { error: "Solo las órdenes cerradas o canceladas pueden reabrirse." };
+  }
+  const { error } = await supabase
+    .from("production_orders")
+    .update({ status: "in_progress" })
+    .eq("id", orderId)
+    .eq("organization_id", org.organizationId);
+  if (error) return { error: dbError(error, "No fue posible reabrir la orden.") };
+  revalidatePath("/traceability/production-orders");
+  revalidatePath(`/traceability/production-orders/${orderId}`);
+  return {
+    error: null,
+    success:
+      "Orden reabierta: quedó «En proceso» para corrección. Sigue formando parte del historial de trazabilidad y no puede eliminarse.",
+  };
+}
+
 export async function addBatchConsumptionAction(
   _prev: TraceActionState,
   formData: FormData
@@ -436,11 +565,11 @@ export async function addBatchConsumptionAction(
   }
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
-  if (
-    !(await assertSameOrg("production_orders", productionOrderId, org.organizationId)) ||
-    !(await assertSameOrg("input_batches", inputBatchId, org.organizationId))
-  ) {
-    return { error: "La orden o el lote no pertenecen a tu empresa." };
+  // PCR-02 (Bloque H): la orden debe ser de la empresa y estar abierta.
+  const orderCheck = await assertOrderAcceptsMutations(org.organizationId, productionOrderId);
+  if (!orderCheck.ok) return { error: orderCheck.error };
+  if (!(await assertSameOrg("input_batches", inputBatchId, org.organizationId))) {
+    return { error: "El lote no pertenece a tu empresa." };
   }
 
   const supabase = await createServerClient();
@@ -483,6 +612,20 @@ export async function updateBatchConsumptionAction(
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const supabase = await createServerClient();
+  // PCR-02.4 (hallazgo 1): editar la masa de un consumo ES una mutación
+  // estructural — exige que la orden del consumo siga aceptando mutaciones.
+  const { data: row } = await supabase
+    .from("batch_consumption")
+    .select("id, production_order_id")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!row) return { error: "El consumo no existe o no pertenece a tu empresa." };
+  const orderCheck = await assertOrderAcceptsMutations(
+    org.organizationId,
+    row.production_order_id as string
+  );
+  if (!orderCheck.ok) return { error: orderCheck.error };
   const { error } = await supabase
     .from("batch_consumption")
     .update({ mass_kg: mass, notes })
@@ -494,6 +637,108 @@ export async function updateBatchConsumptionAction(
   return { error: null };
 }
 
+/**
+ * PCR-02 (Bloques D y E) · Consumo INTERNO: una Orden/corrida consume un
+ * LOTE PRODUCIDO por otra orden (producto intermedio reutilizable). El lote
+ * conserva su identidad: no se duplica. Multiempresa: assertSameOrg sobre
+ * ambos + FK compuestas + RLS; el autoconsumo lo bloquea también el trigger
+ * 0104 en BD. Sobre-consumir lo producido se ADVIERTE en UI (misma filosofía
+ * que los lotes de entrada), no se bloquea.
+ */
+export async function addOutputConsumptionAction(
+  _prev: TraceActionState,
+  formData: FormData
+): Promise<TraceActionState> {
+  const org = await requireActiveOrg();
+  const productionOrderId = String(formData.get("production_order_id") ?? "");
+  const outputBatchId = String(formData.get("output_batch_id") ?? "");
+  const mass = Number(String(formData.get("mass_kg") ?? ""));
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+
+  if (!productionOrderId || !outputBatchId) {
+    return { error: "Selecciona la orden y el lote producido a consumir." };
+  }
+  if (Number.isNaN(mass) || mass <= 0) {
+    return { error: "La masa consumida debe ser mayor que 0." };
+  }
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const orderCheck = await assertOrderAcceptsMutations(org.organizationId, productionOrderId);
+  if (!orderCheck.ok) return { error: orderCheck.error };
+  if (!(await assertSameOrg("output_batches", outputBatchId, org.organizationId))) {
+    return { error: "El lote producido no pertenece a tu empresa." };
+  }
+
+  const supabase = await createServerClient();
+
+  // Anti-autoconsumo también en servidor (el trigger 0104 es la barrera final).
+  const { data: producer } = await supabase
+    .from("output_batches")
+    .select("production_order_id")
+    .eq("organization_id", org.organizationId)
+    .eq("id", outputBatchId)
+    .maybeSingle();
+  if (producer?.production_order_id === productionOrderId) {
+    return { error: "Una orden no puede consumir un lote producido por ella misma." };
+  }
+
+  const { error } = await supabase.from("output_batch_consumption").insert({
+    organization_id: org.organizationId,
+    production_order_id: productionOrderId,
+    output_batch_id: outputBatchId,
+    mass_kg: mass,
+    notes,
+  });
+
+  if (error) {
+    return {
+      error:
+        error.code === "23505"
+          ? "Ese lote producido ya está registrado en esta orden. Elimina el consumo existente para corregirlo."
+          : dbError(error),
+    };
+  }
+  revalidatePath("/traceability/production-orders");
+  revalidatePath("/traceability/output-batches");
+  return { error: null, success: "Consumo registrado correctamente." };
+}
+
+export async function deleteOutputConsumptionAction(
+  _prev: TraceActionState,
+  formData: FormData
+): Promise<TraceActionState> {
+  const org = await requireActiveOrg();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "Falta el identificador del consumo." };
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const supabase = await createServerClient();
+  // PCR-02.1 (hallazgo 1.B): quitar un consumo interno es una mutación
+  // estructural — la orden consumidora debe seguir aceptando mutaciones.
+  const { data: row } = await supabase
+    .from("output_batch_consumption")
+    .select("id, production_order_id")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!row) return { error: "El consumo no existe o no pertenece a tu empresa." };
+  const orderCheck = await assertOrderAcceptsMutations(org.organizationId, row.production_order_id);
+  if (!orderCheck.ok) return { error: orderCheck.error };
+  const { data, error } = await supabase
+    .from("output_batch_consumption")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .select("id");
+  if (error) return { error: dbError(error, "No fue posible eliminar el consumo interno.") };
+  if ((data ?? []).length === 0) {
+    return { error: "No se eliminó: solo administrador o calidad pueden eliminar consumos." };
+  }
+  revalidatePath("/traceability/production-orders");
+  revalidatePath("/traceability/output-batches");
+  return { error: null };
+}
+
 export async function deleteBatchConsumptionAction(
   _prev: TraceActionState,
   formData: FormData
@@ -502,10 +747,22 @@ export async function deleteBatchConsumptionAction(
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
+  // PCR-02.1 (hallazgo 1.A): quitar un consumo externo es una mutación
+  // estructural — validar el estado de la orden ANTES de borrar.
+  const consumptionId = String(formData.get("id") ?? "");
+  const { data: row } = await supabase
+    .from("batch_consumption")
+    .select("id, production_order_id")
+    .eq("id", consumptionId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!row) return { error: "El consumo no existe o no pertenece a tu empresa." };
+  const orderCheck = await assertOrderAcceptsMutations(org.organizationId, row.production_order_id);
+  if (!orderCheck.ok) return { error: orderCheck.error };
   const { data, error } = await supabase
     .from("batch_consumption")
     .delete()
-    .eq("id", String(formData.get("id") ?? ""))
+    .eq("id", consumptionId)
     .eq("organization_id", org.organizationId)
     .select("id");
 
@@ -548,6 +805,11 @@ export async function createOutputBatchAction(
   if (!v.batch_code) return { error: "El código del lote producido / lote final es obligatorio." };
   if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
 
+  // PCR-02 (Bloques B y H): la salida se registra sobre una orden abierta
+  // de la empresa; desde el detalle de la orden la asociación es automática.
+  const returnToOrder = String(formData.get("return_to") ?? "") === "order";
+  const orderCheck = await assertOrderAcceptsMutations(org.organizationId, v.production_order_id);
+  if (!orderCheck.ok) return { error: orderCheck.error };
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
@@ -586,8 +848,15 @@ export async function createOutputBatchAction(
 
   if (error || !created) return { error: dbError(error) };
   revalidatePath("/traceability/output-batches");
-  // PCR-01 (punto 2): confirmar y abrir la composición del lote recién
-  // creado — el siguiente paso lógico del flujo.
+  revalidatePath(`/traceability/production-orders/${v.production_order_id}`);
+  if (returnToOrder) {
+    // PCR-02 (Bloque B): el usuario permanece en el contexto de la orden,
+    // viendo de inmediato el lote creado en "Lotes producidos / salidas".
+    redirect(
+      `/traceability/production-orders/${v.production_order_id}?output_created=${created.id}#salida-${created.id}`
+    );
+  }
+  // PCR-01 (punto 2): confirmar y abrir la composición del lote recién creado.
   redirect(`/traceability/output-batches?batch=${created.id}&created=1#lote-${created.id}`);
 }
 
@@ -615,6 +884,64 @@ export async function updateOutputBatchAction(
   }
 
   const supabase = await createServerClient();
+  // PCR-02.4 (§10/§47, refina la política PCR-02.1): campos del lote.
+  //   · ESTRUCTURALES — orden productora (genealogía), producto, cantidad
+  //     producida (masa/balance) y código (identidad con la que el lote
+  //     aparece en genealogía y dossier): congelados mientras la orden
+  //     productora esté cerrada/cancelada; para corregirlos hay que
+  //     reabrirla.
+  //   · DESCRIPTIVOS — fecha de producción, características, aplicación,
+  //     almacenamiento y notas: corregibles siempre, auditados por
+  //     t_audit_output_batches (0025).
+  //   · CAMBIAR LA ORDEN PRODUCTORA además sigue bloqueado si el lote ya
+  //     fue consumido, y exige AMBAS órdenes mutables (PCR-02.1 §2b).
+  const { data: current } = await supabase
+    .from("output_batches")
+    .select("id, production_order_id, product_id, produced_quantity_kg, batch_code")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!current) {
+    return { error: "El lote producido no existe o no pertenece a tu empresa." };
+  }
+  const nextQuantity = v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg);
+  const currentQuantity =
+    current.produced_quantity_kg == null ? null : Number(current.produced_quantity_kg);
+  const quantityChanged =
+    (currentQuantity == null) !== (nextQuantity == null) ||
+    (currentQuantity != null && nextQuantity != null && currentQuantity !== nextQuantity);
+  const structuralChange =
+    current.production_order_id !== v.production_order_id ||
+    current.product_id !== v.product_id ||
+    quantityChanged ||
+    current.batch_code !== v.batch_code;
+  if (structuralChange) {
+    const structCheck = await assertOrderAcceptsMutations(
+      org.organizationId,
+      current.production_order_id
+    );
+    if (!structCheck.ok) return { error: structCheck.error };
+  }
+  if (current.production_order_id !== v.production_order_id) {
+    const { count: consumers } = await supabase
+      .from("output_batch_consumption")
+      .select("id", { count: "exact", head: true })
+      .eq("output_batch_id", id)
+      .eq("organization_id", org.organizationId);
+    if ((consumers ?? 0) > 0) {
+      return {
+        error:
+          "El lote producido ya fue consumido por otra orden: su orden productora no puede cambiarse.",
+      };
+    }
+    const fromCheck = await assertOrderAcceptsMutations(
+      org.organizationId,
+      current.production_order_id
+    );
+    if (!fromCheck.ok) return { error: fromCheck.error };
+    const toCheck = await assertOrderAcceptsMutations(org.organizationId, v.production_order_id);
+    if (!toCheck.ok) return { error: toCheck.error };
+  }
   const { error } = await supabase
     .from("output_batches")
     .update({
@@ -631,7 +958,16 @@ export async function updateOutputBatchAction(
     .eq("id", id)
     .eq("organization_id", org.organizationId);
 
-  if (error) return { error: dbError(error) };
+  if (error) {
+    // Barrera final en BD (§2b de 0104): mensaje claro, nunca SQL crudo.
+    if (error.code === "23514" || /consumido por otra orden/.test(error.message ?? "")) {
+      return {
+        error:
+          "El lote producido ya fue consumido por otra orden: su orden productora no puede cambiarse.",
+      };
+    }
+    return { error: dbError(error) };
+  }
   revalidatePath("/traceability/output-batches");
   // PCR-01 (punto 7): confirmación inequívoca de la edición.
   redirect(`/traceability/output-batches?updated=${id}#lote-${id}`);
@@ -645,14 +981,54 @@ export async function deleteOutputBatchAction(
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
+  // PCR-02.1 (§50): eliminar una salida es una mutación estructural.
+  //   · Si el lote ya fue consumido por otra orden, no puede eliminarse
+  //     (mensaje claro; ON DELETE RESTRICT es la barrera final en BD).
+  //   · La orden productora debe seguir aceptando mutaciones.
+  const outputId = String(formData.get("id") ?? "");
+  const { data: batch } = await supabase
+    .from("output_batches")
+    .select("id, production_order_id")
+    .eq("id", outputId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!batch) {
+    return { error: "El lote producido no existe o no pertenece a tu empresa." };
+  }
+  const { count: consumers } = await supabase
+    .from("output_batch_consumption")
+    .select("id", { count: "exact", head: true })
+    .eq("output_batch_id", outputId)
+    .eq("organization_id", org.organizationId);
+  if ((consumers ?? 0) > 0) {
+    return {
+      error:
+        "El lote producido ya fue consumido por otras órdenes: no puede eliminarse mientras exista ese consumo.",
+    };
+  }
+  if (batch.production_order_id) {
+    const orderCheck = await assertOrderAcceptsMutations(
+      org.organizationId,
+      batch.production_order_id
+    );
+    if (!orderCheck.ok) return { error: orderCheck.error };
+  }
   const { data, error } = await supabase
     .from("output_batches")
     .delete()
-    .eq("id", String(formData.get("id") ?? ""))
+    .eq("id", outputId)
     .eq("organization_id", org.organizationId)
     .select("id");
 
-  if (error) return { error: dbError(error, "No fue posible eliminar el lote producido / lote final.") };
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "El lote producido ya fue consumido por otras órdenes: no puede eliminarse mientras exista ese consumo.",
+      };
+    }
+    return { error: dbError(error, "No fue posible eliminar el lote producido / lote final.") };
+  }
   if ((data ?? []).length === 0) {
     return { error: "No se eliminó: el lote no existe o tu rol no permite eliminarlo." };
   }
@@ -688,6 +1064,11 @@ export async function addBatchCompositionAction(
   ) {
     return { error: "El lote o el material no pertenecen a tu empresa." };
   }
+  // PCR-02.4 (hallazgo crítico §11): la composición de un lote producido por
+  // una orden cerrada/cancelada está congelada — afecta balance, contenido
+  // reciclado, completitud y dossier.
+  const orderCheck = await assertOutputBatchOrderAcceptsMutations(org.organizationId, outputBatchId);
+  if (!orderCheck.ok) return { error: orderCheck.error };
 
   const supabase = await createServerClient();
   const { error } = await supabase.from("batch_composition").insert({
@@ -727,6 +1108,20 @@ export async function updateBatchCompositionAction(
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const supabase = await createServerClient();
+  // PCR-02.4 (hallazgo crítico §11): resolver el lote de la fila y exigir
+  // que su orden productora siga aceptando mutaciones.
+  const { data: row } = await supabase
+    .from("batch_composition")
+    .select("id, output_batch_id")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!row) return { error: "La fila de composición no existe o no pertenece a tu empresa." };
+  const orderCheck = await assertOutputBatchOrderAcceptsMutations(
+    org.organizationId,
+    row.output_batch_id as string
+  );
+  if (!orderCheck.ok) return { error: orderCheck.error };
   const { error } = await supabase
     .from("batch_composition")
     .update({ mass_kg: mass, is_same_process: isSameProcess, notes })
@@ -746,10 +1141,26 @@ export async function deleteBatchCompositionAction(
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
+  // PCR-02.4 (hallazgo crítico §11): eliminar composición también es
+  // estructural — la orden productora debe seguir aceptando mutaciones.
+  const compId = String(formData.get("id") ?? "");
+  const { data: row } = await supabase
+    .from("batch_composition")
+    .select("id, output_batch_id")
+    .eq("id", compId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (row) {
+    const orderCheck = await assertOutputBatchOrderAcceptsMutations(
+      org.organizationId,
+      row.output_batch_id as string
+    );
+    if (!orderCheck.ok) return { error: orderCheck.error };
+  }
   const { data, error } = await supabase
     .from("batch_composition")
     .delete()
-    .eq("id", String(formData.get("id") ?? ""))
+    .eq("id", compId)
     .eq("organization_id", org.organizationId)
     .select("id");
 

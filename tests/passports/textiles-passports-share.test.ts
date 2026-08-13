@@ -45,7 +45,7 @@ const detailPage = read("app/(app)/(shell)/textiles/passports/[id]/page.tsx");
 console.log("\nSprint T9D · Enlace privado controlado y QR del pasaporte\n");
 
 // --- Migración: tabla y seguridad ---
-check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fibras T9E; 0094 intentos, 0095/0096 fixes digest, 0097 atomicidad T9E.2, 0098 sellado server-only T9E.3, 0099 Storage RLS T9E.4, 0100 acceso comercial por módulo T9F, 0101 endurecimiento operativo T9F.1, 0102 cierre QA T9G; 0103 hardening PCR-01)", () => {
+check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fibras T9E; 0094 intentos, 0095/0096 fixes digest, 0097 atomicidad T9E.2, 0098 sellado server-only T9E.3, 0099 Storage RLS T9E.4, 0100 acceso comercial por módulo T9F, 0101 endurecimiento operativo T9F.1, 0102 cierre QA T9G; 0103 hardening PCR-01; 0104 consumo interno PCR-02)", () => {
   const dir = path.join(root, "supabase/migrations");
   const after91 = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) > 91);
   assert(
@@ -63,8 +63,9 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fi
         "0101_t9f1_module_access_hardening.sql",
         "0102_t9g_qa_finalizer_closure.sql",
         "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
+        "0104_pcr02_internal_consumption_and_completeness.sql",
       ]),
-    `después de 0091 solo debían existir 0092–0103 (hay: ${after91.join(", ")})`
+    `después de 0091 solo debían existir 0092–0104 (hay: ${after91.join(", ")})`
   );
 });
 
