@@ -13,7 +13,10 @@
  * se sobrescribe nada. Un duplicado DENTRO del mismo archivo sí es ERROR
  * (no hay forma segura de saber cuál de las dos filas debería ganar).
  */
-import { INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE } from "@/lib/domain/traceability-validation";
+import {
+  INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE,
+  OUTPUT_BATCH_QUANTITY_REQUIRED_MESSAGE,
+} from "@/lib/domain/traceability-validation";
 import { RESIDUE_TYPES } from "./types";
 import {
   normalizeText,
@@ -299,7 +302,13 @@ function validateOutputBatch(row: Record<string, string>, ref: ReferenceData): D
   const orderCode = normalizeText(row.production_order_code);
   const productCode = normalizeText(row.product_code);
   const date = normalizeOptionalDate(row.production_date, "La fecha de producción (production_date)");
-  const quantity = normalizeOptionalPositiveNumber(row.produced_quantity_kg, '"produced_quantity_kg"');
+  // PCR-02.5 (Bloque A): la cantidad producida es OBLIGATORIA también al
+  // importar — la importación crea lotes NUEVOS y la BD (NOT NULL 0105 +
+  // CHECK 0025) la exigiría igual. Mismo patrón que quantity_kg (PCR-01.1).
+  const quantityRaw = normalizeText(row.produced_quantity_kg);
+  const quantity = quantityRaw
+    ? normalizeOptionalPositiveNumber(row.produced_quantity_kg, '"produced_quantity_kg"')
+    : ({ ok: false, error: OUTPUT_BATCH_QUANTITY_REQUIRED_MESSAGE } as const);
 
   if (!code) err(d, "output_batch_code", 'El campo "output_batch_code" es obligatorio.');
   if (!orderCode) {

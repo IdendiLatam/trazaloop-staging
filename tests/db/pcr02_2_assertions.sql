@@ -114,8 +114,8 @@ begin
   -- A6 · closed como CONSUMIDORA de un lote interno: genealogía intacta
   insert into production_orders (id, organization_id, order_code, order_date, status)
   values ('ffffffff-4444-0000-0000-0000000000a6', org, 'OP-PROD-F', current_date, 'in_progress');
-  insert into output_batches (id, organization_id, production_order_id, batch_code)
-  values ('ffffffff-6666-0000-0000-0000000000a6', org, 'ffffffff-4444-0000-0000-0000000000a6', 'INT-F');
+  insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+  values ('ffffffff-6666-0000-0000-0000000000a6', org, 'ffffffff-4444-0000-0000-0000000000a6', 'INT-F', 50);  -- PCR-02.5
   -- (PCR-02.4: ciclo realista — consume abierta y luego se cierra)
   insert into production_orders (id, organization_id, order_code, order_date, status)
   values ('ffffffff-4444-0000-0000-0000000000a7', org, 'OP-CLOSED-2', current_date, 'in_progress');
@@ -216,8 +216,8 @@ begin
   insert into production_orders (id, organization_id, order_code, order_date, status) values
     ('ffffffff-4444-0000-0000-0000000000b3', org, 'OP-DE', current_date, 'in_progress'),
     ('ffffffff-4444-0000-0000-0000000000b4', org, 'OP-M', current_date, 'in_progress');
-  insert into output_batches (id, organization_id, production_order_id, batch_code)
-  values ('ffffffff-6666-0000-0000-0000000000b3', org, 'ffffffff-4444-0000-0000-0000000000b3', 'INT-DE');
+  insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+  values ('ffffffff-6666-0000-0000-0000000000b3', org, 'ffffffff-4444-0000-0000-0000000000b3', 'INT-DE', 60);  -- PCR-02.5
   insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)
   values (org, 'ffffffff-4444-0000-0000-0000000000b4', ib, 5);
   insert into output_batch_consumption (organization_id, production_order_id, output_batch_id, mass_kg)
@@ -316,8 +316,10 @@ begin
     ords := ords || gen_random_uuid(); outs := outs || gen_random_uuid();
     insert into production_orders (id, organization_id, order_code, order_date, status)
     values (ords[i], org, 'OP-' || i, current_date, 'in_progress');
-    insert into output_batches (id, organization_id, production_order_id, batch_code)
-    values (outs[i], org, ords[i], 'OUT-' || i);
+    insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+    -- PCR-02.5: cantidad obligatoria y COHERENTE con la composición (5 % de
+    -- tolerancia de la vista §4) y con el consumo interno de la cadena.
+    values (outs[i], org, ords[i], 'OUT-' || i, case when i = 13 then 10 else 5 end);
   end loop;
   insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)
   values (org, ords[13], ib, 10);

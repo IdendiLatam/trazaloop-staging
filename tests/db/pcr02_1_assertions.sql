@@ -352,9 +352,9 @@ begin
   raise notice '✔ S5.A consumo externo documentado → complete';
 
   -- CASO B (realizable): misma orden, salida SIN composición → incomplete
-  insert into output_batches (id, organization_id, production_order_id, batch_code) values
+  insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg) values
     ('cccccccc-6666-0000-0000-00000000000b', 'cccccccc-0000-0000-0000-000000000001',
-     'cccccccc-4444-0000-0000-000000000001', 'B-SIN-COMPOSICION');
+     'cccccccc-4444-0000-0000-000000000001', 'B-SIN-COMPOSICION', 120);  -- PCR-02.5: cantidad obligatoria
   select traceability_status, missing_items into v_status, v_missing
     from v_output_batch_completeness
    where output_batch_id = 'cccccccc-6666-0000-0000-00000000000b';
@@ -457,9 +457,9 @@ declare v_count int;
 begin
   -- OP-B ya consume INT-1 (de OP-A) desde S1. Cerrar el ciclo: OP-B produce
   -- Y-CICLO y OP-A lo consume → A⇄B a nivel de órdenes.
-  insert into output_batches (id, organization_id, production_order_id, batch_code)
+  insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
   values ('aaaaaaaa-6666-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001',
-          'aaaaaaaa-4444-0000-0000-00000000000b', 'Y-CICLO');
+          'aaaaaaaa-4444-0000-0000-00000000000b', 'Y-CICLO', 100);  -- PCR-02.5: cantidad obligatoria
   insert into output_batch_consumption (organization_id, production_order_id, output_batch_id, mass_kg)
   values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-4444-0000-0000-00000000000a',
           'aaaaaaaa-6666-0000-0000-000000000002', 3);
@@ -503,8 +503,8 @@ begin
       values (po2, o, 'OP-PROD', current_date, 'in_progress');
       insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)
       values (o, po2, ib, 10);   -- la orden productora sí consume (externo)
-      insert into output_batches (id, organization_id, production_order_id, batch_code)
-      values (ob, o, po2, 'INT-IMPL');
+      insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+      values (ob, o, po2, 'INT-IMPL', 50);  -- PCR-02.5: cantidad obligatoria
       -- PCR-02.4: ciclo realista — la productora se cierra tras construirse
       update production_orders set status = 'closed' where id = po2;
       insert into output_batch_consumption (organization_id, production_order_id, output_batch_id, mass_kg)
@@ -515,8 +515,8 @@ begin
       values (po2, o, 'OP-PROD', current_date, 'in_progress');
       insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)
       values (o, po2, ib, 10);
-      insert into output_batches (id, organization_id, production_order_id, batch_code)
-      values (ob, o, po2, 'INT-IMPL');
+      insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+      values (ob, o, po2, 'INT-IMPL', 50);  -- PCR-02.5: cantidad obligatoria
       -- PCR-02.4: ciclo realista — la productora se cierra tras construirse
       update production_orders set status = 'closed' where id = po2;
       insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)

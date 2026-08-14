@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getInputBatchBalance, getOutputBatchBalance } from "@/lib/db/inventory";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
@@ -40,6 +41,16 @@ function dbError(error: { code?: string; message?: string } | null, fallback = G
     return "La referencia seleccionada no pertenece a tu empresa o no existe.";
   if (error.message?.includes("organization_id de una fila no puede modificarse"))
     return "El registro no puede moverse de empresa.";
+  // PCR-02.5: las guardas de saldo (0105) hablan español de dominio — su
+  // mensaje llega intacto al usuario (p. ej. cuando una carrera concurrente
+  // pierde el candado del lote y la BD es quien rechaza).
+  if (
+    error.code === "23514" &&
+    (error.message?.includes("saldo disponible") ||
+      error.message?.includes("no puede quedar por debajo"))
+  ) {
+    return error.message;
+  }
   return fallback;
 }
 
@@ -571,6 +582,18 @@ export async function addBatchConsumptionAction(
   if (!(await assertSameOrg("input_batches", inputBatchId, org.organizationId))) {
     return { error: "El lote no pertenece a tu empresa." };
   }
+  // PCR-02.5 (Bloque C, capa 2 de 3): validación de saldo en la acción.
+  // La última palabra la tiene SIEMPRE la guarda transaccional de la BD
+  // (0105, candado FOR UPDATE): si dos solicitudes cruzan esta lectura a la
+  // vez, la perdedora recibe el mismo mensaje desde el trigger vía dbError.
+  {
+    const saldo = await getInputBatchBalance(org.organizationId, inputBatchId);
+    if (saldo && mass > saldo.available_kg) {
+      return {
+        error: `La cantidad a consumir supera el saldo disponible del lote. Disponible: ${saldo.available_kg} kg.`,
+      };
+    }
+  }
 
   const supabase = await createServerClient();
   const { error } = await supabase.from("batch_consumption").insert({
@@ -616,7 +639,7 @@ export async function updateBatchConsumptionAction(
   // estructural — exige que la orden del consumo siga aceptando mutaciones.
   const { data: row } = await supabase
     .from("batch_consumption")
-    .select("id, production_order_id")
+    .select("id, production_order_id, input_batch_id, mass_kg")
     .eq("id", id)
     .eq("organization_id", org.organizationId)
     .maybeSingle();
@@ -626,6 +649,21 @@ export async function updateBatchConsumptionAction(
     row.production_order_id as string
   );
   if (!orderCheck.ok) return { error: orderCheck.error };
+  // PCR-02.5 (§12, capa 2 de 3): al EDITAR, la masa de la propia fila se
+  // reutiliza — tope = disponible + masa actual del consumo (recibido −
+  // otros), nunca recibido − otros − propia. La BD (0105) recalcula lo
+  // mismo bajo candado y decide en última instancia.
+  {
+    const saldo = await getInputBatchBalance(org.organizationId, row.input_batch_id as string);
+    if (saldo) {
+      const tope = Number((saldo.available_kg + Number(row.mass_kg)).toFixed(4));
+      if (mass > tope) {
+        return {
+          error: `La cantidad a consumir supera el saldo disponible del lote. Disponible: ${tope} kg.`,
+        };
+      }
+    }
+  }
   const { error } = await supabase
     .from("batch_consumption")
     .update({ mass_kg: mass, notes })
@@ -642,8 +680,9 @@ export async function updateBatchConsumptionAction(
  * LOTE PRODUCIDO por otra orden (producto intermedio reutilizable). El lote
  * conserva su identidad: no se duplica. Multiempresa: assertSameOrg sobre
  * ambos + FK compuestas + RLS; el autoconsumo lo bloquea también el trigger
- * 0104 en BD. Sobre-consumir lo producido se ADVIERTE en UI (misma filosofía
- * que los lotes de entrada), no se bloquea.
+ * 0104 en BD. PCR-02.5: sobre-consumir lo producido ya NO es una simple
+ * advertencia — se BLOQUEA en las tres capas (UI, acción y guarda 0105 con
+ * candado del lote), igual que el inventario externo.
  */
 export async function addOutputConsumptionAction(
   _prev: TraceActionState,
@@ -680,6 +719,18 @@ export async function addOutputConsumptionAction(
     .maybeSingle();
   if (producer?.production_order_id === productionOrderId) {
     return { error: "Una orden no puede consumir un lote producido por ella misma." };
+  }
+
+  // PCR-02.5 (Bloque D, capa 2 de 3): saldo interno = producido − consumido
+  // internamente. La guarda 0105 (FOR UPDATE del lote producido) decide en
+  // última instancia ante concurrencia.
+  {
+    const saldo = await getOutputBatchBalance(org.organizationId, outputBatchId);
+    if (saldo && mass > saldo.available_kg) {
+      return {
+        error: `La cantidad a consumir supera el saldo disponible del lote producido. Disponible: ${saldo.available_kg} kg.`,
+      };
+    }
   }
 
   const { error } = await supabase.from("output_batch_consumption").insert({
@@ -817,9 +868,17 @@ export async function createOutputBatchAction(
   const limitCheck = await checkCprResourceLimit("output_batches");
   if (!limitCheck.allowed) return { error: limitCheck.error };
 
-  if (v.produced_quantity_kg !== "") {
+  // PCR-02.5 (Bloque A): la cantidad producida es OBLIGATORIA — se rechazan
+  // vacío/NULL/NaN/0/negativos aquí, en el required del formulario y en la
+  // BD (NOT NULL 0105 + CHECK 0025): defensa en profundidad.
+  if (v.produced_quantity_kg === "") {
+    return { error: "La cantidad producida es obligatoria." };
+  }
+  {
     const n = Number(v.produced_quantity_kg);
-    if (Number.isNaN(n) || n <= 0) return { error: "La cantidad producida debe ser mayor que 0." };
+    if (Number.isNaN(n) || n <= 0) {
+      return { error: "La cantidad producida debe ser mayor que 0 kg." };
+    }
   }
   if (
     !(await assertSameOrg("production_orders", v.production_order_id, org.organizationId)) ||
@@ -837,7 +896,7 @@ export async function createOutputBatchAction(
       production_order_id: v.production_order_id,
       product_id: v.product_id,
       produced_date: v.produced_date,
-      produced_quantity_kg: v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg),
+      produced_quantity_kg: Number(v.produced_quantity_kg),  // PCR-02.5: ya validada > 0
       characteristics: v.characteristics,
       intended_application: v.intended_application,
       storage_location: v.storage_location,
@@ -872,9 +931,17 @@ export async function updateOutputBatchAction(
   if (!v.production_order_id) return { error: "La orden / corrida de producción es obligatoria." };
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
-  if (v.produced_quantity_kg !== "") {
+  // PCR-02.5 (Bloque A): la cantidad producida es OBLIGATORIA — se rechazan
+  // vacío/NULL/NaN/0/negativos aquí, en el required del formulario y en la
+  // BD (NOT NULL 0105 + CHECK 0025): defensa en profundidad.
+  if (v.produced_quantity_kg === "") {
+    return { error: "La cantidad producida es obligatoria." };
+  }
+  {
     const n = Number(v.produced_quantity_kg);
-    if (Number.isNaN(n) || n <= 0) return { error: "La cantidad producida debe ser mayor que 0." };
+    if (Number.isNaN(n) || n <= 0) {
+      return { error: "La cantidad producida debe ser mayor que 0 kg." };
+    }
   }
   if (
     !(await assertSameOrg("production_orders", v.production_order_id, org.organizationId)) ||
@@ -904,7 +971,7 @@ export async function updateOutputBatchAction(
   if (!current) {
     return { error: "El lote producido no existe o no pertenece a tu empresa." };
   }
-  const nextQuantity = v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg);
+  const nextQuantity = Number(v.produced_quantity_kg);  // PCR-02.5: siempre presente y > 0
   const currentQuantity =
     current.produced_quantity_kg == null ? null : Number(current.produced_quantity_kg);
   const quantityChanged =
@@ -949,7 +1016,7 @@ export async function updateOutputBatchAction(
       production_order_id: v.production_order_id,
       product_id: v.product_id,
       produced_date: v.produced_date,
-      produced_quantity_kg: v.produced_quantity_kg === "" ? null : Number(v.produced_quantity_kg),
+      produced_quantity_kg: Number(v.produced_quantity_kg),  // PCR-02.5: ya validada > 0
       characteristics: v.characteristics,
       intended_application: v.intended_application,
       storage_location: v.storage_location,
@@ -960,7 +1027,13 @@ export async function updateOutputBatchAction(
 
   if (error) {
     // Barrera final en BD (§2b de 0104): mensaje claro, nunca SQL crudo.
-    if (error.code === "23514" || /consumido por otra orden/.test(error.message ?? "")) {
+    // PCR-02.5.1 (hallazgo 1): NO capturar 23514 genéricamente — tras la
+    // 0105 este UPDATE también puede recibir el 23514 del PISO de cantidad
+    // («La cantidad producida no puede quedar por debajo de lo ya consumido
+    // internamente…»), que debe llegar ÍNTEGRO al usuario vía dbError (su
+    // allowlist semántica lo deja pasar y sigue ocultando cualquier otro
+    // SQL). La reasignación se discrimina por su mensaje de dominio.
+    if (/consumido por otra orden/.test(error.message ?? "")) {
       return {
         error:
           "El lote producido ya fue consumido por otra orden: su orden productora no puede cambiarse.",

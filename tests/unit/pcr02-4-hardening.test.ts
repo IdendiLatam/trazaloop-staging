@@ -138,7 +138,12 @@ console.log("\nPCR-02.4 · server actions (S1–S12)");
 check("S2 · updateBatchConsumptionAction exige orden mutable (hallazgo 1)", () => {
   const body = fnBody(ACTIONS, "updateBatchConsumptionAction");
   assert(body.includes("assertOrderAcceptsMutations"), "guarda de estado presente");
-  assert(body.includes('select("id, production_order_id")'), "resuelve la orden del consumo antes de escribir");
+  // PCR-02.5 amplió el select con input_batch_id y mass_kg (tope de saldo
+  // al editar, §12); la resolución de la orden ANTES de escribir se conserva.
+  assert(
+    body.includes('select("id, production_order_id, input_batch_id, mass_kg")'),
+    "resuelve la orden del consumo (y su lote/masa para el saldo) antes de escribir"
+  );
 });
 check("S1/S3–S9 · los ocho mutadores PCR-02.1 conservan su guarda", () => {
   for (const name of [
@@ -218,8 +223,14 @@ check("fixtures con ciclo de vida realista: se construye ABIERTA y se cierra des
 });
 check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, sin 0105+", () => {
   const dir = fs.readdirSync(path.join(__dirname, "..", "..", "supabase", "migrations")).sort();
-  const nums = dir.map((f) => Number(f.slice(0, 4)));
-  assert(Math.max(...nums) === 104, "no deben existir migraciones 0105+ (§5)");
+  // La frontera de PCR-02.4 fue la 0104; el único sprint posterior
+  // autorizado es PCR-02.5 (0105), verificado por su propia suite.
+  const later = dir.filter((f) => Number(f.slice(0, 4)) > 104);
+  assert(
+    later.length === 0 ||
+      (later.length === 1 && later[0] === "0105_pcr025_inventory_and_quantity_guards.sql"),
+    "tras la 0104 solo puede existir la 0105 de PCR-02.5 (§5)"
+  );
   assert(dir.filter((f) => f.startsWith("0104")).length === 1, "una única 0104");
 });
 check("higiene del sprint: scripts registrados, sin comandos remotos, sin version bump", () => {

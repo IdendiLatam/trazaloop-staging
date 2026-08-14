@@ -102,8 +102,8 @@ begin
   raise notice '✔ S9.4 CLOSED_REOPEN_DELETE_BLOCKED: closed → reopen → DELETE FALLA y OP-A/consumo/LE-1 permanecen';
 
   -- S9.5 · Variante con salidas (§47): genealogía intacta
-  insert into output_batches (id, organization_id, production_order_id, batch_code)
-  values ('ffffffff-6666-0000-0000-0000000000c5', org, 'ffffffff-4444-0000-0000-0000000000c1', 'INT-A');
+  insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
+  values ('ffffffff-6666-0000-0000-0000000000c5', org, 'ffffffff-4444-0000-0000-0000000000c1', 'INT-A', 60);  -- PCR-02.5
   insert into production_orders (id, organization_id, order_code, order_date, status)
   values ('ffffffff-4444-0000-0000-0000000000c5', org, 'OP-B', current_date, 'in_progress');
   insert into output_batch_consumption (id, organization_id, production_order_id, output_batch_id, mass_kg)

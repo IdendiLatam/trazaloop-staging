@@ -260,12 +260,14 @@ export function OutputBatchForm({
         />
         <Field label="Fecha de producción (opcional)" name="produced_date" type="date" defaultValue={editing?.produced_date ?? ""} />
         <Field
-          label="Cantidad producida kg (opcional)"
+          label="Cantidad producida (kg) *"
           name="produced_quantity_kg"
           type="number"
           min={0.0001}
           step="0.0001"
+          required
           defaultValue={editing?.produced_quantity_kg ?? ""}
+          hint="Obligatoria y mayor que 0 kg: sin ella no hay balance de masas, inventario interno ni cálculo PCR defendible."
         />
         <Field label="Características (opcional)" name="characteristics" defaultValue={editing?.characteristics ?? ""} />
         <Field label="Aplicación prevista (opcional)" name="intended_application" defaultValue={editing?.intended_application ?? ""} />

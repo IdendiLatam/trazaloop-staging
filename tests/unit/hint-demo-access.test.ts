@@ -9,7 +9,7 @@
  *  · el acceso se resuelve POR MÓDULO (accesos mixtos en la misma empresa);
  *  · el backoffice del superadministrador conserva el contenido real;
  *  · la decisión ocurre en SERVIDOR: al cliente solo viaja lo autorizado;
- *  · no se tocan migraciones previas, no existe 0105+ (0103 = PCR-01, 0104 = PCR-02) y cleanup-staging queda fuera.
+ *  · no se tocan migraciones previas y ninguna migración posterior conoce el aviso Demo (0103 = PCR-01, 0104 = PCR-02, 0105 = PCR-02.5) y cleanup-staging queda fuera.
  *
  * Correr: npm run test:hint-demo-access
  */
@@ -322,10 +322,12 @@ check("14. Fail-closed y paridad de UX: sin modo resoluble → aviso; sin hint �
   assert(!("a" in map) && "b" in map, "solo las secciones con hint administrado entran al mapa");
 });
 
-check("15. Sin cambios de esquema: ninguna migración conoce el aviso Demo y no existe 0105+ (0103 = PCR-01, 0104 = PCR-02)", () => {
+check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; posteriores autorizadas: 0105 (PCR-02.5, inventario)", () => {
   const dir = path.join(ROOT, "supabase", "migrations");
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
-  const forbidden = files.filter((f) => /^010[5-9]|^01[1-9]\d/.test(f));
+  // Sprints posteriores legítimos (cada uno con su propia suite de candados):
+  const knownLater = new Set(["0105_pcr025_inventory_and_quantity_guards.sql"]);
+  const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);
   for (const f of files) {
     const sql = fs.readFileSync(path.join(dir, f), "utf8");

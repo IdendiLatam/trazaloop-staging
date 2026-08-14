@@ -119,7 +119,7 @@ export const TEMPLATE_COLUMNS: Record<ImportEntityType, TemplateColumn[]> = {
       description: "Código EXACTO de un producto ya existente (opcional; si no se encuentra, se crea el lote sin producto asociado).",
     },
     { key: "production_date", required: false, description: "Fecha de producción, formato AAAA-MM-DD (opcional)." },
-    { key: "produced_quantity_kg", required: false, description: "Cantidad producida en kg, mayor que 0 (opcional)." },
+    { key: "produced_quantity_kg", required: true, description: "Cantidad producida en kg, mayor que 0 (obligatoria: sin ella no hay balance de masas ni inventario interno)." },
     { key: "notes", required: false, description: "Notas (opcional)." },
   ],
   batch_composition: [

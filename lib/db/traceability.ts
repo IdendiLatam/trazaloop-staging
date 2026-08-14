@@ -637,8 +637,9 @@ export type InternalConsumptionRow = {
 };
 
 /** Consumos INTERNOS de una orden (lotes producidos por otras órdenes) —
- *  Bloques D/E. Incluye lo ya consumido del lote para la advertencia de
- *  sobre-consumo (misma filosofía que listConsumption: advertir, no bloquear). */
+ *  Bloques D/E. Incluye lo ya consumido del lote para la señal visual de
+ *  sobre-consumo en filas HISTÓRICAS (previas a la guarda 0105). PCR-02.5:
+ *  el sobre-consumo nuevo se BLOQUEA en UI, acción y BD. */
 export async function listInternalConsumption(
   orgId: string,
   productionOrderId: string
@@ -701,28 +702,29 @@ export async function listConsumableOutputs(
   limit: number = SELECTOR_OPTIONS_LIMIT
 ): Promise<BoundedOptions> {
   const supabase = await createServerClient();
+  // PCR-02.5 (§14/§17): el selector de consumo INTERNO se alimenta de la
+  // vista de inventario — los lotes producidos AGOTADOS no se ofrecen para
+  // nuevo consumo (siguen visibles en listados e histórico) y cada opción
+  // informa su saldo. Sigue ACOTADO (PCR-02.1) y excluye la propia orden
+  // (el anti-autoconsumo de la BD permanece como última defensa).
   let request = supabase
-    .from("output_batches")
+    .from("v_output_batch_inventory")
     .select(
-      "id, batch_code, production_order_id, produced_quantity_kg, production_orders(order_code), products(code, name)",
+      "output_batch_id, batch_code, production_order_code, produced_kg, available_kg",
       { count: "exact" }
     )
     .eq("organization_id", orgId)
-    .neq("production_order_id", consumingOrderId);
+    .neq("production_order_id", consumingOrderId)
+    .gt("available_kg", 0);
   const cleaned = term.trim().replace(/[%_]/g, "");
   if (cleaned) request = request.ilike("batch_code", `%${cleaned}%`);
   const { data, count } = await request
-    .order("created_at", { ascending: false })
+    .order("batch_code", { ascending: true })
     .limit(limit);
-  const options = (data ?? []).map((b) => {
-    const po = b.production_orders as unknown as { order_code: string } | null;
-    const p = b.products as unknown as { code: string; name: string } | null;
-    const qty = b.produced_quantity_kg === null ? null : Number(b.produced_quantity_kg);
-    return {
-      value: b.id as string,
-      label: `${b.batch_code}${p ? ` · ${p.code}` : ""} (de ${po?.order_code ?? "—"}${qty !== null ? `, ${qty} kg` : ""})`,
-    };
-  });
+  const options = (data ?? []).map((b) => ({
+    value: b.output_batch_id as string,
+    label: `${b.batch_code} (de ${b.production_order_code ?? "—"}) · Disponible: ${Number(b.available_kg)} kg`,
+  }));
   return { options, total: count ?? options.length, limit };
 }
 
@@ -734,23 +736,26 @@ export async function searchInputBatchOptions(
   limit: number = SELECTOR_OPTIONS_LIMIT
 ): Promise<BoundedOptions> {
   const supabase = await createServerClient();
+  // PCR-02.5 (§10/§17): el selector de consumo EXTERNO se alimenta de la
+  // vista de inventario — los lotes agotados no se ofrecen para nuevo
+  // consumo y cada opción informa su saldo disponible. Sigue ACOTADO
+  // (PCR-02.1 hallazgo 4: jamás el universo completo).
   let request = supabase
-    .from("input_batches")
-    .select("id, batch_code, quantity_kg, materials(name), suppliers(name)", { count: "exact" })
-    .eq("organization_id", orgId);
+    .from("v_input_batch_inventory")
+    .select("input_batch_id, batch_code, material_name, supplier_name, available_kg", {
+      count: "exact",
+    })
+    .eq("organization_id", orgId)
+    .gt("available_kg", 0);
   const cleaned = term.trim().replace(/[%_]/g, "");
   if (cleaned) request = request.ilike("batch_code", `%${cleaned}%`);
   const { data, count } = await request
-    .order("created_at", { ascending: false })
+    .order("received_date", { ascending: false })
     .limit(limit);
-  const options = (data ?? []).map((b) => {
-    const m = b.materials as unknown as { name: string } | null;
-    const sp = b.suppliers as unknown as { name: string } | null;
-    return {
-      value: b.id as string,
-      label: `${b.batch_code} · ${m?.name ?? "—"} (${sp?.name ?? "—"})`,
-    };
-  });
+  const options = (data ?? []).map((b) => ({
+    value: b.input_batch_id as string,
+    label: `${b.batch_code} · ${b.material_name} (${b.supplier_name ?? "—"}) · Disponible: ${Number(b.available_kg)} kg`,
+  }));
   return { options, total: count ?? options.length, limit };
 }
 

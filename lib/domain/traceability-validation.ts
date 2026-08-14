@@ -9,6 +9,11 @@
 export const INPUT_BATCH_QUANTITY_REQUIRED_MESSAGE =
   "La cantidad del lote es obligatoria y debe ser mayor que 0 kg.";
 
+/** PCR-02.5 (Bloque A): la cantidad producida es obligatoria también al
+ *  importar; espejo del mensaje de PCR-01.1 para lotes de entrada. */
+export const OUTPUT_BATCH_QUANTITY_REQUIRED_MESSAGE =
+  'La cantidad producida es obligatoria: incluye "produced_quantity_kg" mayor que 0 en cada fila.';
+
 export type InputBatchFormValues = {
   batch_code: string;
   supplier_id: string | null;

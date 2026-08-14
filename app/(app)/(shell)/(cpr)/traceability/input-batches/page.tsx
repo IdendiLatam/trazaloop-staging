@@ -16,6 +16,7 @@ import {
 } from "@/components/domain/traceability/action-button";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
+import { MaterialInventorySection } from "@/components/domain/traceability/inventory-section";
 import { SuccessAlert } from "@/components/ui/alert";
 import { ImportWizard } from "@/components/domain/import/import-wizard";
 
@@ -40,6 +41,10 @@ export default async function InputBatchesPage({
     created?: string;
     updated?: string;
     focus?: string;
+    inventario?: string;  // PCR-02.5: material seleccionado en el inventario
+    inv_q?: string;       // PCR-02.5.1: búsqueda del inventario (server-side)
+    inv_page?: string;    // PCR-02.5.1: página de la tabla agregada
+    inv_lot_page?: string; // PCR-02.5.1: página del saldo por lote
   }>;
 }) {
   const org = await requireActiveOrg();
@@ -297,6 +302,20 @@ export default async function InputBatchesPage({
         pageSize={result.pageSize}
         total={result.total}
         extraParams={listExtraParams}
+      />
+
+      {/* PCR-02.5 (Bloque B, §6): INVENTARIO DE MATERIALES — después de la
+          lista de lotes y antes de la importación. Derivado en la base
+          (vistas 0105); sin módulo de navegación nuevo. */}
+      <MaterialInventorySection
+        orgId={org.organizationId}
+        params={{
+          inventario: params.inventario,
+          inv_q: params.inv_q,
+          inv_page: params.inv_page,
+          inv_lot_page: params.inv_lot_page,
+        }}
+        extraParams={{ ...listExtraParams, page: params.page }}
       />
 
       <section id="importar" className="rounded-lg border border-hairline bg-surface p-5">

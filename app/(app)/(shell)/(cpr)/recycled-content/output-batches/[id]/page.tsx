@@ -212,6 +212,43 @@ export default async function CalculationDetailPage({
             </div>
           </dl>
 
+          {/* PCR-02.5 (Bloque E, §19–§21): transparencia del cálculo. El
+              porcentaje nunca aparece «sin explicación»: cuando hay masa
+              elegible excluida por falta de soporte, se dice cuánta es, se
+              recuerda que PERMANECE en la masa total (regla del denominador
+              §20 — confirmada en calculate_recycled_content, que acumula
+              v_total incondicionalmente) y la tabla de componentes detalla
+              el motivo fila a fila. La metodología NO cambia. */}
+          {(() => {
+            const excludedForSupport = latest.components.filter(
+              (c) =>
+                !c.counted &&
+                (c.exclusion_reason === "missing_origin_support" ||
+                  c.exclusion_reason === "origin_support_not_valid" ||
+                  c.exclusion_reason === "invalid_reclassification_support")
+            );
+            if (excludedForSupport.length === 0) return null;
+            const excludedMass = excludedForSupport.reduce((acc, c) => acc + c.mass_kg, 0);
+            return (
+              <div className="mt-4 rounded-md border border-hairline bg-canvas px-3 py-2">
+                <p className="text-xs font-semibold">
+                  ¿Por qué el porcentaje no es mayor?
+                </p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  {excludedMass.toFixed(2)} kg de material elegible no cuentan
+                  como contenido reciclado porque su evidencia soporte falta o
+                  no está validada. Esa masa NO se descarta: sigue sumando en
+                  la masa total del lote ({latest.total_mass_kg.toFixed(2)} kg,
+                  el denominador), por eso reduce el porcentaje en lugar de
+                  desaparecer del balance. El detalle por material está en la
+                  tabla: columna «¿Cuenta?» y su razón de exclusión. Al
+                  validar la evidencia y recalcular, la masa pasa al
+                  numerador.
+                </p>
+              </div>
+            );
+          })()}
+
           {latest.warnings.length > 0 ? (
             <div className="mt-4 rounded-md border border-amber/40 bg-amber/10 px-3 py-2">
               <p className="text-xs font-semibold text-amber">Advertencias</p>

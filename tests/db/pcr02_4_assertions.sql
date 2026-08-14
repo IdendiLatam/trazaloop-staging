@@ -122,8 +122,8 @@ begin
 
   -- S10.3 · OUTPUT: estructural congelado, descriptivo corregible
   begin
-    insert into output_batches (organization_id, production_order_id, batch_code)
-    values (org, op, 'OUT-G4-NUEVO');
+    insert into output_batches (organization_id, production_order_id, batch_code, produced_quantity_kg)
+    values (org, op, 'OUT-G4-NUEVO', 10);  -- PCR-02.5: la cantidad va explícita para que el ÚNICO motivo de fallo sea el structural guard
     raise exception 'FALLO S10.3: INSERT de salida sobre cerrada fue permitido';
   exception when others then msg := sqlerrm;
   end;
@@ -220,8 +220,8 @@ begin
   insert into batch_consumption (organization_id, production_order_id, input_batch_id, mass_kg)
   values (org, op, ib2, 10);                                                     -- nuevo consumo
   update batch_composition set mass_kg = 88 where id = comp;                     -- corregir composición
-  insert into output_batches (organization_id, production_order_id, batch_code)
-  values (org, op, 'OUT-G4-2');                                                  -- nueva salida
+  insert into output_batches (organization_id, production_order_id, batch_code, produced_quantity_kg)
+  values (org, op, 'OUT-G4-2', 20);                                              -- nueva salida (PCR-02.5: cantidad obligatoria)
   update output_batches set produced_quantity_kg = 90 where id = ob;             -- corregir cantidad
   update production_orders set notes = 'corregida tras reapertura' where id = op; -- editar la orden
   begin

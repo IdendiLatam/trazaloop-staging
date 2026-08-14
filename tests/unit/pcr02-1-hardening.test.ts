@@ -314,10 +314,12 @@ check("6.1 PCR01_REGRESSION · candados PCR-01.1 intactos (kg obligatorio, evide
   assert(ACTIONS.includes("?created=1#consumos-"), "redirect de creación con foco intacto");
 });
 
-check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas y sin 0105+", () => {
+check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores solo las autorizadas (0105 = PCR-02.5)", () => {
   const dir = fs.readdirSync(path.join(__dirname, "..", "..", "supabase", "migrations"));
-  const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f));
-  assert(after.length === 0, `no debe existir 0105+: ${after.join(", ")}`);
+  // PCR-02.5: sprint posterior autorizado, con su propia suite de candados.
+  const knownLater = new Set(["0105_pcr025_inventory_and_quantity_guards.sql"]);
+  const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
+  assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);
   assert(dir.some((f) => f.startsWith("0104_pcr02_")), "la 0104 sigue siendo la única nueva");
 });
 

@@ -250,9 +250,14 @@ check("C.1 PCR-02.1 intacto: guardas, triggers y selectores no se debilitaron (�
   );
 });
 
-check("C.2 migraciones: 0001–0103 intactas, la 0104 única, sin 0105+ (§3)", () => {
+check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo las autorizadas (0105 = PCR-02.5)", () => {
   const dir = fs.readdirSync(path.join(__dirname, "..", "..", "supabase", "migrations"));
-  assert(dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f)).length === 0, "no debe existir 0105+");
+  // PCR-02.5: sprint posterior autorizado, con su propia suite de candados.
+  const knownLater = new Set(["0105_pcr025_inventory_and_quantity_guards.sql"]);
+  assert(
+    dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,
+    "no debe existir 0106+ ni 0105 desconocida"
+  );
   assert(dir.some((f) => f.startsWith("0104_pcr02_")), "la 0104 sigue presente");
 });
 

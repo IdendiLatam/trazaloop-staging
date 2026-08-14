@@ -29,6 +29,8 @@ import {
   LinkEvidenceInline,
 } from "@/components/domain/traceability/action-button";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
+import { getOutputBatchInventoryByIds } from "@/lib/db/inventory";
+import { formatKg, inventoryState, INVENTORY_STATE_LABEL } from "@/lib/domain/inventory";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
@@ -57,6 +59,13 @@ export default async function OutputBatchesPage({
         .order("name"),
     ]);
   const pageBatches = result.rows;
+  // PCR-02.5 (§15): saldo interno de los lotes de la página, en UNA consulta
+  // acotada a la vista de inventario. El listado sigue siendo consulta /
+  // auditoría / inventario: la Orden / corrida permanece como eje (PCR-02).
+  const inventoryByBatch = await getOutputBatchInventoryByIds(
+    org.organizationId,
+    pageBatches.map((b) => b.id)
+  );
 
   // Con paginación, el lote editado/expandido puede no estar en la página.
   const editing =
@@ -232,6 +241,27 @@ export default async function OutputBatchesPage({
                         .map((part) => ` · ${part}`)
                         .join("")}
                     </p>
+                    {(() => {
+                      const inv = inventoryByBatch.get(b.id);
+                      if (!inv) return null;
+                      const state = inventoryState(inv.available_kg);
+                      return (
+                        <p className="mt-0.5 text-xs text-ink-soft">
+                          Producido: {formatKg(inv.produced_kg)} · Consumido
+                          internamente: {formatKg(inv.consumed_internally_kg)} ·
+                          Disponible: {formatKg(inv.available_kg)}{" "}
+                          <span
+                            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                              state === "available"
+                                ? "bg-loop-soft text-loop-deep"
+                                : "bg-hairline text-ink-soft"
+                            }`}
+                          >
+                            {INVENTORY_STATE_LABEL[state]}
+                          </span>
+                        </p>
+                      );
+                    })()}
                     {(forwardUses[b.id] ?? []).length > 0 ? (
                       <p className="mt-0.5 text-xs text-ink-soft">
                         Consumido después en:{" "}

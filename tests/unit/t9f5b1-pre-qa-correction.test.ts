@@ -440,12 +440,13 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
     // PCR-02: única migración nueva autorizada por el sprint (consumo interno).
     "0104_pcr02_internal_consumption_and_completeness.sql",
+      "0105_pcr025_inventory_and_quantity_guards.sql",
   ];
 
   assert(
     JSON.stringify(after0101) ===
       JSON.stringify(expectedAfter0101),
-    `después de 0101 solo deben existir 0102 (QA), 0103 (PCR-01) y 0104 (PCR-02) ` +
+    `después de 0101 solo deben existir 0102 (QA), 0103 (PCR-01), 0104 (PCR-02) y 0105 (PCR-02.5) ` +
       `(hay: ${after0101.join(", ") || "ninguna"})`
   );
   assert(
