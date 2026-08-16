@@ -314,7 +314,7 @@ check("6.1 PCR01_REGRESSION · candados PCR-01.1 intactos (kg obligatorio, evide
   assert(ACTIONS.includes("?created=1#consumos-"), "redirect de creación con foco intacto");
 });
 
-check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores solo las autorizadas (0105 = PCR-02.5)", () => {
+check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores solo las autorizadas hasta PCR-03.4.1 (0109 hotfix)", () => {
   const dir = fs.readdirSync(path.join(__dirname, "..", "..", "supabase", "migrations"));
   // PCR-02.5: sprint posterior autorizado, con su propia suite de candados.
   const knownLater = new Set([
@@ -324,6 +324,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0106_pcr031_evidence_governance.sql",
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
+    "0109_pcr0341_evidence_status_case_hotfix.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

@@ -45,7 +45,7 @@ const detailPage = read("app/(app)/(shell)/textiles/passports/[id]/page.tsx");
 console.log("\nSprint T9D · Enlace privado controlado y QR del pasaporte\n");
 
 // --- Migración: tabla y seguridad ---
-check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fibras T9E; 0094 intentos, 0095/0096 fixes digest, 0097 atomicidad T9E.2, 0098 sellado server-only T9E.3, 0099 Storage RLS T9E.4, 0100 acceso comercial por módulo T9F, 0101 endurecimiento operativo T9F.1, 0102 cierre QA T9G; 0103 hardening PCR-01; 0104 consumo interno PCR-02; 0105 inventario y guardas de saldo PCR-02.5)", () => {
+check("1. Existe 0092 y las migraciones posteriores están bajo control hasta PCR-03.4.1 (0109 hotfix autorizado)", () => {
   const dir = path.join(root, "supabase/migrations");
   const after91 = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) > 91);
   const mandatory = [
@@ -64,12 +64,13 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fi
     "0104_pcr02_internal_consumption_and_completeness.sql",
     "0105_pcr025_inventory_and_quantity_guards.sql",
   ];
-  // Bloque PCR-03 (reserva declarada del brief): pueden ir apareciendo en
-  // orden a lo largo del bloque; nada FUERA de esta lista está autorizado.
+  // PCR-03 original ocupa 0106–0108; 0109 es el hotfix append-only
+  // PCR-03.4.1 autorizado. Nada fuera de esta lista está autorizado.
   const reservedPcr03 = [
     "0106_pcr031_evidence_governance.sql",
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
+    "0109_pcr0341_evidence_status_case_hotfix.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

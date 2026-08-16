@@ -177,16 +177,17 @@ console.log("\n· Candados del sprint");
 const mig = read("supabase/migrations/0108_pcr033_audit_dossiers.sql");
 const migrations = readdirSync(join(ROOT, "supabase", "migrations")).filter((f) => f.endsWith(".sql")).sort();
 
-check("0108 única de PCR-03.3; 0106/0107 previas; sin 0109", () => {
+check("0108 cierra PCR-03.3; 0109 es el hotfix PCR-03.4.1 autorizado; sin 0110+", () => {
   const later = migrations.filter((f) => f > "0105_z");
   assert(
-    later.length === 3 &&
+    later.length === 4 &&
       later[0].startsWith("0106_pcr031") &&
       later[1].startsWith("0107_pcr032") &&
-      later[2] === "0108_pcr033_audit_dossiers.sql",
-    `bloque exacto 0106/0107/0108 (hay: ${later.join(", ")})`
+      later[2] === "0108_pcr033_audit_dossiers.sql" &&
+      later[3] === "0109_pcr0341_evidence_status_case_hotfix.sql",
+    `bloque exacto 0106/0107/0108 + hotfix 0109 (hay: ${later.join(", ")})`
   );
-  assert(!migrations.some((f) => Number(f.slice(0, 4)) >= 109), "sin 0109 ni posterior");
+  assert(!migrations.some((f) => Number(f.slice(0, 4)) >= 110), "sin 0110 ni posterior");
 });
 
 check("0108: versionado + inmutabilidad + DELETE vetado + RLS + FK compuestas", () => {

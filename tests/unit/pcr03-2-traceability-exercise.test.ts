@@ -272,7 +272,7 @@ console.log("\n· Candados del sprint (13/14/15/16/20/22 + BD)");
 
 const mig = read("supabase/migrations/0107_pcr032_traceability_exercises.sql");
 
-check("22. Tras la 0105 solo el bloque PCR-03 (0106/0107 y, en 03.3, la 0108); sin 0109", () => {
+check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfix autorizado 0109; sin 0110+", () => {
   const files = readdirSync(join(ROOT, "supabase", "migrations")).filter((f) => f.endsWith(".sql")).sort();
   const later = files.filter((f) => f > "0105_z");
   assert(later[0]?.startsWith("0106_pcr031") && later[1]?.startsWith("0107_pcr032"),
@@ -281,10 +281,25 @@ check("22. Tras la 0105 solo el bloque PCR-03 (0106/0107 y, en 03.3, la 0108); s
     "0106_pcr031_evidence_governance.sql",
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
+    "0109_pcr0341_evidence_status_case_hotfix.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
-  assert(!files.some((f) => Number(f.slice(0, 4)) >= 109), "sin 0109 ni posterior");
+
+  const hotfix = read("supabase/migrations/0109_pcr0341_evidence_status_case_hotfix.sql");
+  assert(
+    hotfix.includes("create or replace function public.pcr_build_exercise_snapshot"),
+    "0109 redefine únicamente el builder afectado"
+  );
+  assert(
+    hotfix.includes("else e.status::text end)"),
+    "0109 convierte evidence_status a text en el CASE"
+  );
+  assert(
+    !hotfix.includes("else e.status end)"),
+    "0109 no conserva el CASE defectuoso"
+  );
+  assert(!files.some((f) => Number(f.slice(0, 4)) >= 110), "sin 0110 ni posterior");
 });
 
 check("14. Snapshot inmutable tras completed: guarda jsonb-minus + estados draft/completed/archived", () => {

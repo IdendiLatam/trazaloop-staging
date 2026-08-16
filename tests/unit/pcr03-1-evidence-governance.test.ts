@@ -104,15 +104,23 @@ const migrations = readdirSync(join(ROOT, "supabase", "migrations")).filter((f) 
 check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloque PCR-03", () => {
   const after105 = migrations.filter((f) => f > "0105_" && !f.startsWith("0105"));
   assert(after105[0]?.startsWith("0106_pcr031"), "la 0106 abre el bloque PCR-03");
-  // El bloque continúa con 0107 (PCR-03.2) y 0108 (PCR-03.3): nada más.
+  // El bloque original continúa con 0107/0108; 0109 es el hotfix append-only PCR-03.4.1.
   const allowed = new Set([
     "0106_pcr031_evidence_governance.sql",
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
+    "0109_pcr0341_evidence_status_case_hotfix.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
-  assert(!migrations.some((f) => f.startsWith("0109")), "no existe 0109");
+  assert(
+    migrations.includes("0109_pcr0341_evidence_status_case_hotfix.sql"),
+    "0109 es el hotfix append-only PCR-03.4.1 autorizado"
+  );
+  assert(
+    !migrations.some((f) => Number(f.slice(0, 4)) >= 110),
+    "sin 0110 ni posterior"
+  );
   // La numeración histórica 0001–0105 tiene huecos deliberados: son 97
   // ficheros (candado R1 de PCR-02.5) y NINGUNO cambia en PCR-03.
   assert(migrations.filter((f) => f < "0106").length === 97, "las 97 migraciones históricas 0001–0105 intactas");
