@@ -33,11 +33,13 @@ export function EvidenceMatrixTable({ rows }: { rows: EvidenceMatrixRow[] }) {
       case "required":
         return rows.filter((r) => r.is_required_for_defensibility);
       case "pending":
-        return rows.filter((r) => r.evidence_status === "pending");
+        return rows.filter((r) => r.evidence_status === "pending" && !r.archived_at);
       case "valid":
-        return rows.filter((r) => r.evidence_status === "valid");
+        // (rev. 03.1–03.3.4) "Válidas" = VIGENTES: la vista es la fuente real
+        // (status 'valid' Y no archivada), no el estado a secas.
+        return rows.filter((r) => r.is_valid_for_defensibility === true);
       case "invalid":
-        return rows.filter((r) => r.evidence_status !== "valid");
+        return rows.filter((r) => r.is_valid_for_defensibility !== true);
       default:
         return rows;
     }
@@ -82,7 +84,11 @@ export function EvidenceMatrixTable({ rows }: { rows: EvidenceMatrixRow[] }) {
                 <tr key={`${r.evidence_id}-${r.support_role}-${r.linked_entity_id}-${i}`} className="border-b border-hairline last:border-0 align-top">
                   <td className="py-2 pr-3">{r.evidence_title}</td>
                   <td className="py-2 pr-3 text-xs text-ink-soft">{r.evidence_type ?? "—"}</td>
-                  <td className="code py-2 pr-3 text-xs">{r.evidence_status}</td>
+                  <td className="code py-2 pr-3 text-xs">
+                    {r.evidence_status === "valid" && r.archived_at
+                      ? "Aceptada internamente · Archivada"
+                      : r.evidence_status}
+                  </td>
                   <td className="py-2 pr-3 text-xs">
                     {r.linked_entity_label ?? "—"}
                     <span className="block text-[10px] text-ink-soft">{r.linked_entity_type}</span>

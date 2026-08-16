@@ -326,7 +326,13 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
   const dir = path.join(ROOT, "supabase", "migrations");
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   // Sprints posteriores legítimos (cada uno con su propia suite de candados):
-  const knownLater = new Set(["0105_pcr025_inventory_and_quantity_guards.sql"]);
+  const knownLater = new Set([
+    "0105_pcr025_inventory_and_quantity_guards.sql",
+    // Bloque PCR-03 (reserva declarada del brief)
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);
   for (const f of files) {

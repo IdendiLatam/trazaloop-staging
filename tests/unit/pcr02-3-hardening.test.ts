@@ -245,7 +245,14 @@ check("C.1 PCR-02.1/PCR-02.2 intactos: fail-closed, reasignación, autoconsumo y
 check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo las autorizadas (0105 = PCR-02.5)", () => {
   const dir = fs.readdirSync(path.join(__dirname, "..", "..", "supabase", "migrations"));
   // PCR-02.5: sprint posterior autorizado, con su propia suite de candados.
-  const knownLater = new Set(["0105_pcr025_inventory_and_quantity_guards.sql"]);
+  const knownLater = new Set([
+    "0105_pcr025_inventory_and_quantity_guards.sql",
+    // Bloque PCR-03 (reserva declarada del brief: gobernanza de evidencias,
+    // ejercicio de trazabilidad y expediente de preparación de auditoría).
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,
     "no debe existir 0106+ ni 0105 desconocida"

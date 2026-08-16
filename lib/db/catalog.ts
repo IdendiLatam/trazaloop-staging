@@ -46,6 +46,10 @@ export type Material = {
   origin_evidence_status: string | null;
   reclassification_evidence_name: string | null;
   reclassification_evidence_status: string | null;
+  /** (rev. 03.1–03.3.4) Vigencia canónica 03.1: una evidencia archivada
+   * sigue 'valid' pero NO es soporte vigente. */
+  origin_evidence_archived_at: string | null;
+  reclassification_evidence_archived_at: string | null;
 };
 
 export async function listSuppliers(orgId: string): Promise<Supplier[]> {
@@ -116,14 +120,15 @@ export async function listMaterials(orgId: string): Promise<Material[]> {
         .filter((id): id is string => Boolean(id))
     )
   );
-  const evidenceById = new Map<string, { name: string; status: string }>();
+  const evidenceById = new Map<string, { name: string; status: string; archived_at: string | null }>();
   if (evidenceIds.length > 0) {
     const { data: evs } = await supabase
       .from("evidences")
-      .select("id, name, status")
+      .select("id, name, status, archived_at")
       .eq("organization_id", orgId)
       .in("id", evidenceIds);
-    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+    for (const e of evs ?? [])
+      evidenceById.set(e.id, { name: e.name, status: e.status, archived_at: e.archived_at });
   }
 
   return (data ?? []).map((m) => {
@@ -147,6 +152,8 @@ export async function listMaterials(orgId: string): Promise<Material[]> {
       origin_evidence_status: originEv?.status ?? null,
       reclassification_evidence_name: reclassEv?.name ?? null,
       reclassification_evidence_status: reclassEv?.status ?? null,
+      origin_evidence_archived_at: originEv?.archived_at ?? null,
+      reclassification_evidence_archived_at: reclassEv?.archived_at ?? null,
     };
   });
 }
@@ -269,14 +276,15 @@ export async function searchMaterials(
         .filter((id): id is string => Boolean(id))
     )
   );
-  const evidenceById = new Map<string, { name: string; status: string }>();
+  const evidenceById = new Map<string, { name: string; status: string; archived_at: string | null }>();
   if (evidenceIds.length > 0) {
     const { data: evs } = await supabase
       .from("evidences")
-      .select("id, name, status")
+      .select("id, name, status, archived_at")
       .eq("organization_id", orgId)
       .in("id", evidenceIds);
-    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+    for (const e of evs ?? [])
+      evidenceById.set(e.id, { name: e.name, status: e.status, archived_at: e.archived_at });
   }
 
   return {
@@ -301,6 +309,8 @@ export async function searchMaterials(
         origin_evidence_status: originEv?.status ?? null,
         reclassification_evidence_name: reclassEv?.name ?? null,
         reclassification_evidence_status: reclassEv?.status ?? null,
+        origin_evidence_archived_at: originEv?.archived_at ?? null,
+        reclassification_evidence_archived_at: reclassEv?.archived_at ?? null,
       };
     }),
     total: count ?? 0,
@@ -369,14 +379,15 @@ export async function getMaterial(orgId: string, id: string): Promise<Material |
   const evidenceIds = [m.origin_support_evidence_id, m.reclassification_evidence_id].filter(
     (v): v is string => Boolean(v)
   );
-  const evidenceById = new Map<string, { name: string; status: string }>();
+  const evidenceById = new Map<string, { name: string; status: string; archived_at: string | null }>();
   if (evidenceIds.length > 0) {
     const { data: evs } = await supabase
       .from("evidences")
-      .select("id, name, status")
+      .select("id, name, status, archived_at")
       .eq("organization_id", orgId)
       .in("id", evidenceIds);
-    for (const e of evs ?? []) evidenceById.set(e.id, { name: e.name, status: e.status });
+    for (const e of evs ?? [])
+      evidenceById.set(e.id, { name: e.name, status: e.status, archived_at: e.archived_at });
   }
   const cls = m.material_classifications as unknown as { label: string } | null;
   const originEv = m.origin_support_evidence_id
@@ -398,5 +409,7 @@ export async function getMaterial(orgId: string, id: string): Promise<Material |
     origin_evidence_status: originEv?.status ?? null,
     reclassification_evidence_name: reclassEv?.name ?? null,
     reclassification_evidence_status: reclassEv?.status ?? null,
+    origin_evidence_archived_at: originEv?.archived_at ?? null,
+    reclassification_evidence_archived_at: reclassEv?.archived_at ?? null,
   };
 }

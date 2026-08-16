@@ -153,6 +153,8 @@ export function EvidenceLinkForm({
     input_batch: "Lote de entrada",
     production_order: "Orden / corrida de producción",
     output_batch: "Lote producido / lote final",
+    // PCR-03.1 (5.5): la evidencia también soporta acuerdos/requisitos.
+    customer_requirement: "Acuerdo / requisito de cliente",
   };
 
   const options = targets[targetType] ?? [];

@@ -29,8 +29,13 @@ export default async function GuidedBatchDetailPage({
 
   const totalComposition = composition.reduce((sum, c) => sum + Number(c.mass_kg), 0);
   const requiredEvidences = evidences.filter((e) => e.is_required_for_defensibility);
-  const pendingEvidences = evidences.filter((e) => e.evidence_status === "pending");
-  const validEvidences = evidences.filter((e) => e.evidence_status === "valid");
+  // (rev. 03.1–03.3.4) La vigencia la decide la vista (regla canónica 03.1):
+  // una archivada sigue visible como histórica pero NO cuenta como válida,
+  // para que la UI jamás contradiga la readiness SQL.
+  const pendingEvidences = evidences.filter(
+    (e) => e.evidence_status === "pending" && !e.archived_at
+  );
+  const validEvidences = evidences.filter((e) => e.is_valid_for_defensibility === true);
   const criticalGaps = gaps.filter((g) => g.gap_severity === "critical");
   const latest = history[0] ?? null;
 

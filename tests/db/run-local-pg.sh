@@ -32,10 +32,10 @@ psql -h "$HOST" -p "$PORT" -U "$USER" -d postgres -q -v ON_ERROR_STOP=1 \
 
 run() { psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -q -v ON_ERROR_STOP=1 "$@"; }
 
-echo "-- 1/10 arnés (superficie Supabase mínima)"
+echo "-- 1/13 arnés (superficie Supabase mínima)"
 run -f "$ROOT/tests/db/harness-prelude.sql"
 
-echo "-- 2/10 migración REAL 0025 (modelo de trazabilidad)"
+echo "-- 2/13 migración REAL 0025 (modelo de trazabilidad)"
 run -f "$ROOT/supabase/migrations/0025_traceability.sql"
 
 # El dashboard emulado ahora puede contar sobre las tablas reales de 0025.
@@ -43,20 +43,34 @@ run -c "
 create or replace view public.v_implementation_dashboard as
 select
   o.id as organization_id,
-  (select count(*) from public.suppliers s where s.organization_id = o.id)  as suppliers_count,
-  (select count(*) from public.materials m where m.organization_id = o.id)  as materials_count,
+  (select count(*) from public.suppliers s where s.organization_id = o.id) as suppliers_count,
+  (select count(*) from public.materials m where m.organization_id = o.id) as materials_count,
+  0::bigint as recycled_materials_count,
+  0::bigint as materials_without_origin_support_count,
+  0::bigint as evidences_count,
+  0::bigint as valid_evidences_count,
+  0::bigint as pending_evidences_count,
   (select count(*) from public.input_batches b where b.organization_id = o.id) as input_batches_count,
-  (select count(*) from public.production_orders p where p.organization_id = o.id) as production_orders_count
+  (select count(*) from public.production_orders p where p.organization_id = o.id) as production_orders_count,
+  0::bigint as output_batches_count,
+  0::bigint as output_batches_with_composition_count,
+  0::bigint as calculated_output_batches_count,
+  0::bigint as defensible_calculations_count,
+  0::bigint as warning_calculations_count,
+  0::bigint as preliminary_calculations_count,
+  0::bigint as critical_gaps_count,
+  0::bigint as open_feedback_count,
+  0::bigint as critical_feedback_count
 from public.organizations o;"
 
-echo "-- 3/10 migración REAL 0104 (inmutable: ya aplicada en Production)"
+echo "-- 3/13 migración REAL 0104 (inmutable: ya aplicada en Production)"
 run -f "$ROOT/supabase/migrations/0104_pcr02_internal_consumption_and_completeness.sql"
 
 # ── PCR-02.5.1 (hallazgo 3) · preflight del sobreconsumo HISTÓRICO ─────────
 # Se siembra data legacy INVÁLIDA antes de la 0105 (posible: aún no hay
 # guardas) y la migración debe FALLAR listando los lotes, sin dejar nada a
 # medias (begin/commit atómico) y sin tocar los datos.
-echo "-- 4a/10 LEGACY-EXT-INVALID: consumido 101 > recibido 100 → la 0105 debe FALLAR"
+echo "-- 4a/12 LEGACY-EXT-INVALID: consumido 101 > recibido 100 → la 0105 debe FALLAR"
 run << 'SQL'
 insert into organizations (id, name) values ('99999999-0000-0000-0000-00000000000a', 'Org Legacy');
 insert into suppliers (id, organization_id, name)
@@ -110,7 +124,7 @@ end $$;
 delete from batch_consumption where organization_id = '99999999-0000-0000-0000-00000000000a';
 SQL
 
-echo "-- 4b/10 LEGACY-INT-INVALID: consumo interno 51 > producido 50 → la 0105 debe FALLAR"
+echo "-- 4b/12 LEGACY-INT-INVALID: consumo interno 51 > producido 50 → la 0105 debe FALLAR"
 run << 'SQL'
 insert into output_batches (id, organization_id, production_order_id, batch_code, produced_quantity_kg)
 values ('99999999-6666-0000-0000-00000000000a', '99999999-0000-0000-0000-00000000000a',
@@ -146,7 +160,7 @@ values ('99999999-0000-0000-0000-00000000000a', '99999999-4444-0000-0000-0000000
         '99999999-5555-0000-0000-00000000000a', 100);
 SQL
 
-echo "-- 4c/10 LEGACY-VALID (saldo exacto 100/100 y 50/50) + migración REAL 0105"
+echo "-- 4c/12 LEGACY-VALID (saldo exacto 100/100 y 50/50) + migración REAL 0105"
 run --single-transaction -f "$ROOT/supabase/migrations/0105_pcr025_inventory_and_quantity_guards.sql"
 run << 'SQL'
 do $$
@@ -166,22 +180,39 @@ SQL
 run -c "grant all on all tables in schema public to authenticated;" \
     -c "grant usage, select on all sequences in schema public to authenticated;"
 
-echo "-- 5/10 aserciones conductuales PCR-02.1"
+echo "-- 5/13 aserciones conductuales PCR-02.1"
 run -f "$ROOT/tests/db/pcr02_1_assertions.sql"
 
-echo "-- 6/10 aserciones conductuales PCR-02.2 (historial + fail-closed)"
+echo "-- 6/13 aserciones conductuales PCR-02.2 (historial + fail-closed)"
 run -f "$ROOT/tests/db/pcr02_2_assertions.sql"
 
-echo "-- 7/10 aserciones conductuales PCR-02.3 (candado histórico + reapertura)"
+echo "-- 7/13 aserciones conductuales PCR-02.3 (candado histórico + reapertura)"
 run -f "$ROOT/tests/db/pcr02_3_assertions.sql"
 
-echo "-- 8/10 aserciones conductuales PCR-02.4 (structural guard de órdenes cerradas)"
+echo "-- 8/13 aserciones conductuales PCR-02.4 (structural guard de órdenes cerradas)"
 run -f "$ROOT/tests/db/pcr02_4_assertions.sql"
 
-echo "-- 9/10 aserciones conductuales PCR-02.5 (inventario + saldos + cantidad obligatoria)"
+echo "-- 9/13 aserciones conductuales PCR-02.5 (inventario + saldos + cantidad obligatoria)"
 run -f "$ROOT/tests/db/pcr02_5_assertions.sql"
 
-echo "-- 10/10 concurrencia REAL PCR-02.5 (dos sesiones simultáneas)"
+echo "-- 10/13 concurrencia REAL PCR-02.5 (dos sesiones simultáneas)"
 bash "$ROOT/tests/db/pcr02_5_concurrency.sh"
 
-echo "== PCR-02.1…PCR-02.5 · PostgreSQL local: TODAS las aserciones pasaron =="
+# ── PCR-03: migraciones reales 0106+ con la MISMA semántica de despliegue ──
+echo "-- 11/13 migraciones REALES PCR-03 (0106, 0107, 0108) vía psql --single-transaction"
+run --single-transaction -f "$ROOT/supabase/migrations/0106_pcr031_evidence_governance.sql"
+run --single-transaction -f "$ROOT/supabase/migrations/0107_pcr032_traceability_exercises.sql"
+run --single-transaction -f "$ROOT/supabase/migrations/0108_pcr033_audit_dossiers.sql"
+
+# En Supabase los DEFAULT PRIVILEGES otorgan esto solos; aquí se replica para
+# las tablas nuevas de PCR-03 (la RLS sigue siendo la barrera).
+run -c "grant all on all tables in schema public to authenticated;" \
+    -c "grant usage, select on all sequences in schema public to authenticated;"
+
+echo "-- 12/13 aserciones conductuales PCR-03 (gobernanza de evidencias)"
+run -f "$ROOT/tests/db/pcr03_assertions.sql"
+
+echo "-- 13/13 concurrencia REAL de versionado de expedientes (rev. 03.1–03.3.1, hallazgo 9)"
+PGHOST="$HOST" PGPORT="$PORT" PGDATABASE="$DB" bash "$ROOT/tests/db/pcr03_dossier_concurrency.sh"
+
+echo "== PCR-02.1…PCR-03 · PostgreSQL local: TODAS las aserciones pasaron =="

@@ -196,6 +196,10 @@ export async function cancelEvidenceUploadAction(intentId: string): Promise<Evid
 
 /** Mensajes de trigger conocidos que sí se muestran tal cual al usuario. */
 const KNOWN_DB_MESSAGES = [
+  // PCR-03.1 · guarda de revisión 0106 (mensajes de dominio, nunca SQL crudo)
+  "Solo administrador o calidad pueden revisar una evidencia (aceptarla internamente o rechazarla)",
+  "Solo administrador o calidad pueden archivar o desarchivar una evidencia",
+  "El motivo de rechazo es obligatorio",
   "Solo administrador o calidad pueden marcar una evidencia como válida",
   "Solo administrador o calidad pueden cambiar el estado de una evidencia validada",
   "Solo administrador o calidad pueden cambiar el archivo de una evidencia validada",
@@ -341,6 +345,8 @@ export async function linkEvidenceAction(
     "input_batch",
     "production_order",
     "output_batch",
+    // PCR-03.1 (5.5): el acuerdo/requisito de cliente también es destino.
+    "customer_requirement",
   ];
   if (!evidenceId || !targetId || !allowed.includes(targetType)) {
     return { error: "Selecciona la evidencia y el destino a asociar." };
@@ -352,6 +358,20 @@ export async function linkEvidenceAction(
       error:
         "El soporte de origen o de reclasificación solo aplica cuando el destino es un material.",
     };
+  }
+
+  // Multiempresa EXPLÍCITO: si el destino es un acuerdo/requisito, debe
+  // pertenecer también a la empresa activa (PCR-03.1).
+  if (targetType === "customer_requirement") {
+    const { data: req } = await supabase
+      .from("customer_requirements")
+      .select("id")
+      .eq("id", targetId)
+      .eq("organization_id", org.organizationId)
+      .maybeSingle();
+    if (!req) {
+      return { error: "El acuerdo/requisito no pertenece a tu empresa activa." };
+    }
   }
 
   // Multiempresa EXPLÍCITO: la evidencia debe ser de la empresa activa.
@@ -462,4 +482,166 @@ export async function getEvidenceViewUrlAction(
   const org = await requireActiveOrg();
   if (!evidenceId) return { url: null, error: "Falta la evidencia a abrir." };
   return createEvidenceSignedUrl(org.organizationId, evidenceId);
+}
+
+// ---------------------------------------------------------------------------
+// PCR-03.1 · Gobernanza: revisión interna, archivo y soporte físico
+// ---------------------------------------------------------------------------
+
+/**
+ * Revisión interna de una evidencia (5.1): aceptar internamente (comentario
+ * opcional) o rechazar (motivo OBLIGATORIO). El trigger 0106 impone el rol
+ * admin/quality y sella reviewed_at/reviewed_by con auth.uid() en servidor:
+ * nada de esto puede falsificarse desde el cliente.
+ */
+export async function reviewEvidenceAction(
+  _prev: EvidenceActionState,
+  formData: FormData
+): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const decision = String(formData.get("decision") ?? "");
+  const comment = String(formData.get("review_comment") ?? "").trim();
+  if (decision !== "accept" && decision !== "reject") {
+    return { error: "Decisión de revisión no reconocida." };
+  }
+  if (decision === "reject" && comment === "") {
+    return { error: "El motivo de rechazo es obligatorio." };
+  }
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("evidences")
+    .update({
+      status: decision === "accept" ? "valid" : "rejected",
+      review_comment: comment === "" ? null : comment,
+    })
+    .eq("id", String(formData.get("id") ?? ""))
+    .eq("organization_id", org.organizationId)
+    .select("id");
+  if (error) {
+    return {
+      error: evidenceErrorMessage(
+        error.message,
+        decision === "accept"
+          ? "No fue posible aceptar internamente la evidencia."
+          : "No fue posible rechazar la evidencia."
+      ),
+    };
+  }
+  if ((data ?? []).length === 0) {
+    return { error: "No se encontró la evidencia o no tienes permiso para revisarla." };
+  }
+  revalidatePath("/evidences");
+  return { error: null };
+}
+
+/** Archiva o desarchiva (5.1): una evidencia archivada deja de ser soporte
+ *  vigente por defecto sin perder su histórico. Rol impuesto por el trigger. */
+export async function archiveEvidenceAction(
+  _prev: EvidenceActionState,
+  formData: FormData
+): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const archive = String(formData.get("archive") ?? "true") === "true";
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("evidences")
+    .update({ archived_at: archive ? new Date().toISOString() : null })
+    .eq("id", String(formData.get("id") ?? ""))
+    .eq("organization_id", org.organizationId)
+    .select("id");
+  if (error) {
+    return { error: evidenceErrorMessage(error.message, "No fue posible actualizar el archivado.") };
+  }
+  if ((data ?? []).length === 0) {
+    return { error: "No se encontró la evidencia o no tienes permiso." };
+  }
+  revalidatePath("/evidences");
+  return { error: null };
+}
+
+/**
+ * Registra una evidencia con soporte EXCLUSIVAMENTE FÍSICO (5.2): sin
+ * archivo y sin fingirlo (CHECK 0106: physical ⇒ storage_path NULL). El
+ * consultor puede prepararla; la revisión sigue reservada a admin/quality.
+ */
+export async function createPhysicalEvidenceAction(
+  _prev: EvidenceActionState,
+  formData: FormData
+): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "El nombre de la evidencia es obligatorio." };
+  const reference = String(formData.get("physical_reference") ?? "").trim();
+  if (!reference) {
+    return { error: "La referencia documental del soporte físico es obligatoria." };
+  }
+  const supabase = await createServerClient();
+  const { error } = await supabase.from("evidences").insert({
+    organization_id: org.organizationId,
+    name,
+    evidence_type: String(formData.get("evidence_type") ?? "").trim() || null,
+    evidence_date: String(formData.get("evidence_date") ?? "") || null,
+    valid_until: String(formData.get("valid_until") ?? "") || null,
+    responsible: String(formData.get("responsible") ?? "").trim() || null,
+    observations: String(formData.get("observations") ?? "").trim() || null,
+    medium: "physical",
+    physical_reference: reference,
+    physical_location: String(formData.get("physical_location") ?? "").trim() || null,
+    physical_custodian: String(formData.get("physical_custodian") ?? "").trim() || null,
+    physical_notes: String(formData.get("physical_notes") ?? "").trim() || null,
+  });
+  if (error) {
+    return { error: evidenceErrorMessage(error.message, "No fue posible registrar la evidencia física.") };
+  }
+  revalidatePath("/evidences");
+  return { error: null };
+}
+
+/**
+ * Declara (o corrige) el soporte físico de una evidencia existente (5.2):
+ * si la evidencia tiene archivo digital pasa a HÍBRIDA; si no lo tiene,
+ * queda como FÍSICA. Nunca inventa un archivo.
+ */
+export async function declarePhysicalSupportAction(
+  _prev: EvidenceActionState,
+  formData: FormData
+): Promise<EvidenceActionState> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+  const id = String(formData.get("id") ?? "");
+  const reference = String(formData.get("physical_reference") ?? "").trim();
+  if (!reference) {
+    return { error: "La referencia documental del soporte físico es obligatoria." };
+  }
+  const supabase = await createServerClient();
+  const { data: row } = await supabase
+    .from("evidences")
+    .select("id, storage_path")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!row) return { error: "No se encontró la evidencia." };
+  const { error } = await supabase
+    .from("evidences")
+    .update({
+      medium: row.storage_path ? "hybrid" : "physical",
+      physical_reference: reference,
+      physical_location: String(formData.get("physical_location") ?? "").trim() || null,
+      physical_custodian: String(formData.get("physical_custodian") ?? "").trim() || null,
+      physical_notes: String(formData.get("physical_notes") ?? "").trim() || null,
+    })
+    .eq("id", id)
+    .eq("organization_id", org.organizationId);
+  if (error) {
+    return { error: evidenceErrorMessage(error.message, "No fue posible declarar el soporte físico.") };
+  }
+  revalidatePath("/evidences");
+  return { error: null };
 }

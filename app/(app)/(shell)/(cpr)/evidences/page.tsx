@@ -20,7 +20,16 @@ import {
   EvidenceForm,
   EvidenceLinkForm,
 } from "@/components/domain/evidences/forms";
-import { EvidenceRowActions } from "@/components/domain/evidences/row-actions";
+import { EvidenceGovernanceActions } from "@/components/domain/evidences/governance-actions";
+import { PhysicalEvidenceForm, DeclarePhysicalForm } from "@/components/domain/evidences/physical-forms";
+import {
+  EVIDENCE_CATEGORIES,
+  EVIDENCE_CATEGORY_LABEL,
+  EVIDENCE_MEDIUM_LABEL,
+  EVIDENCE_REVIEW_LABEL,
+  evidenceCategoryLabel,
+  evidenceEffectiveLabel,
+} from "@/lib/domain/evidence-governance";
 import { ViewEvidenceButton } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import {
@@ -39,7 +48,16 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
 export default async function EvidencesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; detail?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    page?: string;
+    detail?: string;
+    /** PCR-03.1 (5.6): filtros de gobernanza */
+    estado?: string;
+    tipo?: string;
+    medio?: string;
+    archivadas?: string;
+  }>;
 }) {
   const org = await requireCprModule();
   const supabase = await createServerClient();
@@ -58,8 +76,16 @@ export default async function EvidencesPage({
     inputBatches,
     productionOrders,
     outputBatches,
+    { data: requirementOptionRows },
   ] = await Promise.all([
-    searchEvidences(org.organizationId, { q: params.q, page: params.page }),
+    searchEvidences(org.organizationId, {
+      q: params.q,
+      page: params.page,
+      status: params.estado,
+      type: params.tipo,
+      medium: params.medio,
+      includeArchived: params.archivadas === "1",
+    }),
     listSuppliers(org.organizationId),
     listFamilies(org.organizationId),
     listProducts(org.organizationId),
@@ -75,6 +101,12 @@ export default async function EvidencesPage({
     listInputBatches(org.organizationId),
     listProductionOrders(org.organizationId),
     listOutputBatches(org.organizationId),
+    // PCR-03.1: opciones de acuerdos/requisitos para el selector de vínculos
+    supabase
+      .from("customer_requirements")
+      .select("id, customer_name, code, title")
+      .eq("organization_id", org.organizationId)
+      .order("customer_name"),
   ]);
   const evidences = result.rows;
   const pageIds = evidences.map((e) => e.id);
@@ -114,6 +146,10 @@ export default async function EvidencesPage({
     input_batch: inputBatches.map((b) => ({ value: b.id, label: b.batch_code })),
     production_order: productionOrders.map((o) => ({ value: o.id, label: o.order_code })),
     output_batch: outputBatches.map((b) => ({ value: b.id, label: b.batch_code })),
+    customer_requirement: (requirementOptionRows ?? []).map((r) => ({
+      value: r.id as string,
+      label: `${r.customer_name} · ${r.code} — ${r.title}`,
+    })),
   };
 
   const listParams = { q: params.q };
@@ -142,12 +178,61 @@ export default async function EvidencesPage({
         <EvidenceForm />
       </section>
 
-      <div className="rounded-lg border border-hairline bg-surface p-4">
+      {/* PCR-03.1 (5.2): evidencia con soporte EXCLUSIVAMENTE físico */}
+      <section className="rounded-lg border border-hairline bg-surface p-5">
+        <h2 className="mb-4 text-sm font-semibold">Registrar evidencia física (sin archivo)</h2>
+        <PhysicalEvidenceForm />
+      </section>
+
+      <div className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
         <ListSearchForm
           basePath="/evidences"
           q={params.q ?? ""}
           placeholder="Buscar por nombre o tipo de evidencia…"
         />
+        {/* PCR-03.1 (5.6): filtros combinables de gobernanza (GET) */}
+        <form method="get" action="/evidences" className="flex flex-wrap items-end gap-3 text-sm">
+          {params.q ? <input type="hidden" name="q" value={params.q} /> : null}
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-ink-soft">Estado</span>
+            <select name="estado" defaultValue={params.estado ?? ""} className="rounded-md border border-hairline bg-canvas px-2 py-1.5">
+              <option value="">Todos</option>
+              {Object.entries(EVIDENCE_REVIEW_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-ink-soft">Tipo</span>
+            <select name="tipo" defaultValue={params.tipo ?? ""} className="rounded-md border border-hairline bg-canvas px-2 py-1.5">
+              <option value="">Todos</option>
+              {EVIDENCE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{EVIDENCE_CATEGORY_LABEL[c]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-ink-soft">Medio</span>
+            <select name="medio" defaultValue={params.medio ?? ""} className="rounded-md border border-hairline bg-canvas px-2 py-1.5">
+              <option value="">Todos</option>
+              {Object.entries(EVIDENCE_MEDIUM_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 pb-1.5 text-xs text-ink-soft">
+            <input type="checkbox" name="archivadas" value="1" defaultChecked={params.archivadas === "1"} />
+            Incluir archivadas
+          </label>
+          <button type="submit" className="rounded-md border border-hairline px-3 py-1.5 hover:bg-canvas">
+            Filtrar
+          </button>
+          {params.estado || params.tipo || params.medio || params.archivadas ? (
+            <Link href="/evidences" className="pb-1.5 text-xs text-ink-soft underline-offset-2 hover:underline">
+              Limpiar filtros
+            </Link>
+          ) : null}
+        </form>
       </div>
 
       {evidences.length === 0 ? (
@@ -183,6 +268,23 @@ export default async function EvidencesPage({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium">{e.name}</p>
+                    {/* PCR-03.1: gobernanza visible — medio, tipología,
+                        localización física y revisión (quién/cuándo/motivo) */}
+                    <p className="text-xs text-ink-soft">
+                      {EVIDENCE_MEDIUM_LABEL[e.medium as keyof typeof EVIDENCE_MEDIUM_LABEL] ?? e.medium}
+                      {" · "}
+                      {evidenceCategoryLabel(e.evidence_type)}
+                      {e.medium !== "digital" && e.physical_reference
+                        ? ` · Ref. física: ${e.physical_reference}${e.physical_location ? ` (${e.physical_location})` : ""}${e.physical_custodian ? ` · custodia: ${e.physical_custodian}` : ""}`
+                        : null}
+                    </p>
+                    {e.reviewed_at ? (
+                      <p className="text-xs text-ink-soft">
+                        Revisada el {new Date(e.reviewed_at).toLocaleDateString("es")}{" "}
+                        {e.reviewed_by_email ? ` por ${e.reviewed_by_email}` : ""}
+                        {e.review_comment ? ` — «${e.review_comment}»` : ""}
+                      </p>
+                    ) : null}
                     <p className="text-xs text-ink-soft">
                       {[
                         e.evidence_type,
@@ -221,18 +323,29 @@ export default async function EvidencesPage({
                     <span
                       className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.tone}`}
                     >
-                      {status.label}
+                      {evidenceEffectiveLabel(e.status, e.archived_at)}
                     </span>
-                    <EvidenceRowActions
+                    <EvidenceGovernanceActions
                       evidenceId={e.id}
                       status={e.status}
-                      canApprove={canApprove}
+                      archived={Boolean(e.archived_at)}
+                      canReview={canApprove}
                     />
                   </div>
                 </div>
 
                 {isOpen ? (
-                  <div className="mt-3 rounded-md border border-hairline bg-paper p-3">
+                  <div className="mt-3 space-y-3 rounded-md border border-hairline bg-paper p-3">
+                    {e.medium === "digital" ? (
+                      <details className="rounded-md border border-hairline bg-canvas p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-ink">
+                          Declarar soporte físico (pasará a «Digital + físico»)
+                        </summary>
+                        <div className="mt-3">
+                          <DeclarePhysicalForm evidenceId={e.id} />
+                        </div>
+                      </details>
+                    ) : null}
                     <p className="mb-2 text-xs font-semibold text-ink">
                       Utilizada en {detailUsage.length === 1 ? "1 registro" : `${detailUsage.length} registros`}
                     </p>

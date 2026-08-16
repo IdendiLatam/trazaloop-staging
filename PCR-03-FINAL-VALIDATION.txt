@@ -1,0 +1,56 @@
+============================================================
+PCR-03 · VALIDACIÓN FINAL — rev. 03.1–03.3.4
+Archived Evidence Consistency Closure · 2026-08-15
+============================================================
+
+Árbol: rama feature/pcr-03-evidence-governance-preaudit-dossier
+Base:  PCR-02.5.2 (commit e15cde4820cf3fccb276cf8c64ba75bc93a13a61)
+       · 0001–0105 BYTE-IDÉNTICAS al ZIP base (97 ficheros, 0 diferencias)
+       · 0028_recycled_content.sql BYTE-INTACTA (SHA-256
+         ca5fd504cf91d924233746d5c5eadba7df6987fdcd58ad4be6ef15f52ebccaf4)
+       · 0031/0032/0034/0065 intactas: sus vistas se redefinen en 0106
+Migraciones del sprint: 0106, 0107, 0108 (en sitio; SIN 0109)
+
+Comandos ejecutados desde el árbol final (logs nuevos):
+
+1) npm run typecheck ............................. EXIT 0
+2) npm run lint .................................. EXIT 0 · 1 warning
+   (ÚNICO, histórico: 'domainSrc')
+3) npm run test:pcr03-1 .......................... EXIT 0
+4) npm run test:pcr03-2 .......................... EXIT 0
+5) npm run test:pcr03-3 .......................... EXIT 0
+6) npm run test:pcr03 ............................ EXIT 0
+7) npm run test:all .............................. EXIT 0
+8) npm run build ................................. EXIT 0 (Compiled successfully)
+9) npm run test:pcr03-db (PostgreSQL 16 REAL, psql 16.14) ........ EXIT 0
+   · 6 bloques "TODAS LAS ASERCIONES PASARON" (S12–S18 + suites PCR-02)
+   · Los SIETE marcadores obligatorios emitidos:
+       ARCHIVED_EVIDENCE_CALCULATION = PASS
+       ARCHIVED_EVIDENCE_CROSS_SURFACE_CONSISTENCY = PASS
+       COMPOSITION_ONLY_MATERIAL_EVIDENCE = PASS
+       PRODUCT_EVIDENCE_IN_EXERCISE = PASS
+       CUSTOMER_REQUIREMENT_EVIDENCE_IN_EXERCISE = PASS
+       IMPLICIT_MATERIAL_SUPPORT_IN_EXERCISE = PASS
+       EVIDENCE_METADATA_IN_DOSSIER = PASS
+   · Concurrencia repetida: ✔ C1 (saldos) y ✔ C2 (expedientes)
+
+Cierres 03.1–03.3.4:
+  ARCHIVED CALC CONSISTENCY ............. YES (S15 + S17 fase B)
+  GUIDED FLOW CONSISTENCY ............... YES (readiness 0106 + UI por
+    is_valid_for_defensibility; S17)
+  AUDIT SUPPORT MATRIX CONSISTENCY ...... YES (is_valid_for_defensibility =
+    valid AND no archivada; archived_at/reviewed_* al final; filtro UI real)
+  IMPLEMENTATION DASHBOARD CONSISTENCY .. YES (conteos y soporte de origen
+    excluyen archivadas; next_actions vigente de 0104 con la adaptación)
+  MATERIAL CATALOG CONSISTENCY .......... YES (archived_at en consultas y
+    tipos; SupportBadge "Soporte archivado · no vigente" con texto)
+  COMPOSITION-ONLY MATERIAL SUPPORT ..... YES (S18: mismo soporte que el
+    motor visible en el ejercicio; brecha señalada sin ocultarlo)
+  CUSTOMER REQUIREMENTS COHERENCIA ...... YES (productos de toda la cadena)
+
+No-regresión 03.1–03.3.3: snapshots autoritativos, roles de archivado en BD,
+conteos >= 0, organization_id inmutable, sellos server-side, búsqueda
+server-side, concurrencia, F1–F12, ataques 1–40 — TODO re-ejecutado en verde.
+
+Paquete: trazaloop-sprint-PCR-03.1-03.3.4.zip + SHA256SUMS.txt
+NO deploy · NO Supabase remoto · NO Vercel · NO git push · NO Production.

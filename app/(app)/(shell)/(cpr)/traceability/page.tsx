@@ -17,6 +17,21 @@ export default async function TraceabilityIndexPage() {
     { href: "/traceability/genealogy", title: "Genealogía", count: null, hint: "Reconstruye la cadena hacia atrás y hacia adelante." },
   ];
 
+  // PCR-03 (§8): agrupación "Preparación para auditoría" dentro del módulo
+  // PCR — sin módulo comercial nuevo. La gobernanza sigue en Evidencias.
+  const auditPrepCards = [
+    {
+      href: "/audit-prep/exercises",
+      title: "Ejercicios de trazabilidad",
+      hint: "Reconstruye un lote hacia atrás con los datos reales y congela la fotografía con sus brechas y advertencias.",
+    },
+    {
+      href: "/audit-prep/dossiers",
+      title: "Expedientes",
+      hint: "Expediente interno de preparación para auditoría por lote: versionado, congelado e imprimible.",
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -58,6 +73,28 @@ export default async function TraceabilityIndexPage() {
           </Link>
         </div>
       </header>
+
+      <section className="rounded-lg border border-hairline bg-surface p-5">
+        <h2 className="text-sm font-semibold">Preparación para auditoría</h2>
+        <p className="mt-1 text-xs text-ink-soft">
+          Herramientas internas para responder: «si un auditor selecciona este
+          lote, ¿puedo reconstruir su trazabilidad, demostrar cantidades y
+          localizar las evidencias?». No constituyen auditoría ni
+          certificación.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {auditPrepCards.map((c) => (
+            <Link
+              key={c.href}
+              href={c.href}
+              className="rounded-md border border-hairline bg-canvas p-3 hover:border-loop"
+            >
+              <p className="text-sm font-medium text-loop">{c.title}</p>
+              <p className="mt-1 text-xs text-ink-soft">{c.hint}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((c) => (

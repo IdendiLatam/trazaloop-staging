@@ -72,6 +72,11 @@ export type EvidenceMatrixRow = {
   is_valid_for_defensibility: boolean;
   created_at: string;
   validated_at: string | null;
+  /** (rev. 03.1–03.3.4) Columnas añadidas AL FINAL de la vista: explican por
+   * qué una evidencia aceptada internamente no está vigente. */
+  archived_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 };
 
 export type SupportGapRow = {

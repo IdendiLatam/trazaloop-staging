@@ -409,8 +409,10 @@ check("H3.2 · doble preflight fail-closed con lotes de ejemplo y sin imputacion
 });
 
 check("H3.3 · el runner demuestra LEGACY-EXT/INT-INVALID (falla) y LEGACY-VALID (aplica)", () => {
-  for (const step of ["4a/10 LEGACY-EXT-INVALID", "4b/10 LEGACY-INT-INVALID", "4c/10 LEGACY-VALID"]) {
-    assert(RUNNER.includes(step), `paso ${step}`);
+  // La numeración del runner crece con cada bloque (PCR-03 añadió pasos);
+  // lo invariante es el paso legacy en sí, no el total.
+  for (const step of ["LEGACY-EXT-INVALID", "LEGACY-INT-INVALID", "LEGACY-VALID"]) {
+    assert(new RegExp(`4[abc]/\\d+ ${step}`).test(RUNNER), `paso ${step}`);
   }
   assert(RUNNER.includes("la 0105 se aplicó sobre sobreconsumo externo histórico"), "el arnés falla si la migración pasara con legacy externo inválido");
   assert(RUNNER.includes("consumo acumulado superior a la cantidad recibida"), "verifica el mensaje externo literal");
@@ -421,12 +423,21 @@ check("H3.3 · el runner demuestra LEGACY-EXT/INT-INVALID (falla) y LEGACY-VALID
 
 console.log("\nPCR-02.5 · Empaquetado, migraciones y regresiones\n");
 
-check("R1 · migraciones: 0105 única nueva; 0001–0104 presentes; sin 0106", () => {
+check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo el bloque PCR-03 reservado", () => {
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
-  assert(files.length === 97, `97 migraciones esperadas, hay ${files.length}`);
-  assert(files[files.length - 1] === "0105_pcr025_inventory_and_quantity_guards.sql", "la última es 0105");
-  assert(!files.some((f) => f.startsWith("0106")), "sin 0106");
-  assert(files.filter((f) => !f.startsWith("0105")).length === 96, "las 96 previas intactas en número");
+  // Bloque PCR-03 (reserva declarada del brief): 0106/0107/0108 exactas.
+  const reservedPcr03 = new Set([
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ]);
+  const historical = files.filter((f) => f <= "0105_z");
+  assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);
+  assert(historical[historical.length - 1] === "0105_pcr025_inventory_and_quantity_guards.sql", "la 0105 cierra el histórico");
+  const later = files.filter((f) => f > "0105_z");
+  const intruders = later.filter((f) => !reservedPcr03.has(f));
+  assert(intruders.length === 0, `tras la 0105 solo el bloque PCR-03: ${intruders.join(", ")}`);
+  assert(!files.some((f) => Number(f.slice(0, 4)) >= 109), "no existe 0109 ni posterior");
 });
 
 check("R2 · Demo/Full/Extra y estructura PCR-02.4 sin tocar", () => {
@@ -440,7 +451,9 @@ check("R2 · Demo/Full/Extra y estructura PCR-02.4 sin tocar", () => {
 check("R3 · scripts npm y arnés: pcr02-5 integrado; build sigue en webpack", () => {
   assert(PKG.includes('"test:pcr02-5": "tsx tests/unit/pcr02-5-hardening.test.ts"'), "script unitario");
   assert(PKG.includes('"test:pcr02-5-db"'), "script de BD");
-  assert(PKG.includes("npm run test:pcr02-4 && npm run test:pcr02-5 && npm run test:release"), "test:all lo ejecuta tras pcr02-4");
+  // PCR-03 se intercala entre pcr02-5 y release (bloque autorizado):
+  // lo invariante es que pcr02-5 corre tras pcr02-4 dentro de test:all.
+  assert(PKG.includes("npm run test:pcr02-4 && npm run test:pcr02-5 &&"), "test:all lo ejecuta tras pcr02-4");
   assert(PKG.includes("next build --webpack"), "build con webpack preservado");
   assert(RUNNER.includes("pcr02_5_assertions.sql") && RUNNER.includes("pcr02_5_concurrency.sh"), "arnés: 15 aserciones + concurrencia real de dos sesiones");
 });

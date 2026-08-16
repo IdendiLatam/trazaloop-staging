@@ -226,11 +226,16 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
   // La frontera de PCR-02.4 fue la 0104; el único sprint posterior
   // autorizado es PCR-02.5 (0105), verificado por su propia suite.
   const later = dir.filter((f) => Number(f.slice(0, 4)) > 104);
-  assert(
-    later.length === 0 ||
-      (later.length === 1 && later[0] === "0105_pcr025_inventory_and_quantity_guards.sql"),
-    "tras la 0104 solo puede existir la 0105 de PCR-02.5 (§5)"
-  );
+  // Posteriores AUTORIZADAS: 0105 (PCR-02.5) y el bloque PCR-03 reservado
+  // por su brief (0106/0107/0108). Cualquier otra sigue vetada.
+  const allowedLater = new Set([
+    "0105_pcr025_inventory_and_quantity_guards.sql",
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ]);
+  const intruders = later.filter((f) => !allowedLater.has(f));
+  assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);
   assert(dir.filter((f) => f.startsWith("0104")).length === 1, "una única 0104");
 });
 check("higiene del sprint: scripts registrados, sin comandos remotos, sin version bump", () => {

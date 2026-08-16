@@ -183,6 +183,11 @@ export default async function MaterialsPage({
                               ? m.reclassification_evidence_status
                               : m.origin_evidence_status
                           }
+                          archivedAt={
+                            alreadyReclassified
+                              ? m.reclassification_evidence_archived_at
+                              : m.origin_evidence_archived_at
+                          }
                         />
                       ) : null}
                     </p>

@@ -434,21 +434,34 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     })
     .sort();
 
-  const expectedAfter0101 = [
+  const mandatoryAfter0101 = [
     "0102_t9g_qa_finalizer_closure.sql",
     // PCR-01: única migración nueva autorizada por el sprint de hardening.
     "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
     // PCR-02: única migración nueva autorizada por el sprint (consumo interno).
     "0104_pcr02_internal_consumption_and_completeness.sql",
-      "0105_pcr025_inventory_and_quantity_guards.sql",
+    "0105_pcr025_inventory_and_quantity_guards.sql",
   ];
-
+  // Bloque PCR-03 (reserva declarada del brief): aparecen en orden durante
+  // el bloque; NADA fuera de esta lista está autorizado después de 0101.
+  const reservedPcr03 = [
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ];
+  for (const f of mandatoryAfter0101) {
+    assert(after0101.includes(f), `falta la migración obligatoria ${f}`);
+  }
+  const allowedAfter0101 = new Set([...mandatoryAfter0101, ...reservedPcr03]);
+  const intrudersAfter0101 = after0101.filter((f) => !allowedAfter0101.has(f));
   assert(
-    JSON.stringify(after0101) ===
-      JSON.stringify(expectedAfter0101),
-    `después de 0101 solo deben existir 0102 (QA), 0103 (PCR-01), 0104 (PCR-02) y 0105 (PCR-02.5) ` +
-      `(hay: ${after0101.join(", ") || "ninguna"})`
+    intrudersAfter0101.length === 0,
+    `después de 0101 solo deben existir 0102 (QA), 0103 (PCR-01), 0104 (PCR-02), 0105 (PCR-02.5) ` +
+      `y el bloque PCR-03 reservado (hay intrusas: ${intrudersAfter0101.join(", ")})`
   );
+
+  // Aserción HISTÓRICA restaurada (revisión 03.1–03.3.1, hallazgo 10): la
+  // extensión de la frontera de migraciones jamás debilita este candado.
   assert(
     MIG100.includes("create or replace function public.resolve_organization_module_access"),
     "0100 conserva su resolver original"

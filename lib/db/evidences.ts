@@ -26,6 +26,15 @@ export const EVIDENCE_SIGNED_URL_TTL_SECONDS = 60 * 10;
 // Listado con búsqueda + paginación (punto 9)
 // ---------------------------------------------------------------------------
 export type EvidenceListItem = {
+  /** PCR-03.1 · Gobernanza: medio, archivo/físico, revisión y archivado. */
+  medium: string;
+  archived_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_email: string | null;
+  review_comment: string | null;
+  physical_reference: string | null;
+  physical_location: string | null;
+  physical_custodian: string | null;
   id: string;
   name: string;
   evidence_type: string | null;
@@ -37,21 +46,45 @@ export type EvidenceListItem = {
 
 export async function searchEvidences(
   orgId: string,
-  query: { q?: string | null; page?: string | number | null }
+  query: {
+    q?: string | null;
+    page?: string | number | null;
+    /** PCR-03.1 · Filtros de gobernanza (5.6): estado, tipo, medio y archivadas. */
+    status?: string | null;
+    type?: string | null;
+    medium?: string | null;
+    includeArchived?: boolean;
+  }
 ): Promise<PageResult<EvidenceListItem>> {
   const { q, page, pageSize } = normalizePageQuery(query);
   const supabase = await createServerClient();
 
   let request = supabase
     .from("evidences")
-    .select("id, name, evidence_type, status, evidence_date, valid_until, storage_path", {
-      count: "exact",
-    })
+    .select(
+      "id, name, evidence_type, status, evidence_date, valid_until, storage_path, medium, archived_at, reviewed_at, review_comment, physical_reference, physical_location, physical_custodian, reviewed_by:profiles!evidences_reviewed_by_fkey(email)",
+      {
+        count: "exact",
+      }
+    )
     .eq("organization_id", orgId);
 
   const term = sanitizeSearchTerm(q);
   if (term) {
     request = request.or(`name.ilike.%${term}%,evidence_type.ilike.%${term}%`);
+  }
+  if (query.status && ["pending", "valid", "rejected", "expired"].includes(query.status)) {
+    request = request.eq("status", query.status);
+  }
+  if (query.type) {
+    request = request.eq("evidence_type", query.type.slice(0, 80));
+  }
+  if (query.medium && ["digital", "physical", "hybrid"].includes(query.medium)) {
+    request = request.eq("medium", query.medium);
+  }
+  if (!query.includeArchived) {
+    // Por defecto la evidencia archivada no aparece como soporte vigente.
+    request = request.is("archived_at", null);
   }
 
   const { from, to } = pageRange(page, pageSize);
@@ -68,6 +101,15 @@ export async function searchEvidences(
       evidence_date: (e.evidence_date as string | null) ?? null,
       valid_until: (e.valid_until as string | null) ?? null,
       has_file: Boolean(e.storage_path),
+      medium: (e.medium as string) ?? "digital",
+      archived_at: (e.archived_at as string | null) ?? null,
+      reviewed_at: (e.reviewed_at as string | null) ?? null,
+      reviewed_by_email:
+        ((e.reviewed_by as unknown as { email?: string } | null)?.email as string | null) ?? null,
+      review_comment: (e.review_comment as string | null) ?? null,
+      physical_reference: (e.physical_reference as string | null) ?? null,
+      physical_location: (e.physical_location as string | null) ?? null,
+      physical_custodian: (e.physical_custodian as string | null) ?? null,
     })),
     total: count ?? 0,
     page,
@@ -121,6 +163,11 @@ export type LinkedEvidence = {
   status: string;
   has_file: boolean;
   link_role: string | null;
+  /** PCR-03.1 (rev. 03.1–03.3.1, hallazgo 2): la gobernanza viaja EXPLÍCITA
+   *  en el contrato — el ejercicio y el expediente la consumen sin casts. */
+  medium: string;
+  archived_at: string | null;
+  physical_reference: string | null;
 };
 
 export type EvidenceTargetType =
@@ -131,7 +178,8 @@ export type EvidenceTargetType =
   | "site"
   | "input_batch"
   | "production_order"
-  | "output_batch";
+  | "output_batch"
+  | "customer_requirement";
 
 /** Evidencias vinculadas a cada destino de UNA página de registros (una sola
  *  consulta por página, nunca por fila). Devuelve targetId → evidencias. */
@@ -147,7 +195,7 @@ export async function listEvidencesForTargets(
   const { data } = await supabase
     .from("evidence_links")
     .select(
-      "target_id, link_role, evidence_id, evidences(name, evidence_type, evidence_date, status, storage_path)"
+      "target_id, link_role, evidence_id, evidences(name, evidence_type, evidence_date, status, storage_path, medium, archived_at, physical_reference)"
     )
     .eq("organization_id", orgId)
     .eq("target_type", targetType)
@@ -160,6 +208,9 @@ export async function listEvidencesForTargets(
       evidence_date: string | null;
       status: string;
       storage_path: string | null;
+      medium: string | null;
+      archived_at: string | null;
+      physical_reference: string | null;
     } | null;
     if (!ev) continue;
     const list = (byTarget[row.target_id as string] ??= []);
@@ -171,6 +222,9 @@ export async function listEvidencesForTargets(
       status: ev.status,
       has_file: Boolean(ev.storage_path),
       link_role: (row.link_role as string | null) ?? null,
+      medium: ev.medium ?? "digital",
+      archived_at: ev.archived_at ?? null,
+      physical_reference: ev.physical_reference ?? null,
     });
   }
   return byTarget;
@@ -199,6 +253,8 @@ const TARGET_TYPE_LABEL: Record<string, string> = {
   output_batch: "Lote producido / lote final",
   document: "Documento",
   requirement: "Requisito",
+  // PCR-03.1 (rev. 03.1–03.3.1, hallazgo 7)
+  customer_requirement: "Acuerdo / requisito de cliente",
 };
 
 function targetHref(targetType: string, targetId: string): string | null {
@@ -223,6 +279,9 @@ function targetHref(targetType: string, targetId: string): string | null {
       return `/traceability/production-orders/${targetId}#registro-${targetId}`;
     case "output_batch":
       return `/traceability/output-batches?batch=${targetId}#lote-${targetId}`;
+    case "customer_requirement":
+      // El listado de requisitos resuelve ?focus=<id> como los catálogos.
+      return `/catalog/customer-requirements?focus=${targetId}#registro-${targetId}`;
     default:
       return null;
   }
@@ -302,6 +361,12 @@ export async function listEvidenceUsage(
   resolve("input_batch", "input_batches", "id, batch_code", (r) => String(r.batch_code));
   resolve("production_order", "production_orders", "id, order_code", (r) => String(r.order_code));
   resolve("output_batch", "output_batches", "id, batch_code", (r) => String(r.batch_code));
+  resolve(
+    "customer_requirement",
+    "customer_requirements",
+    "id, code, title, customer_name",
+    (r) => `${r.customer_name} · ${r.code} — ${r.title}`
+  );
   await Promise.all(resolvers);
 
   const rows: EvidenceUsageRow[] = (links ?? []).map((l) => {

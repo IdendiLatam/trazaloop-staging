@@ -821,24 +821,30 @@ check("12. Las migraciones 0001–0105 existen sin renumeraciones ni duplicados"
     .filter((n) => Number.isFinite(n))
     .sort((a, b) => a - b);
   assert(numbers[0] === 1, `la primera migración es ${numbers[0]}, se esperaba 0001`);
+  // PCR-03 reserva el bloque 0106–0108 (una migración por sub-sprint); la
+  // última debe pertenecer al bloque y nada puede ir más allá de la 0108.
   assert(
-    numbers[numbers.length - 1] === 105,
-    `la última migración es ${numbers[numbers.length - 1]}, se esperaba 0105 (PCR-02.5)`
+    numbers[numbers.length - 1] >= 106 && numbers[numbers.length - 1] <= 108,
+    `la última migración es ${numbers[numbers.length - 1]}, se esperaba dentro del bloque PCR-03 (0106–0108)`
   );
   // Nadie debe haber renumerado ni duplicado un prefijo.
   const dupes = numbers.filter((n, i) => i > 0 && n === numbers[i - 1]);
   assert(dupes.length === 0, `prefijos de migración duplicados: ${dupes.join(", ")}`);
 });
 
-check("13. No existe ninguna migración 0106 ni posterior (0103 = PCR-01, 0104 = PCR-02, 0105 = PCR-02.5)", () => {
+check("13. Tras 0105 solo el bloque PCR-03 exacto (0106/0107/0108); no existe 0109 ni posterior", () => {
   const dir = path.join(ROOT, "supabase", "migrations");
-  const beyond = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(
-    beyond.length === 0,
-    `PCR-02.5 solo autoriza hasta la 0105; existen posteriores: ${beyond.join(", ")}`
-  );
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+  const allowed = new Set([
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ]);
+  const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
+  const intruders = later.filter((f) => !allowed.has(f));
+  assert(intruders.length === 0, `posteriores no autorizadas: ${intruders.join(", ")}`);
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 109);
+  assert(beyond.length === 0, `no debe existir 0109 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("13b. La actualización legal es un script operativo, NO una migración", () => {
@@ -1385,7 +1391,7 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
   }
   // Y siguen sin existir migraciones nuevas.
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.length === 0, `PCR-02.5 solo autoriza hasta la 0105; no debe existir 0106 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 109).length === 0, `el bloque PCR-03 termina en 0108; no debe existir 0109 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
@@ -1977,7 +1983,7 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
     );
   }
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.length === 0, `PCR-02.5 solo autoriza hasta la 0105; no debe existir 0106 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 109).length === 0, `el bloque PCR-03 termina en 0108; no debe existir 0109 ni posterior: ${beyond.join(", ")}`);
   // Los borradores viven en docs/legal, no en supabase/.
   for (const name of LEGAL_DRAFTS) {
     assert(
@@ -2795,7 +2801,7 @@ check("73. La documentación cubre el kill switch", () => {
 check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.length === 0, `PCR-02.5 solo autoriza hasta la 0105; no debe existir 0106 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 109).length === 0, `el bloque PCR-03 termina en 0108; no debe existir 0109 ni posterior: ${beyond.join(", ")}`);
   assert(
     /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
     "el script legal debe declarar la aprobación"
@@ -3003,12 +3009,13 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
+  // PCR-03 reserva 0106–0108: la última debe estar dentro del bloque.
   assert(
-    numbers[numbers.length - 1] === 105,
-    `la última migración debe ser la 0105 (PCR-02.5), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] >= 106 && numbers[numbers.length - 1] <= 108,
+    `la última migración debe estar en el bloque PCR-03 (0106–0108), es ${numbers[numbers.length - 1]}`
   );
   const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 106);
-  assert(beyond.length === 0, `PCR-02.5 solo autoriza hasta la 0105; no debe existir 0106 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 109).length === 0, `el bloque PCR-03 termina en 0108; no debe existir 0109 ni posterior: ${beyond.join(", ")}`);
 });
 
 // ===========================================================================
@@ -3703,13 +3710,14 @@ check("103. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
+  // PCR-03 reserva 0106–0108: la última debe estar dentro del bloque.
   assert(
-    numbers[numbers.length - 1] === 105,
-    `la última migración debe ser la 0105 (PCR-02.5), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] >= 106 && numbers[numbers.length - 1] <= 108,
+    `la última migración debe estar en el bloque PCR-03 (0106–0108), es ${numbers[numbers.length - 1]}`
   );
   assert(
-    files.filter((f) => Number(f.slice(0, 4)) >= 106).length === 0,
-    "PCR-02.5 solo autoriza hasta la 0105; no debe existir 0106 ni posterior"
+    files.filter((f) => Number(f.slice(0, 4)) >= 109).length === 0,
+    "el bloque PCR-03 termina en 0108; no debe existir 0109 ni posterior"
   );
   // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.
   assert(

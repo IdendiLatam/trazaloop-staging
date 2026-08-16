@@ -48,26 +48,35 @@ console.log("\nSprint T9D · Enlace privado controlado y QR del pasaporte\n");
 check("1. Existe 0092 y las migraciones posteriores están bajo control (0093 fibras T9E; 0094 intentos, 0095/0096 fixes digest, 0097 atomicidad T9E.2, 0098 sellado server-only T9E.3, 0099 Storage RLS T9E.4, 0100 acceso comercial por módulo T9F, 0101 endurecimiento operativo T9F.1, 0102 cierre QA T9G; 0103 hardening PCR-01; 0104 consumo interno PCR-02; 0105 inventario y guardas de saldo PCR-02.5)", () => {
   const dir = path.join(root, "supabase/migrations");
   const after91 = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) > 91);
-  assert(
-    JSON.stringify(after91.sort()) ===
-      JSON.stringify([
-        "0092_textile_passport_private_share_links.sql",
-        "0093_textile_custom_fibers.sql",
-        "0094_textile_evidence_upload_intents.sql",
-        "0095_fix_passport_share_digest_schema.sql",
-        "0096_fix_passport_generation_digest_schema.sql",
-        "0097_atomic_textile_evidence_upload_finalize.sql",
-        "0098_server_only_textile_evidence_finalize.sql",
-        "0099_textile_storage_rls_and_csv_utf8_closure.sql",
-        "0100_organization_module_access_modes_and_demo_trial.sql",
-        "0101_t9f1_module_access_hardening.sql",
-        "0102_t9g_qa_finalizer_closure.sql",
-        "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
-        "0104_pcr02_internal_consumption_and_completeness.sql",
-        "0105_pcr025_inventory_and_quantity_guards.sql",
-      ]),
-    `después de 0091 solo debían existir 0092–0105 (hay: ${after91.join(", ")})`
-  );
+  const mandatory = [
+    "0092_textile_passport_private_share_links.sql",
+    "0093_textile_custom_fibers.sql",
+    "0094_textile_evidence_upload_intents.sql",
+    "0095_fix_passport_share_digest_schema.sql",
+    "0096_fix_passport_generation_digest_schema.sql",
+    "0097_atomic_textile_evidence_upload_finalize.sql",
+    "0098_server_only_textile_evidence_finalize.sql",
+    "0099_textile_storage_rls_and_csv_utf8_closure.sql",
+    "0100_organization_module_access_modes_and_demo_trial.sql",
+    "0101_t9f1_module_access_hardening.sql",
+    "0102_t9g_qa_finalizer_closure.sql",
+    "0103_pcr01_effective_plan_and_input_batch_quantity.sql",
+    "0104_pcr02_internal_consumption_and_completeness.sql",
+    "0105_pcr025_inventory_and_quantity_guards.sql",
+  ];
+  // Bloque PCR-03 (reserva declarada del brief): pueden ir apareciendo en
+  // orden a lo largo del bloque; nada FUERA de esta lista está autorizado.
+  const reservedPcr03 = [
+    "0106_pcr031_evidence_governance.sql",
+    "0107_pcr032_traceability_exercises.sql",
+    "0108_pcr033_audit_dossiers.sql",
+  ];
+  for (const f of mandatory) {
+    assert(after91.includes(f), `falta la migración obligatoria ${f}`);
+  }
+  const allowed = new Set([...mandatory, ...reservedPcr03]);
+  const intruders = after91.filter((f) => !allowed.has(f));
+  assert(intruders.length === 0, `migraciones no autorizadas tras 0091: ${intruders.join(", ")}`);
 });
 
 check("2. Crea la tabla de enlaces con la nomenclatura correcta", () => {
