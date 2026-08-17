@@ -272,7 +272,7 @@ console.log("\n· Candados del sprint (13/14/15/16/20/22 + BD)");
 
 const mig = read("supabase/migrations/0107_pcr032_traceability_exercises.sql");
 
-check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfix autorizado 0109; sin 0110+", () => {
+check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; sin 0111+", () => {
   const files = readdirSync(join(ROOT, "supabase", "migrations")).filter((f) => f.endsWith(".sql")).sort();
   const later = files.filter((f) => f > "0105_z");
   assert(later[0]?.startsWith("0106_pcr031") && later[1]?.startsWith("0107_pcr032"),
@@ -282,6 +282,8 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfix autorizado 0109; sin 01
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
@@ -299,7 +301,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfix autorizado 0109; sin 01
     !hotfix.includes("else e.status end)"),
     "0109 no conserva el CASE defectuoso"
   );
-  assert(!files.some((f) => Number(f.slice(0, 4)) >= 110), "sin 0110 ni posterior");
+  assert(!files.some((f) => Number(f.slice(0, 4)) >= 111), "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)");
 });
 
 check("14. Snapshot inmutable tras completed: guarda jsonb-minus + estados draft/completed/archived", () => {

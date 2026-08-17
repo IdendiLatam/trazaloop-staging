@@ -822,17 +822,17 @@ check("12. Las migraciones 0001–0105 existen sin renumeraciones ni duplicados"
     .sort((a, b) => a - b);
   assert(numbers[0] === 1, `la primera migración es ${numbers[0]}, se esperaba 0001`);
   // PCR-03 reserva el bloque 0106–0108 (una migración por sub-sprint); la
-  // 0106–0108 son PCR-03 original; 0109 es el hotfix autorizado y no puede haber 0110+.
+  // 0106–0108 son PCR-03 original; 0109 y 0110 son los hotfixes autorizados y no puede haber 0111+.
   assert(
-    numbers[numbers.length - 1] === 109,
-    `la última migración es ${numbers[numbers.length - 1]}, se esperaba el hotfix PCR-03.4.1 (0109)`
+    numbers[numbers.length - 1] === 110,
+    `la última migración es ${numbers[numbers.length - 1]}, se esperaba el hotfix pgcrypto (0110)`
   );
   // Nadie debe haber renumerado ni duplicado un prefijo.
   const dupes = numbers.filter((n, i) => i > 0 && n === numbers[i - 1]);
   assert(dupes.length === 0, `prefijos de migración duplicados: ${dupes.join(", ")}`);
 });
 
-check("13. Tras 0105: PCR-03 0106–0108 + hotfix autorizado 0109; no existe 0110 ni posterior", () => {
+check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no existe 0111 ni posterior", () => {
   const dir = path.join(ROOT, "supabase", "migrations");
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const allowed = new Set([
@@ -840,12 +840,14 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfix autorizado 0109; no existe 011
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `posteriores no autorizadas: ${intruders.join(", ")}`);
-  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 110);
-  assert(beyond.length === 0, `no debe existir 0110 ni posterior: ${beyond.join(", ")}`);
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 111);
+  assert(beyond.length === 0, `no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("13b. La actualización legal es un script operativo, NO una migración", () => {
@@ -1392,7 +1394,7 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
   }
   // Y siguen sin existir migraciones nuevas.
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 110).length === 0, `PCR-03 original termina en 0108 y 0109 es el hotfix autorizado; no debe existir 0110 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
@@ -1984,7 +1986,7 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
     );
   }
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 110).length === 0, `PCR-03 original termina en 0108 y 0109 es el hotfix autorizado; no debe existir 0110 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
   // Los borradores viven en docs/legal, no en supabase/.
   for (const name of LEGAL_DRAFTS) {
     assert(
@@ -2802,7 +2804,7 @@ check("73. La documentación cubre el kill switch", () => {
 check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 110).length === 0, `PCR-03 original termina en 0108 y 0109 es el hotfix autorizado; no debe existir 0110 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
   assert(
     /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
     "el script legal debe declarar la aprobación"
@@ -3010,13 +3012,13 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
-  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix 0109.
+  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix pgcrypto 0110.
   assert(
-    numbers[numbers.length - 1] === 109,
-    `la última migración debe ser el hotfix PCR-03.4.1 (0109), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === 110,
+    `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
   );
   const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 110).length === 0, `PCR-03 original termina en 0108 y 0109 es el hotfix autorizado; no debe existir 0110 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
 // ===========================================================================
@@ -3711,14 +3713,14 @@ check("103. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
-  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix 0109.
+  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix pgcrypto 0110.
   assert(
-    numbers[numbers.length - 1] === 109,
-    `la última migración debe ser el hotfix PCR-03.4.1 (0109), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === 110,
+    `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
   );
   assert(
-    files.filter((f) => Number(f.slice(0, 4)) >= 110).length === 0,
-    "PCR-03 original termina en 0108 y 0109 es el hotfix autorizado; no debe existir 0110 ni posterior"
+    files.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0,
+    "PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior"
   );
   // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.
   assert(

@@ -45,7 +45,7 @@ const detailPage = read("app/(app)/(shell)/textiles/passports/[id]/page.tsx");
 console.log("\nSprint T9D · Enlace privado controlado y QR del pasaporte\n");
 
 // --- Migración: tabla y seguridad ---
-check("1. Existe 0092 y las migraciones posteriores están bajo control hasta PCR-03.4.1 (0109 hotfix autorizado)", () => {
+check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el hotfix pgcrypto 0110", () => {
   const dir = path.join(root, "supabase/migrations");
   const after91 = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) > 91);
   const mandatory = [
@@ -71,6 +71,8 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta PC
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

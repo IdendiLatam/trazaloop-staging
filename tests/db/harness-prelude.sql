@@ -10,6 +10,15 @@
 -- implementación de las que dependen 0025/0104.
 -- ============================================================================
 
+-- --- Emulación del alojamiento de pgcrypto en Supabase ---------------------
+-- Supabase instala pgcrypto en el schema `extensions`, NO en `public`. Sin
+-- esta línea el arnés no reproduciría la causa raíz del hotfix 0110: dentro
+-- de una SECURITY DEFINER con `set search_path = public`, gen_random_bytes()
+-- sin calificar no resuelve (42883). Es superficie de arnés, no una
+-- migración del producto: jamás se aplica a Supabase ni se añade a la 0001.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
 -- --- Emulación de Supabase auth -------------------------------------------
 create schema if not exists auth;
 create or replace function auth.uid() returns uuid

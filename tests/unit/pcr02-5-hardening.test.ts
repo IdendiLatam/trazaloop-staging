@@ -423,7 +423,7 @@ check("H3.3 · el runner demuestra LEGACY-EXT/INT-INVALID (falla) y LEGACY-VALID
 
 console.log("\nPCR-02.5 · Empaquetado, migraciones y regresiones\n");
 
-check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 original + hotfix 0109 autorizado", () => {
+check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 original + hotfixes 0109/0110 autorizados", () => {
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
   // PCR-03 original: 0106/0107/0108; 0109 es el hotfix append-only PCR-03.4.1 autorizado.
   const reservedPcr03 = new Set([
@@ -431,14 +431,16 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);
   assert(historical[historical.length - 1] === "0105_pcr025_inventory_and_quantity_guards.sql", "la 0105 cierra el histórico");
   const later = files.filter((f) => f > "0105_z");
   const intruders = later.filter((f) => !reservedPcr03.has(f));
-  assert(intruders.length === 0, `tras la 0105 solo PCR-03 0106–0108 + hotfix 0109: ${intruders.join(", ")}`);
-  assert(!files.some((f) => Number(f.slice(0, 4)) >= 110), "no existe 0110 ni posterior");
+  assert(intruders.length === 0, `tras la 0105 solo PCR-03 0106–0108 + hotfixes 0109/0110: ${intruders.join(", ")}`);
+  assert(!files.some((f) => Number(f.slice(0, 4)) >= 111), "no existe 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)");
 });
 
 check("R2 · Demo/Full/Extra y estructura PCR-02.4 sin tocar", () => {

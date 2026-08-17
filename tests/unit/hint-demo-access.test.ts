@@ -333,6 +333,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

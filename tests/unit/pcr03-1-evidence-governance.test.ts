@@ -110,6 +110,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0107_pcr032_traceability_exercises.sql",
     "0108_pcr033_audit_dossiers.sql",
     "0109_pcr0341_evidence_status_case_hotfix.sql",
+    // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+    "0110_platform_org_pgcrypto_schema_fix.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
@@ -118,8 +120,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0109 es el hotfix append-only PCR-03.4.1 autorizado"
   );
   assert(
-    !migrations.some((f) => Number(f.slice(0, 4)) >= 110),
-    "sin 0110 ni posterior"
+    !migrations.some((f) => Number(f.slice(0, 4)) >= 111),
+    "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
   );
   // La numeración histórica 0001–0105 tiene huecos deliberados: son 97
   // ficheros (candado R1 de PCR-02.5) y NINGUNO cambia en PCR-03.

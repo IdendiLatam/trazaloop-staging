@@ -204,6 +204,8 @@ run --single-transaction -f "$ROOT/supabase/migrations/0106_pcr031_evidence_gove
 run --single-transaction -f "$ROOT/supabase/migrations/0107_pcr032_traceability_exercises.sql"
 run --single-transaction -f "$ROOT/supabase/migrations/0108_pcr033_audit_dossiers.sql"
 run --single-transaction -f "$ROOT/supabase/migrations/0109_pcr0341_evidence_status_case_hotfix.sql"
+# Hotfix 0110: calificación de pgcrypto en create_platform_organization.
+run --single-transaction -f "$ROOT/supabase/migrations/0110_platform_org_pgcrypto_schema_fix.sql"
 
 # En Supabase los DEFAULT PRIVILEGES otorgan esto solos; aquí se replica para
 # las tablas nuevas de PCR-03 (la RLS sigue siendo la barrera).
@@ -213,6 +215,7 @@ run -c "grant all on all tables in schema public to authenticated;" \
 echo "-- 12/13 aserciones conductuales PCR-03 (gobernanza de evidencias)"
 run -f "$ROOT/tests/db/pcr03_assertions.sql"
 run -f "$ROOT/tests/db/pcr0341_assertions.sql"
+run -f "$ROOT/tests/db/pcr0110_assertions.sql"
 
 echo "-- 13/13 concurrencia REAL de versionado de expedientes (rev. 03.1–03.3.1, hallazgo 9)"
 PGHOST="$HOST" PGPORT="$PORT" PGDATABASE="$DB" bash "$ROOT/tests/db/pcr03_dossier_concurrency.sh"
