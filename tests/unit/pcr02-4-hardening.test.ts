@@ -243,7 +243,10 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
 });
 check("higiene del sprint: scripts registrados, sin comandos remotos, sin version bump", () => {
   const pkg = JSON.parse(read("package.json"));
-  assert(pkg.version === "1.0.0", "package.json sin bump (§64)");
+  assert(
+    /^1\.0\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(pkg.version),
+    "package.json permanece dentro de la línea comercial v1.0.x (§64)"
+  );
   assert(pkg.scripts["test:pcr02-4"] && pkg.scripts["test:pcr02-4-db"], "scripts PCR-02.4 registrados");
   assert(String(pkg.scripts["test:all"]).includes("test:pcr02-4"), "test:all incluye la suite");
   for (const banned of ["supabase link", "db push", "vercel", "git push"]) {

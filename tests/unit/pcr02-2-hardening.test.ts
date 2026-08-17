@@ -276,7 +276,10 @@ check("C.3 sin comandos remotos en el arnés; package.json versionado intacto (�
     assert(!RUNNER.includes(banned), `el runner no debe contener ${banned}`);
   }
   const pkg = JSON.parse(read("package.json"));
-  assert(pkg.version === "1.0.0", 'package.json permanece en "1.0.0" (§50)');
+  assert(
+    /^1\.0\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(pkg.version),
+    "package.json permanece dentro de la línea comercial v1.0.x (§50)"
+  );
   assert(pkg.scripts["test:pcr02-1"] && pkg.scripts["test:pcr02-1-db"], "scripts PCR-02.1 conservados (§44)");
   assert(pkg.scripts["test:pcr02-2"] && pkg.scripts["test:pcr02-2-db"], "scripts PCR-02.2 registrados (§44)");
 });

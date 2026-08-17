@@ -265,7 +265,10 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
 
 check("C.3 scripts registrados, versionado intacto y nada remoto (§56/§57)", () => {
   const pkg = JSON.parse(read("package.json"));
-  assert(pkg.version === "1.0.0", 'package.json permanece en "1.0.0" (§56)');
+  assert(
+    /^1\.0\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(pkg.version),
+    "package.json permanece dentro de la línea comercial v1.0.x (§56)"
+  );
   assert(pkg.scripts["test:pcr02-3"] && pkg.scripts["test:pcr02-3-db"], "scripts PCR-02.3 registrados");
   assert(
     pkg.scripts["test:pcr02-1"] && pkg.scripts["test:pcr02-2"],

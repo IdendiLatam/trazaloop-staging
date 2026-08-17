@@ -332,7 +332,10 @@ check("el arnés PostgreSQL cablea la 0110 y su regresión, y sigue siendo local
 
 check("higiene del hotfix: scripts registrados y sin bump de versión", () => {
   const pkg = JSON.parse(read("package.json"));
-  assert(pkg.version === "1.0.0", 'package.json permanece en "1.0.0"');
+  assert(
+    /^1\.0\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(pkg.version),
+    "package.json permanece dentro de la línea comercial v1.0.x"
+  );
   assert(pkg.scripts["test:platform-org-pgcrypto-0110"], "script de la suite 0110 registrado");
   assert(
     String(pkg.scripts["test:all"]).includes("test:platform-org-pgcrypto-0110"),

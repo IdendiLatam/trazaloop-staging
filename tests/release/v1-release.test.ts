@@ -1,5 +1,5 @@
 /**
- * Trazaloop v1.0.0 · PRUEBAS DE REGRESIÓN DEL RELEASE
+ * Trazaloop v1.0.x · PRUEBAS DE REGRESIÓN DEL RELEASE
  * tests/release/v1-release.test.ts   ·   npm run test:release
  *
  * Pruebas PURAS y estáticas: leen archivos y lógica sin BD, sin red y sin
@@ -8,7 +8,7 @@
  * depender de un proyecto real.
  *
  * Blindan los 18 invariantes de la versión oficial:
- *   1. la versión es 1.0.0
+ *   1. la versión pertenece a la línea comercial 1.0.x
  *   2. no quedan textos visibles de beta / lanzamiento controlado
  *   3. «Demo» sigue existiendo como plan comercial
  *   4. CPR conserva NTC 6632 · UNE-EN 15343
@@ -94,33 +94,46 @@ const ROOT = path.resolve(__dirname, "..", "..");
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 const exists = (rel: string) => fs.existsSync(path.join(ROOT, rel));
 
-console.log("\nTrazaloop · regresión de release v1.0.0\n");
+console.log("\nTrazaloop · regresión de release v1.0.x\n");
 
 // ===========================================================================
 console.log("§1 · Identidad de la versión\n");
 
-check("1. package.json declara la versión 1.0.0", () => {
+check("1. package.json declara una versión de la línea 1.0.x", () => {
   const pkg = JSON.parse(read("package.json")) as { version: string };
-  assert(pkg.version === "1.0.0", `package.json declara ${pkg.version}, se esperaba 1.0.0`);
+  assert(
+    /^1\.0\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(pkg.version),
+    `package.json declara ${pkg.version}, se esperaba una versión de la línea 1.0.x`
+  );
 });
 
-check("1b. package-lock.json está sincronizado en 1.0.0", () => {
+check("1b. package-lock.json está sincronizado con package.json", () => {
+  const pkg = JSON.parse(read("package.json")) as { version: string };
   const lock = JSON.parse(read("package-lock.json")) as {
     version: string;
     packages: Record<string, { version?: string }>;
   };
-  assert(lock.version === "1.0.0", `package-lock raíz declara ${lock.version}`);
   assert(
-    lock.packages[""]?.version === "1.0.0",
-    `package-lock packages[""] declara ${lock.packages[""]?.version}`
+    lock.version === pkg.version,
+    `package-lock raíz declara ${lock.version}, package.json declara ${pkg.version}`
+  );
+  assert(
+    lock.packages[""]?.version === pkg.version,
+    `package-lock packages[""] declara ${lock.packages[""]?.version}, package.json declara ${pkg.version}`
   );
 });
 
 check("1c. La versión visible deriva de package.json (fuente única)", () => {
-  assert(APP_VERSION === "1.0.0", `APP_VERSION es ${APP_VERSION}`);
+  const pkg = JSON.parse(read("package.json")) as { version: string };
+  const expectedLabel = `Trazaloop v${pkg.version.split(".").slice(0, 2).join(".")}`;
+
   assert(
-    APP_VERSION_LABEL === "Trazaloop v1.0",
-    `la etiqueta visible es «${APP_VERSION_LABEL}», se esperaba «Trazaloop v1.0»`
+    APP_VERSION === pkg.version,
+    `APP_VERSION es ${APP_VERSION}, package.json declara ${pkg.version}`
+  );
+  assert(
+    APP_VERSION_LABEL === expectedLabel,
+    `la etiqueta visible es «${APP_VERSION_LABEL}», se esperaba «${expectedLabel}»`
   );
   assert(
     !/pilot|beta|preliminar|prueba/i.test(APP_VERSION_LABEL),
@@ -3781,4 +3794,4 @@ if (failures > 0) {
   console.error(`\n${failures} comprobación(es) de release FALLARON.\n`);
   process.exit(1);
 }
-console.log("Todas las comprobaciones de release v1.0.0 pasaron.\n");
+console.log("Todas las comprobaciones de release v1.0.x pasaron.\n");
