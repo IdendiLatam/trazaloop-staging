@@ -39,6 +39,12 @@ import {
   CPR_MODULE_CODE,
   TEXTILES_MODULE_CODE,
 } from "../../lib/modules/catalog";
+// RH-01.3: los términos oficiales del glosario dejaron de estar duplicados
+// como .replace() en cada acción y viven en un único helper de presentación.
+import {
+  VISIBLE_NOMENCLATURE_RULES,
+  normalizeVisibleText,
+} from "../../lib/domain/nomenclature";
 
 let failures = 0;
 function check(name: string, fn: () => void) {
@@ -186,8 +192,20 @@ check("2. Glosario: ninguna cadena visible usa «organización» (siempre «empr
 check("3. Términos obligatorios del glosario presentes en la interfaz", () => {
   const team = read("app/(app)/(shell)/team/page.tsx");
   assert(team.includes("Empresa activa"), "«Empresa activa» debía existir en Usuarios y roles");
+  // RH-01.3: el glosario canónico vive en lib/domain/nomenclature.ts y las
+  // acciones lo APLICAN (antes cada una repetía su propio .replace()).
+  const preferred = VISIBLE_NOMENCLATURE_RULES.map((r) => r.preferred);
+  assert(preferred.includes("orden / corrida de producción"), "«orden / corrida de producción» requerido");
+  assert(preferred.includes("lote producido / lote final"), "«lote producido / lote final» requerido");
+  assert(
+    normalizeVisibleText("El lote de salida no existe") === "El lote producido / lote final no existe",
+    "el helper debía producir el término oficial sobre un mensaje real de la RPC"
+  );
   const recycled = read("server/actions/recycled.ts");
-  assert(recycled.includes("orden / corrida de producción"), "«orden / corrida de producción» requerido");
+  assert(
+    recycled.includes("normalizeVisibleText(error.message)"),
+    "calculateRecycledContentAction debía aplicar el glosario a los mensajes de la RPC"
+  );
   assert(recycled.includes("lote producido / lote final"), "«lote producido / lote final» requerido");
   const inputLots = fs.existsSync(path.join(ROOT, "app/(app)/(shell)/textiles/traceability/input-lots/page.tsx"));
   assert(inputLots, "la ruta de «Lotes de entrada» debía existir");

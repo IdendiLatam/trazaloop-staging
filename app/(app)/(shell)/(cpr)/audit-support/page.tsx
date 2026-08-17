@@ -6,6 +6,9 @@ import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getAuditSupportDashboardAction } from "@/server/actions/audit-support";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
+// RH-01.3: los textos de brecha los genera la BD con la denominación
+// histórica; se normalizan aquí, en presentación, nunca en SQL.
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 
 export default async function AuditSupportPage() {
@@ -139,7 +142,7 @@ export default async function AuditSupportPage() {
                     >
                       {g.output_batch_code}
                     </Link>
-                    <span className="font-medium">{g.gap_label}</span>
+                    <span className="font-medium">{normalizeVisibleText(g.gap_label)}</span>
                     <span
                       className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                         g.gap_severity === "critical"
@@ -152,7 +155,7 @@ export default async function AuditSupportPage() {
                       {GAP_SEVERITY_LABEL[g.gap_severity]}
                     </span>
                   </p>
-                  <p className="text-xs text-ink-soft">{g.suggested_action}</p>
+                  <p className="text-xs text-ink-soft">{normalizeVisibleText(g.suggested_action)}</p>
                 </div>
               </li>
             ))}

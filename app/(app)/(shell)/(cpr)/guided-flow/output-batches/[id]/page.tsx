@@ -13,6 +13,8 @@ import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-b
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
+// RH-01.3: normalización de denominación visible sobre textos de la BD.
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 
 const linkClass = "text-loop hover:underline";
 
@@ -59,7 +61,7 @@ export default async function GuidedBatchDetailPage({
         <p className="text-sm text-ink-soft">
           Siguiente paso:{" "}
           <Link href={r.next_step_href} className="font-medium text-loop hover:underline">
-            {(NEXT_STEP_LABEL[r.next_step_code] ?? r.next_step_label)}
+            {(NEXT_STEP_LABEL[r.next_step_code] ?? normalizeVisibleText(r.next_step_label))}
           </Link>
         </p>
       </header>
@@ -298,7 +300,8 @@ export default async function GuidedBatchDetailPage({
                       <span className="font-medium text-danger">
                         {GAP_SEVERITY_LABEL[g.gap_severity]}:
                       </span>{" "}
-                      {g.gap_label} — {g.suggested_action}
+                      {normalizeVisibleText(g.gap_label)} —{" "}
+                      {normalizeVisibleText(g.suggested_action)}
                     </li>
                   ))}
                 </ul>

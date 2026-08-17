@@ -4,6 +4,9 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { orderMutationBlockedMessage } from "@/lib/domain/production-alerts";
+// RH-01.3: missing_items lo genera la vista de completitud con la
+// denominación histórica; se normaliza aquí, en presentación.
+import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import {
@@ -281,7 +284,7 @@ export default async function OutputBatchesPage({
                     ) : null}
                     {comp && comp.missing_items.length > 0 ? (
                       <p className="mt-1 text-xs text-danger">
-                        Falta: {comp.missing_items.join(", ")}.
+                        Falta: {normalizeVisibleTexts(comp.missing_items).join(", ")}.
                       </p>
                     ) : null}
                     {comp?.mass_balance_warning ? (

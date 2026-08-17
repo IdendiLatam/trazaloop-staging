@@ -8,6 +8,8 @@ import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { listOutputBatches } from "@/lib/db/traceability";
 import { listLatestCalculations } from "@/lib/db/recycled";
 import { listEvidenceMatrix, listSupportGaps, GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
+// RH-01.3: normalización de denominación visible sobre textos de la BD.
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { EvidenceMatrixTable } from "@/components/domain/audit-support/evidence-matrix-table";
 import { ExportMatrixCsvButton } from "@/components/domain/audit-support/export-buttons";
@@ -109,12 +111,12 @@ export default async function EvidenceMatrixPage({
                   >
                     {GAP_SEVERITY_LABEL[g.gap_severity]}
                   </span>
-                  <span className="font-medium">{g.gap_label}</span>
+                  <span className="font-medium">{normalizeVisibleText(g.gap_label)}</span>
                   {g.related_entity_label ? (
                     <span className="text-xs text-ink-soft">({g.related_entity_label})</span>
                   ) : null}
                 </p>
-                <p className="mt-1 text-xs text-ink-soft">{g.suggested_action}</p>
+                <p className="mt-1 text-xs text-ink-soft">{normalizeVisibleText(g.suggested_action)}</p>
               </li>
             ))}
           </ul>

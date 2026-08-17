@@ -10,14 +10,18 @@ import {
   listProducts,
   listMaterials,
 } from "@/lib/db/catalog";
+import { listCustomerRequirements } from "@/lib/db/customer-requirements";
 
 export default async function CatalogIndexPage() {
   const org = await requireCprModule();
-  const [suppliers, families, products, materials] = await Promise.all([
+  const [suppliers, families, products, materials, customerRequirements] = await Promise.all([
     listSuppliers(org.organizationId),
     listFamilies(org.organizationId),
     listProducts(org.organizationId),
     listMaterials(org.organizationId),
+    // RH-01.4: /catalog/customer-requirements ya existía (PCR-03.1) pero no
+    // era descubrible desde el hub. Solo se añade la entrada visible.
+    listCustomerRequirements(org.organizationId),
   ]);
 
   const cards = [
@@ -44,6 +48,12 @@ export default async function CatalogIndexPage() {
       title: "Materiales",
       count: materials.length,
       hint: "Con clasificación normativa de origen.",
+    },
+    {
+      href: "/catalog/customer-requirements",
+      title: "Acuerdos y requisitos del cliente",
+      count: customerRequirements.total,
+      hint: "Qué exige o acordó cada cliente y con qué evidencias se soporta.",
     },
   ];
 

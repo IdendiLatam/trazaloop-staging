@@ -6,7 +6,7 @@
  * create_organization/create_platform_organization/change_organization_plan
  * (0053), todas SECURITY DEFINER.
  */
-import type { PlanLimit, PlanStatus, ResourceCode } from "./types";
+import type { PlanCode, PlanLimit, PlanStatus, ResourceCode } from "./types";
 import type { PlatformRoleCode } from "../domain/platform";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,32 @@ export function resolveUsageSeverity(percentUsed: number): UsageSeverity {
 /** ¿Hay espacio para sumar `bytesToAdd` sin superar la cuota del plan? */
 export function hasStorageAvailable(usedBytes: number, limitBytes: number, bytesToAdd: number): boolean {
   return usedBytes + bytesToAdd <= limitBytes;
+}
+
+/**
+ * RH-01.2 · Cuota de almacenamiento del plan EFECTIVO.
+ *
+ * Mismo criterio que checkResourceLimit / checkFeatureEnabled desde PCR-01:
+ * la autoridad comercial es organization_modules vía
+ * organization_effective_plan_code (0103), no la copia legacy de
+ * organization_subscriptions. Sin esto, una empresa Full/Extra quedaba
+ * bloqueada al subir su logo porque el agregado legacy comparaba contra los
+ * 50 MB del plan Demo heredado.
+ *
+ * Es una resolución de límite, NO una excepción: el control de
+ * almacenamiento se mantiene íntegro y un plan Demo efectivo conserva sus
+ * 50 MB aunque la suscripción legacy diga Full. Si plan_definitions no se
+ * pudo leer (arreglo vacío o cuota no positiva) se conserva la cuota legacy
+ * — nunca se concede espacio ilimitado por un fallo de lectura.
+ */
+export function resolveEffectiveStorageLimitBytes(
+  planDefinitions: readonly { code: PlanCode; storageLimitBytes: number }[],
+  effectivePlanCode: PlanCode,
+  legacyLimitBytes: number
+): number {
+  const definition = planDefinitions.find((p) => p.code === effectivePlanCode);
+  if (!definition || !(definition.storageLimitBytes > 0)) return legacyLimitBytes;
+  return definition.storageLimitBytes;
 }
 
 // ---------------------------------------------------------------------------

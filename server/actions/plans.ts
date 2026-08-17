@@ -17,6 +17,7 @@ import {
   canCreateResource,
   isPlanFeatureEnabled,
   hasStorageAvailable,
+  resolveEffectiveStorageLimitBytes,
   canChangeOrganizationPlan,
   buildResourceLimitMessage,
   buildPlanStatusMessage,
@@ -36,7 +37,11 @@ import type { OrganizationPlanUsage } from "@/lib/plans/usage";
  * RESERVADOS a recursos transversales de la organización que NO pertenecen a
  * un módulo comercial: equipo (team_members, roles_enabled), logo de empresa
  * (almacenamiento GLOBAL no atribuido a módulo) y lecturas informativas
- * legacy. PROHIBIDO usarlos en acciones CPR o Textiles: esos módulos validan
+ * legacy. Desde PCR-01/RH-01 el PLAN comercial que gobierna esos recursos ya
+ * no sale de organization_subscriptions sino del plan efectivo por módulos
+ * (0103): la vista legacy solo aporta el USO agregado y el estado
+ * administrativo de la cuenta. PROHIBIDO usarlos en acciones CPR o Textiles:
+ * esos módulos validan
  * SIEMPRE con los helpers por módulo de server/actions/module-plans.ts
  * (moduleCode explícito, plan y uso del propio módulo). Una prueba estática
  * (tests/unit/t9f1-module-operational-enforcement.test.ts) impide nuevas
@@ -133,7 +138,22 @@ export async function checkStorageAvailable(bytesToAdd: number): Promise<{ allow
   const statusCheck = checkPlanStatusBlocking(usage);
   if (!statusCheck.allowed) return statusCheck;
 
-  const allowed = hasStorageAvailable(usage.storageUsedBytes, usage.storageLimitBytes, bytesToAdd);
+  // RH-01.2: la CUOTA sale del plan EFECTIVO por módulos (0103), igual que en
+  // checkResourceLimit/checkFeatureEnabled. El USO sigue siendo el agregado
+  // org-wide de la vista legacy (es el que corresponde al almacenamiento
+  // global no atribuido a módulo, p. ej. el logo de empresa). Antes se
+  // comparaba ese uso contra la cuota legacy: una empresa Full/Extra quedaba
+  // bloqueada por los 50 MB del Demo heredado. El control se conserva: Demo
+  // efectivo sigue con 50 MB.
+  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
+  const planDefinitions = await listPlanDefinitions();
+  const limitBytes = resolveEffectiveStorageLimitBytes(
+    planDefinitions,
+    effectivePlanCode,
+    usage.storageLimitBytes
+  );
+
+  const allowed = hasStorageAvailable(usage.storageUsedBytes, limitBytes, bytesToAdd);
   return { allowed, error: allowed ? null : STORAGE_LIMIT_MESSAGE };
 }
 
@@ -196,15 +216,33 @@ export async function getOrganizationPlanDetailAction(
   history: SubscriptionPlanHistoryEntry[];
   plans: PlanDefinitionRow[];
   canManage: boolean;
+  /** RH-01.1 · Plan comercial VIGENTE (organization_modules, 0103). Es el
+   *  dato que la consola debe presentar; `usage.planCode` es histórico. */
+  effectivePlanCode: PlanCode;
+  /** RH-01.1/RH-01.2 · Cuota real que aplica el servidor con ese plan. */
+  effectiveStorageLimitBytes: number;
 }> {
   const { isSuperadmin } = await requirePlatformStaff();
-  const [allUsage, history, plans] = await Promise.all([
+  const [allUsage, history, plans, effectivePlanCode] = await Promise.all([
     listAllOrganizationUsage(),
     listPlanHistory(organizationId),
     listPlanDefinitions(),
+    getOrganizationEffectivePlanCode(organizationId),
   ]);
   const usage = allUsage.find((u) => u.organizationId === organizationId) ?? null;
-  return { usage, history, plans, canManage: canChangeOrganizationPlan(isSuperadmin ? "superadmin" : null) };
+  const effectiveStorageLimitBytes = resolveEffectiveStorageLimitBytes(
+    plans,
+    effectivePlanCode,
+    usage?.storageLimitBytes ?? 0
+  );
+  return {
+    usage,
+    history,
+    plans,
+    canManage: canChangeOrganizationPlan(isSuperadmin ? "superadmin" : null),
+    effectivePlanCode,
+    effectiveStorageLimitBytes,
+  };
 }
 
 export async function changeOrganizationPlanAction(

@@ -49,3 +49,23 @@ export function storageUsageIsEstimated(hasUntrackedFiles: boolean): boolean {
 export function resolveStorageSeverity(usage: OrganizationPlanUsage): UsageSeverity {
   return resolveUsageSeverity(usage.storagePercentUsed);
 }
+
+const BYTES_PER_MB = 1048576;
+
+/**
+ * RH-01.1 · Presentación del almacenamiento contra la cuota del plan
+ * EFECTIVO. La vista v_organization_plan_usage calcula storage_limit_mb /
+ * storage_percent_used contra la cuota LEGACY: mostrarlo tal cual producía el
+ * célebre «0 MB / 50 MB» en empresas Full/Extra. El uso (bytes) sí es real y
+ * se conserva; solo se recalcula el denominador.
+ */
+export function buildEffectiveStorageUsage(
+  usedBytes: number,
+  limitBytes: number
+): { usedMb: number; limitMb: number; percentUsed: number } {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const usedMb = round2(usedBytes / BYTES_PER_MB);
+  const limitMb = round2(limitBytes / BYTES_PER_MB);
+  const percentUsed = limitBytes > 0 ? Math.round((1000 * usedBytes) / limitBytes) / 10 : 0;
+  return { usedMb, limitMb, percentUsed };
+}

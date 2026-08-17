@@ -4,6 +4,9 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { NEXT_STEP_LABEL } from "@/lib/domain/guided-flow";
+// RH-01.3: el respaldo next_step_label viene de la BD con la denominación
+// histórica; se normaliza aquí, en presentación.
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import {
   getGuidedFlowDashboardAction,
   listOutputBatchReadinessAction,
@@ -278,7 +281,7 @@ export default async function GuidedFlowPage() {
                     </td>
                     <td className="px-4 py-2 text-xs">
                       <Link href={r.next_step_href} className="text-loop hover:underline">
-                        {(NEXT_STEP_LABEL[r.next_step_code] ?? r.next_step_label)}
+                        {(NEXT_STEP_LABEL[r.next_step_code] ?? normalizeVisibleText(r.next_step_label))}
                       </Link>
                     </td>
                     <td className="px-4 py-2 text-xs">

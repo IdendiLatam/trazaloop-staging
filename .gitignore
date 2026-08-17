@@ -51,3 +51,9 @@ supabase/.temp/
 
 # T9F.5B.1 · artefactos accidentales de comandos `find` mal citados
 -name*
+
+# RH-01.6 · artefactos accidentales de redirigir la salida de `npm run <script>`
+# a un archivo con el NOMBRE del script. Patrón acotado a la raíz y al prefijo
+# "test:" (ningún archivo legítimo del repo lleva ':' en el nombre).
+/test:*
+/run

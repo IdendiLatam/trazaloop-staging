@@ -3,14 +3,27 @@ import type { PlatformOrganizationRow } from "@/lib/db/platform";
 import { PLAN_LABEL, type PlanCode } from "@/lib/plans/types";
 import { EmptyState } from "@/components/ui/empty-state";
 
-type PlanInfo = { planCode: PlanCode; storagePercentUsed: number };
+/**
+ * RH-01.1 · `effectivePlanCode` es el plan comercial VIGENTE (derivado de
+ * organization_modules vía organization_effective_plan_code, 0103) y es el
+ * único que la consola presenta como dato comercial. `legacyPlanCode` y
+ * `storagePercentUsed` provienen de organization_subscriptions /
+ * v_organization_plan_usage: se conservan como dato HISTÓRICO-ADMINISTRATIVO
+ * y se rotulan como tal, nunca como el plan vigente.
+ */
+type PlanInfo = {
+  effectivePlanCode: PlanCode;
+  legacyPlanCode: PlanCode | null;
+  storagePercentUsed: number | null;
+};
 
 /** Tabla de empresas registradas (Parte 6). No hay "entrar como soporte"
  *  en este sprint (Parte 7: opción avanzada, explícitamente opcional) —
  *  "Ver implementación" abre un resumen de solo lectura DENTRO de la
  *  consola de plataforma, sin cambiar la organización activa del
  *  superadmin ni crear ningún acceso silencioso.
- *  Sprint 10A: columna de Plan, con el % de almacenamiento usado. */
+ *  Sprint 10A: columna de Plan, con el % de almacenamiento usado.
+ *  RH-01.1: la columna principal pasa a ser el PLAN EFECTIVO. */
 export function OrganizationsTable({
   organizations,
   planByOrgId = {},
@@ -33,9 +46,9 @@ export function OrganizationsTable({
         <thead>
           <tr className="border-b border-hairline text-left text-xs text-ink-soft">
             <th className="px-3 py-2 font-medium">Empresa</th>
-            {/* T9F.1: el plan mostrado es el LEGACY org-wide (informativo). Los
-                planes reales por módulo se gestionan en el detalle de la empresa. */}
-            <th className="px-3 py-2 font-medium">Plan heredado</th>
+            {/* RH-01.1: el plan comercial vigente es el EFECTIVO (módulos).
+                El plan heredado queda debajo, rotulado como histórico. */}
+            <th className="px-3 py-2 font-medium">Plan efectivo</th>
             <th className="px-3 py-2 font-medium">Razón social</th>
             <th className="px-3 py-2 font-medium">NIT</th>
             <th className="px-3 py-2 font-medium">País / ciudad</th>
@@ -58,9 +71,14 @@ export function OrganizationsTable({
               <td className="px-3 py-2 text-xs">
                 {plan ? (
                   <span className="inline-flex flex-col">
-                    <span className="font-medium">{PLAN_LABEL[plan.planCode]}</span>
-                    <span className="text-ink-soft">{plan.storagePercentUsed}% almacenamiento</span>
-                    <span className="text-[10px] text-ink-soft">No gobierna los módulos</span>
+                    <span className="font-medium">{PLAN_LABEL[plan.effectivePlanCode]}</span>
+                    <span className="text-[10px] text-ink-soft">
+                      Plan heredado (histórico / administrativo):{" "}
+                      {plan.legacyPlanCode ? PLAN_LABEL[plan.legacyPlanCode] : "—"}
+                      {plan.storagePercentUsed !== null
+                        ? ` · ${plan.storagePercentUsed}% almacenamiento agregado`
+                        : ""}
+                    </span>
                   </span>
                 ) : (
                   "—"

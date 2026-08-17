@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { DossierBundle } from "@/server/actions/audit-support";
 import type { ChainRow } from "@/lib/db/audit-support";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
+// RH-01.3: normalización de denominación visible sobre textos de la BD.
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import { EXCLUSION_LABEL, WARNING_LABEL, LEVEL_LABEL } from "@/lib/db/recycled";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
@@ -263,10 +265,10 @@ export function DossierBody({
                         {GAP_SEVERITY_LABEL[g.gap_severity]}
                       </span>
                     </td>
-                    <td className="py-2 pr-3 text-xs font-medium">{g.gap_label}</td>
-                    <td className="py-2 pr-3 text-xs text-ink-soft">{g.gap_description}</td>
+                    <td className="py-2 pr-3 text-xs font-medium">{normalizeVisibleText(g.gap_label)}</td>
+                    <td className="py-2 pr-3 text-xs text-ink-soft">{normalizeVisibleText(g.gap_description)}</td>
                     <td className="py-2 pr-3 text-xs">{g.related_entity_label ?? "—"}</td>
-                    <td className="py-2 text-xs text-ink-soft">{g.suggested_action}</td>
+                    <td className="py-2 text-xs text-ink-soft">{normalizeVisibleText(g.suggested_action)}</td>
                   </tr>
                 ))}
               </tbody>

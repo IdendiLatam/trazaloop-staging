@@ -15,10 +15,15 @@ import {
   getRecycledByPeriod,
 } from "@/lib/db/recycled";
 import { listOutputBatches, getCompleteness } from "@/lib/db/traceability";
+import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 
 /**
  * Mensajes que la RPC lanza a propósito (validaciones de negocio): se
  * muestran tal cual. Cualquier otro error de BD se traduce a algo entendible.
+ *
+ * ⚠️ RH-01.3: estas cadenas son el TEXTO TÉCNICO que emite la RPC y sirven
+ * para reconocerla — NO son texto visible y no deben renombrarse. La
+ * denominación oficial se aplica al mostrar el mensaje (normalizeVisibleText).
  */
 const KNOWN_RPC_MESSAGES = [
   "Se requiere una sesión activa",
@@ -64,10 +69,9 @@ export async function calculateRecycledContentAction(
     const known = KNOWN_RPC_MESSAGES.find((m) => error.message?.includes(m));
     return {
       error: known
-        ? // Terminología visible (Sprint 5D) sin tocar los mensajes de la RPC.
-          error.message
-            .replace("lote de salida", "lote producido / lote final")
-            .replace("orden de producción", "orden / corrida de producción")
+        ? // Terminología visible (Sprint 5D; RH-01.3 la centraliza en
+          // lib/domain/nomenclature.ts) sin tocar los mensajes de la RPC.
+          normalizeVisibleText(error.message)
         : "No fue posible calcular. Revisa la composición, los consumos y las evidencias del lote.",
     };
   }

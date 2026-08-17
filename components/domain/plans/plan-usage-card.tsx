@@ -1,5 +1,6 @@
 import type { OrganizationPlanUsage } from "@/lib/plans/usage";
-import type { PlanLimit } from "@/lib/plans/types";
+import { buildEffectiveStorageUsage } from "@/lib/plans/usage";
+import type { PlanCode, PlanLimit } from "@/lib/plans/types";
 import { PLAN_LABEL } from "@/lib/plans/types";
 import { resolveUsageSeverity, findLimit, type UsageSeverity } from "@/lib/plans/limits";
 import { RESOURCE_LABEL, type CountableResourceCode } from "@/lib/plans/types";
@@ -54,14 +55,47 @@ function resourceUsed(usage: OrganizationPlanUsage, code: CountableResourceCode)
 }
 
 /** Indicador de plan y uso (Parte 9). Reutilizable: empresa (su propio
- *  plan) y plataforma (cualquier empresa, con más detalle alrededor). */
-export function PlanUsageCard({ usage, limits }: { usage: OrganizationPlanUsage; limits: PlanLimit[] }) {
-  const storageSeverity = resolveUsageSeverity(usage.storagePercentUsed);
+ *  plan) y plataforma (cualquier empresa, con más detalle alrededor).
+ *
+ *  RH-01.1: cuando quien invoca conoce el plan EFECTIVO de la empresa
+ *  (organization_modules vía 0103) lo pasa en `effectivePlanCode` y, si
+ *  corresponde, su cuota en `effectiveStorageLimitBytes`. En ese caso la
+ *  tarjeta presenta el plan efectivo como dato comercial y degrada el plan
+ *  heredado a una línea rotulada como histórica/administrativa. Sin esas
+ *  props se conserva el comportamiento anterior (el dashboard ya recibe uso
+ *  y cuota POR MÓDULO, que no son legacy). */
+export function PlanUsageCard({
+  usage,
+  limits,
+  effectivePlanCode,
+  effectiveStorageLimitBytes,
+}: {
+  usage: OrganizationPlanUsage;
+  limits: PlanLimit[];
+  effectivePlanCode?: PlanCode;
+  effectiveStorageLimitBytes?: number;
+}) {
+  const storage =
+    effectiveStorageLimitBytes !== undefined
+      ? buildEffectiveStorageUsage(usage.storageUsedBytes, effectiveStorageLimitBytes)
+      : {
+          usedMb: usage.storageUsedMb,
+          limitMb: usage.storageLimitMb,
+          percentUsed: usage.storagePercentUsed,
+        };
+  const storageSeverity = resolveUsageSeverity(storage.percentUsed);
 
   return (
     <div className="space-y-4 rounded-lg border border-hairline bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold">Plan {PLAN_LABEL[usage.planCode]}</span>
+        <span className="text-sm font-semibold">
+          Plan {PLAN_LABEL[effectivePlanCode ?? usage.planCode]}
+        </span>
+        {effectivePlanCode ? (
+          <span className="rounded-full border border-loop/30 bg-loop/5 px-2 py-0.5 text-[11px] font-medium text-loop-deep">
+            Plan efectivo
+          </span>
+        ) : null}
         {usage.planStatus !== "active" ? (
           <span className="rounded-full border border-danger/30 bg-danger/5 px-2 py-0.5 text-[11px] font-medium text-danger">
             {usage.planStatus === "suspended" ? "Suspendido" : "Cancelado"}
@@ -69,17 +103,24 @@ export function PlanUsageCard({ usage, limits }: { usage: OrganizationPlanUsage;
         ) : null}
       </div>
 
+      {effectivePlanCode ? (
+        <p className="text-[11px] text-ink-soft">
+          Plan heredado (histórico / administrativo): {PLAN_LABEL[usage.planCode]}. No gobierna el
+          acceso ni las cuotas.
+        </p>
+      ) : null}
+
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs text-ink-soft">
           <span>Almacenamiento</span>
           <span>
-            {usage.storageUsedMb} MB / {usage.storageLimitMb} MB ({usage.storagePercentUsed}%)
+            {storage.usedMb} MB / {storage.limitMb} MB ({storage.percentUsed}%)
           </span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-paper">
           <div
             className={`h-full rounded-full ${SEVERITY_BAR[storageSeverity]}`}
-            style={{ width: `${Math.min(100, usage.storagePercentUsed)}%` }}
+            style={{ width: `${Math.min(100, storage.percentUsed)}%` }}
           />
         </div>
         {storageSeverity !== "normal" ? (

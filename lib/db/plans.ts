@@ -147,3 +147,19 @@ export async function getOrganizationEffectivePlanCode(orgId: string): Promise<P
   const code = typeof data === "string" ? data : null;
   return code === "full" || code === "extra" ? code : "demo";
 }
+
+/**
+ * RH-01.1 · Plan EFECTIVO de varias empresas de una sola pasada, para la
+ * consola del superadministrador. La RPC ya autoriza a platform_staff
+ * (0103 §2), así que corre con la sesión real — sin service_role. Misma
+ * política fail-closed por empresa: un error de lectura responde 'demo'.
+ */
+export async function listOrganizationEffectivePlanCodes(
+  organizationIds: readonly string[]
+): Promise<Record<string, PlanCode>> {
+  const uniqueIds = Array.from(new Set(organizationIds));
+  const entries = await Promise.all(
+    uniqueIds.map(async (id) => [id, await getOrganizationEffectivePlanCode(id)] as const)
+  );
+  return Object.fromEntries(entries);
+}

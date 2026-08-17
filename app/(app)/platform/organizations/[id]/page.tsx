@@ -22,6 +22,7 @@ import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { getPlanLimits } from "@/lib/db/plans";
+import { PLAN_LABEL } from "@/lib/plans/types";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
@@ -43,7 +44,9 @@ export default async function PlatformOrganizationDetailPage({
     getPlatformOrganizationModulesAction(id),
   ]);
   if (!org) notFound();
-  const planLimits = planDetail.usage ? await getPlanLimits(planDetail.usage.planCode) : [];
+  // RH-01.1: los límites que se muestran son los del PLAN EFECTIVO (0103),
+  // no los del planCode legacy de organization_subscriptions.
+  const planLimits = await getPlanLimits(planDetail.effectivePlanCode);
 
   const rows: [string, string | number][] = [
     ["Razón social", org.legalName ?? "No disponible"],
@@ -77,6 +80,15 @@ export default async function PlatformOrganizationDetailPage({
           Resumen de implementación de solo lectura. Tu empresa activa no cambia al ver esta
           pantalla. Esta información no es visible para usuarios normales de la empresa.
         </p>
+        {/* RH-01.1: el plan comercial vigente de la empresa, arriba de todo y
+            derivado de organization_modules (0103) — nunca del planCode
+            heredado de organization_subscriptions. */}
+        <p className="flex flex-wrap items-center gap-2 pt-2 text-sm">
+          <span className="text-ink-soft">Plan efectivo:</span>
+          <span className="rounded-full border border-loop/30 bg-loop/5 px-2.5 py-0.5 font-semibold text-loop-deep">
+            {PLAN_LABEL[planDetail.effectivePlanCode]}
+          </span>
+        </p>
       </header>
 
       {/* T9F.1: la sección OPERATIVA es "Módulos y planes de la empresa".
@@ -92,15 +104,22 @@ export default async function PlatformOrganizationDetailPage({
 
       {planDetail.usage ? (
         <section className="space-y-3">
-          <h2 className="eyebrow">Plan heredado (informativo)</h2>
+          <h2 className="eyebrow">Uso agregado · Plan heredado</h2>
           <p className="max-w-2xl text-xs text-ink-soft">
-            Información heredada de la suscripción general (organization_subscriptions). Desde
-            T9F.1 <strong>no controla</strong> el acceso, los límites ni el almacenamiento de los
-            módulos: cada módulo se gestiona arriba, en &ldquo;Módulos y planes de la
-            empresa&rdquo;. El uso y la cuota mostrados aquí son los agregados históricos a nivel
-            de empresa.
+            El plan, los límites y la cuota de esta tarjeta son los del <strong>plan efectivo</strong>{" "}
+            (derivado de los módulos, arriba): es lo mismo que aplica el servidor. El{" "}
+            <strong>Plan heredado</strong> que aparece dentro de la tarjeta y el uso mostrado son el
+            agregado HISTÓRICO a nivel de empresa que reporta la suscripción general
+            (organization_subscriptions), conservados solo como referencia administrativa: desde
+            T9F.1 <strong>no controlan</strong> el acceso ni el almacenamiento de los módulos, que se
+            gestionan arriba en &ldquo;Módulos y planes de la empresa&rdquo;.
           </p>
-          <PlanUsageCard usage={planDetail.usage} limits={planLimits} />
+          <PlanUsageCard
+            usage={planDetail.usage}
+            limits={planLimits}
+            effectivePlanCode={planDetail.effectivePlanCode}
+            effectiveStorageLimitBytes={planDetail.effectiveStorageLimitBytes}
+          />
         </section>
       ) : null}
 

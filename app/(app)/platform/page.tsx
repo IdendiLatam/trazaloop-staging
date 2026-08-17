@@ -11,7 +11,7 @@ import {
   listPlatformOrganizationsAction,
   listPlatformStaffAction,
 } from "@/server/actions/platform";
-import { listAllOrganizationUsage } from "@/lib/db/plans";
+import { listAllOrganizationUsage, listOrganizationEffectivePlanCodes } from "@/lib/db/plans";
 import { OrganizationsTable } from "@/components/domain/platform/organizations-table";
 import { PlatformStaffList } from "@/components/domain/platform/staff-list";
 
@@ -23,8 +23,26 @@ export default async function PlatformPage() {
     listPlatformStaffAction(),
     listAllOrganizationUsage(),
   ]);
+  // RH-01.1: el dato comercial principal de la consola es el PLAN EFECTIVO
+  // (organization_modules vía 0103), no el planCode legacy de
+  // organization_subscriptions — ese solo se conserva rotulado como
+  // histórico/administrativo junto al uso agregado.
+  const effectivePlanByOrgId = await listOrganizationEffectivePlanCodes(
+    organizations.map((o) => o.organizationId)
+  );
+  const usageByOrgId = new Map(usage.map((u) => [u.organizationId, u]));
   const planByOrgId = Object.fromEntries(
-    usage.map((u) => [u.organizationId, { planCode: u.planCode, storagePercentUsed: u.storagePercentUsed }])
+    organizations.map((o) => {
+      const u = usageByOrgId.get(o.organizationId) ?? null;
+      return [
+        o.organizationId,
+        {
+          effectivePlanCode: effectivePlanByOrgId[o.organizationId] ?? "demo",
+          legacyPlanCode: u?.planCode ?? null,
+          storagePercentUsed: u?.storagePercentUsed ?? null,
+        },
+      ];
+    })
   );
 
   return (

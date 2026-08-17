@@ -88,6 +88,22 @@ export const TRAZABILIDAD_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * RH-01.5 · Preparación de auditoría (PCR-03: ejercicios de trazabilidad y
+ * expedientes). Las rutas ya existían bajo el route group (cpr) y se
+ * enlazaban solo desde /traceability; aquí quedan integradas al registro
+ * central para que el shell las reconozca como parte del módulo PCR y sean
+ * descubribles desde el menú. No es un módulo comercial nuevo ni una
+ * capacidad nueva: los guards de acceso son los mismos del módulo PCR.
+ */
+export const AUDIT_PREP_GROUP: ModuleNavGroup = {
+  title: "Preparación de auditoría",
+  items: [
+    { label: "Ejercicios de trazabilidad", href: "/audit-prep/exercises" },
+    { label: "Expedientes", href: "/audit-prep/dossiers" },
+  ],
+};
+
 export const TRAZADOCS_GROUP: ModuleNavGroup = {
   title: "TrazaDocs",
   items: [
@@ -114,12 +130,14 @@ export const CPR_SHELL_MODULE: ShellModuleDefinition = {
     "/traceability",
     "/recycled-content",
     "/audit-support",
+    // RH-01.5: preparación de auditoría (PCR-03) pertenece al módulo PCR.
+    "/audit-prep",
     "/implementation",
     "/imports",
     "/trazadocs",
   ],
   topLevel: NAV_TOP_LEVEL,
-  groups: [TRAZABILIDAD_GROUP, TRAZADOCS_GROUP],
+  groups: [TRAZABILIDAD_GROUP, AUDIT_PREP_GROUP, TRAZADOCS_GROUP],
 };
 
 // ---------------------------------------------------------------------------
