@@ -146,13 +146,70 @@ export async function requestPasswordResetAction(
   if (!email) return { error: "Ingresa tu correo." };
 
   const supabase = await createServerClient();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  // Respuesta idéntica exista o no el correo (no revelar existencia).
+  const siteUrl = (
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  ).replace(/\/+$/, "");
+
+  // El enlace vuelve a un callback PKCE controlado. El callback intercambia
+  // el auth code por una sesión válida antes de mostrar /reset-password.
+  // La respuesta sigue siendo idéntica exista o no el correo.
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/login`,
+    redirectTo: `${siteUrl}/auth/callback?next=/reset-password`,
   });
 
   return { error: null };
+}
+
+export async function updatePasswordAction(
+  _prev: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
+  const password = String(formData.get("password") ?? "");
+  const confirmation = String(formData.get("password_confirmation") ?? "");
+
+  if (!password || !confirmation) {
+    return { error: "Ingresa y confirma tu nueva contraseña." };
+  }
+
+  if (password.length < 8) {
+    return { error: "La contraseña debe tener al menos 8 caracteres." };
+  }
+
+  if (password !== confirmation) {
+    return { error: "Las contraseñas no coinciden." };
+  }
+
+  const supabase = await createServerClient();
+
+  // getUser() valida la sesión contra Supabase Auth. No se permite cambiar
+  // contraseña únicamente por haber llegado a la URL.
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return {
+      error:
+        "El enlace de recuperación no es válido o expiró. Solicita uno nuevo.",
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return {
+      error:
+        "No fue posible actualizar la contraseña. Solicita un nuevo enlace e inténtalo nuevamente.",
+    };
+  }
+
+  // La sesión de recuperación no debe convertirse silenciosamente en una
+  // sesión normal de aplicación.
+  await supabase.auth.signOut();
+  await clearActiveOrgCookie();
+
+  redirect("/login?password_updated=1");
 }
 
 export async function signOutAction() {

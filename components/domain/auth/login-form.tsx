@@ -26,6 +26,7 @@ function LoginFormFields({ registrationOpen }: { registrationOpen: boolean }) {
   const [state, formAction, pending] = useActionState(signInAction, initial);
   const params = useSearchParams();
   const justRegistered = params.get("registered") === "1";
+  const passwordUpdated = params.get("password_updated") === "1";
   const next = params.get("next");
   const hasPendingInviteLink = Boolean(next && next.startsWith("/accept-invite"));
 
@@ -41,6 +42,9 @@ function LoginFormFields({ registrationOpen }: { registrationOpen: boolean }) {
       ) : null}
       {justRegistered ? (
         <InfoAlert message="Cuenta creada. Si tu proyecto exige confirmación, revisa tu correo antes de entrar." />
+      ) : null}
+      {passwordUpdated ? (
+        <InfoAlert message="Contraseña actualizada correctamente. Ya puedes iniciar sesión con tu nueva contraseña." />
       ) : null}
       <ErrorAlert message={state.error} />
 
