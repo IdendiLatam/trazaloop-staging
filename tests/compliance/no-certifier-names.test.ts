@@ -28,7 +28,19 @@ const BANNED: { pattern: RegExp; label: string }[] = [
   { pattern: /\baenor\b/i, label: "nombre de organismo certificador" },
   { pattern: /\bsgs\b/i, label: "nombre de organismo certificador" },
   { pattern: /bureau\s+veritas/i, label: "nombre de organismo certificador" },
-  { pattern: /t[üu]v/i, label: "nombre de organismo certificador" },
+  // Q0.3H: el patrón original era /t[üu]v/i, SIN límites de palabra —a
+  // diferencia de todos sus hermanos, que sí los llevan (\bicontec\b, \baenor\b,
+  // \bsgs\b)—, de modo que cualquier texto en español con "tuvo", "estuvo",
+  // "obtuvo", "obtuvieron", "mantuvo" o "sostuvo" lo disparaba como si fuera el
+  // nombre de una certificadora. El defecto estaba latente porque las rutas
+  // escaneadas no contenían esas palabras; apareció al incorporar documentación
+  // en español a docs/.
+  //
+  // No se usa \b: es ASCII, y en "TÜV" la Ü no es carácter de palabra, así que
+  // \bt[üu]v\b dejaría de reconocer el nombre real que se quiere prohibir. Se
+  // usan lookarounds Unicode que exigen que no haya una letra pegada a ninguno
+  // de los dos lados: "TÜV" y "TUV" siguen detectándose; "obtuvieron" no.
+  { pattern: /(?<!\p{L})t[üu]v(?!\p{L})/iu, label: "nombre de organismo certificador" },
   { pattern: /\bintertek\b/i, label: "nombre de organismo certificador" },
   { pattern: /\bapplus\b/i, label: "nombre de organismo certificador" },
   { pattern: /\bdekra\b/i, label: "nombre de organismo certificador" },
@@ -76,6 +88,17 @@ const SUPERSEDED_FILES = new Set([
   "supabase/migrations/0034_implementation_views.sql",
 ]);
 
+// Q0.3H: documentos RECTORES incorporados al repositorio (Documento Maestro y
+// Quality Architecture Baseline). No son contenido del producto ni texto que
+// vea un cliente: son la arquitectura aprobada, y se versionan tal cual fueron
+// firmados. Modificar su redacción para satisfacer al escáner falsearía un
+// documento aprobado, así que se excluye la carpeta.
+//
+// La protección del CONTENIDO PÚBLICO se mantiene intacta: app/, components/,
+// server/, lib/, supabase/ y el resto de docs/ —incluidas las guías que sí ve
+// un cliente— se siguen escaneando igual.
+const SKIP_PREFIXES = ["docs/architecture/"];
+
 function* walk(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue;
@@ -102,9 +125,10 @@ for (const dir of SCAN_DIRS) {
     continue;
   }
   for (const file of entries) {
-    scanned += 1;
     const relPath = relative(ROOT, file);
     if (SUPERSEDED_FILES.has(relPath)) continue;
+    if (SKIP_PREFIXES.some((p) => relPath.startsWith(p))) continue;
+    scanned += 1;
     const content = readFileSync(file, "utf8");
     const lines = content.split("\n");
     lines.forEach((line, i) => {

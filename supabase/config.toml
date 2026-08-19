@@ -1,0 +1,63 @@
+# Trazaloop · Configuración de Supabase LOCAL (Q0.3 · Fase A)
+#
+# Identidad LOCAL y desechable. No contiene secretos: las claves locales las
+# genera `supabase start` en cada arranque y son de desarrollo.
+# El project ref de Production (mvmpadeixomwkpxbnhky) NO aparece aquí y este
+# archivo NO vincula ningún proyecto remoto.
+
+project_id = "trazaloop-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17            # DR-15: igual que Production (17.6.1.147)
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+# DESVIACIÓN DELIBERADA de la plantilla del CLI (que trae enabled = true y
+# sql_paths = ["./seed.sql"]): este repositorio NO tiene supabase/seed.sql y
+# su mecanismo de semilla es scripts/seed-demo.ts. Dejarlo activo apuntando a
+# un archivo inexistente invita a crear un segundo sistema de seed, que el
+# encargo prohíbe expresamente.
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[local_smtp]
+# Captura de correo local (registro, invitaciones, recuperación de contraseña).
+# En el CLI 2.114.0 esta sección sustituye a [inbucket].
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = [
+  "http://localhost:3000",
+  "http://localhost:3000/**",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3000/**",
+]
+
+[auth.email]
+enable_signup = true
+# DIFERENCIA DELIBERADA con Production, donde debe estar HABILITADA.
+# En local el correo se captura en local_smtp (http://127.0.0.1:54324) y
+# exigir confirmación solo entorpece el ciclo de desarrollo.
+enable_confirmations = false

@@ -433,6 +433,8 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);
@@ -440,7 +442,14 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
   const later = files.filter((f) => f > "0105_z");
   const intruders = later.filter((f) => !reservedPcr03.has(f));
   assert(intruders.length === 0, `tras la 0105 solo PCR-03 0106–0108 + hotfixes 0109/0110: ${intruders.join(", ")}`);
-  assert(!files.some((f) => Number(f.slice(0, 4)) >= 111), "no existe 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)");
+  // Q0.3H · La guarda original vetaba TODA migracion 0111+, de modo que cualquier
+  // sprint posterior legitimo la rompia. Se conserva su intencion —ese sprint no
+  // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
+  // usan las demas suites.
+  assert(
+    !files.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    "no existe 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
+  );
 });
 
 check("R2 · Demo/Full/Extra y estructura PCR-02.4 sin tocar", () => {

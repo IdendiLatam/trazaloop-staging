@@ -255,6 +255,8 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

@@ -855,11 +855,13 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `posteriores no autorizadas: ${intruders.join(", ")}`);
-  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 111);
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql");
   assert(beyond.length === 0, `no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
@@ -1407,7 +1409,7 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
   }
   // Y siguen sin existir migraciones nuevas.
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
 check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
@@ -1999,7 +2001,7 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
     );
   }
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
   // Los borradores viven en docs/legal, no en supabase/.
   for (const name of LEGAL_DRAFTS) {
     assert(
@@ -2817,7 +2819,7 @@ check("73. La documentación cubre el kill switch", () => {
 check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
   assert(
     /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
     "el script legal debe declarar la aprobación"
@@ -3031,7 +3033,7 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
     `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
   );
   const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
 // ===========================================================================
@@ -3732,7 +3734,7 @@ check("103. No se modificaron migraciones y no existe 0103", () => {
     `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
   );
   assert(
-    files.filter((f) => Number(f.slice(0, 4)) >= 111).length === 0,
+    files.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0,
     "PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior"
   );
   // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.

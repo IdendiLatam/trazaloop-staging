@@ -112,6 +112,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
@@ -120,7 +122,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0109 es el hotfix append-only PCR-03.4.1 autorizado"
   );
   assert(
-    !migrations.some((f) => Number(f.slice(0, 4)) >= 111),
+    !migrations.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
     "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
   );
   // La numeración histórica 0001–0105 tiene huecos deliberados: son 97

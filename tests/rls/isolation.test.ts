@@ -128,6 +128,28 @@ async function main() {
     if (error) throw new Error(`fixture extra (${org}): ${error.message}`);
   }
 
+  // Q0.3H · Usuario de la empresa A que NUNCA se agrega a la empresa B.
+  //
+  // La prueba 22 añade deliberadamente a C en la empresa B para validar
+  // prevent_organization_id_change. A partir de ese punto C es un consultor
+  // MULTIEMPRESA legítimo —un caso real del producto— y por tanto SÍ debe ver
+  // los datos de B: is_org_member(orgB) es verdadero para él.
+  //
+  // Varias pruebas posteriores seguían usando a C como "miembro de A que no
+  // debe ver B", de modo que reportaban como fuga lo que era el comportamiento
+  // correcto. Este usuario D existe para esas aserciones de aislamiento
+  // cruzado: pertenece solo a la empresa A, siempre.
+  const userD = await newUser("d");
+  {
+    const { error } = await admin.from("memberships").insert({
+      organization_id: orgA,
+      user_id: userD.id,
+      role_code: "quality",
+      status: "active",
+    });
+    if (error) throw new Error(`fixture userD en org A: ${error.message}`);
+  }
+
   // 9: la RPC creó organization + membership admin + módulos base.
   await check("9. create_organization creó org + membership admin + módulos base", async () => {
     const { data: org } = await userA.client
@@ -151,7 +173,14 @@ async function main() {
       .eq("organization_id", orgA);
     const codes = (mods ?? []).map((m) => m.module_code).sort();
     assert(
-      ["core", "docs", "traceability_6632"].every((c) => codes.includes(c)),
+      // Q0.3H · La expectativa original era ["core","docs","traceability_6632"],
+      // escrita antes de dos cambios que la dejaron obsoleta:
+      //   · 0042 retiró 'docs' de los módulos que se activan al crear una
+      //     empresa (el catálogo conserva la fila, pero ya no se asigna);
+      //   · 0100 sustituyó ese seed por provision_new_organization_modules,
+      //     que asigna 'core' como infraestructura más TODOS los módulos
+      //     marcados is_functional — hoy traceability_6632 y textiles.
+      ["core", "traceability_6632", "textiles"].every((c) => codes.includes(c)),
       `módulos base incompletos: ${codes.join(", ")}`
     );
   });
@@ -658,7 +687,9 @@ async function main() {
 
     const { data: ob, error: obErr } = await userB.client
       .from("output_batches")
-      .insert({ organization_id: orgB, batch_code: "B-LS-001", production_order_id: poB })
+      .insert({ organization_id: orgB, batch_code: "B-LS-001", production_order_id: poB,
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+      })
       .select("id").single();
     assert(!obErr && ob, `B no pudo crear lote de salida: ${obErr?.message}`);
     obB = ob!.id;
@@ -718,14 +749,18 @@ async function main() {
     // Lote de salida en A con orden de B.
     const { data: c2, error: e2 } = await userA.client
       .from("output_batches")
-      .insert({ organization_id: orgA, batch_code: "A-LS-X", production_order_id: poB })
+      .insert({ organization_id: orgA, batch_code: "A-LS-X", production_order_id: poB,
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+      })
       .select();
     assert(e2 || (c2 ?? []).length === 0, "se aceptó lote de salida en A con orden de B");
 
     // Composición en A con material de B: primero un lote de salida legítimo de A.
     const { data: ob } = await userA.client
       .from("output_batches")
-      .insert({ organization_id: orgA, batch_code: "A-LS-001", production_order_id: poA1 })
+      .insert({ organization_id: orgA, batch_code: "A-LS-001", production_order_id: poA1,
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+      })
       .select("id").single();
     assert(ob, "A no pudo crear su lote de salida");
     obA1 = ob!.id;
@@ -816,7 +851,9 @@ async function main() {
 
     const { data: ob, error: e4 } = await userC.client
       .from("output_batches")
-      .insert({ organization_id: orgA, batch_code: "A-LS-C01", production_order_id: poA2 })
+      .insert({ organization_id: orgA, batch_code: "A-LS-C01", production_order_id: poA2,
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+      })
       .select("id").single();
     assert(!e4 && ob, `consultant no pudo crear lote de salida: ${e4?.message}`);
     obA2 = ob!.id;
@@ -859,7 +896,9 @@ async function main() {
       .select("id").single();
     const { data: ob3 } = await userA.client
       .from("output_batches")
-      .insert({ organization_id: orgA, batch_code: "A-LS-VACIO", production_order_id: po3!.id })
+      .insert({ organization_id: orgA, batch_code: "A-LS-VACIO", production_order_id: po3!.id,
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+      })
       .select("id").single();
     assert(po3 && ob3, "no se pudo crear el lote vacío");
     poA3 = po3!.id; obA3 = ob3!.id;
@@ -992,7 +1031,18 @@ async function main() {
     const { data: ob } = await userA.client
       .from("output_batches")
       .insert({
-        organization_id: orgA, batch_code: `A-LS-${tag}`, production_order_id: po!.id, ...extra,
+        organization_id: orgA,
+        batch_code: `A-LS-${tag}`,
+        production_order_id: po!.id,
+        // Q0.3H · produced_quantity_kg es OBLIGATORIA (NOT NULL) desde 0105.
+        // El valor correcto es consumeKg, no una constante: estas son cadenas
+        // BALANCEADAS y la composición que añade compose() suma esa misma masa.
+        // 0104 marca mass_balance_warning cuando producido y composición
+        // difieren más de un 5 %, y esa advertencia degrada el cálculo de
+        // 'defensible' a 'with_warnings'. Se declara ANTES de ...extra para que
+        // un caso concreto pueda sobrescribirlo si quiere provocar el desbalance.
+        produced_quantity_kg: consumeKg,
+        ...extra,
       })
       .select("id").single();
     orderS4[tag] = po!.id;
@@ -1336,6 +1386,7 @@ async function main() {
       .insert({
         organization_id: orgA, batch_code: "A-LS-47B", production_order_id: order47,
         produced_date: "2026-08-15",
+        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
       })
       .select("id").single();
     await compose(ob47b!.id, matPC, 70);
@@ -1392,6 +1443,7 @@ async function main() {
     await userA.client.from("output_batches").insert({
       organization_id: orgA, batch_code: "A-LS-48B", production_order_id: orderS4["48"],
       product_id: prodNew!.id, produced_date: "2026-09-20",
+      produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
     });
 
     const { data: byProd } = await userA.client
@@ -2457,7 +2509,7 @@ async function main() {
       // (consultant de A, no superadmin, no admin de B).
       void aSeesB;
 
-      const { data: cSeesB } = await userC.client
+      const { data: cSeesB } = await userD.client
         .from("organization_subscriptions")
         .select("id")
         .eq("organization_id", orgB);
@@ -2492,7 +2544,7 @@ async function main() {
     });
 
     await check("74. Usuario normal no lee historial de plan de otras empresas", async () => {
-      const { data } = await userC.client
+      const { data } = await userD.client
         .from("subscription_plan_history")
         .select("id")
         .eq("organization_id", orgB);
@@ -2601,6 +2653,19 @@ async function main() {
       });
       assert(!planErr, `no se pudo bajar la empresa a demo: ${planErr?.message}`);
 
+      // Q0.3H · Bajar organization_subscriptions ya NO basta. La migracion 0103
+      // (PCR-01) traslado la autoridad comercial a organization_modules.access_mode:
+      // accept_team_invitation resuelve el plan con organization_effective_plan_code(),
+      // no con la copia legado. Como el fixture de esta suite eleva los modulos a
+      // 'extra', el plan EFECTIVO seguia siendo extra y la invitacion se aceptaba:
+      // ese es el comportamiento correcto de hoy. Para reproducir una empresa en
+      // Demo de verdad hay que bajar el modo de acceso de los modulos.
+      const { error: modDownErr } = await admin
+        .from("organization_modules")
+        .update({ access_mode: "demo", access_expires_at: null })
+        .eq("organization_id", orgA);
+      assert(!modDownErr, `no se pudieron bajar los modulos a demo: ${modDownErr?.message}`);
+
       const { error: acceptErr } = await outsider.client.rpc("accept_team_invitation", {
         p_token: "s10a-old-invite-token",
       });
@@ -2616,6 +2681,12 @@ async function main() {
       // Se deja la empresa de nuevo en Full para no afectar otros casos
       // si se reordenan.
       await pg.query(`update organization_subscriptions set plan_code = 'full', status = 'active' where organization_id = $1`, [orgA]);
+      // Q0.3H · restaurar tambien la autoridad vigente (modulos), no solo la
+      // copia legado, para no dejar en Demo a las pruebas siguientes.
+      await admin
+        .from("organization_modules")
+        .update({ access_mode: "extra", access_expires_at: null })
+        .eq("organization_id", orgA);
     });
 
     await check("81. Suspender la empresa bloquea aceptar cualquier invitación pendiente", async () => {
@@ -2678,13 +2749,17 @@ async function main() {
     });
 
     await check("83. Documento descargable: aislamiento cruzado entre empresas", async () => {
-      const { data: directRead } = await userC.client
+      // Q0.3H · El documento pertenece a la empresa A, asi que el forastero debe
+      // ser alguien de FUERA de A: userB, admin unico de la empresa B. (userC
+      // quedo invalidado desde la prueba 22, que lo agrega a B; y userD pertenece
+      // a A, luego SI puede leerlo legitimamente.)
+      const { data: directRead } = await userB.client
         .from("trazadoc_file_documents")
         .select("id")
         .eq("id", fileDocId);
       assert((directRead ?? []).length === 0, "un miembro de otra empresa pudo leer directamente el documento descargable");
 
-      const { data: masterRead } = await userC.client
+      const { data: masterRead } = await userB.client
         .from("v_trazadoc_document_master")
         .select("document_id")
         .eq("document_id", fileDocId);
@@ -2925,16 +3000,16 @@ async function main() {
     });
 
     await check("91. Aislamiento cruzado: el ticket de la organización B no es visible para un miembro de la organización A", async () => {
-      const { data: crossRead } = await userC.client.from("support_tickets").select("id").eq("id", supportTicketId);
+      const { data: crossRead } = await userD.client.from("support_tickets").select("id").eq("id", supportTicketId);
       assert((crossRead ?? []).length === 0, "un miembro de la organización A pudo leer un ticket de la organización B");
 
-      const { error: crossReopenErr } = await userC.client.rpc("reopen_support_ticket", {
+      const { error: crossReopenErr } = await userD.client.rpc("reopen_support_ticket", {
         p_ticket_id: supportTicketId,
         p_note: "intento cruzado",
       });
       assert(crossReopenErr, "un miembro de otra empresa pudo intentar reabrir un ticket ajeno");
 
-      const { data: crossSummary } = await userC.client.from("v_support_ticket_summary").select("ticket_id").eq("ticket_id", supportTicketId);
+      const { data: crossSummary } = await userD.client.from("v_support_ticket_summary").select("ticket_id").eq("ticket_id", supportTicketId);
       assert((crossSummary ?? []).length === 0, "el resumen del ticket de la organización B no debía verse desde la organización A");
     });
 
@@ -3170,9 +3245,25 @@ async function main() {
       });
       assert(userInsertErr, "un usuario normal pudo insertar un documento legal");
 
-      const { data: termsDoc } = await userB.client.from("legal_documents").select("id").eq("document_type", "terms").single();
-      const { error: userUpdateErr } = await userB.client.from("legal_documents").update({ title: "Modificado sin permiso" }).eq("id", termsDoc!.id);
-      assert(userUpdateErr, "un usuario normal pudo modificar un documento legal existente");
+      // Q0.3H · Antes se afirmaba que el UPDATE debia DEVOLVER ERROR. Eso solo
+      // ocurria porque `authenticated` carecia del privilegio de TABLA y
+      // PostgREST respondia 42501: la prueba pasaba por el motivo equivocado y
+      // contra un proyecto con privilegios normales (produccion, o cualquiera
+      // tras la migracion 0111) habria fallado.
+      //
+      // RLS no lanza error en un UPDATE: el USING filtra las filas y la
+      // sentencia no afecta a ninguna. La propiedad real es que el documento
+      // NO CAMBIE, y eso es lo que se comprueba ahora.
+      const { data: termsDoc } = await userB.client
+        .from("legal_documents").select("id, title").eq("document_type", "terms").single();
+      await userB.client
+        .from("legal_documents").update({ title: "Modificado sin permiso" }).eq("id", termsDoc!.id);
+      const { data: afterDoc } = await userB.client
+        .from("legal_documents").select("title").eq("id", termsDoc!.id).single();
+      assert(
+        afterDoc?.title === termsDoc!.title && afterDoc?.title !== "Modificado sin permiso",
+        "un usuario normal pudo modificar un documento legal existente"
+      );
     });
 
     await check("101. Un usuario no puede insertar una aceptación legal a nombre de otro usuario", async () => {
@@ -3194,7 +3285,7 @@ async function main() {
         .single();
       assert(ownStatus?.total_steps === 7, "un miembro de la empresa debía poder ver su propio estado de onboarding, con 7 pasos totales");
 
-      const { data: crossStatus } = await userC.client.from("v_organization_onboarding_status").select("organization_id").eq("organization_id", orgB);
+      const { data: crossStatus } = await userD.client.from("v_organization_onboarding_status").select("organization_id").eq("organization_id", orgB);
       assert((crossStatus ?? []).length === 0, "un miembro de otra empresa no debía poder ver el onboarding de la organización B");
 
       const { data: staffStatus } = await userA.client.from("v_organization_onboarding_status").select("organization_id").eq("organization_id", orgB);

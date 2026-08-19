@@ -327,6 +327,8 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

@@ -721,26 +721,46 @@ const migrationFiles = fs
   .filter((f) => f.endsWith(".sql"))
   .sort();
 
-check("30. 0110 sigue siendo la última migración", () => {
-  const last = migrationFiles[migrationFiles.length - 1];
+check("30. RH-01 no creó migraciones: 0110 cierra su rango", () => {
+  // Q0.3H · La aserción original exigía que 0110 fuera la ÚLTIMA migración del
+  // repositorio para siempre, de modo que cualquier sprint posterior legítimo la
+  // rompía. Lo que RH-01 quiso garantizar es que ESE sprint no añadió ninguna
+  // migración, y eso se comprueba mejor acotando su propio rango: dentro de
+  // 0001–0110 la última sigue siendo la 0110. Las migraciones posteriores
+  // pertenecen a otros sprints y las validan sus propias suites.
+  const withinRhScope = migrationFiles.filter((f) => Number(f.slice(0, 4)) <= 110);
+  const last = withinRhScope[withinRhScope.length - 1];
   assert(
     last === "0110_platform_org_pgcrypto_schema_fix.sql",
-    `la última migración debía ser 0110_platform_org_pgcrypto_schema_fix.sql, es ${last}`
+    `la última migración del rango RH-01 debía ser 0110_platform_org_pgcrypto_schema_fix.sql, es ${last}`
   );
 });
 
-check("31. No existe ninguna migración 0111 o posterior", () => {
+check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
+  // Q0.3H · Igual que en el caso 30: la aserción absoluta "no existe 0111 o
+  // posterior" convertía en fallo cualquier sprint futuro. Se conserva la
+  // intención —RH-01 no introdujo migraciones— mediante una lista blanca
+  // explícita de las posteriores autorizadas, el mismo patrón que ya usan las
+  // suites de PCR-02 y T9F.
+  const authorizedBeyond = new Set([
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
+  ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));
-    return Number.isFinite(n) && n >= 111;
+    return Number.isFinite(n) && n >= 111 && !authorizedBeyond.has(f);
   });
-  assert(beyond.length === 0, `RH-01 no debía crear migraciones: apareció ${beyond.join(", ")}`);
+  assert(beyond.length === 0, `migración posterior no autorizada: ${beyond.join(", ")}`);
 });
 
-check("32. El conteo de migraciones se mantiene en 102 (baseline 0110)", () => {
+check("32. RH-01 no alteró el conteo de su rango: 102 migraciones hasta la 0110", () => {
+  // Q0.3H · El conteo absoluto convertía en fallo cualquier migración futura.
+  // Lo que RH-01 garantizaba es que no añadió ninguna, así que se cuenta
+  // dentro de SU rango (0001–0110) y las posteriores quedan fuera del candado.
+  const withinRhScope = migrationFiles.filter((f) => Number(f.slice(0, 4)) <= 110);
   assert(
-    migrationFiles.length === 102,
-    `se esperaban 102 migraciones, hay ${migrationFiles.length}`
+    withinRhScope.length === 102,
+    `se esperaban 102 migraciones hasta la 0110, hay ${withinRhScope.length}`
   );
 });
 

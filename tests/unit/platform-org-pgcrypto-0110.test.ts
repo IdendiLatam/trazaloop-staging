@@ -81,14 +81,19 @@ check("A. existe exactamente supabase/migrations/0110_platform_org_pgcrypto_sche
   assert(existsSync(join(MIG_DIR, MIG_NAME)), `falta ${MIG_NAME}`);
   const at110 = migrations.filter((f) => Number(f.slice(0, 4)) === 110);
   assert(at110.length === 1 && at110[0] === MIG_NAME, `la 0110 debe ser única y llamarse ${MIG_NAME} (hay: ${at110.join(", ")})`);
+  // Q0.3H · "cerrar la secuencia" se evalua dentro del RANGO de este hotfix
+  // (0001-0110). La comprobacion absoluta convertia en fallo cualquier
+  // migracion posterior legitima; la intencion era que la 0110 fuera la
+  // ultima de SU momento, y eso se conserva.
+  const withinScope = migrations.filter((f) => Number(f.slice(0, 4)) <= 110);
   assert(
-    migrations[migrations.length - 1] === MIG_NAME,
-    `la 0110 debe cerrar la secuencia, la última es ${migrations[migrations.length - 1]}`
+    withinScope[withinScope.length - 1] === MIG_NAME,
+    `la 0110 debe cerrar su rango, la última es ${withinScope[withinScope.length - 1]}`
   );
 });
 
 check("B. no existe ninguna migración 0111 ni posterior", () => {
-  const beyond = migrations.filter((f) => Number(f.slice(0, 4)) >= 111);
+  const beyond = migrations.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql");
   assert(beyond.length === 0, `no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 

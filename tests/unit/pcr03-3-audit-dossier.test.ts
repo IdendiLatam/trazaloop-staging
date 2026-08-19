@@ -178,7 +178,11 @@ const mig = read("supabase/migrations/0108_pcr033_audit_dossiers.sql");
 const migrations = readdirSync(join(ROOT, "supabase", "migrations")).filter((f) => f.endsWith(".sql")).sort();
 
 check("0108 cierra PCR-03.3; 0109 y 0110 son los hotfixes autorizados; sin 0111+", () => {
-  const later = migrations.filter((f) => f > "0105_z");
+  // Q0.3H · Se acota al RANGO de PCR-03.3 (hasta la 0110). La comprobacion
+  // original contaba TODAS las migraciones posteriores a la 0105, de modo que
+  // cualquier sprint futuro la rompia; su intencion era fijar el bloque
+  // 0106-0110, y eso se conserva.
+  const later = migrations.filter((f) => f > "0105_z" && Number(f.slice(0, 4)) <= 110);
   assert(
     later.length === 5 &&
       later[0].startsWith("0106_pcr031") &&
@@ -189,7 +193,14 @@ check("0108 cierra PCR-03.3; 0109 y 0110 son los hotfixes autorizados; sin 0111+
       later[4] === "0110_platform_org_pgcrypto_schema_fix.sql",
     `bloque exacto 0106/0107/0108 + hotfixes 0109/0110 (hay: ${later.join(", ")})`
   );
-  assert(!migrations.some((f) => Number(f.slice(0, 4)) >= 111), "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)");
+  // Q0.3H · La guarda original vetaba TODA migracion 0111+, de modo que cualquier
+  // sprint posterior legitimo la rompia. Se conserva su intencion —ese sprint no
+  // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
+  // usan las demas suites.
+  assert(
+    !migrations.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
+  );
 });
 
 check("0108: versionado + inmutabilidad + DELETE vetado + RLS + FK compuestas", () => {

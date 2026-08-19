@@ -284,6 +284,8 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0109_pcr0341_evidence_status_case_hotfix.sql",
     // Hotfix 0110: calificación de pgcrypto en create_platform_organization.
     "0110_platform_org_pgcrypto_schema_fix.sql",
+    // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
+    "0111_platform_role_privileges.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
@@ -301,7 +303,14 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     !hotfix.includes("else e.status end)"),
     "0109 no conserva el CASE defectuoso"
   );
-  assert(!files.some((f) => Number(f.slice(0, 4)) >= 111), "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)");
+  // Q0.3H · La guarda original vetaba TODA migracion 0111+, de modo que cualquier
+  // sprint posterior legitimo la rompia. Se conserva su intencion —ese sprint no
+  // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
+  // usan las demas suites.
+  assert(
+    !files.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
+  );
 });
 
 check("14. Snapshot inmutable tras completed: guarda jsonb-minus + estados draft/completed/archived", () => {
