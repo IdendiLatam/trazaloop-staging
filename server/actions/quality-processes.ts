@@ -318,6 +318,56 @@ export async function updateQualityProcess(
 }
 
 /**
+ * Retira un proceso o lo devuelve al servicio. NUNCA se borra: sus revisiones
+ * publicadas siguen siendo la respuesta a "qué regía el 14 de marzo", y un
+ * DELETE se llevaría por delante esa historia. Retirar es un cambio de estado
+ * administrativo, reversible.
+ */
+export async function setQualityProcessRetired(
+  processId: string,
+  retired: boolean
+): Promise<QualityActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  if (!canPublishQuality(g.ok.roleCode)) {
+    return { error: "Solo la administración o el área de calidad retiran un proceso." };
+  }
+
+  const id = validateUuid(processId, "proceso");
+  if (id.error) return { error: id.error };
+
+  const supabase = await createServerClient();
+  if (retired) {
+    const { error } = await supabase
+      .from("quality_processes")
+      .update({ status: "retired" })
+      .eq("id", id.value)
+      .eq("organization_id", g.ok.organizationId);
+    if (error) return { error: safeError(error) };
+  } else {
+    // Al reactivar, el estado depende de si llegó a publicarse alguna vez:
+    // un proceso sin revisión publicada vuelve a borrador, no a activo.
+    const { data } = await supabase
+      .from("quality_processes")
+      .select("current_revision")
+      .eq("id", id.value)
+      .eq("organization_id", g.ok.organizationId)
+      .maybeSingle();
+    if (!data) return { error: QUALITY_ERRORS.notFound };
+    const { error } = await supabase
+      .from("quality_processes")
+      .update({ status: Number(data.current_revision ?? 0) > 0 ? "active" : "draft" })
+      .eq("id", id.value)
+      .eq("organization_id", g.ok.organizationId);
+    if (error) return { error: safeError(error) };
+  }
+
+  revalidatePath(PATH_PROCESSES);
+  revalidatePath(`${PATH_PROCESSES}/${id.value}`);
+  return OK;
+}
+
+/**
  * Abre (o reutiliza) el borrador del proceso. Idempotente por diseño: pulsar
  * dos veces no crea dos borradores, la RPC devuelve el que ya estaba abierto.
  */

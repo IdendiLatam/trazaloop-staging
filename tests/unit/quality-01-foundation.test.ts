@@ -59,6 +59,8 @@ const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const stripTs = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const stripSql = (s: string) => s.replace(/^\s*--.*$/gm, "");
 
+const MIG = "supabase/migrations/0112_quality_process_foundation.sql";
+
 let passed = 0;
 let failed = 0;
 function check(name: string, fn: () => void) {
@@ -357,6 +359,41 @@ check("24. El guard del namespace: 404 con el switch apagado, /modules si no est
     "el layout de /quality debe ejecutar el guard");
 });
 
+check("24b. El panel inverso en TrazaDocs calla si Quality no está habilitado", () => {
+  // La lectura inversa vive dentro de TrazaDocs, FUERA del namespace /quality,
+  // así que no hereda el guard del layout: tiene que comprobarlo por su cuenta.
+  const panel = read("components/domain/quality/document-processes-panel.tsx");
+  assert(panel.startsWith('import "server-only";'), "el panel debe ser de servidor");
+  assert(/isQualityModuleEnabled\(\)/.test(panel), "debe comprobar el kill switch");
+  assert(/resolveModuleAccessForOrg/.test(panel), "debe comprobar la habilitación de la empresa");
+  // Y debe devolver null en silencio: un aviso del tipo "Quality no está
+  // disponible" en una pantalla de TrazaDocs delataría que el módulo existe.
+  const guardBlock = panel.slice(panel.indexOf("isQualityModuleEnabled()"), panel.indexOf("listQualityProcessesUsingDocument("));
+  assert((guardBlock.match(/return null;/g) ?? []).length >= 2, "ambas comprobaciones deben devolver null en silencio");
+  assert(!/no está disponible|Próximamente/i.test(stripTs(panel)), "el panel no debe delatar la existencia del módulo");
+  // Está efectivamente insertado en el detalle del documento.
+  assert(
+    read("app/(app)/(shell)/(cpr)/trazadocs/[id]/page.tsx").includes("DocumentQualityProcessesPanel"),
+    "el panel debe estar insertado en el detalle de TrazaDocs"
+  );
+});
+
+check("24c. Retirar un proceso es un cambio de estado, jamás un borrado", () => {
+  const src = stripTs(read("server/actions/quality-processes.ts"));
+  assert(/export async function setQualityProcessRetired/.test(src), "debe existir la acción de retiro");
+  const fn = src.slice(src.indexOf("export async function setQualityProcessRetired"));
+  const body = fn.slice(0, fn.indexOf("\n}\n") + 3);
+  assert(/status: "retired"/.test(body), "debe marcar el estado retirado");
+  assert(!/\.delete\(\)/.test(body), "retirar jamás debe borrar el proceso");
+  assert(/canPublishQuality/.test(body), "retirar debe exigir rol de publicación");
+  // Reactivar no puede devolver a 'active' un proceso que nunca se publicó.
+  assert(/current_revision/.test(body), "al reactivar debe mirarse si llegó a publicarse");
+  // Y ninguna tabla de Quality expone un borrado de procesos en la migración.
+  const sql = stripSql(read(MIG));
+  assert(!/create policy quality_processes_delete/.test(sql), "no debe existir política de DELETE sobre procesos");
+  assert(!/create policy quality_positions_delete/.test(sql), "no debe existir política de DELETE sobre cargos");
+});
+
 check("25. Ninguna página de Quality escapa del layout con guard", () => {
   const dir = join(ROOT, "app/(app)/(shell)/quality");
   const pages: string[] = [];
@@ -378,7 +415,6 @@ check("25. Ninguna página de Quality escapa del layout con guard", () => {
 // ---------------------------------------------------------------------------
 console.log("\nQUALITY-01 · convenciones de la migración 0112\n");
 
-const MIG = "supabase/migrations/0112_quality_process_foundation.sql";
 
 check("26. La migración es append-only y no toca ninguna anterior", () => {
   assert(existsSync(join(ROOT, MIG)), "falta la migración 0112");

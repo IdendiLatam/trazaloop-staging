@@ -11,6 +11,7 @@ import { requireSession } from "@/lib/auth/require-session";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
 import { DeleteDraftButton } from "@/components/domain/trazadocs/delete-draft-button";
+import { DocumentQualityProcessesPanel } from "@/components/domain/quality/document-processes-panel";
 
 const SOURCE_LABEL: Record<string, string> = {
   suggested: "Estructura sugerida",
@@ -100,6 +101,10 @@ export default async function TrazaDocViewPage({ params }: { params: Promise<{ i
           </div>
         ))}
       </section>
+
+      {/* Lectura inversa de la relación con Quality. No renderiza nada si el
+          módulo no está habilitado para esta empresa. */}
+      <DocumentQualityProcessesPanel documentId={doc.id} />
 
       {canDeleteDraft ? <DeleteDraftButton documentId={doc.id} redirectAfterDelete /> : null}
     </div>

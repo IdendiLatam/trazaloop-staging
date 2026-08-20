@@ -477,6 +477,54 @@ export async function listTrazadocsForQuality(organizationId: string): Promise<T
   }));
 }
 
+/**
+ * Lectura INVERSA: qué procesos de Quality referencian un documento de
+ * TrazaDocs. Es la otra mitad de T-03 — si desde el proceso se ve el documento
+ * pero desde el documento no se ve nada, quien mantiene TrazaDocs no tiene forma
+ * de saber a qué procesos afecta antes de marcarlo obsoleto.
+ *
+ * Devuelve lista vacía si el módulo Quality no está habilitado para la empresa:
+ * la comprobación la hace quien llama, y aquí la RLS filtra igualmente.
+ */
+export type ProcessUsingDocument = {
+  processId: string;
+  processName: string;
+  processCode: string | null;
+  processStatus: string;
+  relationType: string;
+};
+
+export async function listQualityProcessesUsingDocument(
+  organizationId: string,
+  documentId: string
+): Promise<ProcessUsingDocument[]> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("quality_process_documents")
+    .select(
+      "relation_type, process_id, quality_processes!quality_process_documents_process_fk(name, code, status)"
+    )
+    .eq("organization_id", organizationId)
+    .eq("document_id", documentId);
+  if (error || !data) return [];
+  return data
+    .map((r) => {
+      const p = (r.quality_processes ?? null) as {
+        name?: string | null;
+        code?: string | null;
+        status?: string | null;
+      } | null;
+      return {
+        processId: r.process_id as string,
+        processName: p?.name ?? "—",
+        processCode: p?.code ?? null,
+        processStatus: p?.status ?? "draft",
+        relationType: r.relation_type as string,
+      };
+    })
+    .sort((a, b) => a.processName.localeCompare(b.processName, "es"));
+}
+
 // ---------------------------------------------------------------------------
 // Mapa de procesos
 // ---------------------------------------------------------------------------

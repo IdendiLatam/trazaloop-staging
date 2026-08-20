@@ -28,6 +28,7 @@ import {
   openQualityProcessRevision,
   publishQualityProcessRevision,
   relateQualityProcesses,
+  setQualityProcessRetired,
   unlinkTrazadocFromQualityProcess,
   updateQualityProcess,
   updateQualityRevisionContent,
@@ -326,10 +327,33 @@ export function QualityProcessDetailView({
             </div>
           </form>
         ) : (
-          <Button variant="quiet" className="w-auto px-3 py-1 text-xs" onClick={() => setEditingIdentity(true)}>
-            Editar identidad
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="quiet" className="w-auto px-3 py-1 text-xs" onClick={() => setEditingIdentity(true)}>
+              Editar identidad
+            </Button>
+            {canPublish ? (
+              <Button
+                variant="quiet"
+                className="w-auto px-3 py-1 text-xs"
+                disabled={pending}
+                onClick={() =>
+                  run(
+                    () => setQualityProcessRetired(process.id, process.status !== "retired"),
+                    process.status === "retired" ? "Proceso devuelto al servicio." : "Proceso retirado."
+                  )
+                }
+              >
+                {process.status === "retired" ? "Devolver al servicio" : "Retirar proceso"}
+              </Button>
+            ) : null}
+          </div>
         )}
+        {process.status === "retired" ? (
+          <p className="text-xs text-ink-soft">
+            Este proceso está retirado. Sus revisiones publicadas se conservan: siguen siendo la
+            respuesta a qué regía en una fecha pasada.
+          </p>
+        ) : null}
       </Section>
 
       {/* --------------------------------------------------------------- */}

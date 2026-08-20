@@ -608,6 +608,53 @@ async function main() {
     assert(proc?.quality_positions?.name === "Director de Calidad", "el cargo no llegó en el segundo nivel");
   });
 
+  await check("48b. Lectura INVERSA: qué procesos usan un documento de TrazaDocs", async () => {
+    const { data: doc } = await userA.client.from("trazadoc_documents")
+      .select("id").eq("organization_id", orgA).limit(1).single();
+    const { data, error } = await userA.client
+      .from("quality_process_documents")
+      .select("relation_type, process_id, quality_processes!quality_process_documents_process_fk(name, code, status)")
+      .eq("organization_id", orgA)
+      .eq("document_id", doc!.id);
+    assert(!error, `PostgREST rechazó el embed inverso: ${error?.message}`);
+    assert((data ?? []).length === 1, `esperaba 1 proceso usando el documento, hay ${(data ?? []).length}`);
+    const p = data![0].quality_processes as { name?: string } | null;
+    assert(p?.name === "Gestión de la calidad", "el proceso no llegó incrustado desde el documento");
+    // Y la empresa B no ve esa relación aunque conozca el identificador.
+    const { data: fromB } = await userB.client.from("quality_process_documents")
+      .select("id").eq("document_id", doc!.id);
+    assert((fromB ?? []).length === 0, "B pudo ver a qué procesos de A pertenece un documento");
+  });
+
+  await check("48c. Retirar un proceso conserva sus revisiones publicadas", async () => {
+    const before = await userA.client.from("quality_process_revisions")
+      .select("id", { count: "exact", head: true }).eq("process_id", processId);
+    const { error } = await userD.client.from("quality_processes")
+      .update({ status: "retired" }).eq("id", processId).eq("organization_id", orgA);
+    assert(!error, `no se pudo retirar el proceso: ${error?.message}`);
+
+    const { data: proc } = await userA.client.from("quality_processes")
+      .select("status").eq("id", processId).single();
+    assert(proc?.status === "retired", "el proceso debía quedar retirado");
+
+    const after = await userA.client.from("quality_process_revisions")
+      .select("id", { count: "exact", head: true }).eq("process_id", processId);
+    assert(after.count === before.count, "retirar el proceso destruyó revisiones");
+
+    // La vigente sigue siendo consultable: es la respuesta a "qué regía".
+    const { data: vig } = await userA.client.from("quality_process_revisions")
+      .select("revision_number").eq("process_id", processId)
+      .eq("status", "published").is("effective_to", null).maybeSingle();
+    assert(vig?.revision_number === 2, "la revisión vigente dejó de ser consultable tras retirar");
+
+    // Y se puede devolver al servicio: retirar no es destruir.
+    await userD.client.from("quality_processes")
+      .update({ status: "active" }).eq("id", processId).eq("organization_id", orgA);
+    const { data: back } = await userA.client.from("quality_processes")
+      .select("status").eq("id", processId).single();
+    assert(back?.status === "active", "no se pudo devolver el proceso al servicio");
+  });
+
   await check("49. Miembros de la empresa con su perfil (desplegable de asignación)", async () => {
     const { data, error } = await userA.client
       .from("memberships")
