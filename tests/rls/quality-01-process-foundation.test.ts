@@ -27,8 +27,41 @@ const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DB_URL = process.env.SUPABASE_DB_URL;
 
 if (!URL || !ANON || !SERVICE) {
-  console.error("Faltan variables para test:quality01 (URL, ANON, SERVICE_ROLE).");
+  console.error("Faltan variables para test:quality01-rls (URL, ANON, SERVICE_ROLE).");
   process.exit(1);
+}
+
+/**
+ * Guarda de ENTORNO. `dotenv` no pisa las variables ya exportadas, pero SÍ
+ * rellena las que falten: al apuntar la API a staging y olvidar SUPABASE_DB_URL,
+ * las comprobaciones por SQL directo se ejecutarían contra la base LOCAL sin
+ * que nada lo delatara, y la prueba diría "verde en staging" sin haberlo mirado.
+ *
+ * Aquí se exige que ambas variables señalen al MISMO proyecto: o las dos a la
+ * base local, o las dos al mismo ref remoto. En caso contrario se aborta.
+ */
+function projectRefOf(value: string): string {
+  if (/(127\.0\.0\.1|localhost)/.test(value)) return "local";
+  // Conexión directa (db.<ref>.supabase.co) o a través del pooler, donde el ref
+  // viaja en el usuario: postgres.<ref>[:contraseña]@…
+  const m =
+    value.match(/(?:db\.|\/\/)([a-z0-9]{20})\.supabase\.co/) ??
+    value.match(/postgres\.([a-z0-9]{20})(?::|@)/);
+  return m ? m[1] : "desconocido";
+}
+
+if (DB_URL) {
+  const apiRef = projectRefOf(URL);
+  const dbRef = projectRefOf(DB_URL);
+  if (apiRef !== dbRef) {
+    console.error(
+      `\nABORTADO: la API apunta a «${apiRef}» y SUPABASE_DB_URL a «${dbRef}».\n` +
+        "Mezclar entornos daría un resultado en verde sin haber comprobado el destino real.\n" +
+        "Exporta SUPABASE_DB_URL del mismo proyecto, o quítala para omitir las comprobaciones por SQL.\n"
+    );
+    process.exit(1);
+  }
+  console.log(`  · API y SQL directo apuntan al mismo proyecto: ${apiRef}`);
 }
 
 let passed = 0;

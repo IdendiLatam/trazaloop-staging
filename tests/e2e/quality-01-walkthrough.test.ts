@@ -70,10 +70,20 @@ async function newUser(label: string) {
   return { id: data.user.id, email, client, session: s.session };
 }
 
+/**
+ * Nombre de la cookie de sesión: supabase-js lo deriva del PRIMER segmento del
+ * host del proyecto ("127" en local, el ref en un proyecto gestionado). Se
+ * calcula en lugar de fijarlo para que la misma prueba sirva contra local y
+ * contra staging: con el nombre equivocado el servidor no ve sesión alguna y
+ * todo redirige a /login, que es un verde falso muy fácil de confundir con un
+ * fallo de la aplicación.
+ */
+const AUTH_COOKIE_NAME = `sb-${new global.URL(URL).hostname.split(".")[0]}-auth-token`;
+
 /** Cookie de sesión con el formato de @supabase/ssr (base64url + prefijo). */
 function sessionCookie(session: unknown): string {
   const b64 = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
-  return `sb-127-auth-token=base64-${b64}`;
+  return `${AUTH_COOKIE_NAME}=base64-${b64}`;
 }
 
 /** Cookie de empresa activa, firmada con HMAC igual que en la aplicación. */
@@ -142,6 +152,16 @@ async function main() {
   assert(!orgErr && orgId, `create_organization: ${orgErr?.message}`);
   const org = orgId as string;
   const cookie = `${sessionCookie(user.session)}; ${activeOrgCookie(org)}`;
+
+  // La cookie es lo único que la prueba fabrica a mano. Si no autentica, TODAS
+  // las comprobaciones fallarían con un 307 a /login y parecería un fallo de la
+  // aplicación. Se comprueba una vez, aquí, con un diagnóstico claro.
+  const sanity = await get(BASE_ON, "/dashboard", cookie);
+  assert(
+    sanity.status === 200,
+    `la sesión fabricada no autentica contra ${BASE_ON} (/dashboard dio ${sanity.status} → ${sanity.location}). ` +
+      `Cookie usada: ${AUTH_COOKIE_NAME}. Comprueba que la aplicación y la prueba apuntan al mismo proyecto Supabase.`
+  );
 
   // --- Estado de partida: el recorrido funcional, con la sesión real -------
 
