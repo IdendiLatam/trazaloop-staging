@@ -12,7 +12,12 @@ import {
   resolveTextilesAvailability,
   isTextilesFlagEnabled,
   organizationHasTextiles,
+  TEXTILES_HOME_PATH,
 } from "../../lib/modules/textiles";
+import {
+  getCommercialModuleByKey,
+  resolveModuleEntryHref,
+} from "../../lib/modules/catalog";
 
 let passed = 0;
 let failed = 0;
@@ -140,8 +145,22 @@ check("7. El portal resuelve la tarjeta por flag + organization_modules en servi
 
 check("8. Cuando está disponible, la tarjeta es un enlace activo a /textiles", () => {
   assert(portal.includes("isEnterableState"), "un estado enterable debía producir un enlace");
-  assert(portal.includes("TEXTILES_HOME_PATH"), "la tarjeta activa debía enlazar la home del módulo");
   assert(portal.includes("Entrar"), "la tarjeta activa debía decir Entrar");
+  // QUALITY-01.1: el selector dejó de nombrar la ruta de cada módulo y la
+  // resuelve por catálogo. La exigencia es la misma —la tarjeta activa enlaza
+  // la home del módulo— y ahora se comprueba sobre la fuente canónica, que es
+  // lo que de verdad determina el destino.
+  assert(portal.includes("resolveModuleEntryHref"), "el selector debía resolver la entrada por catálogo");
+  const textiles = getCommercialModuleByKey("textiles");
+  assert(textiles?.homePath === TEXTILES_HOME_PATH, "el catálogo debía declarar la home de Textiles");
+  assert(
+    resolveModuleEntryHref({ mod: textiles!, isEnterable: true }) === TEXTILES_HOME_PATH,
+    "un estado enterable debía resolver la home de Textiles"
+  );
+  assert(
+    resolveModuleEntryHref({ mod: textiles!, isEnterable: false }) === null,
+    "un estado no enterable no debía producir enlace"
+  );
 });
 
 check("9. Estados bloqueados con explicación: sin organización y sin habilitación", () => {

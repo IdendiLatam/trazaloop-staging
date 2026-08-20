@@ -33,6 +33,20 @@ export type CommercialModule = {
   description: string;
   status: CommercialModuleStatus;
   /**
+   * Ruta de ENTRADA del módulo dentro de la aplicación. `null` mientras el
+   * módulo no tiene rutas construidas.
+   *
+   * Vive aquí, y no en una tabla del selector, por una razón concreta: antes
+   * de QUALITY-01.1 el selector mantenía a mano un mapa `clave → ruta` que
+   * solo conocía CPR y Textiles. Un módulo nuevo resolvía correctamente su
+   * plan y su estado, mostraba "Acceso funcional completo"… y se quedaba SIN
+   * enlace de entrada, porque su clave devolvía `null` en ese mapa. Declarar
+   * la ruta junto al resto de la identidad del módulo hace que ese olvido ya
+   * no sea posible: una prueba exige que todo módulo funcional la declare y
+   * que la página exista de verdad en disco.
+   */
+  homePath: string | null;
+  /**
    * Variable de entorno de kill switch GLOBAL (server-only), si la tiene.
    * Un kill switch apagado bloquea el módulo aunque la empresa lo tenga
    * asignado — jamás lo contrario.
@@ -60,6 +74,7 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
     description:
       "Trazabilidad y contenido reciclado para plásticos (NTC 6632 / UNE-EN 15343): diagnóstico, catálogos, evidencias, trazabilidad y TrazaDocs.",
     status: "functional",
+    homePath: "/dashboard",
     killSwitchEnv: null,
   },
   {
@@ -69,6 +84,7 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
     description:
       "Trazabilidad de productos de confección, composición de fibras, evidencias, circularidad y pasaporte técnico textil.",
     status: "functional",
+    homePath: "/textiles",
     killSwitchEnv: "TEXTILES_MODULE_ENABLED",
   },
   {
@@ -78,6 +94,7 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
     description:
       "Sistema de gestión de la calidad: cargos, procesos con revisiones vigentes, entradas y salidas, interacciones y mapa de procesos publicable.",
     status: "functional",
+    homePath: "/quality",
     killSwitchEnv: "QUALITY_MODULE_ENABLED",
   },
   {
@@ -86,6 +103,7 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
     name: "Trazaloop Construcción",
     description: "Trazabilidad para el sector construcción. En desarrollo.",
     status: "coming_soon",
+    homePath: null,
     killSwitchEnv: null,
   },
 ];
@@ -140,4 +158,29 @@ export function isModuleKillSwitchActive(
 ): boolean {
   if (mod.killSwitchEnv === null) return true;
   return isKillSwitchFlagEnabled(env[mod.killSwitchEnv]);
+}
+
+/**
+ * Ruta de entrada EFECTIVA de una tarjeta del selector de módulos, o `null`
+ * cuando no debe ofrecerse entrada.
+ *
+ * Regla, en una sola frase: si el estado comercial permite entrar y el módulo
+ * declara ruta, hay enlace. Nada más. En particular NO hay una lista de claves
+ * conocidas — eso era exactamente el defecto de QUALITY-01.1.
+ *
+ * `runtimeHref` existe para el único caso legítimo en que la ruta no puede
+ * conocerse de antemano: la entrada a CPR depende de si el usuario tiene
+ * empresa activa, varias, o una invitación pendiente, y se resuelve con la
+ * sesión. Cualquier otro módulo debe dejarlo sin definir y resolver por
+ * catálogo. Pasar `null` explícitamente significa "sin destino", y se respeta.
+ */
+export function resolveModuleEntryHref(input: {
+  mod: Pick<CommercialModule, "homePath">;
+  /** ¿El estado comercial derivado permite entrar? (isEnterableState). */
+  isEnterable: boolean;
+  runtimeHref?: string | null;
+}): string | null {
+  if (!input.isEnterable) return null;
+  if (input.runtimeHref !== undefined) return input.runtimeHref;
+  return input.mod.homePath;
 }

@@ -217,6 +217,91 @@ async function main() {
 
   // ------------------------------------------------------------------ //
 
+  // --- El selector de módulos: el camino que recorre una persona -----------
+  //
+  // Entrar escribiendo /quality en la barra de direcciones NO demuestra que el
+  // módulo sea usable. QUALITY-01.1 lo probó: la tarjeta resolvía Plan Full y
+  // "Acceso funcional completo" pero no ofrecía enlace, porque el selector
+  // mantenía a mano un mapa clave→ruta que no conocía Quality.
+
+  /**
+   * Aísla la tarjeta de un módulo dentro del HTML del selector.
+   *
+   * Las dos ramas de ModuleCard —enlace cuando se puede entrar, bloque inerte
+   * cuando no— comparten el prefijo de clases `flex flex-col gap-2 rounded-lg`.
+   * Se usan esas marcas como frontera: cada tarjeta va desde su apertura hasta
+   * la apertura de la siguiente. Emparejar etiquetas con una expresión regular
+   * no sirve aquí, porque las tarjetas anidan elementos y el emparejamiento
+   * perezoso corta en el cierre equivocado.
+   */
+  const CARD_OPEN = /<(a|div)\b[^>]*class="flex flex-col gap-2 rounded-lg[^"]*"[^>]*>/g;
+
+  function moduleCards(html: string): { tag: string; open: string; block: string }[] {
+    const starts = [...html.matchAll(CARD_OPEN)].map((m) => ({
+      index: m.index!, tag: m[1], open: m[0],
+    }));
+    return starts.map((s, i) => ({
+      tag: s.tag,
+      open: s.open,
+      block: html.slice(s.index, starts[i + 1]?.index ?? html.length),
+    }));
+  }
+
+  function moduleCard(html: string, moduleName: string) {
+    return moduleCards(html).find((c) => c.block.includes(moduleName)) ?? null;
+  }
+
+  function moduleCardHref(html: string, moduleName: string): string | null {
+    const card = moduleCard(html, moduleName);
+    if (!card || card.tag !== "a") return null;
+    return card.open.match(/href="([^"]+)"/)?.[1] ?? null;
+  }
+
+  function moduleCardBlock(html: string, moduleName: string): string {
+    return moduleCard(html, moduleName)?.block ?? "";
+  }
+
+  await check("0a. El selector muestra Quality con su estado y con «Entrar →»", async () => {
+    const r = await get(BASE_ON, "/modules", cookie);
+    assert(r.status === 200, `/modules dio ${r.status} → ${r.location}`);
+    assert(has(r.body, "Trazaloop Quality"), "no aparece la tarjeta de Quality");
+
+    const card = moduleCard(r.body, "Trazaloop Quality");
+    assert(card !== null, "no se pudo aislar la tarjeta de Quality");
+    assert(has(card!.block, "Entrar →"), "la tarjeta de Quality NO ofrece «Entrar →» (el defecto de QUALITY-01.1)");
+    assert(card!.tag === "a", "la tarjeta de Quality debe ser un enlace, no un bloque inerte");
+  });
+
+  await check("0b. El enlace de la tarjeta apunta a /quality y navega de verdad", async () => {
+    const r = await get(BASE_ON, "/modules", cookie);
+    const href = moduleCardHref(r.body, "Trazaloop Quality");
+    assert(href === "/quality", `la tarjeta enlaza a ${href}, debía enlazar /quality`);
+
+    // Y se sigue el enlace tal cual, como haría el navegador.
+    const landed = await get(BASE_ON, href!, cookie);
+    assert(landed.status === 200, `seguir el enlace dio ${landed.status} → ${landed.location}`);
+    assert(has(landed.body, "Trazaloop Quality"), "el destino no es la portada del módulo");
+  });
+
+  await check("0c. Desde el módulo se llega a Procesos y se ven los datos reales", async () => {
+    const home = await get(BASE_ON, "/quality", cookie);
+    const href = moduleCardHref(home.body, "Procesos") ?? "/quality/processes";
+    const procesos = await get(BASE_ON, href, cookie);
+    assert(procesos.status === 200, `Procesos dio ${procesos.status}`);
+    assert(has(procesos.body, "Gestión de la calidad"), "no se ven los datos de QUALITY-01");
+  });
+
+  await check("0d. PCR y Textiles conservan su «Entrar →» (sin regresión)", async () => {
+    const r = await get(BASE_ON, "/modules", cookie);
+    for (const [name, expected] of [["Trazaloop PCR", "/dashboard"], ["Trazaloop Textiles", "/textiles"]] as const) {
+      const card = moduleCardBlock(r.body, name);
+      assert(card.length > 0, `no se pudo aislar la tarjeta de ${name}`);
+      assert(has(card, "Entrar →"), `${name} perdió su «Entrar →»`);
+      const href = moduleCardHref(r.body, name);
+      assert(href === expected, `${name} enlaza a ${href}, debía enlazar ${expected}`);
+    }
+  });
+
   await check("1. /quality abre y resume el estado real de la empresa", async () => {
     const r = await get(BASE_ON, "/quality", cookie);
     assert(r.status === 200, `esperaba 200, fue ${r.status} → ${r.location}`);
@@ -302,6 +387,25 @@ async function main() {
     assert(r.status !== 200, "una petición sin sesión recibió 200");
   });
 
+  await check("9b. Cerrar y volver a iniciar sesión conserva el acceso al módulo", async () => {
+    // Una sesión nueva no debe depender de nada acumulado en la anterior.
+    const fresh = createClient(URL!, ANON!, { auth: { autoRefreshToken: false, persistSession: false } });
+    const { data, error } = await fresh.auth.signInWithPassword({
+      email: user.email, password: "Trazaloop-Test-1234",
+    });
+    assert(!error && data.session, `no se pudo volver a iniciar sesión: ${error?.message}`);
+    const nuevo = `${sessionCookie(data.session)}; ${activeOrgCookie(org)}`;
+
+    const selector = await get(BASE_ON, "/modules", nuevo);
+    assert(selector.status === 200, `/modules dio ${selector.status}`);
+    assert(has(moduleCardBlock(selector.body, "Trazaloop Quality"), "Entrar →"),
+      "tras volver a entrar, la tarjeta perdió «Entrar →»");
+
+    const quality = await get(BASE_ON, "/quality", nuevo);
+    assert(quality.status === 200, `/quality dio ${quality.status} con la sesión nueva`);
+    assert(has(quality.body, "Trazaloop Quality"), "el módulo no cargó con la sesión nueva");
+  });
+
   await check("10. Con el kill switch APAGADO, /quality no existe ni con sesión válida", async () => {
     // Es lo que mantiene Quality invisible en Production: no un texto de
     // "próximamente" ni un 403 que confirme que el módulo está ahí — un 404.
@@ -309,6 +413,13 @@ async function main() {
       const r = await get(BASE_OFF, path, cookie);
       assert(r.status === 404, `${path} con el switch apagado debía dar 404, dio ${r.status} → ${r.location}`);
     }
+    // Y el selector tampoco ofrece entrada: la tarjeta deja de ser un enlace.
+    const selector = await get(BASE_OFF, "/modules", cookie);
+    assert(selector.status === 200, `/modules dio ${selector.status} con el switch apagado`);
+    const card = moduleCardBlock(selector.body, "Trazaloop Quality");
+    assert(!has(card, "Entrar →"), "con el switch apagado la tarjeta seguía ofreciendo «Entrar →»");
+    assert(moduleCardHref(selector.body, "Trazaloop Quality") === null,
+      "con el switch apagado la tarjeta seguía siendo un enlace");
     // Y el mismo servidor sigue sirviendo el resto de la aplicación con
     // normalidad: el switch apaga Quality, no la plataforma.
     const home = await get(BASE_OFF, "/dashboard", cookie);

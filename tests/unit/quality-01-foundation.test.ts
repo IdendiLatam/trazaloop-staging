@@ -21,12 +21,17 @@ import {
 } from "../../lib/modules/quality";
 import {
   COMMERCIAL_MODULES,
+  CPR_MODULE_CODE,
   QUALITY_MODULE_CODE,
+  TEXTILES_MODULE_CODE,
   getCommercialModuleByCode,
   isFunctionalModuleCode,
   isKillSwitchFlagEnabled,
   isModuleKillSwitchActive,
+  resolveModuleEntryHref,
 } from "../../lib/modules/catalog";
+import { resolveModuleAccess } from "../../lib/modules/access";
+import { DERIVED_STATE_LABEL, isEnterableState } from "../../lib/modules/messages";
 import {
   QUALITY_SHELL_MODULE,
   SHELL_MODULES,
@@ -178,6 +183,182 @@ check("10. La navegación de Quality apunta a rutas que existen", () => {
 check("11. CPR sigue siendo el último del registro (módulo por defecto)", () => {
   assert(SHELL_MODULES[SHELL_MODULES.length - 1].key === "cpr", "CPR debe cerrar el registro");
   assert(SHELL_MODULES.some((m) => m.key === "quality"), "Quality debe estar registrado");
+});
+
+// ---------------------------------------------------------------------------
+console.log("\nQUALITY-01.1 · entrada desde el selector de módulos\n");
+
+/**
+ * Resuelve la ruta de una página de Next ignorando los grupos de rutas
+ * `(carpeta)`, que no forman parte de la URL. Sin esto, "/dashboard" no se
+ * encontraría porque vive en app/(app)/(shell)/(cpr)/dashboard/page.tsx.
+ */
+function routeExists(route: string): boolean {
+  const found: string[] = [];
+  const walk = (dir: string, url: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        const isGroup = e.name.startsWith("(") && e.name.endsWith(")");
+        walk(join(dir, e.name), isGroup ? url : `${url}/${e.name}`);
+      } else if (e.name === "page.tsx") {
+        found.push(url === "" ? "/" : url);
+      }
+    }
+  };
+  walk(join(ROOT, "app"), "");
+  return found.includes(route);
+}
+
+check("11a. TODO módulo funcional declara su ruta de entrada y esa página EXISTE", () => {
+  // Es la invariante que impide repetir el defecto: un módulo nuevo que se
+  // vuelve funcional sin declarar ruta —o declarándola mal— falla aquí, no en
+  // producción con una tarjeta muda.
+  for (const mod of COMMERCIAL_MODULES) {
+    if (mod.status !== "functional") {
+      assert(mod.homePath === null, `${mod.key} no es funcional: no debería declarar ruta`);
+      continue;
+    }
+    assert(typeof mod.homePath === "string" && mod.homePath.startsWith("/"),
+      `${mod.key} es funcional y debe declarar una ruta de entrada`);
+    assert(routeExists(mod.homePath!), `la ruta ${mod.homePath} de ${mod.key} no existe en app/`);
+  }
+});
+
+check("11b. La ruta del catálogo coincide con la del resto de fuentes", () => {
+  // El catálogo, el registro del shell y la constante de cada módulo deben
+  // decir lo mismo. Tres sitios que se contradicen es cómo empiezan estos fallos.
+  assert(getCommercialModuleByCode(QUALITY_MODULE_CODE)?.homePath === QUALITY_HOME_PATH,
+    "catálogo y QUALITY_HOME_PATH divergen");
+  for (const shellMod of SHELL_MODULES) {
+    const cat = COMMERCIAL_MODULES.find((m) => m.key === shellMod.key);
+    if (!cat) continue;
+    assert(cat.homePath === shellMod.homePath,
+      `${shellMod.key}: catálogo dice ${cat.homePath} y el registro del shell dice ${shellMod.homePath}`);
+  }
+});
+
+const QUALITY_MOD = getCommercialModuleByCode(QUALITY_MODULE_CODE)!;
+
+check("A. Quality FULL + funcional + kill switch ON → tarjeta con entrada a /quality", () => {
+  const access = resolveModuleAccess({
+    isFunctional: QUALITY_MOD.status === "functional",
+    killSwitchActive: isModuleKillSwitchActive(QUALITY_MOD, { QUALITY_MODULE_ENABLED: "true" }),
+    assignment: { enabled: true, accessMode: "full", accessExpiresAt: null },
+    now: new Date("2026-08-20T12:00:00Z"),
+  });
+  assert(access.allowed, `el acceso debía permitirse: ${JSON.stringify(access)}`);
+  assert(access.derivedState === "full", `el estado debía ser full, fue ${access.derivedState}`);
+  assert(isEnterableState(access.derivedState), "un estado full debe permitir entrar");
+
+  const href = resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) });
+  assert(href === "/quality", `la tarjeta debía enlazar /quality, enlazó ${href}`);
+  assert(DERIVED_STATE_LABEL[access.derivedState] === "Plan Full", "la etiqueta visible debía ser «Plan Full»");
+});
+
+check("A2. Lo mismo con Demo vigente y con Extra: también se puede entrar", () => {
+  for (const [mode, expires, expected] of [
+    ["demo", "2026-08-22T00:00:00Z", "demo_active"],
+    ["demo", null, "demo_permanent"],
+    ["extra", null, "extra"],
+  ] as const) {
+    const access = resolveModuleAccess({
+      isFunctional: true,
+      killSwitchActive: true,
+      assignment: { enabled: true, accessMode: mode, accessExpiresAt: expires },
+      now: new Date("2026-08-20T12:00:00Z"),
+    });
+    assert(access.derivedState === expected, `esperaba ${expected}, fue ${access.derivedState}`);
+    const href = resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) });
+    assert(href === "/quality", `${expected} debía poder entrar, dio ${href}`);
+  }
+});
+
+check("B. Quality SIN entitlement → sin acceso funcional y sin entrada", () => {
+  for (const assignment of [
+    null,                                                                  // sin asignar
+    { enabled: false, accessMode: "full", accessExpiresAt: null },          // deshabilitado
+    { enabled: true, accessMode: "demo", accessExpiresAt: "2026-08-01T00:00:00Z" }, // demo vencido
+  ] as const) {
+    const access = resolveModuleAccess({
+      isFunctional: true, killSwitchActive: true, assignment,
+      now: new Date("2026-08-20T12:00:00Z"),
+    });
+    assert(!access.allowed, `no debía permitirse: ${JSON.stringify(assignment)}`);
+    const href = resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) });
+    assert(href === null, `no debía haber enlace de entrada, hubo ${href}`);
+  }
+});
+
+check("C. Quality con kill switch APAGADO → sin entrada, aunque tenga FULL", () => {
+  for (const env of [{}, { QUALITY_MODULE_ENABLED: "false" }, { QUALITY_MODULE_ENABLED: "" }]) {
+    const access = resolveModuleAccess({
+      isFunctional: true,
+      killSwitchActive: isModuleKillSwitchActive(QUALITY_MOD, env),
+      assignment: { enabled: true, accessMode: "full", accessExpiresAt: null },
+      now: new Date("2026-08-20T12:00:00Z"),
+    });
+    assert(!access.allowed, `el switch apagado debía bloquear: ${JSON.stringify(env)}`);
+    assert(access.derivedState === "globally_disabled", `estado inesperado: ${access.derivedState}`);
+    const href = resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) });
+    assert(href === null, `no debía haber enlace, hubo ${href}`);
+  }
+});
+
+check("D. Un módulo NO funcional → «Próximamente» y sin entrada", () => {
+  const construccion = COMMERCIAL_MODULES.find((m) => m.key === "construccion")!;
+  const access = resolveModuleAccess({
+    isFunctional: construccion.status === "functional",
+    killSwitchActive: isModuleKillSwitchActive(construccion, {}),
+    assignment: { enabled: true, accessMode: "full", accessExpiresAt: null },
+    now: new Date("2026-08-20T12:00:00Z"),
+  });
+  assert(access.derivedState === "coming_soon", `estado inesperado: ${access.derivedState}`);
+  assert(!isEnterableState("coming_soon"), "«Próximamente» jamás permite entrar");
+  assert(DERIVED_STATE_LABEL.coming_soon === "Próximamente", "la etiqueta debía ser «Próximamente»");
+  const href = resolveModuleEntryHref({ mod: construccion, isEnterable: isEnterableState(access.derivedState) });
+  assert(href === null, `un módulo sin construir no debe enlazar a nada, enlazó ${href}`);
+});
+
+check("E. PCR y Textiles conservan su entrada (sin regresión)", () => {
+  const cpr = getCommercialModuleByCode(CPR_MODULE_CODE)!;
+  const textiles = getCommercialModuleByCode(TEXTILES_MODULE_CODE)!;
+
+  // Textiles resuelve por catálogo, igual que Quality.
+  assert(
+    resolveModuleEntryHref({ mod: textiles, isEnterable: true }) === "/textiles",
+    "Textiles perdió su entrada"
+  );
+  // CPR mantiene su destino de tiempo de ejecución: es el único caso legítimo,
+  // porque depende de si hay empresa activa o una invitación pendiente.
+  assert(
+    resolveModuleEntryHref({ mod: cpr, isEnterable: true, runtimeHref: "/select-org" }) === "/select-org",
+    "el destino de CPR resuelto en servidor debe respetarse"
+  );
+  assert(
+    resolveModuleEntryHref({ mod: cpr, isEnterable: true }) === "/dashboard",
+    "sin destino de tiempo de ejecución, CPR cae en su ruta de catálogo"
+  );
+  // Y un destino nulo explícito se respeta: no se «rescata» con el catálogo.
+  assert(
+    resolveModuleEntryHref({ mod: cpr, isEnterable: true, runtimeHref: null }) === null,
+    "un destino nulo explícito debe respetarse"
+  );
+});
+
+check("F. El selector resuelve por catálogo, sin tabla de claves conocidas", () => {
+  const page = stripTs(read("app/(app)/modules/page.tsx"));
+  assert(page.includes("resolveModuleEntryHref"), "el selector debe usar el resolutor del catálogo");
+  assert(!/homeHrefByKey/.test(page), "quedó la tabla clave→ruta que causaba el defecto");
+  assert(!/quality:\s*null/.test(page), "quedó una entrada nula codificada para Quality");
+  assert(!/TEXTILES_HOME_PATH/.test(page), "el selector no debe importar rutas módulo a módulo");
+  // El único destino de tiempo de ejecución permitido es el de CPR.
+  const decl = page.indexOf("runtimeHrefByKey");
+  assert(decl > -1, "no se encontró la declaración de destinos de tiempo de ejecución");
+  const start = page.indexOf("{", decl); // el cuerpo del objeto, no su anotación de tipo
+  const runtime = page.slice(start + 1, page.indexOf("};", start));
+  const claves = [...runtime.matchAll(/^\s*(\w+):/gm)].map((m) => m[1]);
+  assert(claves.length === 1 && claves[0] === "cpr",
+    `solo CPR puede tener destino de tiempo de ejecución; hay: ${claves.join(", ")}`);
 });
 
 // ---------------------------------------------------------------------------

@@ -20,8 +20,11 @@ import { Wordmark } from "@/components/layout/logo";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { getActiveOrgModuleStatuses, getDemoTrialSummary, type OrgModuleStatus } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
-import { COMMERCIAL_MODULES } from "@/lib/modules/catalog";
-import { TEXTILES_HOME_PATH } from "@/lib/modules/textiles";
+import {
+  COMMERCIAL_MODULES,
+  resolveModuleEntryHref,
+  type CommercialModuleKey,
+} from "@/lib/modules/catalog";
 import type { DerivedModuleState } from "@/lib/modules/access";
 import { formatRemainingTrial } from "@/lib/modules/access";
 import { DERIVED_STATE_LABEL, DERIVED_STATE_HINT, isEnterableState } from "@/lib/modules/messages";
@@ -117,11 +120,12 @@ export default async function ModulesPortalPage() {
     ? await getDemoTrialSummary(activeOrg.organizationId)
     : { activeTrials: [], hasExpired: false };
 
-  const homeHrefByKey: Record<string, string | null> = {
+  // Destinos que NO pueden conocerse de antemano porque dependen de la sesión.
+  // Hoy solo CPR: su entrada es el dashboard, salvo que falte empresa activa o
+  // haya una invitación pendiente. Cualquier otro módulo resuelve por catálogo
+  // — no debe añadirse aquí, o volvería el defecto que esto vino a corregir.
+  const runtimeHrefByKey: Partial<Record<CommercialModuleKey, string>> = {
     cpr: cprHref,
-    textiles: TEXTILES_HOME_PATH,
-    quality: null,
-    construccion: null,
   };
 
   return (
@@ -157,7 +161,11 @@ export default async function ModulesPortalPage() {
               ? "not_assigned"
               : "coming_soon";
           const expiresAt = status?.access.expiresAt ?? null;
-          const href = isEnterableState(state) ? homeHrefByKey[mod.key] ?? null : null;
+          const href = resolveModuleEntryHref({
+            mod,
+            isEnterable: isEnterableState(state),
+            runtimeHref: runtimeHrefByKey[mod.key],
+          });
           return (
             <ModuleCard
               key={mod.key}
