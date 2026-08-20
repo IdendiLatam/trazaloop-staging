@@ -271,15 +271,26 @@ check("21. /modules mantiene CPR disponible y los demás módulos deshabilitados
   for (const mod of ["Trazaloop Textiles", "Trazaloop Quality", "Trazaloop Construcción"]) {
     assert(catalog.includes(mod), `el catálogo debía incluir ${mod}`);
   }
-  // CPR y Textiles funcionales; Quality y Construcción exactamente 2 coming_soon.
-  assert((catalog.match(/status: "coming_soon"/g) ?? []).length === 2, "debían existir exactamente 2 módulos coming_soon (Quality, Construcción)");
-  assert((catalog.match(/status: "functional"/g) ?? []).length === 2, "debían existir exactamente 2 módulos funcionales (CPR, Textiles)");
+  // QUALITY-01 pasó Quality a functional (con kill switch propio). Construcción
+  // sigue siendo el único módulo "próximamente"; CPR, Textiles y Quality son los
+  // tres funcionales. La invariante que este test protege no ha cambiado: nadie
+  // pasa un módulo a functional sin declararlo aquí.
+  assert((catalog.match(/status: "coming_soon"/g) ?? []).length === 1, "debía existir exactamente 1 módulo coming_soon (Construcción)");
+  assert((catalog.match(/status: "functional"/g) ?? []).length === 3, "debían existir exactamente 3 módulos funcionales (CPR, Textiles, Quality)");
+  // Un módulo funcional que se estrena detrás de un kill switch debe declararlo:
+  // sin él quedaría encendido en Production por el solo hecho de desplegar.
+  assert(catalog.includes('killSwitchEnv: "QUALITY_MODULE_ENABLED"'), "Quality debía declarar su kill switch propio");
 });
 
-check("22. Textil/Quality/Construcción no tienen rutas funcionales nuevas", () => {
-  for (const dir of ["../../app/textil", "../../app/quality", "../../app/construccion", "../../app/(app)/(shell)/textil", "../../app/(app)/(shell)/quality", "../../app/(app)/(shell)/construccion"]) {
+check("22. Los módulos aún no funcionales no tienen rutas", () => {
+  // "textil" (sin la s) nunca fue una ruta válida: DL-01 congeló "textiles".
+  for (const dir of ["../../app/textil", "../../app/construccion", "../../app/(app)/(shell)/textil", "../../app/(app)/(shell)/construccion"]) {
     assert(!fs.existsSync(path.resolve(__dirname, dir)), `no debía existir ninguna ruta funcional para ${dir}`);
   }
+  // Quality sí tiene rutas desde QUALITY-01, y TODAS deben colgar del namespace
+  // /quality para heredar el guard del layout — nunca sueltas bajo app/.
+  assert(!fs.existsSync(path.resolve(__dirname, "../../app/quality")), "Quality no debe tener rutas fuera del shell autenticado");
+  assert(fs.existsSync(path.resolve(__dirname, "../../app/(app)/(shell)/quality/layout.tsx")), "el namespace /quality debía tener su layout con guard");
 });
 
 check("Extra: los documentos requeridos son exactamente términos y privacidad", () => {

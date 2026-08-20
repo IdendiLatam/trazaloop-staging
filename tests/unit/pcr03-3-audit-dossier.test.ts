@@ -20,6 +20,11 @@ import {
 } from "../../lib/domain/traceability-exercise";
 import type { GenealogyGraph } from "../../lib/domain/genealogy";
 
+// Migraciones autorizadas a partir de 0111. Cada sprint que añade una
+// migración la declara aquí: es lo que impide que aparezca una migración
+// no revisada sin que ninguna prueba se entere.
+const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+
 const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
@@ -198,7 +203,7 @@ check("0108 cierra PCR-03.3; 0109 y 0110 son los hotfixes autorizados; sin 0111+
   // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
   // usan las demas suites.
   assert(
-    !migrations.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    !migrations.some((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)),
     "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
   );
 });

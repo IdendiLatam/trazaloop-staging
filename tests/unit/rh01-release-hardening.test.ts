@@ -745,6 +745,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
   const authorizedBeyond = new Set([
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

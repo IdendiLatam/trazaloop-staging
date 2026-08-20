@@ -21,7 +21,7 @@ export type ModuleNavLink = {
 
 export type ModuleNavGroup = { title: string; items: ModuleNavLink[] };
 
-export type ShellModuleKey = "cpr" | "textiles";
+export type ShellModuleKey = "cpr" | "textiles" | "quality";
 
 export type ShellModuleDefinition = {
   key: ShellModuleKey;
@@ -175,12 +175,36 @@ export const TEXTILES_SHELL_MODULE: ShellModuleDefinition = {
 };
 
 // ---------------------------------------------------------------------------
+// Trazaloop Quality (module_code "quality") · QUALITY-01
+// ---------------------------------------------------------------------------
+
+export const QUALITY_SGC_GROUP: ModuleNavGroup = {
+  title: "Sistema de gestión",
+  items: [
+    { label: "Cargos", href: "/quality/positions" },
+    { label: "Procesos", href: "/quality/processes" },
+    { label: "Mapa de procesos", href: "/quality/map" },
+  ],
+};
+
+export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
+  key: "quality",
+  name: "Trazaloop Quality",
+  headerBadge: "Trazaloop Quality",
+  homePath: "/quality",
+  pathPrefixes: ["/quality"],
+  topLevel: [{ label: "Inicio Quality", href: "/quality", exact: true }],
+  groups: [QUALITY_SGC_GROUP],
+};
+
+// ---------------------------------------------------------------------------
 // Resolución del módulo activo
 // ---------------------------------------------------------------------------
 
 /** Registro completo. CPR va último a propósito: es el módulo por defecto. */
 export const SHELL_MODULES: readonly ShellModuleDefinition[] = [
   TEXTILES_SHELL_MODULE,
+  QUALITY_SHELL_MODULE,
   CPR_SHELL_MODULE,
 ];
 

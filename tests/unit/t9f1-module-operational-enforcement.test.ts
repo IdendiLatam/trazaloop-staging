@@ -101,10 +101,16 @@ check("8. FRONTERA ESTRUCTURAL: el layout (cpr) del shell aplica requireCprModul
   // Todo segmento del shell FUERA de (cpr) debe estar en la lista explícita
   // de NO-CPR: una ruta CPR nueva creada fuera de la frontera rompe esta
   // prueba hasta declararla conscientemente.
-  const NON_CPR_ALLOWED = new Set(["(cpr)", "textiles", "settings", "support", "team", "layout.tsx"]);
+  // QUALITY-01 añadió "quality", que tiene su propio guard de namespace.
+  const NON_CPR_ALLOWED = new Set(["(cpr)", "textiles", "quality", "settings", "support", "team", "layout.tsx"]);
   const entries = readdirSync(join(process.cwd(), "app/(app)/(shell)"));
   const intruders = entries.filter((e) => !NON_CPR_ALLOWED.has(e));
   assert(intruders.length === 0, `segmentos del shell fuera de (cpr) y fuera de la lista no-CPR: ${intruders.join(", ")}`);
+
+  // Cada namespace de módulo aplica SU propio guard en su layout: sin esto, un
+  // segmento nuevo quedaría solo con las guardas genéricas del shell.
+  assert(/requireQualityModule\(\)/.test(stripTs(read("app/(app)/(shell)/quality/layout.tsx"))), "el layout /quality debe ejecutar requireQualityModule()");
+  assert(/requireTextilesModule\(\)/.test(stripTs(read("app/(app)/(shell)/textiles/layout.tsx"))), "el layout /textiles debe ejecutar requireTextilesModule()");
 
   const CPR_SEGMENTS = ["audit-support", "catalog", "dashboard", "diagnostic", "evidences", "guided-flow", "implementation", "imports", "onboarding", "recycled-content", "traceability", "trazadocs"];
   const inCpr = readdirSync(join(process.cwd(), "app/(app)/(shell)/(cpr)"));
@@ -368,9 +374,12 @@ check("29-30. Códigos canónicos: CPR=traceability_6632, Textiles=textiles, sin
 });
 
 check("63. moduleCode arbitrario es rechazado por los helpers (isFunctionalModuleCode) y por la RPC (m.is_functional)", () => {
-  assert(!isFunctionalModuleCode("quality"), "quality no es operable");
+  // Quality dejó de ser "próximamente" en QUALITY-01; el resto de la
+  // invariante no cambia: un código inventado nunca es operable.
+  assert(isFunctionalModuleCode("quality"), "quality es operable desde QUALITY-01");
   assert(!isFunctionalModuleCode("construccion"), "construccion no es operable");
   assert(!isFunctionalModuleCode("hacker_module"), "códigos arbitrarios no son operables");
+  assert(!isFunctionalModuleCode(""), "el código vacío no es operable");
   const src = stripTs(read("server/actions/module-plans.ts"));
   assert(/if \(!isFunctionalModuleCode\(moduleCode\)\)/.test(src), "resolveModuleGate debe rechazar moduleCode no funcional ANTES de tocar BD");
 });

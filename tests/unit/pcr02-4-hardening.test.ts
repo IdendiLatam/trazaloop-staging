@@ -238,6 +238,8 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

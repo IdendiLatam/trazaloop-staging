@@ -3,11 +3,11 @@ import "server-only";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlanLimits, listPlanDefinitions } from "@/lib/db/plans";
-import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
 import {
   COMMERCIAL_MODULES,
   getCommercialModuleByCode,
   isFunctionalModuleCode,
+  isModuleKillSwitchActive,
   type CommercialModule,
 } from "@/lib/modules/catalog";
 import {
@@ -30,10 +30,16 @@ import {
  * una asignación Demo/Full/Extra jamás anula un flag global apagado.
  */
 
-/** ¿El kill switch global del módulo está activo? (sin switch → siempre). */
+/**
+ * ¿El kill switch global del módulo está activo? (sin switch → siempre).
+ *
+ * Se delega en el catálogo canónico, que resuelve la variable declarada por
+ * el propio módulo. Antes esto era una cadena de comparaciones con el nombre
+ * de cada variable; un módulo nuevo con kill switch caía por el `return
+ * mod.killSwitchEnv === null` final y quedaba denegado sin mensaje.
+ */
 function isKillSwitchActive(mod: CommercialModule): boolean {
-  if (mod.killSwitchEnv === "TEXTILES_MODULE_ENABLED") return isTextilesModuleEnabled();
-  return mod.killSwitchEnv === null;
+  return isModuleKillSwitchActive(mod);
 }
 
 /** Fila de asignación de la organización (bajo RLS de la sesión real). */

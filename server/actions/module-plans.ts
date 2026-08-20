@@ -7,6 +7,7 @@ import { getOrganizationUsage, getPlanLimits, listPlanDefinitions } from "@/lib/
 import {
   CPR_MODULE_CODE,
   TEXTILES_MODULE_CODE,
+  QUALITY_MODULE_CODE,
   getCommercialModuleByCode,
   isFunctionalModuleCode,
 } from "@/lib/modules/catalog";
@@ -360,4 +361,12 @@ export async function checkTextilesFeatureEnabled(
 
 export async function checkTextilesStorageAvailable(bytesToAdd: number): Promise<CheckResult> {
   return checkModuleStorageAvailable(TEXTILES_MODULE_CODE, bytesToAdd);
+}
+
+// ---------------------------------------------------------------------------
+// Envolturas canónicas Quality · QUALITY-01
+// ---------------------------------------------------------------------------
+
+export async function checkQualityCanMutate(): Promise<CheckResult> {
+  return checkModuleCanMutate(QUALITY_MODULE_CODE);
 }

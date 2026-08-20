@@ -257,6 +257,8 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

@@ -287,16 +287,16 @@ check("9. Los cuatro estados objetivo del superadministrador siguen disponibles"
   );
 });
 
-check("10. Quality y Construcción siguen «Próximamente» y NO asignables", () => {
+check("10. Construcción sigue «Próximamente» y NO asignable; Quality ya es asignable", () => {
   const quality = COMMERCIAL_MODULES.find((m) => m.key === "quality");
   const construccion = COMMERCIAL_MODULES.find((m) => m.key === "construccion");
-  assert(quality?.status === "coming_soon", "Quality debía seguir coming_soon");
+  assert(quality?.status === "functional", "Quality debía ser functional desde QUALITY-01");
   assert(construccion?.status === "coming_soon", "Construcción debía seguir coming_soon");
-  assert(isFunctionalModuleCode("quality") === false, "quality no debía ser asignable");
+  assert(isFunctionalModuleCode("quality") === true, "quality debía ser asignable desde QUALITY-01");
   assert(isFunctionalModuleCode("construccion") === false, "construccion no debía ser asignable");
   assert(isFunctionalModuleCode(CPR_MODULE_CODE) === true, "CPR debía seguir asignable");
   assert(isFunctionalModuleCode(TEXTILES_MODULE_CODE) === true, "Textiles debía seguir asignable");
-  assert(FUNCTIONAL_MODULE_CODES.length === 2, "solo CPR y Textiles debían ser gestionables");
+  assert(FUNCTIONAL_MODULE_CODES.length === 3, "CPR, Textiles y Quality debían ser los gestionables");
   const comingSoon = decide({ enabled: true, accessMode: "full", accessExpiresAt: null }, false);
   assert(!comingSoon.allowed && comingSoon.derivedState === "coming_soon", "coming_soon jamás permite entrar");
   assert(DERIVED_STATE_LABEL.coming_soon === "Próximamente", "la etiqueta visible debía ser «Próximamente»");

@@ -125,7 +125,15 @@ const messages = read("lib/modules/messages.ts");
 
 check("7. El portal resuelve la tarjeta por flag + organization_modules en servidor", () => {
   assert(portal.includes("getActiveOrgModuleStatuses"), "el portal debía resolver el estado en servidor");
-  assert(moduleAccess.includes("isTextilesModuleEnabled()"), "la capa server-only debía consultar el flag");
+  // QUALITY-01: el flag ya no se resuelve nombrando la variable de Textiles,
+  // sino a través del catálogo, que sabe qué variable declara cada módulo. La
+  // exigencia es la misma —el kill switch se consulta en servidor— y ahora
+  // cubre por construcción a cualquier módulo nuevo.
+  assert(moduleAccess.includes("isModuleKillSwitchActive"), "la capa server-only debía consultar el kill switch");
+  assert(
+    catalog.includes('killSwitchEnv: "TEXTILES_MODULE_ENABLED"'),
+    "el catálogo debía seguir declarando el kill switch de Textiles"
+  );
   assert(moduleAccess.includes("organization_modules"), "debía consultar organization_modules bajo RLS");
   assert(catalog.includes('key: "textiles"'), "el catálogo debía conservar la clave DL-01");
 });

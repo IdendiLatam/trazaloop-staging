@@ -25,6 +25,11 @@ import {
   normalizeInventoryPage,
 } from "../../lib/domain/inventory";
 
+// Migraciones autorizadas a partir de 0111. Cada sprint que añade una
+// migración la declara aquí: es lo que impide que aparezca una migración
+// no revisada sin que ninguna prueba se entere.
+const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+
 const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
@@ -435,6 +440,8 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);
@@ -447,7 +454,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
   // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
   // usan las demas suites.
   assert(
-    !files.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    !files.some((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)),
     "no existe 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
   );
 });

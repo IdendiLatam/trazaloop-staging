@@ -354,11 +354,16 @@ async function main() {
     assert(!r.error, "restaurar demo permanente");
   });
 
-  await check("21-22. Quality y Construcción siguen NO asignables (RPC los rechaza)", async () => {
-    for (const code of ["quality", "construccion"]) {
+  await check("21-22. Un módulo no funcional sigue sin ser asignable por la RPC", async () => {
+    // Quality dejó de estar en esta lista al volverse funcional (QUALITY-01).
+    // La invariante que importa no cambió: la RPC no asigna nada que la BD no
+    // declare funcional, ni siquiera al superadministrador.
+    for (const code of ["construccion", "modulo_inventado"]) {
       const { error } = await setModule(superU.client, orgA, code, "full");
       assert(error !== null && /no está disponible/i.test(error.message), `${code} debía ser rechazado`);
     }
+    const ok = await setModule(superU.client, orgA, "quality", "full");
+    assert(ok.error === null, `quality sí debía aceptarse: ${ok.error?.message}`);
   });
 
   console.log(`\nT9F.1 RLS: ${passed} ✔, ${failed} ✘`);

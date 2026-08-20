@@ -48,6 +48,7 @@ export type CommercialModule = {
  */
 export const CPR_MODULE_CODE = "traceability_6632";
 export const TEXTILES_MODULE_CODE = "textiles";
+export const QUALITY_MODULE_CODE = "quality";
 /** Infraestructura: no comercial, no gettable, no aparece en el selector. */
 export const CORE_MODULE_CODE = "core";
 
@@ -72,11 +73,12 @@ export const COMMERCIAL_MODULES: readonly CommercialModule[] = [
   },
   {
     key: "quality",
-    moduleCode: "quality",
+    moduleCode: QUALITY_MODULE_CODE,
     name: "Trazaloop Quality",
-    description: "Gestión de calidad. En desarrollo.",
-    status: "coming_soon",
-    killSwitchEnv: null,
+    description:
+      "Sistema de gestión de la calidad: cargos, procesos con revisiones vigentes, entradas y salidas, interacciones y mapa de procesos publicable.",
+    status: "functional",
+    killSwitchEnv: "QUALITY_MODULE_ENABLED",
   },
   {
     key: "construccion",
@@ -106,4 +108,36 @@ export function getCommercialModuleByKey(key: string): CommercialModule | null {
  *  jamás se debe habilitar un módulo "próximamente" desde la UI). */
 export function isFunctionalModuleCode(moduleCode: string | null | undefined): boolean {
   return !!moduleCode && FUNCTIONAL_MODULE_CODES.includes(moduleCode);
+}
+
+/**
+ * Interpretación PURA de un kill switch: solo "true" o "1" lo encienden.
+ * Cualquier otro valor (ausente, "", "false", "yes"…) lo deja APAGADO —
+ * apagado por defecto, nunca al revés.
+ *
+ * Es la misma regla para todos los módulos, y vive aquí para que resolverla
+ * no dependa de conocer módulo por módulo qué variable le toca: antes de
+ * QUALITY-01 esa resolución estaba codificada a mano en lib/db/module-access.ts
+ * y solo contemplaba Textiles, de modo que cualquier módulo nuevo con kill
+ * switch quedaba denegado en silencio.
+ */
+export function isKillSwitchFlagEnabled(raw: string | null | undefined): boolean {
+  return raw === "true" || raw === "1";
+}
+
+/**
+ * ¿El kill switch global de este módulo está activo? Un módulo sin switch
+ * declarado está siempre activo; uno con switch depende de su variable de
+ * entorno (server-only, sin prefijo NEXT_PUBLIC_).
+ *
+ * Nota: la lectura de process.env es por nombre dinámico a propósito, para que
+ * añadir un módulo con kill switch no exija tocar este archivo. Es código de
+ * servidor: el navegador nunca lo evalúa.
+ */
+export function isModuleKillSwitchActive(
+  mod: Pick<CommercialModule, "killSwitchEnv">,
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  if (mod.killSwitchEnv === null) return true;
+  return isKillSwitchFlagEnabled(env[mod.killSwitchEnv]);
 }

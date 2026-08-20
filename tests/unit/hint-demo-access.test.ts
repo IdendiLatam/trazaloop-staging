@@ -337,6 +337,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

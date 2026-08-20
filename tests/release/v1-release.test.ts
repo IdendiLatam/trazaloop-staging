@@ -76,6 +76,12 @@ import {
   environmentBadgeLabel,
 } from "../../lib/env";
 
+// Migraciones autorizadas a partir de 0111. Cada sprint que añade una
+// migración la declara aquí: es lo que impide que aparezca una migración
+// no revisada sin que ninguna prueba se entere.
+const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
+
 // ---------------------------------------------------------------------------
 let failures = 0;
 function check(name: string, fn: () => void) {
@@ -363,23 +369,24 @@ check("5b. El kill switch de Textiles sigue APAGADO por defecto (fail-closed)", 
   );
 });
 
-check("6. Quality y Construcción siguen «Próximamente» y no son asignables", () => {
-  for (const key of ["quality", "construccion"]) {
-    const mod = getCommercialModuleByKey(key);
-    assert(mod !== null, `el módulo ${key} debe seguir en el catálogo`);
-    assert(mod!.status === "coming_soon", `${key} debe seguir en coming_soon`);
-    assert(
-      !FUNCTIONAL_MODULE_CODES.includes(mod!.moduleCode),
-      `${key} no debe aparecer entre los módulos funcionales`
-    );
-    assert(
-      !isFunctionalModuleCode(mod!.moduleCode),
-      `${key} no debe poder asignarse como módulo funcional`
-    );
-  }
+check("6. Construcción sigue «Próximamente»; Quality es funcional pero no está lanzado", () => {
+  const construccion = getCommercialModuleByKey("construccion");
+  assert(construccion !== null, "el módulo construccion debe seguir en el catálogo");
+  assert(construccion!.status === "coming_soon", "construccion debe seguir en coming_soon");
+  assert(!isFunctionalModuleCode(construccion!.moduleCode), "construccion no debe poder asignarse");
+
+  // QUALITY-01 pasó Quality a funcional en el CATÁLOGO. Que sea funcional no
+  // significa que esté lanzado: su kill switch propio es lo que decide dónde se
+  // enciende, y en Production está apagado. Por eso la portada (6b) lo sigue
+  // presentando como «Próximamente» sin contradecir esto.
+  const quality = getCommercialModuleByKey("quality");
+  assert(quality !== null, "el módulo quality debe seguir en el catálogo");
+  assert(quality!.status === "functional", "quality debe ser functional desde QUALITY-01");
+  assert(quality!.killSwitchEnv === "QUALITY_MODULE_ENABLED", "quality debe tener su kill switch propio");
+
   assert(
-    FUNCTIONAL_MODULE_CODES.length === 2,
-    `se esperaban exactamente 2 módulos funcionales, hay ${FUNCTIONAL_MODULE_CODES.length}`
+    FUNCTIONAL_MODULE_CODES.length === 3,
+    `se esperaban exactamente 3 módulos funcionales, hay ${FUNCTIONAL_MODULE_CODES.length}`
   );
   assert(COMMERCIAL_MODULES.length === 4, "el catálogo debe seguir teniendo 4 módulos comerciales");
 });
@@ -834,11 +841,14 @@ check("12. Las migraciones 0001–0105 existen sin renumeraciones ni duplicados"
     .filter((n) => Number.isFinite(n))
     .sort((a, b) => a - b);
   assert(numbers[0] === 1, `la primera migración es ${numbers[0]}, se esperaba 0001`);
-  // PCR-03 reserva el bloque 0106–0108 (una migración por sub-sprint); la
-  // 0106–0108 son PCR-03 original; 0109 y 0110 son los hotfixes autorizados y no puede haber 0111+.
+  // 0106–0108 son PCR-03 original; 0109 y 0110 son los hotfixes autorizados;
+  // 0111 (privilegios de rol, Q0.3H) y 0112 (fundación de Quality) son las
+  // únicas posteriores declaradas. La cola se compara contra esa declaración:
+  // así una migración nueva no pasa inadvertida, pero añadirla es un cambio
+  // consciente de una sola línea.
   assert(
-    numbers[numbers.length - 1] === 110,
-    `la última migración es ${numbers[numbers.length - 1]}, se esperaba el hotfix pgcrypto (0110)`
+    numbers[numbers.length - 1] === MAX_DECLARED_MIGRATION,
+    `la última migración es ${numbers[numbers.length - 1]}, se esperaba ${MAX_DECLARED_MIGRATION} (fundación de Quality)`
   );
   // Nadie debe haber renumerado ni duplicado un prefijo.
   const dupes = numbers.filter((n, i) => i > 0 && n === numbers[i - 1]);
@@ -857,11 +867,13 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `posteriores no autorizadas: ${intruders.join(", ")}`);
-  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql");
+  const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f));
   assert(beyond.length === 0, `no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 
@@ -1409,7 +1421,7 @@ check("33. Los scripts legales NO se añadieron como migración", () => {
   }
   // Y siguen sin existir migraciones nuevas.
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)).length === 0, `PCR-03 original termina en 0108; después solo son autorizadas 0109, 0110, 0111 y 0112; migraciones no declaradas: ${beyond.join(", ")}`);
 });
 
 check("34. La aprobación legal está declarada y el fail-closed sigue intacto", () => {
@@ -2001,7 +2013,7 @@ check("49. Los borradores no se publicaron ni se cargaron en la base", () => {
     );
   }
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)).length === 0, `PCR-03 original termina en 0108; después solo son autorizadas 0109, 0110, 0111 y 0112; migraciones no declaradas: ${beyond.join(", ")}`);
   // Los borradores viven en docs/legal, no en supabase/.
   for (const name of LEGAL_DRAFTS) {
     assert(
@@ -2081,14 +2093,13 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
     /Construcción/.test(s),
     "Trazaloop Construcción debe figurar como Próximamente"
   );
-  // El catálogo del código no cambió.
-  assert(FUNCTIONAL_MODULE_CODES.length === 2, "siguen siendo 2 los módulos funcionales");
-  for (const key of ["quality", "construccion"]) {
-    assert(
-      getCommercialModuleByKey(key)?.status === "coming_soon",
-      `${key} debe seguir en coming_soon`
-    );
-  }
+  // El documento de alcance de v1.0.0 es historia y no se reescribe. Lo que sí
+  // se comprueba contra el código de hoy es que Construcción siga sin lanzarse.
+  assert(FUNCTIONAL_MODULE_CODES.length === 3, "CPR, Textiles y Quality son los funcionales");
+  assert(
+    getCommercialModuleByKey("construccion")?.status === "coming_soon",
+    "construccion debe seguir en coming_soon"
+  );
 });
 
 check("53. Mercado Pago no se presenta como integrado", () => {
@@ -2819,7 +2830,7 @@ check("73. La documentación cubre el kill switch", () => {
 check("74. No se tocaron migraciones y la aprobación quedó declarada", () => {
   const migrations = fs.readdirSync(path.join(ROOT, "supabase", "migrations"));
   const beyond = migrations.filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)).length === 0, `PCR-03 original termina en 0108; después solo son autorizadas 0109, 0110, 0111 y 0112; migraciones no declaradas: ${beyond.join(", ")}`);
   assert(
     /c_legal_approval_confirmed constant boolean := true;/.test(read(PUBLISH_SQL)),
     "el script legal debe declarar la aprobación"
@@ -2973,14 +2984,13 @@ check("81. Quality y Construcción NO se presentan como funcionales", () => {
     !/Trazaloop Quality/i.test(s) && !/Trazaloop Construcción/i.test(s),
     "la página general no debe listar Quality ni Construcción entre los módulos funcionales"
   );
-  // Y en el catálogo siguen en coming_soon (fuente canónica).
-  for (const key of ["quality", "construccion"]) {
-    assert(
-      getCommercialModuleByKey(key)?.status === "coming_soon",
-      `${key} debe seguir en coming_soon`
-    );
-  }
-  assert(FUNCTIONAL_MODULE_CODES.length === 2, "siguen siendo 2 los módulos funcionales");
+  // Construcción sigue en coming_soon (fuente canónica). Quality ya es
+  // funcional en el catálogo, pero sigue sin anunciarse: no está lanzado.
+  assert(
+    getCommercialModuleByKey("construccion")?.status === "coming_soon",
+    "construccion debe seguir en coming_soon"
+  );
+  assert(FUNCTIONAL_MODULE_CODES.length === 3, "CPR, Textiles y Quality son los funcionales");
   // La portada los mantiene como «Próximamente».
   const landing = read("app/page.tsx");
   assert(
@@ -3027,13 +3037,13 @@ check("82. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
-  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix pgcrypto 0110.
+  // PCR-03 original ocupa 0106–0108; la cola autorizada la declara QUALITY_01_ALLOWED.
   assert(
-    numbers[numbers.length - 1] === 110,
-    `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === MAX_DECLARED_MIGRATION,
+    `la última migración debe ser ${MAX_DECLARED_MIGRATION}, es ${numbers[numbers.length - 1]}`
   );
   const beyond = files.filter((f) => Number(f.slice(0, 4)) >= 106);
-  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0, `PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
+  assert(beyond.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)).length === 0, `PCR-03 original termina en 0108; después solo son autorizadas 0109, 0110, 0111 y 0112; migraciones no declaradas: ${beyond.join(", ")}`);
 });
 
 // ===========================================================================
@@ -3728,13 +3738,13 @@ check("103. No se modificaron migraciones y no existe 0103", () => {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
   assert(numbers[0] === 1, "la primera migración debe seguir siendo 0001");
-  // PCR-03 original ocupa 0106–0108; el tail actual autorizado es el hotfix pgcrypto 0110.
+  // PCR-03 original ocupa 0106–0108; la cola autorizada la declara QUALITY_01_ALLOWED.
   assert(
-    numbers[numbers.length - 1] === 110,
-    `la última migración debe ser el hotfix pgcrypto (0110), es ${numbers[numbers.length - 1]}`
+    numbers[numbers.length - 1] === MAX_DECLARED_MIGRATION,
+    `la última migración debe ser ${MAX_DECLARED_MIGRATION}, es ${numbers[numbers.length - 1]}`
   );
   assert(
-    files.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql").length === 0,
+    files.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)).length === 0,
     "PCR-03 original termina en 0108; 0109 y el hotfix pgcrypto 0110 son los autorizados; no debe existir 0111 ni posterior"
   );
   // Y el paquete jurídico no introdujo ninguna tabla ni columna nueva.

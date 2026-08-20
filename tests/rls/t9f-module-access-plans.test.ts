@@ -118,8 +118,13 @@ async function main() {
     assert(Math.abs(hours - 48) < 0.001, `esperaba 48 h exactas, fueron ${hours}`);
   });
 
-  await check("4. Quality y Construcción NO se asignan al registrarse", async () => {
-    assert((await moduleRow(orgA, "quality")) === null, "Quality no debía asignarse");
+  await check("4. Al registrarse se asignan los módulos FUNCIONALES; Construcción no", async () => {
+    // La provisión sigue exactamente a modules.is_functional. QUALITY-01 marcó
+    // Quality como funcional (0112), así que una empresa nueva lo recibe en
+    // Demo igual que CPR y Textiles. Que la asignación exista no significa que
+    // el módulo esté accesible: el kill switch QUALITY_MODULE_ENABLED decide
+    // eso, y en Production está apagado.
+    assert((await moduleRow(orgA, "quality")) !== null, "Quality debía asignarse: es funcional desde QUALITY-01");
     assert((await moduleRow(orgA, "construccion")) === null, "Construcción no debía asignarse");
   });
 
@@ -238,10 +243,12 @@ async function main() {
 
   console.log("\n── Módulos no funcionales rechazados ────────────────────────\n");
 
-  await check("21. Superadmin NO puede habilitar Quality", async () => {
+  await check("21. Superadmin SÍ puede gestionar Quality (funcional desde QUALITY-01)", async () => {
     const { error } = await trySet(superU.client, orgA, "quality", "full");
-    assert(error !== null && /no está disponible|no funcional|disponible para asignación/i.test(error.message), `Quality debía rechazarse: ${error?.message ?? "ÉXITO"}`);
-    assert((await moduleRow(orgA, "quality")) === null, "no debía crear asignación para Quality");
+    assert(error === null, `Quality debía aceptarse: ${error?.message}`);
+    const row = await moduleRow(orgA, "quality");
+    assert(row !== null, "debía existir la asignación de Quality");
+    assert(row!.access_mode === "full", `el modo debía quedar en full, quedó en ${row!.access_mode}`);
   });
 
   await check("22. Superadmin NO puede habilitar Construcción", async () => {

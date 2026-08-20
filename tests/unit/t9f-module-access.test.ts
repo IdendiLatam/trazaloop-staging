@@ -22,6 +22,7 @@ import {
   isFunctionalModuleCode,
   CPR_MODULE_CODE,
   TEXTILES_MODULE_CODE,
+  QUALITY_MODULE_CODE,
 } from "../../lib/modules/catalog";
 import { DERIVED_STATE_LABEL, isEnterableState } from "../../lib/modules/messages";
 
@@ -159,32 +160,51 @@ check("14. Demo temporal y Demo permanente reciben los MISMOS límites (mismo ac
 
 console.log("\nTrazaloop · T9F: catálogo canónico ↔ migración 0100\n");
 
-check("15. Solo CPR (traceability_6632) y Textiles son funcionales en el catálogo", () => {
-  assert(FUNCTIONAL_MODULE_CODES.slice().sort().join(",") === [CPR_MODULE_CODE, TEXTILES_MODULE_CODE].sort().join(","), "funcionales inesperados");
+check("15. CPR (traceability_6632), Textiles y Quality son los funcionales del catálogo", () => {
+  // QUALITY-01 incorporó Quality. Construcción sigue siendo el único
+  // "próximamente": la prueba comprueba la lista COMPLETA, así que nadie puede
+  // añadir un funcional sin pasar por aquí.
+  assert(FUNCTIONAL_MODULE_CODES.slice().sort().join(",") === [CPR_MODULE_CODE, TEXTILES_MODULE_CODE, QUALITY_MODULE_CODE].sort().join(","), "funcionales inesperados");
   assert(isFunctionalModuleCode(CPR_MODULE_CODE) && isFunctionalModuleCode(TEXTILES_MODULE_CODE), "CPR/Textiles deben ser funcionales");
-  assert(!isFunctionalModuleCode("quality") && !isFunctionalModuleCode("construccion"), "quality/construccion NO deben ser funcionales");
+  assert(isFunctionalModuleCode(QUALITY_MODULE_CODE), "Quality debe ser funcional desde QUALITY-01");
+  assert(!isFunctionalModuleCode("construccion"), "construccion NO debe ser funcional");
 });
 
-check("16. Quality y Construcción están en el catálogo como coming_soon", () => {
+check("16. Construcción sigue en el catálogo como coming_soon", () => {
   const q = COMMERCIAL_MODULES.find((m) => m.key === "quality");
   const c = COMMERCIAL_MODULES.find((m) => m.key === "construccion");
-  assert(q?.status === "coming_soon" && c?.status === "coming_soon", "quality/construccion deben ser coming_soon");
+  assert(q?.status === "functional", "quality debe ser functional desde QUALITY-01");
+  assert(c?.status === "coming_soon", "construccion debe seguir coming_soon");
 });
 
-check("17. El catálogo coincide con modules.is_functional de 0100", () => {
+check("17. El catálogo coincide con modules.is_functional en BD (0100 + 0112)", () => {
   const sql = readFileSync(join(process.cwd(), "supabase/migrations/0100_organization_module_access_modes_and_demo_trial.sql"), "utf8");
-  // La migración marca is_functional=true solo para traceability_6632 y textiles.
+  // 0100 marcó is_functional solo para traceability_6632 y textiles…
   assert(
     /update public\.modules set is_functional = true\s+where code in \('traceability_6632', 'textiles'\)/.test(sql),
     "0100 debe marcar is_functional solo para CPR y Textiles"
   );
-  // Y siembra quality/construccion como no disponibles.
+  // …y sembró quality/construccion como no disponibles.
   assert(/'quality'[\s\S]{0,120}false/.test(sql) && /'construccion'[\s\S]{0,120}false/.test(sql), "0100 debe sembrar quality/construccion no disponibles");
+  // QUALITY-01 lo cambió de forma append-only: 0112 es quien pone Quality en
+  // funcional. El espejo en BD y el catálogo TypeScript siguen coincidiendo.
+  const q01 = readFileSync(join(process.cwd(), "supabase/migrations/0112_quality_process_foundation.sql"), "utf8");
+  assert(
+    /update public\.modules[\s\S]{0,400}is_functional\s*=\s*true[\s\S]{0,200}where code = 'quality'/.test(q01),
+    "0112 debe marcar el módulo quality como funcional"
+  );
+  assert(!/construccion/.test(q01), "0112 no debe tocar el módulo construccion");
 });
 
-check("18. Solo Textiles tiene kill switch (TEXTILES_MODULE_ENABLED)", () => {
+check("18. Textiles y Quality tienen kill switch propio", () => {
   const withSwitch = COMMERCIAL_MODULES.filter((m) => m.killSwitchEnv !== null);
-  assert(withSwitch.length === 1 && withSwitch[0].killSwitchEnv === "TEXTILES_MODULE_ENABLED", "solo Textiles debe tener kill switch");
+  assert(
+    withSwitch.map((m) => m.killSwitchEnv).sort().join(",") === ["QUALITY_MODULE_ENABLED", "TEXTILES_MODULE_ENABLED"].sort().join(","),
+    "los kill switches declarados no son los esperados"
+  );
+  // Sin prefijo NEXT_PUBLIC_: el navegador jamás debe conocer estos valores,
+  // porque ocultar un botón no es la barrera de acceso.
+  assert(withSwitch.every((m) => !m.killSwitchEnv!.startsWith("NEXT_PUBLIC_")), "un kill switch nunca se expone al navegador");
 });
 
 console.log("\nTrazaloop · T9F: estados derivados de UI y tiempo restante\n");

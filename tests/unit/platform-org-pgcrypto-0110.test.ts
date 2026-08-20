@@ -20,6 +20,11 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+// Migraciones autorizadas a partir de 0111. Cada sprint que añade una
+// migración la declara aquí: es lo que impide que aparezca una migración
+// no revisada sin que ninguna prueba se entere.
+const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+
 const ROOT = join(__dirname, "..", "..");
 const MIG_DIR = join(ROOT, "supabase", "migrations");
 const MIG_NAME = "0110_platform_org_pgcrypto_schema_fix.sql";
@@ -92,8 +97,8 @@ check("A. existe exactamente supabase/migrations/0110_platform_org_pgcrypto_sche
   );
 });
 
-check("B. no existe ninguna migración 0111 ni posterior", () => {
-  const beyond = migrations.filter((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql");
+check("B. no existe ninguna migración fuera de la lista autorizada tras 0110", () => {
+  const beyond = migrations.filter((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f));
   assert(beyond.length === 0, `no debe existir 0111 ni posterior: ${beyond.join(", ")}`);
 });
 

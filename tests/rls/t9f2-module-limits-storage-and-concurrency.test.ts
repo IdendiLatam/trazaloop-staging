@@ -629,9 +629,11 @@ async function main() {
     assert(isDenied(error), `anon debía ser rechazado (fue ${error?.message ?? "permitido"})`);
   });
 
-  await check("51-52. Módulo NO funcional ('quality') y estado arbitrario ('premium'): rechazados con mensaje claro incluso para el superadmin", async () => {
-    const q = await setModule(superU.client, orgA, "quality", "full");
-    assert(isDenied(q.error), `quality debía rechazarse: ${q.error?.message ?? "permitido"}`);
+  await check("51-52. Módulo NO funcional ('construccion') y estado arbitrario ('premium'): rechazados con mensaje claro incluso para el superadmin", async () => {
+    // Antes el ejemplo de módulo no funcional era 'quality'; QUALITY-01 lo hizo
+    // funcional, así que el ejemplo pasa a ser Construcción. La regla es la misma.
+    const q = await setModule(superU.client, orgA, "construccion", "full");
+    assert(isDenied(q.error), `construccion debía rechazarse: ${q.error?.message ?? "permitido"}`);
     const p = await setModule(superU.client, orgA, TEX, "premium");
     assert(p.error !== null && /no válido/i.test(p.error.message), `premium debía rechazarse: ${p.error?.message ?? "permitido"}`);
   });

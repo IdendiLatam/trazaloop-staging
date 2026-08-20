@@ -25,6 +25,11 @@ import {
   type LinkedEvidenceInput,
 } from "../../lib/domain/traceability-exercise";
 
+// Migraciones autorizadas a partir de 0111. Cada sprint que añade una
+// migración la declara aquí: es lo que impide que aparezca una migración
+// no revisada sin que ninguna prueba se entere.
+const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+
 const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
@@ -286,6 +291,8 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0110_platform_org_pgcrypto_schema_fix.sql",
     // Q0.3H: privilegios de rol reproducibles desde migraciones (DR-22).
     "0111_platform_role_privileges.sql",
+    // QUALITY-01: fundación de Procesos de Trazaloop Quality.
+    "0112_quality_process_foundation.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
@@ -308,7 +315,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
   // anadio migraciones— con una lista blanca explicita, el mismo patron que ya
   // usan las demas suites.
   assert(
-    !files.some((f) => Number(f.slice(0, 4)) >= 111 && f !== "0111_platform_role_privileges.sql"),
+    !files.some((f) => Number(f.slice(0, 4)) >= 111 && !QUALITY_01_ALLOWED.has(f)),
     "sin 0111 ni posterior (la 0110 es el hotfix pgcrypto autorizado)"
   );
 });
