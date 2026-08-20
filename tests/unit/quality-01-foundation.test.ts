@@ -601,7 +601,11 @@ check("26. La migración es append-only y no toca ninguna anterior", () => {
   assert(existsSync(join(ROOT, MIG)), "falta la migración 0112");
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql")).sort();
   const numbers = files.map((f) => Number(f.slice(0, 4)));
-  assert(Math.max(...numbers) === 112, `la última migración debe ser 112, es ${Math.max(...numbers)}`);
+  // La cola crece con cada sprint; lo que esta prueba protege es que 0112
+  // exista, que no se haya renumerado nada y que ninguna migración anterior se
+  // haya tocado — no que 0112 sea la última para siempre.
+  assert(numbers.includes(112), "falta la migración 0112");
+  assert(Math.max(...numbers) >= 112, `la cola de migraciones retrocedió a ${Math.max(...numbers)}`);
   assert(new Set(numbers).size === numbers.length, "hay prefijos de migración duplicados");
 });
 

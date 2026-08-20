@@ -13,6 +13,23 @@ import { createServerClient } from "@/lib/supabase/server";
  * Mapeo manual a camelCase (el repo no genera tipos de Supabase).
  */
 
+/**
+ * Deja constancia en el registro del servidor de una consulta que falló.
+ *
+ * Estas funciones devuelven listas vacías ante un error para que una pantalla
+ * nunca reviente por un fallo de lectura. El precio es que un error de
+ * programación —una columna mal escrita, un embed inválido— se vuelve
+ * indistinguible de "no hay datos". QUALITY-01.1 pagó ese precio: el selector
+ * de categorías salía en blanco y nada en ninguna parte decía por qué.
+ *
+ * No cambia el comportamiento de la interfaz; solo hace que el motivo exista.
+ */
+function reportQueryFailure(where: string, error: { message?: string; code?: string } | null): void {
+  console.error(
+    `[quality] consulta fallida en ${where}: ${error?.code ?? "sin código"} · ${error?.message ?? "sin mensaje"}`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Categorías
 // ---------------------------------------------------------------------------
@@ -26,20 +43,37 @@ export type QualityCategoryRow = {
   organizationId: string | null;
 };
 
+/**
+ * Categorías visibles para la sesión: las cuatro base de Trazaloop
+ * (`organization_id is null`, sembradas por 0112) más las propias de la
+ * empresa. La RLS de 0112 se encarga de ocultar las de otras empresas.
+ *
+ * Como las base son GLOBALES, toda empresa las ve desde el primer día sin
+ * necesidad de aprovisionar nada: vale igual para las que ya existen, para las
+ * nuevas y para una que contrate únicamente Quality.
+ */
 export async function listQualityCategories(): Promise<QualityCategoryRow[]> {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("quality_process_categories")
-    .select("code, name, description, display_order, organization_id")
+    .select("code, name, description, sort_order, organization_id")
     .eq("is_active", true)
-    .order("display_order", { ascending: true })
+    .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
-  if (error || !data) return [];
+  if (error || !data) {
+    // Un error aquí devolvía silenciosamente una lista vacía, y el selector de
+    // categorías aparecía en blanco sin que nada lo delatara: exactamente el
+    // defecto que reportó la prueba humana (se pedía `display_order`, una
+    // columna que no existe). Devolver [] sigue siendo lo correcto para no
+    // romper la pantalla, pero el motivo tiene que quedar registrado.
+    reportQueryFailure("listQualityCategories", error);
+    return [];
+  }
   return data.map((r) => ({
     code: r.code as string,
     name: r.name as string,
     description: (r.description as string | null) ?? null,
-    displayOrder: Number(r.display_order ?? 0),
+    displayOrder: Number(r.sort_order ?? 0),
     organizationId: (r.organization_id as string | null) ?? null,
   }));
 }
@@ -77,7 +111,11 @@ export async function listQualityPositions(organizationId: string): Promise<Qual
       .eq("organization_id", organizationId),
   ]);
 
-  if (positions.error || !positions.data) return [];
+  if (positions.error || !positions.data) {
+    reportQueryFailure("listQualityPositions", positions.error);
+    return [];
+  }
+  if (holders.error) reportQueryFailure("listQualityPositions/holders", holders.error);
 
   const holderByPosition = new Map<string, Record<string, unknown>>();
   for (const h of holders.data ?? []) {
@@ -128,7 +166,10 @@ export async function listQualityPositionAssignments(
     .eq("organization_id", organizationId)
     .eq("position_id", positionId)
     .order("effective_from", { ascending: false });
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listQualityPositionAssignments", error);
+    return [];
+  }
   return data.map((r) => {
     const p = (r.profiles ?? null) as { full_name?: string | null; email?: string | null } | null;
     return {
@@ -143,6 +184,40 @@ export async function listQualityPositionAssignments(
       notes: (r.notes as string | null) ?? null,
     };
   });
+}
+
+/**
+ * ¿Qué hay colgando de este cargo? Se usa para decidir, ANTES de intentar el
+ * borrado, si un cargo puede eliminarse o solo desactivarse — y sobre todo
+ * para poder explicárselo a la persona en lugar de devolverle un error de
+ * clave foránea. La barrera real siguen siendo las FK ON DELETE RESTRICT.
+ */
+export type QualityPositionUsage = {
+  processes: number;
+  assignments: number;
+  /** true si el cargo no ha dejado rastro y puede borrarse sin perder nada. */
+  isDeletable: boolean;
+};
+
+export async function getQualityPositionUsage(
+  organizationId: string,
+  positionId: string
+): Promise<QualityPositionUsage> {
+  const supabase = await createServerClient();
+  const [processes, assignments] = await Promise.all([
+    supabase.from("quality_processes").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("owner_position_id", positionId),
+    supabase.from("quality_position_assignments").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("position_id", positionId),
+  ]);
+  if (processes.error) reportQueryFailure("getQualityPositionUsage/processes", processes.error);
+  if (assignments.error) reportQueryFailure("getQualityPositionUsage/assignments", assignments.error);
+
+  // Ante una lectura fallida se asume que SÍ hay uso: equivocarse hacia
+  // "desactivar" conserva los datos; equivocarse hacia "borrar" los destruye.
+  const p = processes.error ? 1 : processes.count ?? 0;
+  const a = assignments.error ? 1 : assignments.count ?? 0;
+  return { processes: p, assignments: a, isDeletable: p === 0 && a === 0 };
 }
 
 export async function getQualityPosition(
@@ -165,7 +240,10 @@ export async function listOrganizationMembersForQuality(
     .select("user_id, profiles(full_name, email)")
     .eq("organization_id", organizationId)
     .eq("status", "active");
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listOrganizationMembersForQuality", error);
+    return [];
+  }
   return data
     .map((r) => {
       const p = (r.profiles ?? null) as { full_name?: string | null; email?: string | null } | null;
@@ -202,7 +280,10 @@ export async function listQualityProcesses(organizationId: string): Promise<Qual
     )
     .eq("organization_id", organizationId)
     .order("name", { ascending: true });
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listQualityProcesses", error);
+    return [];
+  }
   return data.map((r) => {
     const owner = (r.quality_positions ?? null) as { name?: string | null } | null;
     return {
@@ -468,7 +549,10 @@ export async function listTrazadocsForQuality(organizationId: string): Promise<T
     .eq("organization_id", organizationId)
     .neq("status", "obsolete")
     .order("title", { ascending: true });
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listTrazadocsForQuality", error);
+    return [];
+  }
   return data.map((r) => ({
     id: r.id as string,
     title: r.title as string,
@@ -506,7 +590,10 @@ export async function listQualityProcessesUsingDocument(
     )
     .eq("organization_id", organizationId)
     .eq("document_id", documentId);
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listQualityProcessesUsingDocument", error);
+    return [];
+  }
   return data
     .map((r) => {
       const p = (r.quality_processes ?? null) as {
@@ -545,7 +632,10 @@ export async function listQualityMaps(organizationId: string): Promise<QualityMa
     .eq("organization_id", organizationId)
     .order("is_default", { ascending: false })
     .order("name", { ascending: true });
-  if (error || !data) return [];
+  if (error || !data) {
+    reportQueryFailure("listQualityMaps", error);
+    return [];
+  }
   return data.map((r) => ({
     id: r.id as string,
     name: r.name as string,
@@ -687,11 +777,13 @@ export type QualitySummary = {
   publishedProcesses: number;
   maps: number;
   hasPublishedMap: boolean;
+  /** Documentos PROPIOS de Quality (module_key = 'quality'). */
+  documents: number;
 };
 
 export async function getQualitySummary(organizationId: string): Promise<QualitySummary> {
   const supabase = await createServerClient();
-  const [positions, processes, published, maps, publishedMaps] = await Promise.all([
+  const [positions, processes, published, maps, publishedMaps, documents] = await Promise.all([
     supabase.from("quality_positions").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("is_active", true),
     supabase.from("quality_processes").select("id", { count: "exact", head: true })
@@ -702,6 +794,8 @@ export async function getQualitySummary(organizationId: string): Promise<Quality
       .eq("organization_id", organizationId),
     supabase.from("quality_process_map_versions").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("status", "published").is("effective_to", null),
+    supabase.from("trazadoc_documents").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("module_key", "quality"),
   ]);
   return {
     positions: positions.count ?? 0,
@@ -709,5 +803,6 @@ export async function getQualitySummary(organizationId: string): Promise<Quality
     publishedProcesses: published.count ?? 0,
     maps: maps.count ?? 0,
     hasPublishedMap: (publishedMaps.count ?? 0) > 0,
+    documents: documents.count ?? 0,
   };
 }

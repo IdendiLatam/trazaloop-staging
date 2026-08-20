@@ -8,6 +8,7 @@ import {
   listQualityPositions,
   listOrganizationMembersForQuality,
   listQualityPositionAssignments,
+  getQualityPositionUsage,
 } from "@/lib/db/quality-processes";
 import { canManagePositions } from "@/lib/domain/quality-processes";
 import { QualityPositionsManager } from "@/components/domain/quality/positions-manager";
@@ -22,14 +23,23 @@ export default async function QualityPositionsPage() {
     listOrganizationMembersForQuality(org.organizationId),
   ]);
 
-  // Historial de cada cargo: se resuelve en servidor para que la pantalla
-  // pueda mostrar la vigencia sin viajes adicionales desde el navegador.
-  const history = await Promise.all(
-    positions.map(async (p) => ({
-      positionId: p.id,
-      assignments: await listQualityPositionAssignments(org.organizationId, p.id),
-    }))
-  );
+  // Historial y uso de cada cargo: se resuelven en servidor para que la
+  // pantalla pueda mostrar la vigencia y decidir si un cargo se puede eliminar
+  // o solo desactivar, sin viajes adicionales desde el navegador.
+  const [history, usage] = await Promise.all([
+    Promise.all(
+      positions.map(async (p) => ({
+        positionId: p.id,
+        assignments: await listQualityPositionAssignments(org.organizationId, p.id),
+      }))
+    ),
+    Promise.all(
+      positions.map(async (p) => ({
+        positionId: p.id,
+        ...(await getQualityPositionUsage(org.organizationId, p.id)),
+      }))
+    ),
+  ]);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -47,6 +57,7 @@ export default async function QualityPositionsPage() {
         positions={positions}
         members={members}
         history={history}
+        usage={usage}
         canManage={canManagePositions(org.roleCode)}
       />
     </div>

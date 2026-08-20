@@ -8,6 +8,7 @@ import { assertMyLegalAcceptance } from "@/server/actions/legal";
 import { requireSession } from "@/lib/auth/require-session";
 import { writeActiveOrgCookie } from "@/lib/auth/active-organization";
 import { getUserOrganizations, getActiveOrganization } from "@/lib/db/organizations";
+import { buildInvitationLink } from "@/lib/auth/invitation-link";
 import {
   listMembers,
   listInvitations,
@@ -172,8 +173,11 @@ export async function createTeamInvitationAction(
 
   revalidateTeam();
 
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const inviteLink = `${site}/accept-invite?token=${payload.token}`;
+  // Enlace ABSOLUTO construido con el origen real de esta petición: quien
+  // invita está mirando el despliegue correcto, así que el enlace apunta ahí y
+  // no a lo que diga una variable que puede estar sin definir o apuntando a un
+  // despliegue antiguo.
+  const inviteLink = await buildInvitationLink(payload.token);
   return { error: null, inviteLink };
 }
 

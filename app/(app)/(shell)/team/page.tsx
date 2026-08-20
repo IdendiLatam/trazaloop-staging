@@ -14,6 +14,7 @@ import { MemberList } from "@/components/domain/team/member-list";
 import { InvitationList } from "@/components/domain/team/invitation-list";
 import { InviteUserForm } from "@/components/domain/team/invite-user-form";
 import { RoleHelp } from "@/components/domain/team/role-help";
+import { resolveAppOrigin } from "@/lib/auth/invitation-link";
 
 export default async function TeamPage() {
   const { user } = await requireSession();
@@ -23,6 +24,12 @@ export default async function TeamPage() {
     listTeamInvitationsAction(),
   ]);
   const canManage = canManageTeam(org.roleCode);
+  // El enlace de cada invitación pendiente se resuelve EN SERVIDOR, con el
+  // origen real de esta petición. Antes solo existía en el resultado efímero
+  // de crear la invitación: quien navegaba a otra pantalla lo perdía para
+  // siempre y no había forma de volver a obtenerlo — el defecto que dejaba a
+  // la persona invitada abriendo /accept-invite sin token.
+  const appOrigin = await resolveAppOrigin();
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -81,7 +88,7 @@ export default async function TeamPage() {
       {/* 3. Invitaciones pendientes */}
       <section className="space-y-3">
         <h2 className="eyebrow">Invitaciones</h2>
-        <InvitationList invitations={invitations} canManage={canManage} />
+        <InvitationList invitations={invitations} canManage={canManage} appOrigin={appOrigin} />
       </section>
 
       {/* 4. Invitar usuario */}

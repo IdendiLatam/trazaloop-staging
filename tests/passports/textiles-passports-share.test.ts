@@ -77,6 +77,8 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

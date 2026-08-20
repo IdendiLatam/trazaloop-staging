@@ -35,11 +35,21 @@ export const QUALITY_CATEGORY_UI_ORDER: readonly QualityBaseCategoryCode[] = [
   "system",
 ];
 
+/**
+ * Etiquetas de las cuatro categorías congeladas.
+ *
+ * Deben coincidir EXACTAMENTE con el nombre que tienen en
+ * `quality_process_categories` (catálogo global). Este mapa solo se usa cuando
+ * la pantalla conoce el código pero no ha cargado la fila — el mapa de
+ * procesos, por ejemplo. Que dijeran cosas distintas («Apoyo» aquí, «De apoyo»
+ * allá) hacía que la misma categoría se llamara de dos maneras según dónde se
+ * mirara; una prueba comprueba ahora que sigan de acuerdo.
+ */
 export const QUALITY_CATEGORY_LABEL: Record<string, string> = {
   strategic: "Estratégicos",
   core: "Misionales",
-  support: "De apoyo",
-  system: "De gestión del sistema",
+  support: "Apoyo",
+  system: "Sistema",
 };
 
 export function qualityCategoryLabel(code: string | null | undefined): string {

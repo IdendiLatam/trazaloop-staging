@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   SISTEMA_GROUP,
   PLATFORM_GROUP,
+  SHELL_MODULE_PARAM,
+  moduleAwareHref,
   resolveShellModuleForPath,
   isShellNavLinkActive,
   type ModuleNavLink,
   type ModuleNavGroup,
+  type ShellModuleKey,
 } from "@/lib/modules/registry";
 
 /**
@@ -35,10 +38,21 @@ export {
   PLATFORM_GROUP,
 } from "@/lib/modules/registry";
 
-function NavItem({ item, active }: { item: ModuleNavLink; active: boolean }) {
+function NavItem({
+  item,
+  active,
+  moduleKey,
+}: {
+  item: ModuleNavLink;
+  active: boolean;
+  moduleKey: ShellModuleKey;
+}) {
   return (
     <Link
-      href={item.href}
+      // Los enlaces transversales llevan el módulo desde el que se navega, para
+      // que ir a "Equipo" desde Quality no devuelva a la persona al shell de
+      // CPR. Los enlaces propios del módulo se dejan intactos.
+      href={moduleAwareHref(item.href, moduleKey)}
       aria-current={active ? "page" : undefined}
       className={`block rounded-md px-3 py-2 text-sm font-medium ${
         active ? "bg-white/15 text-white" : "text-white hover:bg-white/10"
@@ -49,7 +63,15 @@ function NavItem({ item, active }: { item: ModuleNavLink; active: boolean }) {
   );
 }
 
-function NavGroupSection({ group, pathname }: { group: ModuleNavGroup; pathname: string }) {
+function NavGroupSection({
+  group,
+  pathname,
+  moduleKey,
+}: {
+  group: ModuleNavGroup;
+  pathname: string;
+  moduleKey: ShellModuleKey;
+}) {
   return (
     <details open className="group">
       <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-100/70 hover:bg-white/5">
@@ -58,7 +80,12 @@ function NavGroupSection({ group, pathname }: { group: ModuleNavGroup; pathname:
       </summary>
       <div className="mt-0.5 space-y-0.5">
         {group.items.map((item) => (
-          <NavItem key={item.label} item={item} active={isShellNavLinkActive(item, pathname)} />
+          <NavItem
+            key={item.label}
+            item={item}
+            active={isShellNavLinkActive(item, pathname)}
+            moduleKey={moduleKey}
+          />
         ))}
       </div>
     </details>
@@ -67,7 +94,8 @@ function NavGroupSection({ group, pathname }: { group: ModuleNavGroup; pathname:
 
 export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}) {
   const pathname = usePathname() ?? "";
-  const activeModule = resolveShellModuleForPath(pathname);
+  const searchParams = useSearchParams();
+  const activeModule = resolveShellModuleForPath(pathname, searchParams?.get(SHELL_MODULE_PARAM));
 
   return (
     <nav aria-label="Navegación principal" className="space-y-3">
@@ -81,15 +109,34 @@ export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}
               key={item.label}
               item={item}
               active={isShellNavLinkActive(item, pathname)}
+              moduleKey={activeModule.key}
             />
           ))}
         </div>
       </div>
       {activeModule.groups.map((group) => (
-        <NavGroupSection key={group.title} group={group} pathname={pathname} />
+        <NavGroupSection
+          key={group.title}
+          group={group}
+          pathname={pathname}
+          moduleKey={activeModule.key}
+        />
       ))}
-      <NavGroupSection group={SISTEMA_GROUP} pathname={pathname} />
-      {showPlatform ? <NavGroupSection group={PLATFORM_GROUP} pathname={pathname} /> : null}
+      <NavGroupSection group={SISTEMA_GROUP} pathname={pathname} moduleKey={activeModule.key} />
+      {showPlatform ? (
+        <NavGroupSection group={PLATFORM_GROUP} pathname={pathname} moduleKey={activeModule.key} />
+      ) : null}
+      {/* Volver al inicio del módulo activo: desde una pantalla transversal es
+          la salida natural, y sin ella la única vuelta era el selector. */}
+      {activeModule.key !== "cpr" &&
+      resolveShellModuleForPath(pathname).key === "cpr" ? (
+        <Link
+          href={activeModule.homePath}
+          className="block rounded-md px-3 py-2 text-xs font-medium text-emerald-100/70 hover:bg-white/10 hover:text-white"
+        >
+          ← Volver a {activeModule.name}
+        </Link>
+      ) : null}
       <Link
         href="/modules"
         className="block rounded-md px-3 py-2 text-xs font-medium text-emerald-100/70 hover:bg-white/10 hover:text-white"

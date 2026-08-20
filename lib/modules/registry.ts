@@ -44,6 +44,15 @@ export type ShellModuleDefinition = {
 // Grupos transversales (idénticos a los históricos de components/layout/nav)
 // ---------------------------------------------------------------------------
 
+/**
+ * Grupo TRANSVERSAL: pantallas que no pertenecen a ningún módulo y que
+ * cualquier empresa puede usar, tenga contratado lo que tenga.
+ *
+ * QUALITY-01.1 sacó "Onboarding" de aquí. Vive bajo el grupo de rutas (cpr) y
+ * está protegido por `requireCprModule()`, así que para una empresa que solo
+ * tuviera Quality era un enlace que devolvía al selector de módulos. No era
+ * transversal: era de CPR colocado en un menú transversal.
+ */
 export const SISTEMA_GROUP: ModuleNavGroup = {
   title: "Sistema",
   items: [
@@ -51,7 +60,6 @@ export const SISTEMA_GROUP: ModuleNavGroup = {
     { label: "Datos de empresa", href: "/settings/company" },
     { label: "Mi perfil", href: "/settings/profile" },
     { label: "Centro de soporte", href: "/support" },
-    { label: "Onboarding", href: "/onboarding" },
   ],
 };
 
@@ -72,6 +80,9 @@ export const PLATFORM_GROUP: ModuleNavGroup = {
 export const NAV_TOP_LEVEL: ModuleNavLink[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Flujo guiado", href: "/guided-flow" },
+  // Onboarding es de CPR (vive bajo (cpr) y lo protege requireCprModule):
+  // pertenece a su navegación, no al grupo transversal Sistema.
+  { label: "Onboarding", href: "/onboarding" },
 ];
 
 export const TRAZABILIDAD_GROUP: ModuleNavGroup = {
@@ -187,6 +198,15 @@ export const QUALITY_SGC_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * Documentos de Quality. Grupo propio, no un enlace suelto: el espacio
+ * documental es una de las dos patas del módulo, no un accesorio de Procesos.
+ */
+export const QUALITY_DOCUMENTOS_GROUP: ModuleNavGroup = {
+  title: "Documentación",
+  items: [{ label: "Documentos", href: "/quality/documents" }],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -194,7 +214,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   homePath: "/quality",
   pathPrefixes: ["/quality"],
   topLevel: [{ label: "Inicio Quality", href: "/quality", exact: true }],
-  groups: [QUALITY_SGC_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------
@@ -209,21 +229,68 @@ export const SHELL_MODULES: readonly ShellModuleDefinition[] = [
 ];
 
 /**
- * Módulo activo según la ruta actual. Coincidencia por prefijo estricta
- * ("/textiles" o "/textiles/..."), nunca por subcadena: "/textiles-x"
- * jamás activa Textiles. Sin coincidencia → CPR (módulo por defecto).
+ * Nombre del parámetro que transporta el módulo activo a través de las rutas
+ * TRANSVERSALES (equipo, configuración, soporte), que no pertenecen a ningún
+ * módulo.
+ *
+ * Sin él, salir de Quality a "Equipo" dejaba al usuario dentro del shell de
+ * CPR —menú, identidad y todo— porque `/team` no lo reclama nadie y CPR es el
+ * módulo por defecto. La persona entraba a Quality y acababa en PCR sin haber
+ * pedido cambiar de módulo. Es un parámetro de PRESENTACIÓN: no concede acceso
+ * a nada, y la ruta siempre manda sobre él.
  */
+export const SHELL_MODULE_PARAM = "m";
+
+export function isShellModuleKey(value: string | null | undefined): value is ShellModuleKey {
+  return SHELL_MODULES.some((m) => m.key === value);
+}
+
+/**
+ * Módulo activo del shell.
+ *
+ * 1. Si la ruta pertenece a un módulo, gana la RUTA. Coincidencia por prefijo
+ *    estricta ("/textiles" o "/textiles/..."), nunca por subcadena. Esto es lo
+ *    que impide que `?m=quality` secuestre una pantalla de otro módulo.
+ * 2. Las rutas propias de CPR también ganan sobre el parámetro. CPR es el
+ *    módulo por defecto, pero eso no significa que sus pantallas sean
+ *    transversales: `/dashboard?m=quality` es una pantalla de PCR y debe
+ *    mostrarse como tal.
+ * 3. Si la ruta es transversal y se recuerda un módulo, se conserva ese.
+ * 4. Si no, CPR.
+ */
+function claimsPath(mod: ShellModuleDefinition, p: string): boolean {
+  return mod.pathPrefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+}
+
 export function resolveShellModuleForPath(
-  pathname: string | null | undefined
+  pathname: string | null | undefined,
+  moduleParam?: string | null
 ): ShellModuleDefinition {
   const p = pathname ?? "";
   for (const mod of SHELL_MODULES) {
     if (mod.key === CPR_SHELL_MODULE.key) continue;
-    if (mod.pathPrefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`))) {
-      return mod;
-    }
+    if (claimsPath(mod, p)) return mod;
+  }
+  if (claimsPath(CPR_SHELL_MODULE, p)) return CPR_SHELL_MODULE;
+  if (isShellModuleKey(moduleParam)) {
+    return SHELL_MODULES.find((m) => m.key === moduleParam) ?? CPR_SHELL_MODULE;
   }
   return CPR_SHELL_MODULE;
+}
+
+/**
+ * Decora un enlace TRANSVERSAL con el módulo desde el que se navega, para que
+ * el shell no cambie de identidad al pulsarlo.
+ *
+ * CPR no necesita marca: es el destino por defecto, así que sus URLs quedan
+ * limpias y el comportamiento anterior se conserva intacto. Un enlace que ya
+ * pertenece a un módulo tampoco se toca — su propia ruta ya lo dice.
+ */
+export function moduleAwareHref(href: string, moduleKey: ShellModuleKey): string {
+  if (moduleKey === CPR_SHELL_MODULE.key) return href;
+  if (resolveShellModuleForPath(href).key !== CPR_SHELL_MODULE.key) return href;
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}${SHELL_MODULE_PARAM}=${moduleKey}`;
 }
 
 /** ¿El enlace corresponde a la ruta actual? (marca de opción activa) */

@@ -10,10 +10,12 @@ import {
   QUALITY_ASSIGNMENT_TYPE_LABEL,
   type QualityAssignmentType,
 } from "@/lib/domain/quality-processes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   createQualityPosition,
   assignPersonToQualityPosition,
   endQualityPositionAssignment,
+  removeQualityPosition,
   updateQualityPosition,
 } from "@/server/actions/quality-processes";
 
@@ -52,6 +54,9 @@ type AssignmentView = {
 
 type MemberOption = { profileId: string; name: string; email: string | null };
 
+/** Uso real de cada cargo, calculado en servidor: decide qué ofrece la UI. */
+type PositionUsage = { positionId: string; processes: number; assignments: number; isDeletable: boolean };
+
 const inputClass =
   "block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-loop";
 
@@ -59,24 +64,31 @@ export function QualityPositionsManager({
   positions,
   members,
   history,
+  usage,
   canManage,
 }: {
   positions: PositionView[];
   members: MemberOption[];
   history: { positionId: string; assignments: AssignmentView[] }[];
+  usage: PositionUsage[];
   canManage: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const [assigningTo, setAssigningTo] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<PositionView | null>(null);
 
   const historyByPosition = new Map(history.map((h) => [h.positionId, h.assignments]));
+  const usageByPosition = new Map(usage.map((u) => [u.positionId, u]));
 
-  function run(fn: () => Promise<{ error: string | null }>) {
+  function run(fn: () => Promise<{ error: string | null }>, okMessage?: string) {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
       const result = await fn();
       if (result.error) {
@@ -84,7 +96,34 @@ export function QualityPositionsManager({
         return;
       }
       setCreating(false);
+      setEditing(null);
       setAssigningTo(null);
+      if (okMessage) setNotice(okMessage);
+      router.refresh();
+    });
+  }
+
+  /**
+   * Quitar un cargo. La acción de servidor decide si se borra o se desactiva
+   * según el uso real; aquí solo se cuenta lo que ocurrió. Anunciarlo importa:
+   * pulsar "Eliminar" y ver que el cargo sigue en la lista, desactivado, sería
+   * desconcertante si nadie lo explica.
+   */
+  function onRemove(position: PositionView) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await removeQualityPosition(position.id);
+      setConfirmRemove(null);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setNotice(
+        result.outcome === "deleted"
+          ? `Se eliminó el cargo «${position.name}». No tenía información asociada.`
+          : `El cargo «${position.name}» quedó desactivado en lugar de eliminarse, para conservar su historial.`
+      );
       router.refresh();
     });
   }
@@ -115,6 +154,47 @@ export function QualityPositionsManager({
   return (
     <div className="space-y-4">
       <ErrorAlert message={error} />
+      {notice ? <InfoAlert message={notice} /> : null}
+
+      {/* La confirmación anuncia el resultado REAL, que depende del uso del
+          cargo. Prometer "eliminar" y desactivar en su lugar, sin avisar, sería
+          engañoso; avisar después, tarde. */}
+      <ConfirmDialog
+        open={confirmRemove !== null}
+        destructive
+        pending={pending}
+        title={
+          confirmRemove && (usageByPosition.get(confirmRemove.id)?.isDeletable ?? false)
+            ? `¿Eliminar el cargo «${confirmRemove.name}»?`
+            : `¿Desactivar el cargo «${confirmRemove?.name ?? ""}»?`
+        }
+        description={(() => {
+          if (!confirmRemove) return "";
+          const u = usageByPosition.get(confirmRemove.id);
+          if (u?.isDeletable) {
+            return "Este cargo no tiene procesos ni asignaciones, así que se eliminará por completo. La acción no se puede deshacer.";
+          }
+          const partes: string[] = [];
+          if (u && u.processes > 0) {
+            partes.push(`${u.processes} ${u.processes === 1 ? "proceso" : "procesos"} a su cargo`);
+          }
+          if (u && u.assignments > 0) {
+            partes.push(`${u.assignments} ${u.assignments === 1 ? "asignación" : "asignaciones"} de personas`);
+          }
+          const detalle = partes.length > 0 ? ` (${partes.join(" y ")})` : "";
+          return (
+            `Este cargo tiene información asociada${detalle}, así que se DESACTIVARÁ en lugar de eliminarse, ` +
+            "para conservar el historial de quién respondía por cada proceso. Podrás reactivarlo cuando quieras."
+          );
+        })()}
+        confirmLabel={
+          confirmRemove && (usageByPosition.get(confirmRemove.id)?.isDeletable ?? false)
+            ? "Eliminar definitivamente"
+            : "Desactivar"
+        }
+        onConfirm={() => confirmRemove && onRemove(confirmRemove)}
+        onCancel={() => setConfirmRemove(null)}
+      />
 
       {!canManage ? (
         <InfoAlert message="Puedes consultar los cargos. Crearlos o asignarlos corresponde a la administración o al área de calidad." />
@@ -213,6 +293,13 @@ export function QualityPositionsManager({
                         <Button
                           variant="quiet"
                           className="w-auto px-3 py-1 text-xs"
+                          onClick={() => setEditing(editing === p.id ? null : p.id)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          variant="quiet"
+                          className="w-auto px-3 py-1 text-xs"
                           onClick={() => setAssigningTo(assigningTo === p.id ? null : p.id)}
                         >
                           Asignar persona
@@ -222,23 +309,86 @@ export function QualityPositionsManager({
                           className="w-auto px-3 py-1 text-xs"
                           disabled={pending}
                           onClick={() =>
-                            run(() =>
-                              updateQualityPosition(p.id, {
-                                name: p.name,
-                                code: p.code ?? "",
-                                orgUnit: p.orgUnit ?? "",
-                                description: p.description ?? "",
-                                isActive: !p.isActive,
-                              })
+                            run(
+                              () =>
+                                updateQualityPosition(p.id, {
+                                  name: p.name,
+                                  code: p.code ?? "",
+                                  orgUnit: p.orgUnit ?? "",
+                                  description: p.description ?? "",
+                                  isActive: !p.isActive,
+                                }),
+                              p.isActive
+                                ? `El cargo «${p.name}» quedó desactivado.`
+                                : `El cargo «${p.name}» vuelve a estar activo.`
                             )
                           }
                         >
                           {p.isActive ? "Desactivar" : "Reactivar"}
                         </Button>
+                        <Button
+                          variant="quiet"
+                          className="w-auto px-3 py-1 text-xs text-danger"
+                          disabled={pending}
+                          onClick={() => setConfirmRemove(p)}
+                        >
+                          Eliminar
+                        </Button>
                       </>
                     ) : null}
                   </div>
                 </div>
+
+                {canManage && editing === p.id ? (
+                  <form
+                    action={(form) =>
+                      run(
+                        () =>
+                          updateQualityPosition(p.id, {
+                            name: String(form.get("name") ?? ""),
+                            code: String(form.get("code") ?? ""),
+                            orgUnit: String(form.get("orgUnit") ?? ""),
+                            description: String(form.get("description") ?? ""),
+                          }),
+                        "Cargo actualizado."
+                      )
+                    }
+                    className="mt-3 space-y-3 rounded-md border border-hairline bg-paper p-3"
+                  >
+                    <h3 className="text-xs font-semibold">Editar cargo</h3>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium">Nombre del cargo</span>
+                      <input name="name" required defaultValue={p.name} maxLength={160} className={inputClass} />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium">Código</span>
+                        <input name="code" defaultValue={p.code ?? ""} maxLength={40} className={inputClass} />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium">Área</span>
+                        <input name="orgUnit" defaultValue={p.orgUnit ?? ""} maxLength={160} className={inputClass} />
+                      </label>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium">Descripción</span>
+                      <textarea name="description" rows={2} defaultValue={p.description ?? ""} className={inputClass} />
+                    </label>
+                    <p className="text-xs text-ink-soft">
+                      Cambiar el nombre no afecta a los procesos que tiene a su cargo: siguen
+                      apuntando a este mismo cargo.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={pending} className="w-auto px-3 py-1 text-xs">
+                        {pending ? "Guardando…" : "Guardar cambios"}
+                      </Button>
+                      <Button type="button" variant="quiet" className="w-auto px-3 py-1 text-xs"
+                              onClick={() => setEditing(null)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
 
                 {canManage && assigningTo === p.id ? (
                   <form

@@ -240,6 +240,8 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

@@ -191,7 +191,10 @@ check("11. Vistas ampliadas: summary, blueprint_summary y maestro exponen module
 });
 
 check("12. Separación en capa de datos: default 'cpr' preserva CPR; envolturas fijan 'textiles' (puntos 14–16)", () => {
-  assert(dbShared.includes(`export type TrazadocModuleKey = "cpr" | "textiles";`), "faltó el tipo TrazadocModuleKey");
+  // QUALITY-01.1 añadió el tercer módulo al motor transversal. La exigencia de
+  // esta prueba no cambia —el default sigue siendo 'cpr' y cada consulta filtra
+  // por módulo, así que CPR y Textiles no se mezclan— y ahora cubre a Quality.
+  assert(dbShared.includes(`export type TrazadocModuleKey = "cpr" | "textiles" | "quality";`), "faltó el tipo TrazadocModuleKey");
   for (const fn of ["listDocuments", "getDocument", "listAvailableBlueprints", "getBlueprintByIdForCompany", "findDocumentByNormalizedTitle"]) {
     const idx = dbShared.indexOf(`export async function ${fn}`);
     assert(idx >= 0, `faltó ${fn}`);

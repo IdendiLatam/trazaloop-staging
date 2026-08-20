@@ -13,7 +13,7 @@ import { getDemoTrialSummary } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
 import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
-import { ModuleHeaderBadge } from "@/components/layout/module-badge";
+import { ModuleHeaderBadge, ModuleAwareSettingsLink } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
 import Link from "next/link";
 
@@ -101,12 +101,7 @@ export default async function ShellLayout({
             <span className="text-xs font-normal text-ink-soft">cambiar</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link
-              href="/settings/company"
-              className="text-sm text-ink-soft hover:text-loop hover:underline"
-            >
-              Configuración
-            </Link>
+            <ModuleAwareSettingsLink />
             <ModuleHeaderBadge />
           </div>
         </header>

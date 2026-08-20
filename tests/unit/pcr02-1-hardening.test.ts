@@ -331,6 +331,8 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

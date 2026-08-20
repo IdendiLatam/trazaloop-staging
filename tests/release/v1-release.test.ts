@@ -79,7 +79,11 @@ import {
 // Migraciones autorizadas a partir de 0111. Cada sprint que añade una
 // migración la declara aquí: es lo que impide que aparezca una migración
 // no revisada sin que ninguna prueba se entere.
-const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+const QUALITY_01_ALLOWED = new Set([
+  "0111_platform_role_privileges.sql",
+  "0112_quality_process_foundation.sql",
+  "0113_quality_documents_and_position_lifecycle.sql",
+]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
 // ---------------------------------------------------------------------------
@@ -869,6 +873,8 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));
@@ -1177,9 +1183,18 @@ check("24c. ACTIVE_ORG_COOKIE_SECRET y NEXT_PUBLIC_SITE_URL sí los consume el c
     "ACTIVE_ORG_COOKIE_SECRET debe seguir siendo consumida por la firma de la cookie"
   );
   const authAction = read("server/actions/auth.ts");
-  const teamAction = read("server/actions/team.ts");
+  // QUALITY-01.1: el enlace de invitación pasó a construirse con el origen REAL
+  // de la petición (lib/auth/invitation-link.ts), porque en Preview la variable
+  // apunta a un despliegue concreto y el enlace señalaba a uno viejo. La
+  // variable sigue consumida ahí, como respaldo — la exigencia se comprueba
+  // sobre el constructor, que es quien la usa ahora.
+  const inviteLink = read("lib/auth/invitation-link.ts");
   assert(
-    authAction.includes("NEXT_PUBLIC_SITE_URL") && teamAction.includes("NEXT_PUBLIC_SITE_URL"),
+    read("server/actions/team.ts").includes("buildInvitationLink"),
+    "la creación de invitaciones debe usar el constructor de enlaces"
+  );
+  assert(
+    authAction.includes("NEXT_PUBLIC_SITE_URL") && inviteLink.includes("NEXT_PUBLIC_SITE_URL"),
     "NEXT_PUBLIC_SITE_URL debe seguir construyendo enlaces (reset, invitaciones)"
   );
 });

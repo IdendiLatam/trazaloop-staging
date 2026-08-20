@@ -324,7 +324,7 @@ async function main() {
     assert(has(r.body, "Gestión de la calidad"), "falta el primer proceso");
     assert(has(r.body, "Producción"), "falta el segundo proceso");
     assert(has(r.body, "Propietario: Director de Calidad"), "no se incrustó el cargo propietario");
-    assert(has(r.body, "De gestión del sistema"), "no se tradujo la categoría");
+    assert(has(r.body, "Sistema"), "no se muestra el nombre de la categoría");
   });
 
   await check("4. El detalle reúne propósito, entradas, salidas, relaciones y documento", async () => {
@@ -341,7 +341,7 @@ async function main() {
   await check("5. /quality/map agrupa los procesos por categoría", async () => {
     const r = await get(BASE_ON, "/quality/map", cookie);
     assert(r.status === 200, `esperaba 200, fue ${r.status}`);
-    assert(has(r.body, "De gestión del sistema"), "falta la banda de sistema");
+    assert(has(r.body, "Sistema"), "falta la banda de sistema");
     assert(has(r.body, "Misionales"), "falta la banda misional");
     assert(has(r.body, "Gestión de la calidad") && has(r.body, "Producción"), "faltan bloques del mapa");
     assert(has(r.body, "Publicar mapa"), "un admin debía poder publicar");

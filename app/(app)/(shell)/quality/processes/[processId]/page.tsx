@@ -15,8 +15,8 @@ import {
   listQualityCategories,
   listQualityPositions,
   listQualityProcesses,
-  listTrazadocsForQuality,
 } from "@/lib/db/quality-processes";
+import { listDocumentsLinkableFromQuality } from "@/lib/db/quality-documents";
 import { canPublishQuality } from "@/lib/domain/quality-processes";
 import { QualityProcessDetailView } from "@/components/domain/quality/process-detail";
 
@@ -40,7 +40,7 @@ export default async function QualityProcessPage({
     listQualityPositions(org.organizationId),
     listQualityCategories(),
     listQualityProcesses(org.organizationId),
-    listTrazadocsForQuality(org.organizationId),
+    listDocumentsLinkableFromQuality(org.organizationId),
   ]);
 
   const shownRevision = revision

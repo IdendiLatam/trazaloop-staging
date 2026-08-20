@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireQualityForAction } from "@/lib/auth/require-quality-module";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
+import { getQualityPositionUsage } from "@/lib/db/quality-processes";
 import {
   QUALITY_ASSIGNMENT_TYPES,
   QUALITY_DOCUMENT_RELATIONS,
@@ -156,6 +157,73 @@ export async function updateQualityPosition(
 
   revalidatePath(PATH_POSITIONS);
   return OK;
+}
+
+/**
+ * Elimina el cargo si no ha dejado rastro; si ya se usa, lo DESACTIVA.
+ *
+ * Un cargo en uso no se borra: sus procesos y su historial de asignaciones son
+ * la respuesta a "quién respondía por esto el 14 de marzo", y destruirlos sería
+ * exactamente lo que T-02 quiere evitar. Pero un cargo recién creado por error
+ * no debería quedarse para siempre en la lista.
+ *
+ * La decisión se toma leyendo el uso real, no adivinando: y aunque esa lectura
+ * fallara, las FK ON DELETE RESTRICT de 0112 impedirían el borrado igualmente.
+ * El resultado dice cuál de las dos cosas ocurrió, para poder contárselo a la
+ * persona en lugar de dejarla suponiendo.
+ */
+export type PositionRemovalOutcome =
+  | { error: null; outcome: "deleted" }
+  | { error: null; outcome: "deactivated"; processes: number; assignments: number }
+  | { error: string; outcome: null };
+
+export async function removeQualityPosition(positionId: string): Promise<PositionRemovalOutcome> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error ?? QUALITY_ERRORS.generic, outcome: null };
+  if (!canManagePositions(g.ok.roleCode)) {
+    return { error: "Solo la administración o el área de calidad gestionan los cargos.", outcome: null };
+  }
+
+  // Comparación explícita con null, no comprobación de veracidad: `string`
+  // incluye la cadena vacía, así que `if (id.error)` no estrecha el tipo y
+  // `id.value` seguiría siendo `string | null`.
+  const id = validateUuid(positionId, "cargo");
+  if (id.error !== null) return { error: id.error, outcome: null };
+
+  const usage = await getQualityPositionUsage(g.ok.organizationId, id.value);
+  const supabase = await createServerClient();
+
+  if (usage.isDeletable) {
+    const { error } = await supabase
+      .from("quality_positions")
+      .delete()
+      .eq("id", id.value)
+      .eq("organization_id", g.ok.organizationId);
+    if (!error) {
+      revalidatePath(PATH_POSITIONS);
+      return { error: null, outcome: "deleted" };
+    }
+    // 23503 = violación de clave foránea. Significa que apareció una
+    // referencia entre la lectura y el borrado: se desactiva, como si el uso
+    // se hubiera detectado antes.
+    if (error.code !== "23503") return { error: safeError(error), outcome: null };
+  }
+
+  const { error } = await supabase
+    .from("quality_positions")
+    .update({ is_active: false })
+    .eq("id", id.value)
+    .eq("organization_id", g.ok.organizationId);
+  if (error) return { error: safeError(error), outcome: null };
+
+  revalidatePath(PATH_POSITIONS);
+  revalidatePath(PATH_PROCESSES);
+  return {
+    error: null,
+    outcome: "deactivated",
+    processes: usage.processes,
+    assignments: usage.assignments,
+  };
 }
 
 export type QualityAssignmentInput = {

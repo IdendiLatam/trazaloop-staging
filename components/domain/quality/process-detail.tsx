@@ -106,6 +106,14 @@ type Detail = {
 const inputClass =
   "block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-loop";
 
+/** Módulo de origen de un documento vinculable, para que quede claro que
+ *  asociarlo no lo mueve a Quality: sigue viviendo donde nació. */
+const MODULE_ORIGIN_LABEL: Record<string, string> = {
+  cpr: "PCR",
+  textiles: "Textiles",
+  quality: "Quality",
+};
+
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
@@ -132,7 +140,8 @@ export function QualityProcessDetailView({
   positions: { id: string; name: string }[];
   categories: { code: string; name: string }[];
   otherProcesses: { id: string; name: string }[];
-  availableDocuments: { id: string; title: string; code: string | null; status: string }[];
+  /** Documentos vinculables: de CUALQUIER módulo de la misma empresa. */
+  availableDocuments: { id: string; title: string; code: string | null; status: string; moduleKey: string }[];
   canPublish: boolean;
 }) {
   const router = useRouter();
@@ -679,6 +688,7 @@ export function QualityProcessDetailView({
                   <option key={d.id} value={d.id}>
                     {d.title}
                     {d.code ? ` (${d.code})` : ""}
+                    {d.moduleKey !== "quality" ? ` — de ${MODULE_ORIGIN_LABEL[d.moduleKey] ?? d.moduleKey}` : ""}
                   </option>
                 ))}
               </select>
@@ -709,9 +719,11 @@ export function QualityProcessDetailView({
           </Button>
         ) : (
           <p className="text-xs text-ink-soft">
-            No hay documentos disponibles.{" "}
-            <Link href="/trazadocs/new" className="text-loop hover:underline">
-              Crea uno en TrazaDocs
+            Todavía no hay documentos en la empresa.{" "}
+            {/* El destino es Documentos de QUALITY, no TrazaDocs de PCR: una
+                empresa que solo tenga Quality no puede entrar allí. */}
+            <Link href="/quality/documents" className="text-loop hover:underline">
+              Crea el primero en Documentos
             </Link>{" "}
             y vuelve para asociarlo.
           </p>

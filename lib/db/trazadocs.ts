@@ -64,7 +64,7 @@ function mapSummaryRow(r: Record<string, unknown>): DocumentSummaryRow {
 // T8: los listados/consultas filtran por module_key ('cpr' por defecto —
 // comportamiento CPR intacto; TrazaDocs Textil pasa 'textiles'). Es la
 // separación documental entre módulos del encargo T8 §9.
-export type TrazadocModuleKey = "cpr" | "textiles";
+export type TrazadocModuleKey = "cpr" | "textiles" | "quality";
 
 export async function listDocuments(
   orgId: string,

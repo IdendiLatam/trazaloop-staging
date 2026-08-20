@@ -339,6 +339,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

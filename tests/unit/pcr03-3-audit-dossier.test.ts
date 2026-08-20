@@ -23,7 +23,11 @@ import type { GenealogyGraph } from "../../lib/domain/genealogy";
 // Migraciones autorizadas a partir de 0111. Cada sprint que añade una
 // migración la declara aquí: es lo que impide que aparezca una migración
 // no revisada sin que ninguna prueba se entere.
-const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+const QUALITY_01_ALLOWED = new Set([
+  "0111_platform_role_privileges.sql",
+  "0112_quality_process_foundation.sql",
+  "0113_quality_documents_and_position_lifecycle.sql",
+]);
 
 const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");

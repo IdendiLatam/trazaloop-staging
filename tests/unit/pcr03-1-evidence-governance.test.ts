@@ -29,7 +29,11 @@ import {
 // Migraciones autorizadas a partir de 0111. Cada sprint que añade una
 // migración la declara aquí: es lo que impide que aparezca una migración
 // no revisada sin que ninguna prueba se entere.
-const QUALITY_01_ALLOWED = new Set(["0111_platform_role_privileges.sql", "0112_quality_process_foundation.sql"]);
+const QUALITY_01_ALLOWED = new Set([
+  "0111_platform_role_privileges.sql",
+  "0112_quality_process_foundation.sql",
+  "0113_quality_documents_and_position_lifecycle.sql",
+]);
 
 const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -121,6 +125,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0111_platform_role_privileges.sql",
     // QUALITY-01: fundación de Procesos de Trazaloop Quality.
     "0112_quality_process_foundation.sql",
+    // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
+    "0113_quality_documents_and_position_lifecycle.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

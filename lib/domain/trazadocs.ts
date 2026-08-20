@@ -318,7 +318,18 @@ export type TrustedDocumentInsert = {
   description: string | null;
   owner_id: string | null;
   category_code: CategoryCode;
+  /**
+   * Módulo dueño del documento. Solo lo declara un documento LIBRE: cuando
+   * nace de una estructura base, el trigger de 0082 lo hereda del blueprint e
+   * ignora lo que venga aquí. Lo fija SIEMPRE la server action en servidor —
+   * jamás el cliente— y en UPDATE es inmutable, así que un documento nunca
+   * cruza de módulo.
+   */
+  module_key?: TrazadocDocumentModule;
 };
+
+/** Módulos que pueden ser dueños de un documento (espejo de la CHECK de 0113). */
+export type TrazadocDocumentModule = "cpr" | "textiles" | "quality";
 
 /**
  * Arma el payload de creación de un documento. NUNCA declara

@@ -102,6 +102,19 @@ export default async function QualityHomePage() {
           }
           cta="Ver el mapa"
         />
+
+        <Card
+          href="/quality/documents"
+          step="Documentación"
+          title="Documentos"
+          description="El espacio documental de Quality: procedimientos, políticas e instructivos, con los mismos estados y versiones de TrazaDocs. No necesita ningún otro módulo."
+          meta={
+            summary.documents === 0
+              ? "Aún no hay documentos de Quality."
+              : `${summary.documents} ${summary.documents === 1 ? "documento" : "documentos"} de Quality.`
+          }
+          cta="Ir a Documentos"
+        />
       </section>
 
       <section className="rounded-lg border border-hairline bg-surface p-4">
