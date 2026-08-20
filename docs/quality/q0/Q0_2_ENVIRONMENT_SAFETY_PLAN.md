@@ -759,3 +759,49 @@ npm run precheck:env -- --env=production --expect-project-ref=mvmpadeixomwkpxbnh
 - **Cero** commits, **cero** push.
 - **Cero** comandos de §13 ejecutados.
 - Todo el trabajo de este sprint fue **lectura del repositorio** para fundamentar el plan.
+
+---
+
+# Addendum Q0.4 — una suposición de este plan resultó falsa
+
+**Fecha:** 2026-08-19 · **Documento completo:** `Q0_4_STAGING_ENVIRONMENT_VALIDATION.md`
+**El texto original de este plan se conserva íntegro.**
+
+## La suposición incorrecta
+
+Este plan afirma en §1.1 y §2 que `dtrxxqmdweykzncfmahc` es un **«proyecto retirado»** que «ya no
+existe» y que «no debe considerarse una dependencia válida», apoyándose en la conclusión de Q0.1.
+
+**Es incorrecto.** El proyecto existe: es `trazaloop-staging`, en estado **`INACTIVE`** (pausado),
+región `ca-central-1`, PostgreSQL 17.6.1.141. Supabase pausa por inactividad los proyectos del
+plan gratuito y les retira el DNS — que fue justo la evidencia que me llevó a darlo por eliminado.
+Confundí *pausado* con *eliminado*.
+
+La conclusión práctica del plan **se sostiene**: `.env.local` apuntaba a un proyecto no operativo y
+el desarrollo local estaba roto. Lo que estaba mal era la causa, y con ella dos consecuencias:
+
+- existía ya un proyecto de staging que **podría haberse reactivado** desde el panel, en lugar de
+  crear uno nuevo;
+- la organización tenía **tres** proyectos, no dos.
+
+## Lo que Q0.4 hizo en su lugar, y por qué
+
+Se creó un proyecto nuevo, `trazaloop-staging-qa` (`qchzkxbnbqeyuxinipln`), en lugar de reactivar
+el pausado, por tres razones concretas:
+
+1. el CLI **no tiene subcomando de restauración**: reactivar exige el panel, una acción humana;
+2. el pausado está en `ca-central-1`, y este plan pide la **misma región que producción**;
+3. este plan exige que staging **nazca sin datos**, y el proyecto pausado conserva lo que tuviera.
+
+Queda como **decisión humana** qué hacer con el proyecto pausado: eliminarlo, renombrarlo para
+deshacer la ambigüedad de nombres, o dejarlo como está. Ver `Q0_4` §21.
+
+## Suposiciones de este plan que sí se confirmaron
+
+- **§4.5 · El riesgo de *ownership* en `storage.objects`.** Era la incógnita técnica que
+  justificaba exigir staging. En un proyecto gestionado real **no se materializó**: las 9 políticas
+  se crearon sin un solo error. La precaución era correcta; el riesgo, menor de lo temido.
+- **§5.3 · Staging sin datos de clientes.** Cumplido: solo datos sintéticos generados con
+  `seed-demo.ts`.
+- **§9 · Guardrails.** El repositorio quedó **desvinculado** y toda operación remota exige
+  `--project-ref` explícito.

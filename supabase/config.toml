@@ -2,8 +2,9 @@
 #
 # Identidad LOCAL y desechable. No contiene secretos: las claves locales las
 # genera `supabase start` en cada arranque y son de desarrollo.
-# El project ref de Production (mvmpadeixomwkpxbnhky) NO aparece aquí y este
-# archivo NO vincula ningún proyecto remoto.
+# Este archivo NO vincula ningún proyecto remoto: el vínculo del CLI vive en
+# supabase/.temp/, que está en .gitignore. Ningún project ref remoto se declara
+# aquí.
 
 project_id = "trazaloop-local"
 
