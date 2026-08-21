@@ -93,22 +93,20 @@ el entorno de Staging antes de correr el recorrido.
 
 ## 4. Preview
 
-Despliegue del commit final `0cf6486`:
-
-```
-https://trazaloop-production-7fxb1qwll-idendi-latam-s-projects.vercel.app
-```
-
-Alias de rama, que siempre apunta al último despliegue de
-`feature/quality-02-document-control` y es el enlace que conviene usar:
+**Enlace canónico** — el alias de rama, que siempre apunta al último despliegue
+de `feature/quality-02-document-control`:
 
 ```
 https://trazaloop-production-git-feature-93345d-idendi-latam-s-projects.vercel.app
 ```
 
+Es el que hay que usar. Vercel crea además una URL inmutable por despliegue
+(`…-cm89vfi9c-…`, `…-7fxb1qwll-…`, `…-fb18rin60-…`), pero cambia con cada
+commit —incluidos los que solo tocan este documento—, así que fijar una aquí no
+podría ser cierto por mucho tiempo. El alias no tiene ese problema.
+
 Estado **Ready**, `target: preview`, construido automáticamente por la
-integración de Git al empujar la rama. (El despliegue anterior,
-`cm89vfi9c`, correspondía a `0f40d2b`, un commit atrás.)
+integración de Git al empujar la rama.
 
 `QUALITY_MODULE_ENABLED` está definida en el entorno **Preview** (variable
 sensible, valor no legible desde el CLI). No se creó ni se modificó ninguna
