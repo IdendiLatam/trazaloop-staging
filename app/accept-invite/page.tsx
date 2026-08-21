@@ -16,9 +16,9 @@ import { Wordmark } from "@/components/layout/logo";
 export default async function AcceptInvitePage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; return_to?: string }>;
 }) {
-  const { token } = await searchParams;
+  const { token, return_to: returnTo } = await searchParams;
 
   const shell = (children: React.ReactNode) => (
     <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-6 p-6">
@@ -43,7 +43,12 @@ export default async function AcceptInvitePage({
   // 4 y 5 de la corrección de onboarding): así, tras iniciar sesión o
   // crear la cuenta, la persona vuelve directo aquí en vez de terminar en
   // "crear empresa".
-  const returnHere = `/accept-invite?token=${encodeURIComponent(token)}`;
+  // QUALITY-01.2: el `return_to` del enlace viaja con el destino de vuelta,
+  // para que no se pierda al pasar por login o registro. Aquí no se valida:
+  // quien decide si vale es el servidor, al aceptar.
+  const returnHere =
+    `/accept-invite?token=${encodeURIComponent(token)}` +
+    (returnTo ? `&return_to=${encodeURIComponent(returnTo)}` : "");
 
   const supabase = await createServerClient();
   const {
@@ -133,7 +138,7 @@ export default async function AcceptInvitePage({
           administrador de la empresa que envíe una nueva.
         </p>
       ) : (
-        <AcceptInviteForm token={token} />
+        <AcceptInviteForm token={token} returnTo={returnTo ?? null} />
       )}
     </div>
   );

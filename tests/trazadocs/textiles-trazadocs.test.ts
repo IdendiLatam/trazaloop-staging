@@ -7,6 +7,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { SHELL_MODULE_KEYS } from "../../lib/modules/registry";
 
 const root = process.cwd();
 let passed = 0;
@@ -194,7 +195,18 @@ check("12. Separación en capa de datos: default 'cpr' preserva CPR; envolturas 
   // QUALITY-01.1 añadió el tercer módulo al motor transversal. La exigencia de
   // esta prueba no cambia —el default sigue siendo 'cpr' y cada consulta filtra
   // por módulo, así que CPR y Textiles no se mezclan— y ahora cubre a Quality.
-  assert(dbShared.includes(`export type TrazadocModuleKey = "cpr" | "textiles" | "quality";`), "faltó el tipo TrazadocModuleKey");
+  // QUALITY-01.2 · La lista de módulos dejó de repetirse en cada archivo: el
+  // tipo se DERIVA del registro de módulos (lib/modules/registry). La exigencia
+  // sigue siendo la misma —CPR por defecto, cada consulta filtrada— y además se
+  // comprueba que el registro incluya de verdad los tres módulos, para que
+  // derivarlo no afloje nada.
+  assert(dbShared.includes(`export type TrazadocModuleKey = TrazadocDocumentModule;`), "faltó el tipo TrazadocModuleKey");
+  for (const key of ["cpr", "textiles", "quality"]) {
+    assert(
+      (SHELL_MODULE_KEYS as readonly string[]).includes(key),
+      `el registro de módulos debía incluir '${key}'`
+    );
+  }
   for (const fn of ["listDocuments", "getDocument", "listAvailableBlueprints", "getBlueprintByIdForCompany", "findDocumentByNormalizedTitle"]) {
     const idx = dbShared.indexOf(`export async function ${fn}`);
     assert(idx >= 0, `faltó ${fn}`);

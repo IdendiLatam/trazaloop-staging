@@ -283,19 +283,24 @@ export type MapNodeLike = {
   sortOrder: number;
 };
 
-export type MapCategoryBand = {
+export type MapCategoryBand<T extends MapNodeLike = MapNodeLike> = {
   categoryCode: string;
   label: string;
-  nodes: MapNodeLike[];
+  nodes: T[];
 };
 
 /**
  * Ordena los nodos en bandas por categoría, en el orden de lectura del mapa.
  * Las categorías propias de la empresa (fuera del catálogo base) se muestran
  * después de las cuatro base, alfabéticamente, en lugar de desaparecer.
+ *
+ * Genérica (QUALITY-01.2) para que el dibujo del mapa conserve el código, el
+ * estado y el cargo propietario de cada bloque en vez de perderlos aquí.
  */
-export function groupMapNodesByCategory(nodes: readonly MapNodeLike[]): MapCategoryBand[] {
-  const byCategory = new Map<string, MapNodeLike[]>();
+export function groupMapNodesByCategory<T extends MapNodeLike>(
+  nodes: readonly T[]
+): MapCategoryBand<T>[] {
+  const byCategory = new Map<string, T[]>();
   for (const node of nodes) {
     const list = byCategory.get(node.categoryCode) ?? [];
     list.push(node);
@@ -330,11 +335,21 @@ export type InteractionLike = {
   description: string | null;
 };
 
-/** Separa las interacciones de un proceso en las que salen y las que entran. */
-export function splitInteractions(
+/**
+ * Separa las relaciones de un proceso en las que SALEN y las que ENTRAN.
+ *
+ * Es la función que hace posible la promesa del modelo: una sola fila leída
+ * desde sus dos extremos. «Recibe de» no es un registro distinto de «entrega
+ * a» — es la MISMA relación mirada desde el otro lado.
+ *
+ * Genérica a propósito (QUALITY-01.2): quien la llama conserva los campos
+ * añadidos —la salida de origen y la entrada de destino— en lugar de perderlos
+ * al estrecharse a InteractionLike.
+ */
+export function splitInteractions<T extends InteractionLike>(
   processId: string,
-  interactions: readonly InteractionLike[]
-): { outgoing: InteractionLike[]; incoming: InteractionLike[] } {
+  interactions: readonly T[]
+): { outgoing: T[]; incoming: T[] } {
   return {
     outgoing: interactions.filter((i) => i.sourceProcessId === processId),
     incoming: interactions.filter((i) => i.targetProcessId === processId),

@@ -8,6 +8,7 @@ import {
   getRoleInOrganization,
 } from "@/lib/db/organizations";
 import { toSafeOrgCreationError } from "@/lib/domain/platform";
+import { MODULE_SELECTOR_PATH } from "@/lib/domain/team";
 import { assertMyLegalAcceptance } from "@/server/actions/legal";
 import { LEGAL_ACCEPTANCE_REQUIRED_MESSAGE } from "@/lib/domain/legal";
 
@@ -79,7 +80,12 @@ export async function selectActiveOrganizationAction(formData: FormData) {
   }
 
   await writeActiveOrgCookie(organizationId);
-  redirect("/dashboard");
+  // QUALITY-01.2 · Elegir empresa es una operación TRANSVERSAL: el destino es
+  // el selector de módulos, no la portada de PCR. Una empresa que no tenga PCR
+  // contratado terminaba aquí en un módulo al que no podía entrar, y el guard
+  // la devolvía al selector — dando un rebote en vez de una navegación.
+  // Es la misma regla que ya aplica postAuthDestinationPath tras el login.
+  redirect(MODULE_SELECTOR_PATH);
 }
 
 /** Organizaciones del usuario (para UI de selección). */

@@ -13,6 +13,7 @@ import {
   updateDocumentMetadata,
 } from "@/lib/db/trazadocs";
 import { getQualityDocument, QUALITY_DOC_MODULE } from "@/lib/db/quality-documents";
+import { isQualityDocumentCategory } from "@/lib/domain/quality-documents";
 import {
   buildInitialVersionSnapshot,
   canCreateDocument,
@@ -98,9 +99,7 @@ export async function createQualityDocumentAction(
   const code = String(formData.get("code") ?? "").trim() || null;
   const description = String(formData.get("description") ?? "").trim() || null;
   const rawCategory = String(formData.get("category_code") ?? "procedure");
-  const category = QUALITY_DOCUMENT_CATEGORIES.includes(rawCategory as never)
-    ? (rawCategory as (typeof QUALITY_DOCUMENT_CATEGORIES)[number])
-    : "other";
+  const category = isQualityDocumentCategory(rawCategory) ? rawCategory : "other";
 
   const { id, error } = await insertDocument(g.ok.organizationId, {
     source_type: "custom",
@@ -135,16 +134,6 @@ export async function createQualityDocumentAction(
   revalidateDocs(id);
   return { error: null, success: true, documentId: id };
 }
-
-export const QUALITY_DOCUMENT_CATEGORIES = [
-  "manual",
-  "procedure",
-  "instruction",
-  "record",
-  "policy",
-  "format",
-  "other",
-] as const;
 
 // ---------------------------------------------------------------------------
 // Editar

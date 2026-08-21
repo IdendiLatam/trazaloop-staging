@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QualityMapCanvas } from "@/components/domain/quality/map-canvas";
 import {
   QUALITY_REVISION_STATUS_LABEL,
   canEditRevision,
@@ -49,6 +50,16 @@ type NodeRow = {
   sortOrder: number;
 };
 
+type EdgeRow = {
+  id: string;
+  sourceProcessId: string;
+  targetProcessId: string;
+  sourceOutputName: string | null;
+  targetInputName: string | null;
+  informationItem: string | null;
+  frozen: boolean;
+};
+
 type Detail = {
   map: MapRow;
   versions: VersionRow[];
@@ -56,6 +67,7 @@ type Detail = {
   draftVersion: VersionRow | null;
   shownVersion: VersionRow | null;
   nodes: NodeRow[];
+  edges: EdgeRow[];
 };
 
 const inputClass =
@@ -147,12 +159,15 @@ export function QualityMapView({
     );
   }
 
-  const { map, versions, publishedVersion, draftVersion, shownVersion, nodes } = detail;
+  const { map, versions, publishedVersion, draftVersion, shownVersion, nodes, edges } = detail;
   const editable = shownVersion !== null && canEditRevision(shownVersion.status);
   const bands = groupMapNodesByCategory(
     nodes.map((n) => ({
       processId: n.processId,
       processName: n.processName,
+      processCode: n.processCode,
+      processStatus: n.processStatus,
+      ownerPositionName: n.ownerPositionName,
       categoryCode: n.categoryCode,
       sortOrder: n.sortOrder,
     }))
@@ -230,28 +245,37 @@ export function QualityMapView({
           description="Coloca procesos en el mapa para poder publicarlo. Un mapa sin procesos no dice nada."
         />
       ) : (
-        <div className="space-y-3">
-          {bands.map((band) => (
-            <section key={band.categoryCode} className="rounded-lg border border-hairline bg-surface p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-                {band.label}
-              </h2>
-              <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {band.nodes.map((n) => {
-                  const node = nodeByProcess.get(n.processId)!;
-                  return (
-                    <li key={n.processId} className="rounded-md border border-loop/30 bg-loop/5 p-3">
-                      <Link
-                        href={`/quality/processes/${n.processId}`}
-                        className="text-sm font-medium text-loop hover:underline"
-                      >
-                        {n.processName}
-                      </Link>
-                      <p className="mt-0.5 text-[11px] text-ink-soft">
-                        {node.processCode ? `${node.processCode} · ` : ""}
-                        {node.ownerPositionName ?? "Sin cargo propietario"}
-                      </p>
-                      {editable ? (
+        <div className="space-y-4">
+          {/* QUALITY-01.2 · El mapa dibujado: bandas por categoría MÁS el flujo
+              real, derivado de las relaciones ya registradas en cada proceso. */}
+          <QualityMapCanvas
+            bands={bands}
+            nodes={bands.flatMap((b) => b.nodes)}
+            edges={edges}
+            frozen={shownVersion?.status !== "draft"}
+          />
+
+          {/* Gestión de los bloques: sacar un proceso del mapa solo tiene
+              sentido en el borrador, y ahí conviene una lista, no el dibujo. */}
+          {editable ? (
+            <section className="space-y-2 rounded-lg border border-hairline bg-surface p-4">
+              <h2 className="text-sm font-semibold">Procesos colocados</h2>
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {bands.flatMap((band) =>
+                  band.nodes.map((n) => {
+                    const node = nodeByProcess.get(n.processId)!;
+                    return (
+                      <li key={n.processId} className="rounded-md border border-hairline bg-paper p-3">
+                        <Link
+                          href={`/quality/processes/${n.processId}`}
+                          className="text-sm font-medium text-loop hover:underline"
+                        >
+                          {n.processName}
+                        </Link>
+                        <p className="mt-0.5 text-[11px] text-ink-soft">
+                          {band.label}
+                          {node.processCode ? ` · ${node.processCode}` : ""}
+                        </p>
                         <button
                           type="button"
                           disabled={pending}
@@ -260,13 +284,13 @@ export function QualityMapView({
                         >
                           Quitar del mapa
                         </button>
-                      ) : null}
-                    </li>
-                  );
-                })}
+                      </li>
+                    );
+                  })
+                )}
               </ul>
             </section>
-          ))}
+          ) : null}
         </div>
       )}
 

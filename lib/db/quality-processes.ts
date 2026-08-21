@@ -322,12 +322,24 @@ export type QualityIoRow = {
   sortOrder: number;
 };
 
+/**
+ * Una relación entre procesos, con sus CUATRO extremos resueltos.
+ *
+ * QUALITY-01.2: hasta ahora solo se leían los procesos y el texto del ítem, de
+ * modo que la pantalla podía decir «Compras → Producción» pero no «la salida
+ * *Materia prima aprobada* alimenta la entrada *Materia prima*». La relación
+ * sigue siendo UNA fila: esto solo la lee entera.
+ */
 export type QualityInteractionRow = {
   id: string;
   sourceProcessId: string;
   sourceProcessName: string;
   targetProcessId: string;
   targetProcessName: string;
+  sourceOutputId: string | null;
+  sourceOutputName: string | null;
+  targetInputId: string | null;
+  targetInputName: string | null;
   informationItem: string | null;
   description: string | null;
 };
@@ -338,7 +350,12 @@ export type QualityProcessDocumentRow = {
   documentTitle: string;
   documentCode: string | null;
   documentStatus: string;
+  /** Módulo de ORIGEN del documento: define en qué ruta se abre. */
+  documentModuleKey: string;
   relationType: string;
+  /** NULL = el documento aplica al proceso entero; con valor = a esa
+   *  entrada o salida concreta (0114). */
+  ioId: string | null;
 };
 
 export type QualityProcessDetail = {
@@ -402,7 +419,11 @@ export async function getQualityProcessDetail(
     supabase
       .from("quality_process_interactions")
       .select(
-        "id, source_process_id, target_process_id, information_item, description, source:quality_processes!quality_process_interactions_source_fk(name), target:quality_processes!quality_process_interactions_target_fk(name)"
+        "id, source_process_id, target_process_id, source_output_id, target_input_id, information_item, description, " +
+          "source:quality_processes!quality_process_interactions_source_fk(name), " +
+          "target:quality_processes!quality_process_interactions_target_fk(name), " +
+          "output:quality_process_io!quality_process_interactions_output_fk(name), " +
+          "input:quality_process_io!quality_process_interactions_input_fk(name)"
       )
       .eq("organization_id", organizationId)
       .or(`source_process_id.eq.${processId},target_process_id.eq.${processId}`)
@@ -410,7 +431,7 @@ export async function getQualityProcessDetail(
     supabase
       .from("quality_process_documents")
       .select(
-        "id, document_id, relation_type, trazadoc_documents!quality_process_documents_document_fk(title, code, status)"
+        "id, document_id, relation_type, io_id, trazadoc_documents!quality_process_documents_document_fk(title, code, status, module_key)"
       )
       .eq("organization_id", organizationId)
       .eq("process_id", processId),
@@ -449,25 +470,39 @@ export async function getQualityProcessDetail(
     }));
   }
 
-  const interactions: QualityInteractionRow[] = (interactionsRes.data ?? []).map((r) => {
+  if (interactionsRes.error) reportQueryFailure("getQualityProcessDetail/interactions", interactionsRes.error);
+  if (documentsRes.error) reportQueryFailure("getQualityProcessDetail/documents", documentsRes.error);
+
+  const interactions: QualityInteractionRow[] = (
+    (interactionsRes.data ?? []) as unknown as Record<string, unknown>[]
+  ).map((r) => {
     const src = (r.source ?? null) as { name?: string | null } | null;
     const tgt = (r.target ?? null) as { name?: string | null } | null;
+    const out = (r.output ?? null) as { name?: string | null } | null;
+    const inp = (r.input ?? null) as { name?: string | null } | null;
     return {
       id: r.id as string,
       sourceProcessId: r.source_process_id as string,
       sourceProcessName: src?.name ?? "—",
       targetProcessId: r.target_process_id as string,
       targetProcessName: tgt?.name ?? "—",
+      sourceOutputId: (r.source_output_id as string | null) ?? null,
+      sourceOutputName: out?.name ?? null,
+      targetInputId: (r.target_input_id as string | null) ?? null,
+      targetInputName: inp?.name ?? null,
       informationItem: (r.information_item as string | null) ?? null,
       description: (r.description as string | null) ?? null,
     };
   });
 
-  const documents: QualityProcessDocumentRow[] = (documentsRes.data ?? []).map((r) => {
+  const documents: QualityProcessDocumentRow[] = (
+    (documentsRes.data ?? []) as unknown as Record<string, unknown>[]
+  ).map((r) => {
     const d = (r.trazadoc_documents ?? null) as {
       title?: string | null;
       code?: string | null;
       status?: string | null;
+      module_key?: string | null;
     } | null;
     return {
       id: r.id as string,
@@ -475,7 +510,9 @@ export async function getQualityProcessDetail(
       documentTitle: d?.title ?? "Documento",
       documentCode: d?.code ?? null,
       documentStatus: d?.status ?? "draft",
+      documentModuleKey: d?.module_key ?? "cpr",
       relationType: r.relation_type as string,
+      ioId: (r.io_id as string | null) ?? null,
     };
   });
 
@@ -499,66 +536,113 @@ export async function getQualityProcessDetail(
   };
 }
 
-/** Salidas de un proceso y entradas de otro, para construir una interacción. */
-export async function listIoForInteraction(
-  organizationId: string,
-  processId: string,
-  direction: "input" | "output"
-): Promise<QualityIoRow[]> {
-  const supabase = await createServerClient();
-  const { data: rev } = await supabase
-    .from("quality_process_revisions")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("process_id", processId)
-    .order("revision_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!rev) return [];
-  const { data } = await supabase
-    .from("quality_process_io")
-    .select("id, revision_id, direction, name, description, io_kind, sort_order")
-    .eq("organization_id", organizationId)
-    .eq("revision_id", rev.id as string)
-    .eq("direction", direction)
-    .order("sort_order", { ascending: true });
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    revisionId: r.revision_id as string,
-    direction: r.direction as string,
-    name: r.name as string,
-    description: (r.description as string | null) ?? null,
-    ioKind: r.io_kind as string,
-    sortOrder: Number(r.sort_order ?? 0),
-  }));
-}
-
-/** Documentos de TrazaDocs de la empresa, para asociarlos a un proceso. */
-export type TrazadocOption = {
+/**
+ * QUALITY-01.2 · Catálogo de entradas y salidas VIGENTES de todos los procesos
+ * de la empresa.
+ *
+ * Es lo que hace posible crear una relación desde cualquiera de sus dos
+ * extremos: para decir «este proceso RECIBE DE Compras» hay que poder elegir
+ * una salida de Compras, y para decir «ENTREGA A Despachos» hay que poder
+ * elegir una entrada de Despachos.
+ *
+ * «Vigente» significa el borrador abierto si lo hay y, si no, la revisión
+ * publicada en curso — la misma regla con la que la ficha del proceso decide
+ * qué revisión muestra por defecto. Se resuelve en dos consultas para toda la
+ * empresa, no una por proceso.
+ */
+export type QualityIoOption = {
   id: string;
-  title: string;
-  code: string | null;
-  status: string;
+  name: string;
+  ioKind: string;
+  sortOrder: number;
 };
 
-export async function listTrazadocsForQuality(organizationId: string): Promise<TrazadocOption[]> {
+export type QualityProcessIoCatalogEntry = {
+  processId: string;
+  processName: string;
+  processCode: string | null;
+  processStatus: string;
+  categoryCode: string;
+  /** null cuando el proceso todavía no tiene ninguna revisión. */
+  revisionId: string | null;
+  inputs: QualityIoOption[];
+  outputs: QualityIoOption[];
+};
+
+export async function listQualityProcessIoCatalog(
+  organizationId: string
+): Promise<QualityProcessIoCatalogEntry[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("trazadoc_documents")
-    .select("id, title, code, status")
-    .eq("organization_id", organizationId)
-    .neq("status", "obsolete")
-    .order("title", { ascending: true });
-  if (error || !data) {
-    reportQueryFailure("listTrazadocsForQuality", error);
+
+  const [processesRes, revisionsRes] = await Promise.all([
+    supabase
+      .from("quality_processes")
+      .select("id, code, name, category_code, status")
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true }),
+    supabase
+      .from("quality_process_revisions")
+      .select("id, process_id, status, effective_to, revision_number")
+      .eq("organization_id", organizationId)
+      .in("status", ["draft", "published"])
+      .order("revision_number", { ascending: false }),
+  ]);
+
+  if (processesRes.error || !processesRes.data) {
+    reportQueryFailure("listQualityProcessIoCatalog/processes", processesRes.error);
     return [];
   }
-  return data.map((r) => ({
-    id: r.id as string,
-    title: r.title as string,
-    code: (r.code as string | null) ?? null,
-    status: r.status as string,
-  }));
+  if (revisionsRes.error) reportQueryFailure("listQualityProcessIoCatalog/revisions", revisionsRes.error);
+
+  // Borrador si lo hay; si no, la publicada vigente.
+  const revisionByProcess = new Map<string, string>();
+  for (const r of revisionsRes.data ?? []) {
+    const pid = r.process_id as string;
+    const isDraft = r.status === "draft";
+    const isCurrent = r.status === "published" && r.effective_to === null;
+    if (!isDraft && !isCurrent) continue;
+    if (isDraft || !revisionByProcess.has(pid)) revisionByProcess.set(pid, r.id as string);
+  }
+
+  const revisionIds = [...revisionByProcess.values()];
+  const ioByRevision = new Map<string, { inputs: QualityIoOption[]; outputs: QualityIoOption[] }>();
+  if (revisionIds.length > 0) {
+    const { data, error } = await supabase
+      .from("quality_process_io")
+      .select("id, revision_id, direction, name, io_kind, sort_order")
+      .eq("organization_id", organizationId)
+      .in("revision_id", revisionIds)
+      .order("sort_order", { ascending: true });
+    if (error) reportQueryFailure("listQualityProcessIoCatalog/io", error);
+    for (const r of data ?? []) {
+      const key = r.revision_id as string;
+      const bucket = ioByRevision.get(key) ?? { inputs: [], outputs: [] };
+      const option: QualityIoOption = {
+        id: r.id as string,
+        name: r.name as string,
+        ioKind: r.io_kind as string,
+        sortOrder: Number(r.sort_order ?? 0),
+      };
+      if (r.direction === "input") bucket.inputs.push(option);
+      else bucket.outputs.push(option);
+      ioByRevision.set(key, bucket);
+    }
+  }
+
+  return processesRes.data.map((p) => {
+    const revisionId = revisionByProcess.get(p.id as string) ?? null;
+    const io = revisionId ? ioByRevision.get(revisionId) : undefined;
+    return {
+      processId: p.id as string,
+      processName: p.name as string,
+      processCode: (p.code as string | null) ?? null,
+      processStatus: p.status as string,
+      categoryCode: p.category_code as string,
+      revisionId,
+      inputs: io?.inputs ?? [],
+      outputs: io?.outputs ?? [],
+    };
+  });
 }
 
 /**
@@ -667,6 +751,29 @@ export type QualityMapNodeRow = {
   sortOrder: number;
 };
 
+/**
+ * Una conexión del mapa. QUALITY-01.2: el mapa deja de ser una lista de
+ * tarjetas y muestra el flujo real, y ese flujo NO se dibuja a mano — se
+ * deriva de las relaciones ya registradas en cada proceso (capture once,
+ * reuse many times).
+ *
+ * `frozen` distingue de dónde viene:
+ *   · false → borrador: se leen las relaciones VIVAS, para que el borrador
+ *     refleje lo que hay ahora mismo.
+ *   · true  → versión publicada: se lee el snapshot de 0114, que conserva
+ *     lo que el mapa mostraba el día en que se publicó.
+ */
+export type QualityMapEdgeRow = {
+  id: string;
+  sourceProcessId: string;
+  targetProcessId: string;
+  sourceOutputName: string | null;
+  targetInputName: string | null;
+  informationItem: string | null;
+  sortOrder: number;
+  frozen: boolean;
+};
+
 export type QualityMapDetail = {
   map: QualityMapRow;
   versions: QualityMapVersionRow[];
@@ -676,6 +783,7 @@ export type QualityMapDetail = {
   /** Versión que se está mostrando (y si es editable). */
   shownVersion: QualityMapVersionRow | null;
   nodes: QualityMapNodeRow[];
+  edges: QualityMapEdgeRow[];
 };
 
 function mapVersion(r: Record<string, unknown>): QualityMapVersionRow {
@@ -754,11 +862,69 @@ export async function getQualityMapDetail(
     });
   }
 
+  // Las conexiones del mapa (QUALITY-01.2). Un borrador enseña las relaciones
+  // vivas; una versión publicada, su snapshot congelado.
+  let edges: QualityMapEdgeRow[] = [];
+  if (shownVersion && nodes.length > 0) {
+    if (shownVersion.status === "draft") {
+      const inMap = new Set(nodes.map((n) => n.processId));
+      const { data, error } = await supabase
+        .from("quality_process_interactions")
+        .select(
+          "id, source_process_id, target_process_id, information_item, sort_order, " +
+            "output:quality_process_io!quality_process_interactions_output_fk(name), " +
+            "input:quality_process_io!quality_process_interactions_input_fk(name)"
+        )
+        .eq("organization_id", organizationId)
+        .order("sort_order", { ascending: true });
+      if (error) reportQueryFailure("getQualityMapDetail/liveEdges", error);
+      edges = ((data ?? []) as unknown as Record<string, unknown>[])
+        .filter(
+          (r) =>
+            inMap.has(r.source_process_id as string) && inMap.has(r.target_process_id as string)
+        )
+        .map((r) => {
+          const out = (r.output ?? null) as { name?: string | null } | null;
+          const inp = (r.input ?? null) as { name?: string | null } | null;
+          return {
+            id: r.id as string,
+            sourceProcessId: r.source_process_id as string,
+            targetProcessId: r.target_process_id as string,
+            sourceOutputName: out?.name ?? null,
+            targetInputName: inp?.name ?? null,
+            informationItem: (r.information_item as string | null) ?? null,
+            sortOrder: Number(r.sort_order ?? 0),
+            frozen: false,
+          };
+        });
+    } else {
+      const { data, error } = await supabase
+        .from("quality_process_map_edges")
+        .select(
+          "id, source_process_id, target_process_id, source_output_name, target_input_name, information_item, sort_order"
+        )
+        .eq("organization_id", organizationId)
+        .eq("map_version_id", shownVersion.id)
+        .order("sort_order", { ascending: true });
+      if (error) reportQueryFailure("getQualityMapDetail/frozenEdges", error);
+      edges = (data ?? []).map((r) => ({
+        id: r.id as string,
+        sourceProcessId: r.source_process_id as string,
+        targetProcessId: r.target_process_id as string,
+        sourceOutputName: (r.source_output_name as string | null) ?? null,
+        targetInputName: (r.target_input_name as string | null) ?? null,
+        informationItem: (r.information_item as string | null) ?? null,
+        sortOrder: Number(r.sort_order ?? 0),
+        frozen: true,
+      }));
+    }
+  }
+
   return { map: { id: m.id as string, name: m.name as string,
                   description: (m.description as string | null) ?? null,
                   isDefault: Boolean(m.is_default),
                   currentVersion: Number(m.current_version ?? 0) },
-           versions, publishedVersion, draftVersion, shownVersion, nodes };
+           versions, publishedVersion, draftVersion, shownVersion, nodes, edges };
 }
 
 /** El mapa por defecto de la empresa (el que abre /quality/map). */

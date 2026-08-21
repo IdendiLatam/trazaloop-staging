@@ -48,6 +48,7 @@ const UNIQUE_VIOLATION = "23505";
 const PATH_POSITIONS = "/quality/positions";
 const PATH_PROCESSES = "/quality/processes";
 const PATH_MAP = "/quality/map";
+const PATH_DOCUMENTS = "/quality/documents";
 
 type PgErrorLike = { code?: string; message?: string } | null;
 
@@ -609,6 +610,21 @@ export type QualityInteractionInput = {
   description?: string;
 };
 
+/**
+ * Registra la relación. Una sola fila, leíble desde ambos extremos.
+ *
+ * QUALITY-01.2 · La pantalla ofrece dos puntos de vista —«añadir proceso del
+ * que recibe» y «añadir proceso al que entrega»— y AMBOS terminan aquí con la
+ * misma estructura. La dirección estructural la fija siempre quien llama:
+ * source es el que produce, target el que consume. No existe una segunda tabla
+ * para «recibe de», ni una segunda fila: sería el mismo hecho contado dos
+ * veces, y las dos copias acabarían discrepando.
+ *
+ * Las invariantes duras las imponen 0112 y 0114 en la base: la salida
+ * pertenece al origen, la entrada al destino, ambos procesos son de la misma
+ * empresa (FK compuesta), no hay autorrelación, no hay duplicado exacto y no
+ * se relacionan procesos retirados. Aquí solo se traducen a mensajes.
+ */
 export async function relateQualityProcesses(
   input: QualityInteractionInput
 ): Promise<QualityActionState> {
@@ -626,31 +642,67 @@ export async function relateQualityProcesses(
   if (outputId.error) return { error: outputId.error };
   const inputId = validateOptionalUuid(input.targetInputId, "entrada");
   if (inputId.error) return { error: inputId.error };
-  const item = validateQualityName(input.informationItem, "qué se intercambia");
-  if (item.error) return { error: item.error };
   const description = validateLongText(input.description, "descripción");
   if (description.error) return { error: description.error };
 
   const supabase = await createServerClient();
+
+  // El texto de la relación se deriva de la SALIDA elegida cuando no se
+  // escribe uno: lo que fluye ya está nombrado, y obligar a repetirlo era una
+  // fricción sin contenido. Se resuelve en servidor, no en el navegador: el
+  // cliente no decide qué dice el modelo.
+  let item = cleanOptionalText(input.informationItem);
+  if (item === null && outputId.value !== null) {
+    const { data } = await supabase
+      .from("quality_process_io")
+      .select("name")
+      .eq("organization_id", g.ok.organizationId)
+      .eq("id", outputId.value)
+      .maybeSingle();
+    item = (data?.name as string | undefined) ?? null;
+  }
+  if (item === null) {
+    return { error: "Elige la salida de origen o escribe qué se entrega." };
+  }
+  const itemCheck = validateQualityName(item, "qué se intercambia");
+  if (itemCheck.error) return { error: itemCheck.error };
+
   const { error } = await supabase.from("quality_process_interactions").insert({
     organization_id: g.ok.organizationId,
     source_process_id: source.value,
     target_process_id: target.value,
     source_output_id: outputId.value,
     target_input_id: inputId.value,
-    information_item: item.value,
+    information_item: itemCheck.value,
     description: description.value,
   });
   if (error) {
     if (isUniqueViolation(error)) {
       return { error: "Esa relación ya está registrada entre ambos procesos." };
     }
+    const message = error.message ?? "";
+    if (message.includes("SALIDA del proceso origen")) {
+      return { error: "La salida elegida no pertenece al proceso de origen." };
+    }
+    if (message.includes("ENTRADA del proceso destino")) {
+      return { error: "La entrada elegida no pertenece al proceso de destino." };
+    }
+    if (message.includes("retirado")) {
+      return { error: "No se registran relaciones nuevas con un proceso retirado." };
+    }
     return { error: safeError(error) };
   }
 
   revalidatePath(`${PATH_PROCESSES}/${source.value}`);
   revalidatePath(`${PATH_PROCESSES}/${target.value}`);
+  revalidatePath(PATH_MAP);
   return OK;
+}
+
+/** Texto opcional ya recortado, o null. */
+function cleanOptionalText(raw: string | undefined | null): string | null {
+  const value = (raw ?? "").trim();
+  return value.length === 0 ? null : value;
 }
 
 export async function deleteQualityInteraction(
@@ -674,6 +726,7 @@ export async function deleteQualityInteraction(
   if (error) return { error: safeError(error) };
 
   revalidatePath(`${PATH_PROCESSES}/${pid.value}`);
+  revalidatePath(PATH_MAP);
   return OK;
 }
 
@@ -681,10 +734,21 @@ export async function deleteQualityInteraction(
 // Documentos de TrazaDocs (T-03: se REFERENCIA, jamás se copia)
 // ---------------------------------------------------------------------------
 
+/**
+ * Asocia un documento de TrazaDocs a un proceso o —QUALITY-01.2— a una de sus
+ * ENTRADAS o SALIDAS (`ioId`).
+ *
+ * El documento no se copia ni se mueve de módulo: solo se crea la referencia.
+ * Que sea de la misma empresa lo garantiza la FK compuesta de 0112 contra
+ * trazadoc_documents, y que la entrada/salida sea de ESTE proceso, el trigger
+ * de 0114. Ninguna de las dos cosas depende de esta capa.
+ */
 export async function linkTrazadocToQualityProcess(input: {
   processId: string;
   documentId: string;
   relationType: string;
+  /** Entrada o salida concreta. Sin valor, el documento aplica al proceso. */
+  ioId?: string;
   notes?: string;
 }): Promise<QualityActionState> {
   const g = await gate();
@@ -694,6 +758,8 @@ export async function linkTrazadocToQualityProcess(input: {
   if (processId.error) return { error: processId.error };
   const documentId = validateUuid(input.documentId, "documento");
   if (documentId.error) return { error: documentId.error };
+  const ioId = validateOptionalUuid(input.ioId, "entrada o salida");
+  if (ioId.error) return { error: ioId.error };
   if (!isOneOf(QUALITY_DOCUMENT_RELATIONS, input.relationType)) {
     return { error: "El tipo de relación con el documento no es válido." };
   }
@@ -706,16 +772,25 @@ export async function linkTrazadocToQualityProcess(input: {
     process_id: processId.value,
     document_id: documentId.value,
     relation_type: input.relationType,
+    io_id: ioId.value,
     notes: notes.value,
   });
   if (error) {
     if (isUniqueViolation(error)) {
-      return { error: "Ese documento ya está asociado al proceso con esa relación." };
+      return {
+        error: ioId.value
+          ? "Ese documento ya está vinculado a esta entrada o salida con esa relación."
+          : "Ese documento ya está asociado al proceso con esa relación.",
+      };
+    }
+    if ((error.message ?? "").includes("pertenecer a este proceso")) {
+      return { error: "La entrada o salida no pertenece a este proceso." };
     }
     return { error: safeError(error, QUALITY_ERRORS.notFound) };
   }
 
   revalidatePath(`${PATH_PROCESSES}/${processId.value}`);
+  revalidatePath(PATH_DOCUMENTS);
   return OK;
 }
 
@@ -741,6 +816,7 @@ export async function unlinkTrazadocFromQualityProcess(
   if (error) return { error: safeError(error) };
 
   revalidatePath(`${PATH_PROCESSES}/${pid.value}`);
+  revalidatePath(PATH_DOCUMENTS);
   return OK;
 }
 

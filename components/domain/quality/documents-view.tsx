@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,12 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
 import {
-  createQualityDocumentAction,
   QUALITY_DOCUMENT_CATEGORIES,
+  qualityDocumentCategoryLabel,
+} from "@/lib/domain/quality-documents";
+import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
+import {
+  createQualityDocumentAction,
   type QualityDocumentActionState,
 } from "@/server/actions/quality-documents";
 
@@ -24,22 +28,6 @@ import {
  *    los confunda con propios: editarlos afecta también a ese módulo, y se
  *    hace desde allí.
  */
-
-const CATEGORY_LABEL: Record<string, string> = {
-  manual: "Manual",
-  procedure: "Procedimiento",
-  instruction: "Instructivo",
-  record: "Registro",
-  policy: "Política",
-  format: "Formato",
-  other: "Otro",
-};
-
-const MODULE_LABEL: Record<string, string> = {
-  cpr: "PCR",
-  textiles: "Textiles",
-  quality: "Quality",
-};
 
 type OwnDocument = {
   id: string;
@@ -82,10 +70,16 @@ export function QualityDocumentsView({
   const [state, formAction, pending] = useActionState(createQualityDocumentAction, initial);
 
   // Tras crear, se abre el documento: lo natural es empezar a escribirlo.
-  if (state.success && state.documentId && creating) {
-    setCreating(false);
-    router.push(`/quality/documents/${state.documentId}`);
-  }
+  //
+  // En un EFECTO, no durante el render. Navegar mientras React está pintando
+  // actualiza el Router desde dentro de otro componente, que en React 19 es un
+  // error y no un aviso: el segundo defecto de esta pantalla, latente detrás
+  // del primero.
+  useEffect(() => {
+    if (state.success && state.documentId) {
+      router.push(`/quality/documents/${state.documentId}`);
+    }
+  }, [state.success, state.documentId, router]);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -120,7 +114,7 @@ export function QualityDocumentsView({
                 <select name="category_code" defaultValue="procedure" className={inputClass}>
                   {QUALITY_DOCUMENT_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
-                      {CATEGORY_LABEL[c] ?? c}
+                      {qualityDocumentCategoryLabel(c)}
                     </option>
                   ))}
                 </select>
@@ -208,34 +202,47 @@ export function QualityDocumentsView({
           </p>
         ) : (
           <ul className="space-y-2">
-            {linked.map((d) => (
-              <li
-                key={d.documentId}
-                className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-hairline bg-paper p-4"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">
-                    {d.title}
-                    {d.code ? <span className="ml-2 text-xs text-ink-soft">{d.code}</span> : null}
-                  </p>
-                  <p className="text-xs text-ink-soft">
-                    Origen: {MODULE_LABEL[d.moduleKey] ?? d.moduleKey} · usado por{" "}
-                    {d.processes.map((p) => p.name).join(", ")}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <DocumentStatusBadge status={d.status as never} />
-                  {d.processes[0] ? (
-                    <Link
-                      href={`/quality/processes/${d.processes[0].id}`}
-                      className="text-xs font-medium text-loop hover:underline"
-                    >
-                      Ver proceso →
-                    </Link>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+            {linked.map((d) => {
+              // El documento se abre en SU módulo, no en el de PCR: la ruta la
+              // declara el registro de módulos (QUALITY-01.2).
+              const documentHref = trazadocDocumentHref(d.moduleKey, d.documentId);
+              return (
+                <li
+                  key={d.documentId}
+                  className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-hairline bg-paper p-4"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      {d.title}
+                      {d.code ? <span className="ml-2 text-xs text-ink-soft">{d.code}</span> : null}
+                    </p>
+                    <p className="text-xs text-ink-soft">
+                      Origen: {shellModuleName(d.moduleKey)} · usado por{" "}
+                      {d.processes.map((p) => p.name).join(", ")}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <DocumentStatusBadge status={d.status as never} />
+                    {documentHref ? (
+                      <Link
+                        href={documentHref}
+                        className="text-xs font-medium text-loop hover:underline"
+                      >
+                        Abrir documento →
+                      </Link>
+                    ) : null}
+                    {d.processes[0] ? (
+                      <Link
+                        href={`/quality/processes/${d.processes[0].id}`}
+                        className="text-xs font-medium text-loop hover:underline"
+                      >
+                        Ver proceso →
+                      </Link>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

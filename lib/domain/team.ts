@@ -362,6 +362,55 @@ export function postAuthDestinationPath(dest: PostAuthDestination): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// QUALITY-01.2 · A dónde llega alguien DESPUÉS de aceptar una invitación
+// ---------------------------------------------------------------------------
+
+/**
+ * El selector de módulos: la experiencia NEUTRA de plataforma. No pertenece a
+ * PCR, ni a Textiles, ni a Quality.
+ */
+export const MODULE_SELECTOR_PATH = "/modules";
+
+/**
+ * Decide el destino tras aceptar correctamente una invitación.
+ *
+ * Aceptar una invitación es una operación TRANSVERSAL: concede incorporación a
+ * una empresa, no acceso a un módulo concreto. Hasta QUALITY-01.2 el destino
+ * era `/dashboard` —la portada de PCR— así que quien era invitado desde
+ * Textiles o desde Quality terminaba dentro de un módulo que quizá su empresa
+ * ni siquiera tiene contratado. No había navegado allí: la aplicación lo había
+ * movido.
+ *
+ * La regla:
+ *
+ *  · Por defecto, el SELECTOR DE MÓDULOS. Desde ahí se entra únicamente a lo
+ *    que la empresa tenga.
+ *  · Se conserva un `returnTo` SOLO si es exactamente la ruta de inicio de un
+ *    módulo en el que esa empresa puede entrar.
+ *
+ * La lista blanca es deliberadamente estrecha —rutas de inicio completas, no
+ * prefijos— y por eso no hay open redirect posible: una URL absoluta, un
+ * `//host`, un `..` o una ruta interna arbitraria no coinciden con ninguna
+ * entrada y caen al selector. El parámetro no CONCEDE nada: los módulos
+ * entrables los calcula el servidor con el estado comercial de la empresa, y
+ * el guard de cada namespace vuelve a comprobarlo al llegar.
+ *
+ * Función pura: `enterableModuleHomePaths` lo resuelve quien llama.
+ */
+export function resolveAcceptInviteDestination(input: {
+  returnTo?: string | null;
+  /** Rutas de inicio de los módulos en los que la empresa PUEDE entrar hoy. */
+  enterableModuleHomePaths: readonly string[];
+}): string {
+  const candidate = (input.returnTo ?? "").trim();
+  if (candidate.length === 0) return MODULE_SELECTOR_PATH;
+  if (!candidate.startsWith("/")) return MODULE_SELECTOR_PATH;
+  if (candidate.startsWith("//")) return MODULE_SELECTOR_PATH;
+  if (!input.enterableModuleHomePaths.includes(candidate)) return MODULE_SELECTOR_PATH;
+  return candidate;
+}
+
 /** La ruta a la que de verdad debe llegar el usuario UNA VEZ que ya eligió
  *  "Trazaloop CPR" en /modules — aquí sí se usa el destino real
  *  (dashboard/select-org), nunca /modules de nuevo (evita un ciclo). */

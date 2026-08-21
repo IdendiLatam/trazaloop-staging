@@ -675,7 +675,7 @@ async function main() {
     const pg = new PgClient({ connectionString: DB_URL });
     await pg.connect();
 
-    await check("50. Las 11 tablas de Quality tienen RLS activa", async () => {
+    await check("50. TODA tabla de Quality tiene RLS activa", async () => {
       const { rows } = await pg.query(
         `select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
           where n.nspname='public' and c.relkind='r' and c.relname like 'quality\\_%' and not c.relrowsecurity`
@@ -684,7 +684,11 @@ async function main() {
       const { rows: all } = await pg.query(
         `select count(*)::int as n from pg_tables where schemaname='public' and tablename like 'quality\\_%'`
       );
-      assert(all[0].n === 11, `esperaba 11 tablas de Quality, hay ${all[0].n}`);
+      // QUALITY-01.2 · La exigencia es que NINGUNA tabla de Quality se quede
+      // sin RLS —lo comprueba la consulta anterior— y que las once de 0112
+      // sigan estando. Fijar el número exacto convertía cada tabla nueva en un
+      // fallo, que no es lo que esta prueba protege.
+      assert(all[0].n >= 11, `faltan tablas de Quality: hay ${all[0].n}, esperaba al menos 11`);
     });
 
     await check("51. anon NO tiene ningún privilegio sobre Quality", async () => {

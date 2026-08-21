@@ -17,6 +17,7 @@
  */
 import type { TeamRoleCode } from "./team";
 import type { PlatformRoleCode } from "./platform";
+import { SHELL_MODULE_KEYS, type ShellModuleKey } from "../modules/registry";
 
 // ---------------------------------------------------------------------------
 // Catálogos y tipos.
@@ -328,8 +329,24 @@ export type TrustedDocumentInsert = {
   module_key?: TrazadocDocumentModule;
 };
 
-/** Módulos que pueden ser dueños de un documento (espejo de la CHECK de 0113). */
-export type TrazadocDocumentModule = "cpr" | "textiles" | "quality";
+/**
+ * Módulos que pueden ser dueños de un documento (espejo de la CHECK de 0113).
+ *
+ * QUALITY-01.2 · Se DERIVA del registro de módulos en lugar de repetir la
+ * lista. TrazaDocs es un motor transversal: todo módulo con shell propio puede
+ * tener documentación, y enumerarlos aquí a mano es exactamente el patrón que
+ * dejó a Quality fuera en QUALITY-01.1 —cuatro veces, en cuatro archivos
+ * distintos—. Una prueba comprueba que esta lista y la restricción CHECK de la
+ * base sigan diciendo lo mismo, para que añadir un módulo no lo olvide.
+ */
+export const TRAZADOC_MODULE_KEYS = SHELL_MODULE_KEYS;
+export type TrazadocDocumentModule = ShellModuleKey;
+
+export function isTrazadocDocumentModule(
+  value: string | null | undefined
+): value is TrazadocDocumentModule {
+  return !!value && (TRAZADOC_MODULE_KEYS as readonly string[]).includes(value);
+}
 
 /**
  * Arma el payload de creación de un documento. NUNCA declara

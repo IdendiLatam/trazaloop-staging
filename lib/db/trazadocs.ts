@@ -8,6 +8,7 @@ import type {
   DocumentType,
   TrustedDocumentInsert,
   BlueprintSectionFacts,
+  TrazadocDocumentModule,
 } from "@/lib/domain/trazadocs";
 
 /**
@@ -64,7 +65,10 @@ function mapSummaryRow(r: Record<string, unknown>): DocumentSummaryRow {
 // T8: los listados/consultas filtran por module_key ('cpr' por defecto —
 // comportamiento CPR intacto; TrazaDocs Textil pasa 'textiles'). Es la
 // separación documental entre módulos del encargo T8 §9.
-export type TrazadocModuleKey = "cpr" | "textiles" | "quality";
+//
+// QUALITY-01.2 · La lista de módulos posibles ya no se repite aquí: es la del
+// dominio, que a su vez la deriva del registro de módulos.
+export type TrazadocModuleKey = TrazadocDocumentModule;
 
 export async function listDocuments(
   orgId: string,

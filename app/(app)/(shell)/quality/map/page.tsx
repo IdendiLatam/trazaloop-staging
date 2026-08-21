@@ -43,9 +43,9 @@ export default async function QualityMapPage({
         <p className="eyebrow">Trazaloop Quality</p>
         <h1 className="text-2xl font-semibold tracking-tight">Mapa de procesos</h1>
         <p className="text-sm text-ink-soft">
-          Los procesos organizados por categoría. Cada bloque del mapa es un proceso real del
-          sistema, no una figura suelta: si lo abres, encuentras su propósito, sus entradas y
-          sus salidas.
+          Los procesos organizados por categoría y el flujo real entre ellos. Cada bloque es un
+          proceso del sistema, no una figura suelta, y cada flecha sale de una relación ya
+          registrada —qué salida alimenta qué entrada—, no de un trazo hecho a mano.
         </p>
       </header>
 

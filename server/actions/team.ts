@@ -36,9 +36,13 @@ import {
   isTeamRole,
   resolveTeamChecklistStatus,
   resolvePostAuthDestination,
+  resolveAcceptInviteDestination,
   type TeamChecklistStatus,
   type PostAuthDestination,
 } from "@/lib/domain/team";
+import { getActiveOrgModuleStatuses } from "@/lib/db/module-access";
+import { getCommercialModuleByKey } from "@/lib/modules/catalog";
+import { isEnterableState } from "@/lib/modules/messages";
 
 // ---------------------------------------------------------------------------
 // Lecturas — llamadas directas desde Server Components, sin FormData. La
@@ -230,7 +234,38 @@ export async function acceptTeamInvitationAction(
   await writeActiveOrgCookie(organizationId);
 
   revalidateTeam();
-  redirect("/dashboard");
+
+  // QUALITY-01.2 · El destino es NEUTRO. Antes se redirigía siempre a
+  // /dashboard, que es la portada de PCR: alguien invitado desde Textiles o
+  // desde Quality —o desde una empresa que no tiene PCR contratado— terminaba
+  // dentro de un módulo ajeno sin haberlo pedido.
+  //
+  // Los módulos entrables se calculan EN SERVIDOR con el estado comercial real
+  // de la empresa recién aceptada; el `return_to` del cliente solo puede
+  // coincidir con uno de ellos o ser ignorado.
+  redirect(await resolveDestinationAfterAccept(organizationId, formData.get("return_to")));
+}
+
+/**
+ * Rutas de inicio de los módulos en los que la empresa PUEDE entrar hoy, y
+ * destino final tras aceptar. Vive aparte de la action porque compone tres
+ * piezas ya existentes —catálogo, estado comercial y la regla pura
+ * resolveAcceptInviteDestination— y así la regla se prueba sin base de datos.
+ */
+async function resolveDestinationAfterAccept(
+  organizationId: string,
+  rawReturnTo: FormDataEntryValue | null
+): Promise<string> {
+  const statuses = await getActiveOrgModuleStatuses(organizationId);
+  const enterableModuleHomePaths = statuses
+    .filter((s) => isEnterableState(s.access.derivedState))
+    .map((s) => getCommercialModuleByKey(s.key)?.homePath ?? null)
+    .filter((p): p is string => p !== null);
+
+  return resolveAcceptInviteDestination({
+    returnTo: typeof rawReturnTo === "string" ? rawReturnTo : null,
+    enterableModuleHomePaths,
+  });
 }
 
 /** Cambia el rol de un miembro. Solo admin; el trigger guard_last_admin

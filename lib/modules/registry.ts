@@ -21,7 +21,15 @@ export type ModuleNavLink = {
 
 export type ModuleNavGroup = { title: string; items: ModuleNavLink[] };
 
-export type ShellModuleKey = "cpr" | "textiles" | "quality";
+/**
+ * Claves de los módulos que tienen shell propio, como DATO y no solo como
+ * tipo. QUALITY-01.2: tenerlas en tiempo de ejecución permite que una prueba
+ * exija que el registro y el catálogo comercial no se separen, en vez de
+ * confiar en que alguien se acuerde de tocar los dos.
+ */
+export const SHELL_MODULE_KEYS = ["cpr", "textiles", "quality"] as const;
+
+export type ShellModuleKey = (typeof SHELL_MODULE_KEYS)[number];
 
 export type ShellModuleDefinition = {
   key: ShellModuleKey;
@@ -32,6 +40,18 @@ export type ShellModuleDefinition = {
   headerBadge: string;
   /** Ruta de inicio del módulo dentro del shell. */
   homePath: string;
+  /**
+   * Ruta de un DOCUMENTO de TrazaDocs que pertenece a este módulo.
+   *
+   * TrazaDocs es un motor transversal: el mismo documento puede haber nacido
+   * en PCR, en Textiles o en Quality, y cada módulo lo muestra en su propia
+   * pantalla. Antes de QUALITY-01.2 la ficha de un proceso enlazaba SIEMPRE a
+   * `/trazadocs/<id>` —la ruta de PCR—, así que una empresa que solo tuviera
+   * Quality pulsaba el documento que acababa de asociar y se topaba con el
+   * guard de otro módulo. La ruta pertenece a la identidad del módulo; vive
+   * aquí para que enlazar un documento no obligue a saber de qué módulo es.
+   */
+  documentPath: (documentId: string) => string;
   /** Prefijos de ruta que pertenecen al módulo (módulo activo por ruta). */
   pathPrefixes: string[];
   /** Navegación de nivel superior (sin grupo). */
@@ -129,6 +149,7 @@ export const CPR_SHELL_MODULE: ShellModuleDefinition = {
   name: "Trazaloop PCR",
   headerBadge: "NTC 6632 · UNE-EN 15343",
   homePath: "/dashboard",
+  documentPath: (id) => `/trazadocs/${id}`,
   // CPR es el módulo por defecto del shell: cualquier ruta no reclamada por
   // otro módulo se atiende con su navegación (dashboard, catálogos CPR,
   // TrazaDocs empresarial, etc.).
@@ -180,6 +201,7 @@ export const TEXTILES_SHELL_MODULE: ShellModuleDefinition = {
   name: "Trazaloop Textiles",
   headerBadge: "Trazaloop Textiles",
   homePath: "/textiles",
+  documentPath: (id) => `/textiles/trazadocs/${id}`,
   pathPrefixes: ["/textiles"],
   topLevel: [{ label: "Inicio Textiles", href: "/textiles", exact: true }],
   groups: [TEXTILES_GESTION_GROUP, TEXTILES_DOCUMENTACION_GROUP],
@@ -212,6 +234,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   name: "Trazaloop Quality",
   headerBadge: "Trazaloop Quality",
   homePath: "/quality",
+  documentPath: (id) => `/quality/documents/${id}`,
   pathPrefixes: ["/quality"],
   topLevel: [{ label: "Inicio Quality", href: "/quality", exact: true }],
   groups: [QUALITY_SGC_GROUP, QUALITY_DOCUMENTOS_GROUP],
@@ -291,6 +314,37 @@ export function moduleAwareHref(href: string, moduleKey: ShellModuleKey): string
   if (resolveShellModuleForPath(href).key !== CPR_SHELL_MODULE.key) return href;
   const separator = href.includes("?") ? "&" : "?";
   return `${href}${separator}${SHELL_MODULE_PARAM}=${moduleKey}`;
+}
+
+/** Definición del módulo por su clave, o `null` si la clave no es de ningún
+ *  módulo con shell. */
+export function getShellModule(key: string | null | undefined): ShellModuleDefinition | null {
+  return SHELL_MODULES.find((m) => m.key === key) ?? null;
+}
+
+/**
+ * Nombre comercial de un módulo a partir de su clave. Sustituye a los mapas
+ * `{ cpr: "PCR", textiles: "Textiles", quality: "Quality" }` que cada pantalla
+ * mantenía por su cuenta: tres copias del mismo dato que un módulo nuevo
+ * obligaba a perseguir una por una.
+ *
+ * Si la clave no se reconoce se devuelve tal cual, para que una pantalla nunca
+ * quede en blanco por un valor inesperado.
+ */
+export function shellModuleName(key: string | null | undefined): string {
+  return getShellModule(key)?.name ?? (key ?? "—");
+}
+
+/**
+ * Ruta del documento de TrazaDocs `documentId` en el módulo del que es dueño.
+ * Devuelve `null` cuando el módulo no se reconoce: es preferible no ofrecer
+ * enlace a ofrecer uno que lleva al guard de otro módulo.
+ */
+export function trazadocDocumentHref(
+  moduleKey: string | null | undefined,
+  documentId: string
+): string | null {
+  return getShellModule(moduleKey)?.documentPath(documentId) ?? null;
 }
 
 /** ¿El enlace corresponde a la ruta actual? (marca de opción activa) */

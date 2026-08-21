@@ -371,7 +371,12 @@ console.log("\nMigración 0113 · convenciones\n");
 check("M1. Append-only tras 0112 y sin privilegios implícitos", () => {
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
   const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
-  assert(Math.max(...numbers) === 113, `la última migración debe ser 113, es ${Math.max(...numbers)}`);
+  // QUALITY-01.2 · La exigencia es que 0113 exista, que no se renumere nada y
+  // que la cola NO retroceda — no que 113 sea para siempre la última: el
+  // repositorio es append-only y cada sprint añade la suya (mismo criterio que
+  // la prueba equivalente de QUALITY-01).
+  assert(numbers.includes(113), "0113 debe existir");
+  assert(Math.max(...numbers) >= 113, `la cola de migraciones retrocedió a ${Math.max(...numbers)}`);
   assert(new Set(numbers).size === numbers.length, "hay prefijos duplicados");
 
   const sql = stripSql(read(MIG));

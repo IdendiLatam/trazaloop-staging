@@ -14,7 +14,7 @@ import {
   getQualityProcessDetail,
   listQualityCategories,
   listQualityPositions,
-  listQualityProcesses,
+  listQualityProcessIoCatalog,
 } from "@/lib/db/quality-processes";
 import { listDocumentsLinkableFromQuality } from "@/lib/db/quality-documents";
 import { canPublishQuality } from "@/lib/domain/quality-processes";
@@ -36,10 +36,13 @@ export default async function QualityProcessPage({
   const detail = await getQualityProcessDetail(org.organizationId, processId, revision);
   if (!detail) notFound();
 
-  const [positions, categories, otherProcesses, documents] = await Promise.all([
+  const [positions, categories, ioCatalog, documents] = await Promise.all([
     listQualityPositions(org.organizationId),
     listQualityCategories(),
-    listQualityProcesses(org.organizationId),
+    // QUALITY-01.2 · Para poder crear la relación desde CUALQUIERA de sus dos
+    // extremos hace falta saber qué salidas tiene el proceso del que se recibe
+    // y qué entradas tiene aquel al que se entrega.
+    listQualityProcessIoCatalog(org.organizationId),
     listDocumentsLinkableFromQuality(org.organizationId),
   ]);
 
@@ -53,7 +56,10 @@ export default async function QualityProcessPage({
       shownRevisionId={shownRevision?.id ?? null}
       positions={positions.filter((p) => p.isActive)}
       categories={categories}
-      otherProcesses={otherProcesses.filter((p) => p.id !== processId)}
+      // Un proceso retirado no admite relaciones nuevas (0114): no se ofrece.
+      otherProcesses={ioCatalog.filter(
+        (p) => p.processId !== processId && p.processStatus !== "retired"
+      )}
       availableDocuments={documents}
       canPublish={canPublishQuality(org.roleCode)}
     />

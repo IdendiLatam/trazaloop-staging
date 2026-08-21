@@ -15,10 +15,31 @@ import { InvitationList } from "@/components/domain/team/invitation-list";
 import { InviteUserForm } from "@/components/domain/team/invite-user-form";
 import { RoleHelp } from "@/components/domain/team/role-help";
 import { resolveAppOrigin } from "@/lib/auth/invitation-link";
+import {
+  moduleAwareHref,
+  resolveShellModuleForPath,
+  SHELL_MODULE_PARAM,
+} from "@/lib/modules/registry";
 
-export default async function TeamPage() {
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user } = await requireSession();
   const org = await requireActiveOrg();
+  // QUALITY-01.2 · Los accesos rápidos de esta cabecera eran cuatro rutas de
+  // PCR (/implementation, /imports, /evidences, /traceability) puestas en una
+  // pantalla TRANSVERSAL. Una empresa que solo tenga Quality los veía y, al
+  // pulsarlos, el guard de PCR la devolvía al selector. Ahora salen de la
+  // navegación del módulo desde el que se llegó, igual que el menú lateral.
+  const params = await searchParams;
+  const rawModule = params[SHELL_MODULE_PARAM];
+  const activeModule = resolveShellModuleForPath(
+    "/team",
+    Array.isArray(rawModule) ? rawModule[0] : rawModule
+  );
+  const shortcuts = [...activeModule.topLevel, ...(activeModule.groups[0]?.items ?? [])].slice(0, 4);
   const [members, invitations] = await Promise.all([
     listOrganizationMembersAction(),
     listTeamInvitationsAction(),
@@ -40,32 +61,17 @@ export default async function TeamPage() {
           Administra usuarios, roles y accesos dentro de la empresa activa.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
+          {shortcuts.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
+            >
+              Ir a {item.label}
+            </Link>
+          ))}
           <Link
-            href="/implementation"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Implementación
-          </Link>
-          <Link
-            href="/imports"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Importaciones
-          </Link>
-          <Link
-            href="/evidences"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Evidencias
-          </Link>
-          <Link
-            href="/traceability"
-            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
-          >
-            Ir a Trazabilidad
-          </Link>
-          <Link
-            href="/settings/profile"
+            href={moduleAwareHref("/settings/profile", activeModule.key)}
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >
             Mi perfil
