@@ -541,6 +541,12 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0112_quality_process_foundation.sql",
     // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
     "0113_quality_documents_and_position_lifecycle.sql",
+    // QUALITY-01.2: relaciones entre procesos, documentos en entradas y
+    // salidas, y snapshot de las aristas del mapa publicado.
+    "0114_quality_relations_io_documents_and_map_edges.sql",
+    // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
+    // entorno remoto concede DML por defecto sobre cada tabla nueva.
+    "0115_quality_map_edges_privilege_hardening.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

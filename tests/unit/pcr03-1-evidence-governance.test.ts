@@ -33,6 +33,12 @@ const QUALITY_01_ALLOWED = new Set([
   "0111_platform_role_privileges.sql",
   "0112_quality_process_foundation.sql",
   "0113_quality_documents_and_position_lifecycle.sql",
+  // QUALITY-01.2: relaciones entre procesos, documentos en entradas y
+  // salidas, y snapshot de las aristas del mapa publicado.
+  "0114_quality_relations_io_documents_and_map_edges.sql",
+  // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
+  // entorno remoto concede DML por defecto sobre cada tabla nueva.
+  "0115_quality_map_edges_privilege_hardening.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -127,6 +133,12 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0112_quality_process_foundation.sql",
     // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
     "0113_quality_documents_and_position_lifecycle.sql",
+    // QUALITY-01.2: relaciones entre procesos, documentos en entradas y
+    // salidas, y snapshot de las aristas del mapa publicado.
+    "0114_quality_relations_io_documents_and_map_edges.sql",
+    // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
+    // entorno remoto concede DML por defecto sobre cada tabla nueva.
+    "0115_quality_map_edges_privilege_hardening.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

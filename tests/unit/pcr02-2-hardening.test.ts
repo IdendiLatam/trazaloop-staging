@@ -269,6 +269,12 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0112_quality_process_foundation.sql",
     // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
     "0113_quality_documents_and_position_lifecycle.sql",
+    // QUALITY-01.2: relaciones entre procesos, documentos en entradas y
+    // salidas, y snapshot de las aristas del mapa publicado.
+    "0114_quality_relations_io_documents_and_map_edges.sql",
+    // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
+    // entorno remoto concede DML por defecto sobre cada tabla nueva.
+    "0115_quality_map_edges_privilege_hardening.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

@@ -67,6 +67,22 @@ function sourceFiles(): string[] {
 }
 
 const SOURCES = sourceFiles();
+
+/** Las propias suites, para el invariante de las listas blancas (M8). */
+function testFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(join(ROOT, dir))) {
+      const rel = `${dir}/${entry}`;
+      if (statSync(join(ROOT, rel)).isDirectory()) walk(rel);
+      else if (entry.endsWith(".test.ts")) out.push(rel);
+    }
+  };
+  walk("tests");
+  return out;
+}
+
+const SOURCES_TESTS = testFiles();
 const firstLines = (src: string) => src.split("\n").slice(0, 5).join("\n");
 
 /** Comentarios y literales de cadena fuera: las llaves que llevan dentro no
@@ -714,6 +730,47 @@ check("M5. Las invariantes del modelo relacional están en la BASE, no solo en l
     "la prohibición de autorrelación no puede desaparecer");
   assert(!/drop constraint quality_process_interactions_not_self/i.test(sql),
     "0114 no debe levantar la prohibición de autorrelación");
+});
+
+check("M8. Toda migración nueva está declarada en las listas blancas de las suites", () => {
+  // Dieciséis suites llevan una lista blanca de migraciones «autorizadas tras
+  // 0091/0101». Es el mismo patrón que esta auditoría persigue —una lista
+  // escrita a mano que hay que acordarse de ampliar— y en QUALITY-01.2 se
+  // olvidó: `test:all` salía con código 1 y el fallo era fácil de pasar por
+  // alto porque estaba enterrado entre ~1.400 comprobaciones verdes.
+  //
+  // Estas listas NO se derivan a propósito: su valor es justamente que alguien
+  // tenga que declarar cada migración. Pero el olvido debe salir aquí, con el
+  // nombre del archivo que falta, y no como una línea perdida al final.
+  //
+  // La regla es la mínima que sirve: cada lista cubre un rango distinto —unas
+  // arrancan en 0091, otras en 0101— así que no se exige que contengan TODO.
+  // Se exige que contengan lo que viene DESPUÉS de la última que ya declaran,
+  // que es exactamente lo que un sprint nuevo añade y lo que se olvida.
+  const ALLOWLIST_MARKER = '"0113_quality_documents_and_position_lifecycle.sql",';
+  const newer = readdirSync(join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) > 113)
+    .sort();
+  assert(newer.length > 0, "esta comprobación asume que QUALITY-01.2 añadió migraciones");
+
+  const carriers: string[] = [];
+  const offenders: string[] = [];
+  for (const file of SOURCES_TESTS) {
+    const src = read(file);
+    // Solo los archivos que llevan la lista de verdad: 0113 dentro de un array,
+    // junto a 0112. Mencionar la ruta de 0113 en un comentario no cuenta.
+    if (!src.includes(ALLOWLIST_MARKER)) continue;
+    if (!src.includes('"0112_quality_process_foundation.sql",')) continue;
+    carriers.push(file);
+    for (const migration of newer) {
+      if (!src.includes(migration)) offenders.push(`${file} → falta ${migration}`);
+    }
+  }
+
+  // Si el marcador cambiara de forma, esta prueba dejaría de mirar nada y
+  // pasaría en verde sin comprobar. Se exige que siga encontrando las listas.
+  assert(carriers.length >= 10, `esperaba encontrar las listas blancas, encontré ${carriers.length}`);
+  assert(offenders.length === 0, offenders.join("; "));
 });
 
 check("M7. El snapshot es de SOLO LECTURA también donde el entorno concede de más", () => {

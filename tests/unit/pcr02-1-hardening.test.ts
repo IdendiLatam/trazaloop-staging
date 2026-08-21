@@ -333,6 +333,12 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0112_quality_process_foundation.sql",
     // QUALITY-01.1: correcciones de aceptación (documentos y ciclo del cargo).
     "0113_quality_documents_and_position_lifecycle.sql",
+    // QUALITY-01.2: relaciones entre procesos, documentos en entradas y
+    // salidas, y snapshot de las aristas del mapa publicado.
+    "0114_quality_relations_io_documents_and_map_edges.sql",
+    // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
+    // entorno remoto concede DML por defecto sobre cada tabla nueva.
+    "0115_quality_map_edges_privilege_hardening.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);
