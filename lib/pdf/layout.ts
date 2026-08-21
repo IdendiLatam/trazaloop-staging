@@ -9,7 +9,7 @@
  * hacia abajo, como se lee.
  */
 import {
-  PdfWriter, measureText, wrapText, truncateToWidth,
+  PdfWriter, measureText, wrapText,
   type PageSize, type PdfFont,
 } from "./writer";
 
@@ -139,17 +139,25 @@ export class PdfLayout {
     const widths = weights.map((w) => (w / total) * this.contentWidth);
     const padding = 3;
 
+    // Los encabezados se ENVUELVEN, no se recortan. Un «Revisión vi…» en la
+    // cabecera de una lista maestra impresa obliga a adivinar qué columna se
+    // está leyendo, que es justo lo contrario de lo que una lista maestra hace.
+    const headerLines = headers.map((header, i) =>
+      wrapText(header, "bold", headerSize, widths[i] - padding * 2)
+    );
+    const headerRows = Math.max(1, ...headerLines.map((l) => l.length));
+
     const drawHeader = () => {
-      const height = headerSize * 2.2;
+      const height = headerRows * headerSize * 1.35 + padding * 2;
       this.ensure(height + 4);
       this.writer.rect(this.left, this.cursor, this.contentWidth, height, 0.92);
       let x = this.left;
-      headers.forEach((header, i) => {
-        this.writer.text(
-          x + padding, this.cursor + headerSize * 1.5,
-          truncateToWidth(header, "bold", headerSize, widths[i] - padding * 2),
-          "bold", headerSize, 0.15
-        );
+      headerLines.forEach((lines, i) => {
+        let ly = this.cursor + padding + headerSize;
+        for (const line of lines) {
+          this.writer.text(x + padding, ly, line, "bold", headerSize, 0.15);
+          ly += headerSize * 1.35;
+        }
         x += widths[i];
       });
       this.cursor += height;

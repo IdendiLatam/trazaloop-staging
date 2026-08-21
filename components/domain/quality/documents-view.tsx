@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -69,14 +69,15 @@ export function QualityDocumentsView({
   linked,
   hasProcesses,
   canCreate,
+  positions,
 }: {
   own: OwnDocument[];
   linked: LinkedDocument[];
   hasProcesses: boolean;
   canCreate: boolean;
+  positions: { id: string; name: string; holderName: string | null }[];
 }) {
   const router = useRouter();
-  const [creating, setCreating] = useState(false);
   const [state, formAction, pending] = useActionState(createQualityDocumentAction, initial);
 
   // Tras crear, se abre el documento: lo natural es empezar a escribirlo.
@@ -120,9 +121,20 @@ export function QualityDocumentsView({
 
       <ErrorAlert message={state.error} />
 
+      {/*
+        Crear se abre con <details>, no con un botón que alterna estado de
+        React. La diferencia importa: con <details> el formulario ESTÁ en el
+        documento aunque JavaScript no haya cargado —o falle—, así que la
+        pantalla sigue siendo usable y la prueba de aceptación puede recorrerla
+        como lo haría un navegador sin JS. El comportamiento visible es el
+        mismo: cerrado por defecto, se despliega al pulsar.
+      */}
       {canCreate ? (
-        creating ? (
-          <form action={formAction} className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
+        <details className="rounded-lg border border-hairline bg-surface" open={state.error !== null}>
+          <summary className="cursor-pointer list-none rounded-lg px-4 py-3 text-sm font-semibold text-loop hover:bg-loop/5">
+            Crear documento
+          </summary>
+          <form action={formAction} className="space-y-3 border-t border-hairline p-4">
             <h2 className="text-sm font-semibold">Nuevo documento de Quality</h2>
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium">Título</span>
@@ -150,6 +162,19 @@ export function QualityDocumentsView({
               <textarea name="description" rows={2} className={inputClass}
                         placeholder="De qué trata, en una línea." />
             </label>
+            {positions.length > 0 ? (
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium">Cargo propietario (opcional)</span>
+                <select name="owner_position_id" defaultValue="" className={inputClass}>
+                  <option value="">— sin cargo asignado —</option>
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.holderName ? ` · ${p.holderName}` : " · sin titular"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <p className="text-xs text-ink-soft">
               El documento nace en la <strong>Revisión 1</strong>, en borrador, con cinco secciones
               de partida (objetivo, alcance, responsabilidades, desarrollo y registros). Podrás
@@ -157,20 +182,11 @@ export function QualityDocumentsView({
               devuelvan o aprobarlo NO cambia el número de revisión: solo lo hace crear una
               revisión nueva, cuando tú lo decidas.
             </p>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={pending}>
-                {pending ? "Creando…" : "Crear documento"}
-              </Button>
-              <Button type="button" variant="quiet" onClick={() => setCreating(false)} disabled={pending}>
-                Cancelar
-              </Button>
-            </div>
+            <Button type="submit" disabled={pending} className="sm:w-auto">
+              {pending ? "Creando…" : "Crear documento"}
+            </Button>
           </form>
-        ) : (
-          <Button onClick={() => setCreating(true)} className="sm:w-auto">
-            Crear documento
-          </Button>
-        )
+        </details>
       ) : (
         <InfoAlert message="Puedes consultar los documentos. Crearlos corresponde a la administración, al área de calidad o a un consultor." />
       )}

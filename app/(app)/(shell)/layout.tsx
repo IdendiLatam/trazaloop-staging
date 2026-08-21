@@ -67,7 +67,16 @@ export default async function ShellLayout({
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col">
+      {/*
+        min-w-0 · Una celda de rejilla mide por defecto `min-width: auto`, así
+        que un hijo ancho —una tabla de dieciséis columnas, por ejemplo— empuja
+        la columna `1fr` más allá del ancho de la ventana y arrastra consigo la
+        barra superior y el menú. Con min-w-0 la columna respeta su pista y el
+        contenido ancho se desplaza DENTRO de su propio contenedor, que es lo
+        que ya pedían los envoltorios `overflow-x-auto` de las tablas.
+        QUALITY-02 lo encontró con la Lista Maestra; corrige a todo el shell.
+      */}
+      <div className="flex min-h-screen min-w-0 flex-col">
         {/* Barra superior: empresa activa siempre visible */}
         <header className="no-print relative flex items-center justify-between border-b border-hairline bg-surface px-6 py-3">
           {/* Distintivo de ambiente: null en Production (nunca se muestra),

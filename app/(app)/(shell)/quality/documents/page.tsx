@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { listDocumentsLinkedToQuality } from "@/lib/db/quality-documents";
-import { listQualityProcesses } from "@/lib/db/quality-processes";
+import { listQualityProcesses, listQualityPositions } from "@/lib/db/quality-processes";
 import { loadQualityMasterList } from "@/lib/db/quality-master-list";
 import { canCreateDocument } from "@/lib/domain/trazadocs";
 import { QualityDocumentsView } from "@/components/domain/quality/documents-view";
@@ -23,10 +23,11 @@ export const metadata = { title: "Documentos" };
 export default async function QualityDocumentsPage() {
   const org = await requireQualityModule();
 
-  const [master, linked, processes] = await Promise.all([
+  const [master, linked, processes, positions] = await Promise.all([
     loadQualityMasterList(org.organizationId),
     listDocumentsLinkedToQuality(org.organizationId),
     listQualityProcesses(org.organizationId),
+    listQualityPositions(org.organizationId),
   ]);
 
   const own = master.filter((d) => d.moduleKey === "quality");
@@ -55,6 +56,9 @@ export default async function QualityDocumentsPage() {
       linked={linkedFromOtherModules}
       hasProcesses={processes.length > 0}
       canCreate={canCreateDocument(org.roleCode)}
+      positions={positions
+        .filter((p) => p.isActive)
+        .map((p) => ({ id: p.id, name: p.name, holderName: p.holderName }))}
     />
   );
 }

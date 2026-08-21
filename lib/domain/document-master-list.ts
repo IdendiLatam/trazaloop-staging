@@ -9,12 +9,14 @@
  */
 import { shellModuleName } from "../modules/registry";
 import {
+  DECISION_TYPE_LABEL,
   LIFECYCLE_LABEL,
   displayRevision,
   effectivityCaption,
   formatDate,
   orDash,
   orPending,
+  type DecisionType,
   type LifecycleState,
   type RevisionModel,
 } from "./document-control";
@@ -41,6 +43,13 @@ export type MasterListRow = {
   approvedAt: string | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
+  /**
+   * Vigencia declarada por la revisión EN CURSO. Es distinta de effectiveFrom,
+   * que es la de la revisión que rige HOY: un documento aprobado con vigencia
+   * futura no tiene revisión vigente todavía, y sin este dato su fecha de
+   * entrada en vigor —que es justo lo que hay que comunicar— quedaba en blanco.
+   */
+  currentEffectiveFrom: string | null;
   reviewDueAt: string | null;
   reviewOverdue: boolean;
   processNames: string;
@@ -143,8 +152,11 @@ export type MasterColumn = {
  * medición.
  */
 export const MASTER_COLUMNS: MasterColumn[] = [
-  { key: "code", header: "Código", width: 8, value: (r) => orDash(r.code) },
-  { key: "title", header: "Título", width: 16, value: (r) => r.title },
+  // El código es el identificador con el que se pide un documento en una
+  // auditoría: es la única columna que NO puede partirse en dos líneas, así que
+  // se le reserva ancho suficiente para un código completo antes que al título.
+  { key: "code", header: "Código", width: 11, value: (r) => orDash(r.code) },
+  { key: "title", header: "Título", width: 15, value: (r) => r.title },
   { key: "category", header: "Tipo", width: 11, value: (r) => r.categoryLabel },
   {
     key: "revision",
@@ -168,8 +180,8 @@ export const MASTER_COLUMNS: MasterColumn[] = [
     width: 11,
     value: (r) => orPending(r.ownerPositionName ?? r.ownerName, "Sin asignar"),
   },
-  { key: "reviewers", header: "Revisor(es)", width: 10, value: (r) => orPending(r.reviewers, "Sin designar") },
-  { key: "approvers", header: "Aprobador(es)", width: 10, value: (r) => orPending(r.approvers, "Sin designar") },
+  { key: "reviewers", header: "Revisor(es)", width: 11, value: (r) => orPending(r.reviewers, "Sin designar") },
+  { key: "approvers", header: "Aprobador(es)", width: 12, value: (r) => orPending(r.approvers, "Sin designar") },
   { key: "created", header: "Creado", width: 10, value: (r) => formatDate(r.createdAt) },
   { key: "submitted", header: "Enviado", width: 10, value: (r) => (r.submittedAt ? formatDate(r.submittedAt) : "Pendiente") },
   { key: "approved", header: "Aprobado", width: 10, value: (r) => (r.approvedAt ? formatDate(r.approvedAt) : "Pendiente") },
@@ -181,7 +193,7 @@ export const MASTER_COLUMNS: MasterColumn[] = [
       effectivityCaption({
         lifecycle: r.lifecycle,
         approvedAt: r.approvedAt,
-        effectiveFrom: r.effectiveFrom,
+        effectiveFrom: r.effectiveFrom ?? r.currentEffectiveFrom,
         effectiveTo: r.effectiveTo,
       }),
   },
@@ -194,7 +206,7 @@ export const MASTER_COLUMNS: MasterColumn[] = [
         ? "No aplica"
         : `${formatDate(r.reviewDueAt)}${r.reviewOverdue ? " · vencida" : ""}`,
   },
-  { key: "processes", header: "Procesos", width: 10, value: (r) => orDash(r.processNames) },
+  { key: "processes", header: "Procesos", width: 9, value: (r) => orDash(r.processNames) },
   {
     // El nombre comercial lleva el prefijo de marca ("Trazaloop Quality"), que
     // en una columna estrecha no aporta nada: dentro de Trazaloop, todo lo es.
@@ -204,13 +216,19 @@ export const MASTER_COLUMNS: MasterColumn[] = [
   {
     key: "last_decision",
     header: "Última decisión",
-    width: 12,
+    width: 11,
     value: (r) =>
       r.lastDecisionAt === null
         ? "Sin decisiones"
-        : `${orDash(r.lastDecisionType)} · ${formatDate(r.lastDecisionAt)}`,
+        : `${decisionLabel(r.lastDecisionType)} · ${formatDate(r.lastDecisionAt)}`,
   },
 ];
+
+/** El tipo de decisión SIEMPRE en español: «approved» es una clave interna. */
+export function decisionLabel(type: string | null | undefined): string {
+  if (!type) return "—";
+  return DECISION_TYPE_LABEL[type as DecisionType] ?? type;
+}
 
 export function masterListToRows(rows: MasterListRow[]): string[][] {
   return rows.map((r) => MASTER_COLUMNS.map((c) => c.value(r)));

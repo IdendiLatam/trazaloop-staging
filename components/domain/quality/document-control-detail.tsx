@@ -285,17 +285,17 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
 
       {/* Lo primero: lo que hay que hacer AHORA. */}
       {model.canDecide ? (
-        <section className="space-y-3 rounded-lg border border-amber/40 bg-amber/5 p-4">
-          <h2 className="text-sm font-semibold">
-            Te toca {model.myPendingRole === "approver" ? "aprobar" : "revisar"} este documento
-          </h2>
-          <p className="text-xs text-ink-soft">
-            Lee el contenido más abajo. Si algo debe corregirse, devuélvelo explicando qué: el autor
-            solo puede corregir lo que sepa que está mal.
-          </p>
-          <ErrorAlert message={decideState.error} />
-          {decideState.success ? <SuccessAlert message={decideState.message ?? "Listo."} /> : null}
+        <section className="rounded-lg border border-amber/40 bg-amber/5 p-4">
           <form action={decideAction} className="space-y-3">
+            <h2 className="text-sm font-semibold">
+              Te toca {model.myPendingRole === "approver" ? "aprobar" : "revisar"} este documento
+            </h2>
+            <p className="text-xs text-ink-soft">
+              Lee el contenido más abajo. Si algo debe corregirse, devuélvelo explicando qué: el
+              autor solo puede corregir lo que sepa que está mal.
+            </p>
+            <ErrorAlert message={decideState.error} />
+            {decideState.success ? <SuccessAlert message={decideState.message ?? "Listo."} /> : null}
             <input type="hidden" name="document_id" value={model.documentId} />
             <Field label="Motivo (obligatorio solo si devuelves el documento)">
               <textarea
@@ -538,15 +538,15 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
       {/* Enviar a revisión */}
       {model.canSubmit ? (
         <section className={cardClass}>
-          <h2 className="text-sm font-semibold">Enviar a revisión y aprobación</h2>
-          <p className="text-xs text-ink-soft">
-            Indica a quién se envía. Un documento sin aprobador no es un documento controlado, así
-            que al menos uno es obligatorio; los revisores son opcionales. Puedes designar un cargo
-            —lo habitual— o una persona concreta.
-          </p>
-          <ErrorAlert message={submitState.error} />
-          {submitState.success ? <SuccessAlert message={submitState.message ?? "Enviado."} /> : null}
           <form action={submitAction} className="space-y-3">
+            <h2 className="text-sm font-semibold">Enviar a revisión y aprobación</h2>
+            <p className="text-xs text-ink-soft">
+              Indica a quién se envía. Un documento sin aprobador no es un documento controlado,
+              así que al menos uno es obligatorio; los revisores son opcionales. Puedes designar un
+              cargo —lo habitual— o una persona concreta.
+            </p>
+            <ErrorAlert message={submitState.error} />
+            {submitState.success ? <SuccessAlert message={submitState.message ?? "Enviado."} /> : null}
             <input type="hidden" name="document_id" value={model.documentId} />
             <div className="grid gap-3 sm:grid-cols-3">
               {[1, 2, 3].map((n) => (

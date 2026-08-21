@@ -375,6 +375,7 @@ function mapMasterRow(r: Record<string, unknown>): MasterListRow {
     approvedAt: (r.approved_at as string | null) ?? null,
     effectiveFrom: (r.effective_from as string | null) ?? null,
     effectiveTo: (r.effective_to as string | null) ?? null,
+    currentEffectiveFrom: (r.current_effective_from as string | null) ?? null,
     reviewDueAt: (r.review_due_at as string | null) ?? null,
     reviewOverdue: Boolean(r.review_overdue),
     processNames: (r.process_names as string | null) ?? "",

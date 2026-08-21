@@ -13,7 +13,12 @@ import {
   QUALITY_DOCUMENT_CATEGORIES,
   qualityDocumentCategoryLabel,
 } from "@/lib/domain/quality-documents";
-import { describeFilters, type MasterListFilters, type MasterListRow } from "@/lib/domain/document-master-list";
+import {
+  decisionLabel,
+  describeFilters,
+  type MasterListFilters,
+  type MasterListRow,
+} from "@/lib/domain/document-master-list";
 import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
 
 /**
@@ -198,7 +203,7 @@ export function QualityMasterListView({
                 const href = trazadocDocumentHref(r.moduleKey, r.documentId);
                 return (
                   <tr key={r.documentId} className="border-b border-hairline last:border-0 align-top">
-                    <td className="px-3 py-2 code">{orDash(r.code)}</td>
+                    <td className="px-3 py-2 code whitespace-nowrap">{orDash(r.code)}</td>
                     <td className="px-3 py-2">
                       {href ? (
                         <Link href={href} className="font-medium text-loop hover:underline">{r.title}</Link>
@@ -218,20 +223,20 @@ export function QualityMasterListView({
                               currentRevisionNumber: r.currentRevisionNumber,
                             })}
                     </td>
-                    <td className="px-3 py-2"><LifecycleBadge state={r.lifecycle} /></td>
+                    <td className="px-3 py-2"><LifecycleBadge state={r.lifecycle} compact /></td>
                     <td className="px-3 py-2">
                       {orPending(r.ownerPositionName ?? r.ownerName, "Sin asignar")}
                     </td>
                     <td className="px-3 py-2">{orPending(r.reviewers, "Sin designar")}</td>
                     <td className="px-3 py-2">{orPending(r.approvers, "Sin designar")}</td>
-                    <td className="px-3 py-2">{formatDate(r.createdAt)}</td>
-                    <td className="px-3 py-2">{r.submittedAt ? formatDate(r.submittedAt) : "Pendiente"}</td>
-                    <td className="px-3 py-2">{r.approvedAt ? formatDate(r.approvedAt) : "Pendiente"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.createdAt)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.submittedAt ? formatDate(r.submittedAt) : "Pendiente"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.approvedAt ? formatDate(r.approvedAt) : "Pendiente"}</td>
                     <td className="px-3 py-2">
                       {effectivityCaption({
                         lifecycle: r.lifecycle,
                         approvedAt: r.approvedAt,
-                        effectiveFrom: r.effectiveFrom,
+                        effectiveFrom: r.effectiveFrom ?? r.currentEffectiveFrom,
                         effectiveTo: r.effectiveTo,
                       })}
                     </td>
@@ -250,7 +255,7 @@ export function QualityMasterListView({
                       {r.lastDecisionAt === null ? (
                         <span className="text-ink-soft">Sin decisiones</span>
                       ) : (
-                        `${orDash(r.lastDecisionType)} · ${formatDate(r.lastDecisionAt)}`
+                        `${decisionLabel(r.lastDecisionType)} · ${formatDate(r.lastDecisionAt)}`
                       )}
                     </td>
                   </tr>
