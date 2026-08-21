@@ -93,18 +93,22 @@ el entorno de Staging antes de correr el recorrido.
 
 ## 4. Preview
 
+Despliegue del commit final `0cf6486`:
+
 ```
-https://trazaloop-production-cm89vfi9c-idendi-latam-s-projects.vercel.app
+https://trazaloop-production-7fxb1qwll-idendi-latam-s-projects.vercel.app
 ```
 
-Alias de rama:
+Alias de rama, que siempre apunta al último despliegue de
+`feature/quality-02-document-control` y es el enlace que conviene usar:
 
 ```
 https://trazaloop-production-git-feature-93345d-idendi-latam-s-projects.vercel.app
 ```
 
 Estado **Ready**, `target: preview`, construido automáticamente por la
-integración de Git al empujar `feature/quality-02-document-control`.
+integración de Git al empujar la rama. (El despliegue anterior,
+`cm89vfi9c`, correspondía a `0f40d2b`, un commit atrás.)
 
 `QUALITY_MODULE_ENABLED` está definida en el entorno **Preview** (variable
 sensible, valor no legible desde el CLI). No se creó ni se modificó ninguna
@@ -145,9 +149,30 @@ versión anterior del CLI, que `supabase status` ya reportaba como
 | `QUALITY_MODULE_ENABLED` | no definida allí — Quality sigue invisible |
 
 Las únicas operaciones sobre proyectos remotos fueron: `projects list`
-(lectura), `projects api-keys --project-ref qchzkxbnbqeyuxinipln`,
-`migration list --project-ref qchzkxbnbqeyuxinipln` y `db push --project-ref
-qchzkxbnbqeyuxinipln`.
+(lectura), `projects api-keys` sobre Staging y sobre Production (lectura de la
+API de gestión; no abre conexión a la base), `migration list --project-ref
+qchzkxbnbqeyuxinipln` y `db push --project-ref qchzkxbnbqeyuxinipln`.
+
+### 6.1 · Comprobación de solo lectura sobre Production
+
+Se verificó por HTTP —sin CLI, sin conexión a la base y sin inicializar ningún
+rol— que las tablas de 0116 **no existen** en Production:
+
+```
+trazadoc_document_revisions → PGRST205  Could not find the table …
+trazadoc_document_decisions → PGRST205  Could not find the table …
+work_tasks                  → PGRST205  Could not find the table …
+work_alerts                 → PGRST205  Could not find the table …
+
+trazadoc_documents          → HTTP 200   (control: una tabla que sí existe)
+```
+
+El control importa: sin él, cuatro respuestas de error no probarían nada —
+podrían venir de una clave mal formada o de un proyecto caído—. Con él, queda
+claro que la API responde bien y que lo que falta es exactamente 0116.
+
+`QUALITY_MODULE_ENABLED` **no está definida** en el entorno Production de
+Vercel: Quality sigue invisible allí.
 
 ---
 

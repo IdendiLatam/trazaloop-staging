@@ -54,9 +54,12 @@ Detalle completo en `QUALITY_02_DOCUMENT_MODEL.md`.
 3c33012  test(quality): QUALITY-02 · pruebas puras, de base real y recorrido humano
 d0ca41b  test(quality): QUALITY-02 · regresión completa en verde
 0f40d2b  docs(quality): QUALITY-02 · modelo documental, workflow, RLS, pruebas y PDF
+0cf6486  docs(quality): QUALITY-02 · informe de implementación y despliegue en Staging
 ```
 
-59 archivos, +10 469 / −404.
+61 archivos, +10 900 / −404. El último cambio de CÓDIGO es `d0ca41b`: los dos
+commits posteriores son solo documentación, así que los resultados de las suites
+registrados en §7 corresponden al árbol final.
 
 ---
 
