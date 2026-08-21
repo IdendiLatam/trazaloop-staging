@@ -19,6 +19,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { createHmac } from "node:crypto";
+import { shellModuleName } from "../../lib/modules/registry";
 import { spawn, type ChildProcess } from "node:child_process";
 
 loadEnv({ path: ".env.local" });
@@ -317,7 +318,11 @@ async function main() {
     assert(!error, `no se pudo vincular: ${error?.message}`);
 
     const r = await get(documentsHref);
-    assert(has(r.body, "Origen: PCR"), "el documento vinculado no muestra su módulo de origen");
+    // QUALITY-01.2 pasó a mostrar el NOMBRE COMERCIAL del módulo, que sale del
+    // registro. Se compara contra el registro y no contra una copia del texto,
+    // para que renombrar un módulo no vuelva a dejar esta prueba en rojo.
+    assert(has(r.body, `Origen: ${shellModuleName("cpr")}`),
+      "el documento vinculado no muestra su módulo de origen");
     // Y no se ha duplicado.
     const { count } = await client.from("trazadoc_documents")
       .select("id", { count: "exact", head: true })

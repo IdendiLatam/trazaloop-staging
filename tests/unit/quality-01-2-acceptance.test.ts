@@ -761,6 +761,11 @@ check("M8. Toda migración nueva está declarada en las listas blancas de las su
     // junto a 0112. Mencionar la ruta de 0113 en un comentario no cuenta.
     if (!src.includes(ALLOWLIST_MARKER)) continue;
     if (!src.includes('"0112_quality_process_foundation.sql",')) continue;
+    // …y esta misma suite no cuenta: contiene los marcadores porque los DEFINE,
+    // no porque lleve una lista blanca. Auditarse a sí misma la obligaba a
+    // nombrar cada migración nueva en su propio código para dejar de fallar,
+    // que es ruido y no la regla que persigue. (Lo destapó QUALITY-02.)
+    if (src.includes("const ALLOWLIST_MARKER =")) continue;
     carriers.push(file);
     for (const migration of newer) {
       if (!src.includes(migration)) offenders.push(`${file} → falta ${migration}`);

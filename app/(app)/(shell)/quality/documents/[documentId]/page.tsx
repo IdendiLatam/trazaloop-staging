@@ -142,6 +142,8 @@ export default async function QualityDocumentPage({
         currentRound: round,
         sections: detail.sections.map((s) => ({
           id: s.id,
+          blueprintSectionId: null,
+          sectionKey: s.sectionKey,
           title: s.title,
           content: s.content,
           sortOrder: s.sortOrder,

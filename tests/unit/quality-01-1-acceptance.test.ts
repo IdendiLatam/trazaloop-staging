@@ -271,12 +271,27 @@ check("E3. TODA action de documentos pasa por la guarda de Quality", () => {
 });
 
 check("E4. El editor de secciones se REUTILIZA, no se reescribe", () => {
-  const detail = read("components/domain/quality/document-detail.tsx");
+  // QUALITY-02 renombró la ficha a document-control-detail.tsx al añadirle el
+  // control documental completo. El invariante NO cambia: el editor por
+  // secciones sigue siendo el del motor TrazaDocs.
+  const detail = read("components/domain/quality/document-control-detail.tsx");
   assert(/from "@\/components\/domain\/trazadocs\/section-editor"/.test(detail),
     "debe reutilizar SectionEditor del motor");
-  assert(/from "@\/components\/domain\/trazadocs\/document-status-badge"/.test(detail),
-    "debe reutilizar el distintivo de estado");
-  assert(!/<textarea/.test(detail), "no debe reimplementar el campo de edición de secciones");
+  // El campo de edición de una sección se declara UNA vez, en el motor. Otros
+  // textareas de la pantalla —el motivo de una devolución, la nota para quien
+  // revisa— son campos distintos y legítimos; lo que no puede repetirse es el
+  // campo `section:<id>`, que es el que la server action lee.
+  assert(!/name=\{`section:/.test(detail),
+    "no debe reimplementar el campo de edición de secciones");
+
+  // El distintivo de estado SÍ es propio de Quality, y no por gusto: el del
+  // motor solo conoce borrador/revisión/aprobado/obsoleto, y un sistema de
+  // gestión necesita distinguir «aprobado» de «vigente» (D-06) y «devuelto»
+  // de «borrador». Ambos leen sus etiquetas del dominio, nunca de una copia.
+  const badge = read("components/domain/quality/lifecycle-badge.tsx");
+  assert(/from "@\/lib\/domain\/document-control"/.test(badge),
+    "el distintivo de Quality debe leer sus etiquetas del dominio");
+  assert(/LifecycleBadge/.test(detail), "la ficha debe usar el distintivo de ciclo de vida");
 });
 
 check("E5. La lista separa documentos PROPIOS de VINCULADOS", () => {

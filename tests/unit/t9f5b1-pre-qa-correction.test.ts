@@ -463,6 +463,10 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
     // entorno remoto concede DML por defecto sobre cada tabla nueva.
     "0115_quality_map_edges_privilege_hardening.sql",
+    // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+    // con revisores y aprobadores, decisiones append-only, bandeja transversal
+    // de tareas y alertas, y la lista maestra como vista derivada.
+    "0116_document_control_revisions_workflow_and_tasks.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

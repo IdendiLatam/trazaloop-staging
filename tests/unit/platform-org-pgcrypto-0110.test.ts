@@ -33,6 +33,10 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
   // entorno remoto concede DML por defecto sobre cada tabla nueva.
   "0115_quality_map_edges_privilege_hardening.sql",
+  // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+  // con revisores y aprobadores, decisiones append-only, bandeja transversal
+  // de tareas y alertas, y la lista maestra como vista derivada.
+  "0116_document_control_revisions_workflow_and_tasks.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

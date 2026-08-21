@@ -339,6 +339,10 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
     // entorno remoto concede DML por defecto sobre cada tabla nueva.
     "0115_quality_map_edges_privilege_hardening.sql",
+    // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+    // con revisores y aprobadores, decisiones append-only, bandeja transversal
+    // de tareas y alertas, y la lista maestra como vista derivada.
+    "0116_document_control_revisions_workflow_and_tasks.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

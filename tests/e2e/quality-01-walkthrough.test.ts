@@ -333,7 +333,12 @@ async function main() {
     assert(has(r.body, "Asegurar la eficacia del SGC"), "no se mostró el propósito del borrador");
     assert(has(r.body, "Política de calidad"), "no se mostró la entrada");
     assert(has(r.body, "Informe de revisión"), "no se mostró la salida");
-    assert(has(r.body, "Este proceso entrega a"), "falta la sección de relaciones");
+    // QUALITY-01.2 renombró la sección: una relación se lee desde SUS DOS
+    // extremos, «Recibe de» y «Entrega a», en vez de una sola frase que solo
+    // servía para el extremo emisor. La afirmación se pone al día; lo que
+    // comprueba —que el detalle reúne las relaciones— es lo mismo.
+    assert(has(r.body, "Entrega a"), "falta la sección de relaciones");
+    assert(has(r.body, "Recibe de"), "falta el otro extremo de la relación");
     assert(has(r.body, "Procedimiento de revisión por la dirección"), "no se mostró el documento asociado");
     assert(has(r.body, "estás editando el borrador"), "no se comunicó que la revisión es editable");
   });

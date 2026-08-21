@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
 import { LifecycleBadge } from "@/components/domain/quality/lifecycle-badge";
+import { SectionEditor } from "@/components/domain/trazadocs/section-editor";
 import {
   DECISION_TYPE_LABEL,
   LIFECYCLE_HELP,
@@ -57,8 +58,16 @@ const inputClass =
   "block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-loop";
 const cardClass = "space-y-3 rounded-lg border border-hairline bg-surface p-4";
 
+/**
+ * Una sección tal como la espera el editor del motor TrazaDocs
+ * (`DocumentSectionRow`). Se declara con la misma forma A PROPÓSITO: el editor
+ * por secciones no se reescribe aquí, se reutiliza — es el mismo campo, con el
+ * mismo nombre (`section:<id>`) que la server action lee.
+ */
 export type ControlSection = {
   id: string;
+  blueprintSectionId: string | null;
+  sectionKey: string;
   title: string;
   content: string;
   sortOrder: number;
@@ -448,33 +457,9 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
           {sectionState.success ? (
             <SuccessAlert message={sectionState.message ?? "Contenido guardado."} />
           ) : null}
+          {/* Quality no tiene pistas comerciales, así que el hint va en null. */}
           {ordered.map((s) => (
-            <div key={s.id} className="space-y-2 rounded-lg border border-hairline bg-surface p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold">{s.title}</h3>
-                {s.isRequired ? (
-                  <span className="rounded-full border border-amber/40 bg-amber/10 px-2 py-0.5 text-[11px] font-medium text-amber">
-                    Obligatoria
-                  </span>
-                ) : (
-                  <span className="rounded-full border border-hairline bg-paper px-2 py-0.5 text-[11px] text-ink-soft">
-                    Sugerida
-                  </span>
-                )}
-                <span className="text-[11px] text-ink-soft">
-                  {s.content.trim().length === 0 ? "Sin diligenciar" : "Diligenciada"}
-                </span>
-              </div>
-              <textarea
-                name={`section:${s.id}`}
-                defaultValue={s.content}
-                rows={5}
-                readOnly={!model.canEdit}
-                disabled={!model.canEdit}
-                className="block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-70"
-                placeholder={model.canEdit ? "Escribe el contenido de esta sección…" : ""}
-              />
-            </div>
+            <SectionEditor key={s.id} section={s} hint={null} readOnly={!model.canEdit} />
           ))}
           {model.canEdit ? (
             <Button type="submit" disabled={sectionPending} className="w-auto px-4 py-2 text-sm">

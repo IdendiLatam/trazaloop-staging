@@ -347,6 +347,10 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
     // entorno remoto concede DML por defecto sobre cada tabla nueva.
     "0115_quality_map_edges_privilege_hardening.sql",
+    // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+    // con revisores y aprobadores, decisiones append-only, bandeja transversal
+    // de tareas y alertas, y la lista maestra como vista derivada.
+    "0116_document_control_revisions_workflow_and_tasks.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

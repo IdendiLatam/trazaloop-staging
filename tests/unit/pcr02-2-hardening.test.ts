@@ -275,6 +275,10 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
     // entorno remoto concede DML por defecto sobre cada tabla nueva.
     "0115_quality_map_edges_privilege_hardening.sql",
+    // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+    // con revisores y aprobadores, decisiones append-only, bandeja transversal
+    // de tareas y alertas, y la lista maestra como vista derivada.
+    "0116_document_control_revisions_workflow_and_tasks.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

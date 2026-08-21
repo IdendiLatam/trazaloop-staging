@@ -53,6 +53,21 @@ const textileActions = read("server/actions/textiles-trazadocs.ts");
 
 console.log("Sprint T8.1 · Hardening de edición de secciones TrazaDocs\n");
 
+/**
+ * Cuerpo COMPLETO de una función exportada: desde su declaración hasta la
+ * siguiente. Sustituye a los recortes de N caracteres, que medían el tamaño
+ * del código y no su contenido: bastaba con añadirle a una función un
+ * parámetro documentado para que la comprobación empezara a mirar antes de
+ * donde estaba lo que quería comprobar, y fallara sin que nada se hubiera
+ * roto. (QUALITY-02 lo provocó al ampliar updateDocumentMetadata.)
+ */
+function functionBody(source: string, name: string): string {
+  const start = source.indexOf(`export async function ${name}(`);
+  if (start < 0) return "";
+  const next = source.indexOf("\nexport ", start + 1);
+  return source.slice(start, next < 0 ? source.length : next);
+}
+
 check("1. Existe 0083 y su rango sigue intacto", () => {
   // Actualizado en T9A (misma deriva de pins de T2.1–T8): se fija SOLO el
   // slot propio; 0084+ son sprints legítimos posteriores.
@@ -135,22 +150,19 @@ check("8. El helper inseguro fue REEMPLAZADO: existe updateSectionContentForDocu
 });
 
 check("9. El helper seguro valida organización+módulo+estado editable y amarra la sección al documento", () => {
-  const idx = dbShared.indexOf("export async function updateSectionContentForDocument");
-  const body = dbShared.slice(idx, idx + 1600);
+  const body = functionBody(dbShared, "updateSectionContentForDocument");
   assert(body.includes("getDocumentFacts(input.organizationId, input.documentId, input.moduleKey)"), "el helper no verifica el documento del módulo");
   assert(body.includes('doc.status !== "draft" && doc.status !== "in_review"'), "el helper no exige estado editable");
   assert(body.includes('.eq("document_id", input.documentId)'), "el update no amarra document_id");
   assert(body.includes("La sección no pertenece a este documento."), "faltó el mensaje de sección ajena");
-  const facts = dbShared.indexOf("export async function getDocumentFacts");
-  const factsBody = dbShared.slice(facts, facts + 700);
+  const factsBody = functionBody(dbShared, "getDocumentFacts");
   assert(factsBody.includes('.eq("module_key", moduleKey)'), "getDocumentFacts no filtra por módulo");
 });
 
 check("10. deleteSection y reorderSections exigen documentId y filtran por document_id", () => {
   for (const fn of ["deleteSection", "reorderSections"]) {
-    const idx = dbShared.indexOf(`export async function ${fn}(`);
-    assert(idx >= 0, `faltó ${fn}`);
-    const body = dbShared.slice(idx, idx + 900);
+    const body = functionBody(dbShared, fn);
+    assert(body.length > 0, `faltó ${fn}`);
     assert(body.includes("documentId: string"), `${fn} debía exigir documentId`);
     assert(body.includes('.eq("document_id", documentId)'), `${fn} debía amarrar document_id`);
   }
@@ -158,8 +170,8 @@ check("10. deleteSection y reorderSections exigen documentId y filtran por docum
 
 check("11. updateDocumentMetadata y deleteDocument amarran módulo con default 'cpr' (CPR intacto; Textil fuera de alcance CPR)", () => {
   for (const fn of ["updateDocumentMetadata", "deleteDocument"]) {
-    const idx = dbShared.indexOf(`export async function ${fn}(`);
-    const body = dbShared.slice(idx, idx + 900);
+    const body = functionBody(dbShared, fn);
+    assert(body.length > 0, `faltó ${fn}`);
     assert(body.includes('moduleKey: TrazadocModuleKey = "cpr"'), `${fn} debía recibir moduleKey con default 'cpr'`);
     assert(body.includes('.eq("module_key", moduleKey)'), `${fn} debía filtrar por módulo`);
   }

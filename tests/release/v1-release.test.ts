@@ -89,6 +89,10 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
   // entorno remoto concede DML por defecto sobre cada tabla nueva.
   "0115_quality_map_edges_privilege_hardening.sql",
+  // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+  // con revisores y aprobadores, decisiones append-only, bandeja transversal
+  // de tareas y alertas, y la lista maestra como vista derivada.
+  "0116_document_control_revisions_workflow_and_tasks.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -887,6 +891,10 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     // QUALITY-01.2: el snapshot del mapa, de solo lectura tambien donde el
     // entorno remoto concede DML por defecto sobre cada tabla nueva.
     "0115_quality_map_edges_privilege_hardening.sql",
+    // QUALITY-02: control documental — identidad, revisión inmutable, workflow
+    // con revisores y aprobadores, decisiones append-only, bandeja transversal
+    // de tareas y alertas, y la lista maestra como vista derivada.
+    "0116_document_control_revisions_workflow_and_tasks.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));
