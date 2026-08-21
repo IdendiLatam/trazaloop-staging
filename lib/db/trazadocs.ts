@@ -393,13 +393,32 @@ export async function insertInitialVersion(
 export async function updateDocumentMetadata(
   orgId: string,
   documentId: string,
-  input: { title: string; code: string | null; description: string | null; ownerId: string | null },
+  input: {
+    title: string;
+    code: string | null;
+    description: string | null;
+    ownerId: string | null;
+    /** QUALITY-02 · Solo se toca si viene: PCR y Textiles no lo envían y su
+     *  categoría se sigue editando por su propia pantalla. */
+    categoryCode?: string;
+    /** QUALITY-02 · Cargo propietario (D-17). `null` lo borra; `undefined` lo
+     *  deja como está — la distinción importa, y por eso no se colapsan. */
+    ownerPositionId?: string | null;
+  },
   moduleKey: TrazadocModuleKey = "cpr"
 ): Promise<{ error: string | null }> {
   const supabase = await createServerClient();
+  const patch: Record<string, unknown> = {
+    title: input.title,
+    code: input.code,
+    description: input.description,
+    owner_id: input.ownerId,
+  };
+  if (input.categoryCode !== undefined) patch.category_code = input.categoryCode;
+  if (input.ownerPositionId !== undefined) patch.owner_position_id = input.ownerPositionId;
   const { data, error } = await supabase
     .from("trazadoc_documents")
-    .update({ title: input.title, code: input.code, description: input.description, owner_id: input.ownerId })
+    .update(patch)
     .eq("organization_id", orgId)
     .eq("id", documentId)
     // T8.1: un documento de otro módulo jamás se edita desde este flujo.

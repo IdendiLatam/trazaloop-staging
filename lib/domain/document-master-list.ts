@@ -48,6 +48,9 @@ export type MasterListRow = {
   lastDecisionType: string | null;
   lastDecisionAt: string | null;
   disposition: string;
+  /** Avance del diligenciamiento, para la lista de documentos. */
+  sectionsCount: number;
+  filledSectionsCount: number;
 };
 
 export type MasterListFilters = {

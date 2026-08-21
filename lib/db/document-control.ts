@@ -382,6 +382,8 @@ function mapMasterRow(r: Record<string, unknown>): MasterListRow {
     lastDecisionType: (r.last_decision_type as string | null) ?? null,
     lastDecisionAt: (r.last_decision_at as string | null) ?? null,
     disposition: (r.disposition as string) ?? "active",
+    sectionsCount: Number(r.sections_count ?? 0),
+    filledSectionsCount: Number(r.filled_sections_count ?? 0),
   };
 }
 

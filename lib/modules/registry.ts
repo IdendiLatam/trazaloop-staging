@@ -223,10 +223,17 @@ export const QUALITY_SGC_GROUP: ModuleNavGroup = {
 /**
  * Documentos de Quality. Grupo propio, no un enlace suelto: el espacio
  * documental es una de las dos patas del módulo, no un accesorio de Procesos.
+ *
+ * QUALITY-02 · La Lista Maestra entra aquí como destino de primer nivel. Es el
+ * documento que una auditoría pide primero, y esconderla dentro de la lista de
+ * documentos la convertía en una función que había que descubrir.
  */
 export const QUALITY_DOCUMENTOS_GROUP: ModuleNavGroup = {
   title: "Documentación",
-  items: [{ label: "Documentos", href: "/quality/documents" }],
+  items: [
+    { label: "Documentos", href: "/quality/documents", exact: true },
+    { label: "Lista Maestra", href: "/quality/documents/master" },
+  ],
 };
 
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
@@ -236,7 +243,12 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   homePath: "/quality",
   documentPath: (id) => `/quality/documents/${id}`,
   pathPrefixes: ["/quality"],
-  topLevel: [{ label: "Inicio Quality", href: "/quality", exact: true }],
+  topLevel: [
+    { label: "Inicio Quality", href: "/quality", exact: true },
+    // QUALITY-02 · La bandeja va en el nivel superior a propósito: es lo
+    // primero que abre quien entra a trabajar, no una sección de consulta.
+    { label: "Mis tareas", href: "/quality/tasks" },
+  ],
   groups: [QUALITY_SGC_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 

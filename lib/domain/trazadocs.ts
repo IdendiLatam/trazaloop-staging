@@ -18,6 +18,7 @@
 import type { TeamRoleCode } from "./team";
 import type { PlatformRoleCode } from "./platform";
 import { SHELL_MODULE_KEYS, type ShellModuleKey } from "../modules/registry";
+import type { RevisionModel } from "./document-control";
 
 // ---------------------------------------------------------------------------
 // Catálogos y tipos.
@@ -327,6 +328,20 @@ export type TrustedDocumentInsert = {
    * cruza de módulo.
    */
   module_key?: TrazadocDocumentModule;
+  /**
+   * QUALITY-02 · Modelo de revisión del documento. Se omite en PCR y Textiles,
+   * donde la columna conserva su valor por defecto ('legacy') y con él el
+   * comportamiento histórico intacto. Quality crea sus documentos como
+   * 'controlled': su `current_version` pasa a ser la REVISIÓN de negocio, que
+   * solo avanza con la acción explícita de crear una revisión nueva.
+   */
+  revision_model?: RevisionModel;
+  /**
+   * QUALITY-02 · Cargo propietario (D-17: la responsabilidad persistente
+   * apunta a un cargo, no a una persona). Solo Quality tiene cargos; en los
+   * demás módulos queda nulo y `owner_id` sigue siendo el único propietario.
+   */
+  owner_position_id?: string | null;
 };
 
 /**

@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-status-badge";
+import { LifecycleBadge } from "@/components/domain/quality/lifecycle-badge";
+import {
+  displayRevision,
+  type LifecycleState,
+  type RevisionModel,
+} from "@/lib/domain/document-control";
 import {
   QUALITY_DOCUMENT_CATEGORIES,
   qualityDocumentCategoryLabel,
@@ -39,6 +45,10 @@ type OwnDocument = {
   sectionsCount: number;
   filledSectionsCount: number;
   processNames: string[];
+  /** QUALITY-02 · Estado que lee una persona: distingue aprobado de vigente. */
+  lifecycle: LifecycleState;
+  revisionModel: RevisionModel;
+  currentRevisionNumber: number | null;
 };
 
 type LinkedDocument = {
@@ -87,10 +97,25 @@ export function QualityDocumentsView({
         <p className="eyebrow">Trazaloop Quality</p>
         <h1 className="text-2xl font-semibold tracking-tight">Documentos</h1>
         <p className="text-sm text-ink-soft">
-          El espacio documental de Quality. Usa el mismo motor que TrazaDocs —estados,
-          versiones y aprobaciones son los de siempre— pero vive dentro de Quality y no
-          requiere ningún otro módulo.
+          El espacio documental de Quality. Usa el mismo motor que TrazaDocs —el editor por
+          secciones, los estados y el historial son los de siempre— con el control documental
+          completo encima: revisiones que solo avanzan cuando alguien lo decide, revisores,
+          aprobadores y vigencia. No requiere ningún otro módulo.
         </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Link
+            href="/quality/documents/master"
+            className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"
+          >
+            Lista Maestra
+          </Link>
+          <Link
+            href="/quality/tasks"
+            className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"
+          >
+            Mis tareas
+          </Link>
+        </div>
       </header>
 
       <ErrorAlert message={state.error} />
@@ -126,8 +151,11 @@ export function QualityDocumentsView({
                         placeholder="De qué trata, en una línea." />
             </label>
             <p className="text-xs text-ink-soft">
-              El documento nace en borrador con cinco secciones de partida (objetivo, alcance,
-              responsabilidades, desarrollo y registros). Podrás cambiarlas al escribirlo.
+              El documento nace en la <strong>Revisión 1</strong>, en borrador, con cinco secciones
+              de partida (objetivo, alcance, responsabilidades, desarrollo y registros). Podrás
+              agregarlas, eliminarlas y reordenarlas al escribirlo. Enviarlo a revisión, que te lo
+              devuelvan o aprobarlo NO cambia el número de revisión: solo lo hace crear una
+              revisión nueva, cuando tú lo decidas.
             </p>
             <div className="flex gap-2">
               <Button type="submit" disabled={pending}>
@@ -169,8 +197,12 @@ export function QualityDocumentsView({
                       {d.code ? <span className="ml-2 text-xs text-ink-soft">{d.code}</span> : null}
                     </p>
                     <p className="text-xs text-ink-soft">
-                      {d.filledSectionsCount} de {d.sectionsCount} secciones diligenciadas · versión v
-                      {d.currentVersion}
+                      {d.filledSectionsCount} de {d.sectionsCount} secciones diligenciadas ·{" "}
+                      {displayRevision({
+                        revisionModel: d.revisionModel,
+                        currentVersion: d.currentVersion,
+                        currentRevisionNumber: d.currentRevisionNumber,
+                      })}
                     </p>
                     {d.processNames.length > 0 ? (
                       <p className="mt-0.5 text-xs text-ink-soft">
@@ -178,7 +210,7 @@ export function QualityDocumentsView({
                       </p>
                     ) : null}
                   </div>
-                  <DocumentStatusBadge status={d.status as never} />
+                  <LifecycleBadge state={d.lifecycle} />
                 </Link>
               </li>
             ))}

@@ -1,17 +1,37 @@
 // Ruta protegida (el guard corre en el layout del namespace /quality).
 export const dynamic = "force-dynamic";
 
-// Trazaloop Quality · QUALITY-01.1 · Detalle y edición de un documento propio.
+// Trazaloop Quality · QUALITY-02 · Ficha de un documento controlado.
 //
-// Reutiliza el editor por secciones del motor TrazaDocs; lo único propio son
-// las server actions, que aplican la guarda de Quality y fijan module_key.
+// La página resuelve TODOS los permisos en servidor y le pasa a la vista
+// booleanos ya decididos. El componente no vuelve a razonar sobre roles: si
+// alguna vez alguien lo manipulara, la base seguiría diciendo que no.
 
 import { notFound } from "next/navigation";
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
-import { getQualityDocument } from "@/lib/db/quality-documents";
-import { listQualityProcessesUsingDocument } from "@/lib/db/quality-processes";
-import { canEditDocument, canApproveDocument, canMarkObsolete } from "@/lib/domain/trazadocs";
-import { QualityDocumentDetail } from "@/components/domain/quality/document-detail";
+import { requireSession } from "@/lib/auth/require-session";
+import { getDocumentControlDetail } from "@/lib/db/document-control";
+import { QUALITY_DOC_MODULE } from "@/lib/db/quality-documents";
+import {
+  listQualityProcessesUsingDocument,
+  listQualityPositions,
+  listOrganizationMembersForQuality,
+} from "@/lib/db/quality-processes";
+import {
+  canAttemptHardDelete,
+  canCreateNextRevision,
+  canDecideNow,
+  canEditRevisionContent,
+  canRetireDocument,
+  canSubmitRevision,
+  displayRevision,
+  hardDeleteBlockReason,
+  type ParticipantRole,
+} from "@/lib/domain/document-control";
+import {
+  QualityDocumentControlDetail,
+  type ResponsibleOption,
+} from "@/components/domain/quality/document-control-detail";
 
 export const metadata = { title: "Documento" };
 
@@ -21,20 +41,167 @@ export default async function QualityDocumentPage({
   params: Promise<{ documentId: string }>;
 }) {
   const org = await requireQualityModule();
+  const { user } = await requireSession();
   const { documentId } = await params;
 
-  const doc = await getQualityDocument(org.organizationId, documentId);
-  if (!doc) notFound();
+  const detail = await getDocumentControlDetail(org.organizationId, documentId, QUALITY_DOC_MODULE);
+  if (!detail) notFound();
 
-  const processes = await listQualityProcessesUsingDocument(org.organizationId, documentId);
+  const [processes, positions, members] = await Promise.all([
+    listQualityProcessesUsingDocument(org.organizationId, documentId),
+    listQualityPositions(org.organizationId),
+    listOrganizationMembersForQuality(org.organizationId),
+  ]);
+
+  const role = org.roleCode as never;
+  const round = detail.currentRevision?.round ?? 1;
+  const routeMode = detail.currentRevision?.routeMode ?? "sequential";
+
+  const canDecide = canDecideNow({
+    userId: user.id,
+    lifecycle: detail.lifecycle,
+    routeMode,
+    round,
+    participants: detail.participants.map((p) => ({
+      profileId: p.profileId,
+      participantRole: p.participantRole,
+      stepOrder: p.stepOrder,
+      round: p.round,
+      decision: p.decision,
+    })),
+  });
+  const myPendingRole: ParticipantRole | null = !canDecide
+    ? null
+    : detail.lifecycle === "pending_approval"
+      ? "approver"
+      : "reviewer";
+
+  // El motivo de la última devolución, que es lo que el autor necesita leer
+  // ANTES que ninguna otra cosa de la pantalla.
+  const lastRejectionDecision = [...detail.decisions]
+    .reverse()
+    .find((d) => d.decisionType === "changes_requested");
+
+  const deleteFacts = {
+    lifecycle: detail.lifecycle,
+    disposition: detail.disposition,
+    everApproved: detail.revisions.some((r) => r.approvedAt !== null),
+    hasFormalHistory: detail.decisions.some((d) => d.decisionType !== "revision_created"),
+    revisionCount: detail.revisions.length,
+    linkedProcessCount: processes.length,
+  };
+  const deleteBlockedReason = hardDeleteBlockReason(deleteFacts);
+  const canDelete = canAttemptHardDelete(role) && deleteBlockedReason === null;
+
+  // Un cargo sin titular vigente no puede recibir una tarea: no hay persona a
+  // quien asignársela. Se ofrece igualmente, pero la base lo rechaza con un
+  // mensaje claro si se elige — y el desplegable ya lo anuncia.
+  const responsibleOptions: ResponsibleOption[] = [
+    ...positions
+      .filter((p) => p.isActive)
+      .map((p) => ({
+        value: `position:${p.id}`,
+        label: p.holderName ? `${p.name} · ${p.holderName}` : `${p.name} · sin titular`,
+        group: "Cargos" as const,
+      })),
+    ...members.map((m) => ({
+      value: `profile:${m.profileId}`,
+      label: m.name,
+      group: "Personas" as const,
+    })),
+  ];
 
   return (
-    <QualityDocumentDetail
-      document={doc}
-      processes={processes}
-      canEdit={canEditDocument(org.roleCode, doc.status)}
-      canApprove={canApproveDocument(org.roleCode)}
-      canObsolete={canMarkObsolete(org.roleCode)}
+    <QualityDocumentControlDetail
+      model={{
+        documentId: detail.documentId,
+        code: detail.code,
+        title: detail.title,
+        description: detail.description,
+        categoryCode: detail.categoryCode,
+        lifecycle: detail.lifecycle,
+        revisionText: displayRevision({
+          revisionModel: detail.revisionModel,
+          currentVersion: detail.currentVersion,
+          currentRevisionNumber: detail.currentRevision?.revisionNumber ?? null,
+        }),
+        revisionModel: detail.revisionModel,
+        ownerName: detail.ownerName,
+        ownerPositionId: detail.ownerPositionId,
+        ownerPositionName: detail.ownerPositionName,
+        createdByName: detail.createdByName,
+        createdAt: detail.createdAt,
+        retirementReason: detail.retirementReason,
+        approvedAt: detail.effectiveRevision?.approvedAt ?? detail.currentRevision?.approvedAt ?? null,
+        effectiveFrom:
+          detail.effectiveRevision?.effectiveFrom ?? detail.currentRevision?.effectiveFrom ?? null,
+        effectiveTo: detail.effectiveRevision?.effectiveTo ?? null,
+        reviewDueAt:
+          detail.effectiveRevision?.reviewDueAt ?? detail.currentRevision?.reviewDueAt ?? null,
+        routeMode,
+        currentRound: round,
+        sections: detail.sections.map((s) => ({
+          id: s.id,
+          title: s.title,
+          content: s.content,
+          sortOrder: s.sortOrder,
+          isRequired: s.isRequired,
+        })),
+        participants: detail.participants.map((p) => ({
+          id: p.id,
+          participantRole: p.participantRole,
+          stepOrder: p.stepOrder,
+          round: p.round,
+          profileName: p.profileName,
+          positionName: p.positionName,
+          decision: p.decision,
+          decidedAt: p.decidedAt,
+          decisionComment: p.decisionComment,
+        })),
+        revisions: detail.revisions.map((r) => ({
+          id: r.id,
+          revisionNumber: r.revisionNumber,
+          revisionLabel: r.revisionLabel,
+          workflowState: r.workflowState,
+          round: r.round,
+          changeNote: r.changeNote,
+          effectiveFrom: r.effectiveFrom,
+          effectiveTo: r.effectiveTo,
+          reviewDueAt: r.reviewDueAt,
+          approvedAt: r.approvedAt,
+          approvedByName: r.approvedByName,
+          createdAt: r.createdAt,
+        })),
+        decisions: detail.decisions.map((d) => ({
+          id: d.id,
+          revisionNumber: d.revisionNumber,
+          round: d.round,
+          decisionType: d.decisionType,
+          reason: d.reason,
+          decidedByName: d.decidedByName,
+          decidedAt: d.decidedAt,
+        })),
+        processes,
+        positions: positions
+          .filter((p) => p.isActive)
+          .map((p) => ({ id: p.id, name: p.name, holderName: p.holderName })),
+        responsibleOptions,
+        canEdit: canEditRevisionContent(role, detail.lifecycle),
+        canSubmit: canSubmitRevision(role, detail.lifecycle) && detail.currentRevision !== null,
+        canDecide,
+        myPendingRole,
+        canCreateNextRevision: canCreateNextRevision(role, detail.lifecycle),
+        canRetire: canRetireDocument(role),
+        canDelete,
+        deleteBlockedReason: canAttemptHardDelete(role) ? deleteBlockedReason : null,
+        lastRejection: lastRejectionDecision
+          ? {
+              reason: lastRejectionDecision.reason,
+              byName: lastRejectionDecision.decidedByName,
+              at: lastRejectionDecision.decidedAt,
+            }
+          : null,
+      }}
     />
   );
 }

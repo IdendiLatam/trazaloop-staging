@@ -10,7 +10,10 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
+import { requireSession } from "@/lib/auth/require-session";
 import { getQualitySummary } from "@/lib/db/quality-processes";
+import { listMyTasks } from "@/lib/db/document-control";
+import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
   href,
@@ -45,7 +48,17 @@ function Card({
 
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
-  const summary = await getQualitySummary(org.organizationId);
+  const { user } = await requireSession();
+  const [summary, tasks] = await Promise.all([
+    getQualitySummary(org.organizationId),
+    listMyTasks(org.organizationId, user.id),
+  ]);
+
+  // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
+  // Solo aparece si de verdad hay algo esperando por esta persona; una tarjeta
+  // que siempre dice «0 pendientes» solo enseña a ignorarla.
+  const inbox = summarizeInbox(tasks.map((t) => ({ taskType: t.taskType, status: t.status })));
+  const pending = summaryLines(inbox);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -58,6 +71,20 @@ export default async function QualityHomePage() {
           publicable. Cada versión publicada queda fija y consultable.
         </p>
       </header>
+
+      {pending.length > 0 ? (
+        <section className="rounded-lg border border-amber/40 bg-amber/5 p-4">
+          <h2 className="text-sm font-semibold">Pendientes para ti</h2>
+          <ul className="mt-1 space-y-0.5">
+            {pending.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <Link href="/quality/tasks" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ir a Mis tareas →
+          </Link>
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">Cómo se construye</h2>
@@ -107,7 +134,7 @@ export default async function QualityHomePage() {
           href="/quality/documents"
           step="Documentación"
           title="Documentos"
-          description="El espacio documental de Quality: procedimientos, políticas e instructivos, con los mismos estados y versiones de TrazaDocs. No necesita ningún otro módulo."
+          description="El espacio documental de Quality: procedimientos, políticas e instructivos, con control documental completo —revisiones, revisores, aprobadores, vigencia y Lista Maestra—. No necesita ningún otro módulo."
           meta={
             summary.documents === 0
               ? "Aún no hay documentos de Quality."

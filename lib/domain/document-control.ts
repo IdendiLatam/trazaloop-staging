@@ -44,6 +44,21 @@ export const WORKFLOW_STATES = [
 ] as const;
 export type WorkflowState = (typeof WORKFLOW_STATES)[number];
 
+/**
+ * Cómo se nombra el estado de UNA revisión en su historial. No es lo mismo que
+ * LIFECYCLE_LABEL: aquel describe el documento hoy (y distingue vigente de
+ * aprobado); este describe qué pasó con una revisión concreta.
+ */
+export const WORKFLOW_STATE_LABEL: Record<WorkflowState, string> = {
+  draft: "Borrador",
+  in_review: "En revisión",
+  changes_requested: "Devuelta",
+  pending_approval: "Pendiente de aprobación",
+  approved: "Aprobada",
+  superseded: "Sustituida",
+  retired: "Retirada",
+};
+
 export function isWorkflowState(v: string | null | undefined): v is WorkflowState {
   return !!v && (WORKFLOW_STATES as readonly string[]).includes(v);
 }
