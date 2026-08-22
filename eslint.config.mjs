@@ -23,6 +23,20 @@ const eslintConfig = defineConfig([
     "supabase/.temp/**",
     "supabase/.branches/**",
   ]),
+  {
+    // Un parámetro con guion bajo delante es una declaración explícita del
+    // autor: «esto lo exige la firma y no lo uso». El repositorio ya lo hace
+    // en toda server action (`_prev`, la firma que impone useActionState), así
+    // que la regla debe reconocer la convención en vez de avisar de algo que
+    // ya está dicho. Sin esta línea, la única forma de silenciarlo sería usar
+    // el parámetro para nada, que es peor.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

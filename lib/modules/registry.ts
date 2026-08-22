@@ -221,6 +221,24 @@ export const QUALITY_SGC_GROUP: ModuleNavGroup = {
 };
 
 /**
+ * Desempeño. Grupo propio, no un apéndice del sistema de gestión: objetivos e
+ * indicadores son la pata que responde «¿esto funciona?», y meterlos junto a
+ * los procesos los convertiría en una pantalla más de configuración.
+ *
+ * QUALITY-03 · Objetivo e Indicador son entradas SEPARADAS a propósito. Un
+ * indicador puede existir sin objetivo (mide un proceso, o la empresa), y un
+ * objetivo se mide con varios indicadores: esconder los indicadores dentro de
+ * los objetivos haría invisible la mitad de los casos.
+ */
+export const QUALITY_DESEMPENO_GROUP: ModuleNavGroup = {
+  title: "Desempeño",
+  items: [
+    { label: "Objetivos", href: "/quality/objectives" },
+    { label: "Indicadores", href: "/quality/indicators" },
+  ],
+};
+
+/**
  * Documentos de Quality. Grupo propio, no un enlace suelto: el espacio
  * documental es una de las dos patas del módulo, no un accesorio de Procesos.
  *
@@ -249,7 +267,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_DOCUMENTOS_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

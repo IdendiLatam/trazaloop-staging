@@ -13,6 +13,7 @@ import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { requireSession } from "@/lib/auth/require-session";
 import { getQualitySummary } from "@/lib/db/quality-processes";
 import { listMyTasks } from "@/lib/db/document-control";
+import { listObjectives, listIndicators } from "@/lib/db/quality-indicators";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -49,9 +50,11 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks] = await Promise.all([
+  const [summary, tasks, objectives, indicators] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
+    listObjectives(org.organizationId),
+    listIndicators(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -59,6 +62,26 @@ export default async function QualityHomePage() {
   // que siempre dice «0 pendientes» solo enseña a ignorarla.
   const inbox = summarizeInbox(tasks.map((t) => ({ taskType: t.taskType, status: t.status })));
   const pending = summaryLines(inbox);
+
+  // QUALITY-03 · Estado del desempeño, con datos reales y sin convertir la
+  // portada en un tablero. Solo se muestra lo que pide una acción.
+  const activeObjectives = objectives.filter((o) => o.adminState === "active");
+  const activeIndicators = indicators.filter((i) => i.adminState === "active");
+  const offTarget = activeIndicators.filter((i) => i.lastEvaluation === "not_met");
+  const needingAttention = activeIndicators.filter((i) => i.lastEvaluation === "attention");
+  const pendingMeasurement = activeIndicators.filter((i) => i.measurementPending);
+
+  const performanceLines: string[] = [];
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (offTarget.length > 0) {
+    performanceLines.push(plural(offTarget.length, "indicador fuera de meta", "indicadores fuera de meta"));
+  }
+  if (needingAttention.length > 0) {
+    performanceLines.push(plural(needingAttention.length, "indicador en atención", "indicadores en atención"));
+  }
+  if (pendingMeasurement.length > 0) {
+    performanceLines.push(plural(pendingMeasurement.length, "medición pendiente", "mediciones pendientes"));
+  }
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -82,6 +105,23 @@ export default async function QualityHomePage() {
           </ul>
           <Link href="/quality/tasks" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ir a Mis tareas →
+          </Link>
+        </section>
+      ) : null}
+
+      {performanceLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Desempeño</h2>
+          <ul className="mt-1 space-y-0.5">
+            {performanceLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Un indicador fuera de meta pide análisis, no es una no conformidad.
+          </p>
+          <Link href="/quality/indicators" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver indicadores →
           </Link>
         </section>
       ) : null}
@@ -128,6 +168,19 @@ export default async function QualityHomePage() {
                 : "Mapa en preparación, todavía sin publicar."
           }
           cta="Ver el mapa"
+        />
+
+        <Card
+          href="/quality/objectives"
+          step="Desempeño"
+          title="Objetivos e indicadores"
+          description="Qué quiere lograr la organización, con qué indicadores se comprueba y cómo va. Los indicadores automáticos se alimentan de lo que Trazaloop ya tiene registrado: nadie teclea el resultado."
+          meta={
+            activeObjectives.length === 0
+              ? "Aún no hay objetivos activos."
+              : `${activeObjectives.length} ${activeObjectives.length === 1 ? "objetivo activo" : "objetivos activos"} · ${activeIndicators.length} ${activeIndicators.length === 1 ? "indicador" : "indicadores"}.`
+          }
+          cta="Ir a Objetivos"
         />
 
         <Card
