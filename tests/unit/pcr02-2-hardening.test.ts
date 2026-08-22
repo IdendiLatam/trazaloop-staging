@@ -282,6 +282,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // QUALITY-03: objetivos, indicadores con configuración versionada,
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
+    "0118_quality_measurement_engine_privilege_hardening.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

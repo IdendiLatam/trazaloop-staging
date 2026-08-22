@@ -40,6 +40,7 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-03: objetivos, indicadores con configuración versionada,
   // mediciones con linaje, eventos de desempeño y cierre de ciclo.
   "0117_quality_objectives_indicators_and_measurements.sql",
+  "0118_quality_measurement_engine_privilege_hardening.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

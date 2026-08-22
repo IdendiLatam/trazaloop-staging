@@ -32,6 +32,7 @@ const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const stripSql = (s: string) => s.replace(/^\s*--.*$/gm, "");
 const MIG = "supabase/migrations/0117_quality_objectives_indicators_and_measurements.sql";
+const MIG_PRIV = "supabase/migrations/0118_quality_measurement_engine_privilege_hardening.sql";
 
 let passed = 0;
 let failed = 0;
@@ -545,6 +546,35 @@ check("M14. la migración explica el porqué y ancla sus decisiones", () => {
                           "OI-13", "OI-16", "OI-21", "OI-22", "OI-26", "OI-31", "AT-02", "MDR-33"]) {
     assert(text.includes(decision), `la migración no ancla la decisión ${decision}`);
   }
+});
+
+check("M15. el motor de medición es de SOLO LECTURA también donde el entorno concede de más", () => {
+  // Conceder SELECT no retira lo que el entorno ya concedió. En un proyecto
+  // remoto de Supabase los privilegios por defecto dan arwdDxtm sobre cada
+  // tabla nueva; en local solo Dxtm. Por eso 0117 §21 parecía correcta aquí y
+  // en Staging dejaba a `authenticated` con UPDATE y DELETE sobre las
+  // mediciones y los eventos: la RLS los filtraba a cero filas, que NO es lo
+  // mismo que denegarlos. Lo cazó la validación contra Staging; 0118 lo revoca.
+  //
+  // Esta prueba existe para que la próxima tabla de solo lectura no repita el
+  // olvido sin que nadie se entere hasta el despliegue.
+  const sql = stripSql(read(MIG_PRIV));
+  const readOnly = ["quality_indicator_configs", "quality_measurements",
+                    "quality_calculation_runs", "quality_period_closures", "work_events"];
+  const revoked = sql.match(/revoke insert, update, delete, truncate, references, trigger[\s\S]*?from authenticated/);
+  assert(revoked !== null, "0118 debe revocar el DML que concede el entorno");
+  for (const table of readOnly) {
+    assert(revoked![0].includes(table), `${table} sigue con el DML del entorno`);
+  }
+  // La evidencia es el caso mixto: se adjunta y se quita, pero nunca se reescribe.
+  assert(/revoke update, truncate, references, trigger[\s\S]*?quality_measurement_evidence[\s\S]*?from authenticated/.test(sql),
+    "la evidencia no puede ser reescribible");
+  assert(/revoke all on table[\s\S]*?from anon/.test(sql), "anon no puede conservar nada");
+  // Anclado a inicio de sentencia: la palabra «UPDATE» aparece legítimamente
+  // dentro de un `comment on table`, y buscarla como subcadena convertiría la
+  // prueba en un detector de prosa.
+  assert(!/^\s*(create|alter|drop|insert|update|delete)\b/im.test(sql),
+    "0118 solo revoca y comenta: no crea, no altera y no toca datos");
 });
 
 // ---------------------------------------------------------------------------

@@ -92,6 +92,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     // QUALITY-03: objetivos, indicadores con configuración versionada,
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
+    "0118_quality_measurement_engine_privilege_hardening.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

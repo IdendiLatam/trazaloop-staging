@@ -762,6 +762,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     // QUALITY-03: objetivos, indicadores con configuración versionada,
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
+    "0118_quality_measurement_engine_privilege_hardening.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));
