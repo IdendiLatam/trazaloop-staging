@@ -98,6 +98,7 @@ export function QualityPeriodClosures({
 
       {canClose ? (
         <form action={closeAction} className="grid gap-3 border-t border-hairline pt-3 sm:grid-cols-4 sm:items-end">
+          <h3 className="text-sm font-semibold sm:col-span-4">Cerrar un periodo</h3>
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium">Nombre del periodo</span>
             <input name="label" required defaultValue={suggested.label} className={inputClass} />
