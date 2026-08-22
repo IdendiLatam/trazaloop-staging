@@ -15,6 +15,19 @@
 export const TASK_STATUSES = ["open", "in_progress", "done", "cancelled"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/** A dónde lleva una tarea o una alerta según el objeto del que habla. Sin
+ *  esto, la bandeja mandaría una tarea de indicador a la ruta de documentos.
+ *  Devuelve null cuando el asunto no se reconoce: mejor sin enlace que con uno
+ *  que lleva a un 404. */
+export const SUBJECT_TYPES = [
+  "trazadoc_document", "quality_indicator", "quality_objective",
+] as const;
+export type SubjectType = (typeof SUBJECT_TYPES)[number];
+
+export function isSubjectType(v: string | null | undefined): v is SubjectType {
+  return !!v && (SUBJECT_TYPES as readonly string[]).includes(v);
+}
+
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   open: "Pendiente",
   in_progress: "En curso",
@@ -26,6 +39,11 @@ export const TASK_TYPES = [
   "document_review",
   "document_approval",
   "document_changes_requested",
+  // QUALITY-03 · La bandeja se diseñó transversal en 0116 y este es el primer
+  // dominio que la comparte. Los tipos nuevos entran AQUÍ, no en un enumerado
+  // paralelo: si el dominio no los conoce, la pantalla los pinta sin etiqueta.
+  "indicator_measurement_due",
+  "indicator_off_target",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -33,6 +51,8 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   document_review: "Revisar documento",
   document_approval: "Aprobar documento",
   document_changes_requested: "Corregir y reenviar",
+  indicator_measurement_due: "Registrar medición",
+  indicator_off_target: "Indicador fuera de meta",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -52,6 +72,9 @@ export const ALERT_TYPES = [
   "document_changes_requested",
   "document_approved",
   "document_retired",
+  "indicator_measurement_due",
+  "indicator_target_missed",
+  "objective_at_risk",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -61,6 +84,9 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   document_changes_requested: "Te devolvieron un documento",
   document_approved: "Un documento quedó aprobado",
   document_retired: "Un documento fue retirado",
+  indicator_measurement_due: "Falta una medición",
+  indicator_target_missed: "Un indicador no cumplió su meta",
+  objective_at_risk: "Un objetivo está en riesgo",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;
@@ -97,6 +123,7 @@ export type InboxSummary = {
   toReview: number;
   toApprove: number;
   returned: number;
+  toMeasure: number;
   total: number;
 };
 
@@ -107,7 +134,8 @@ export function summarizeInbox(
   const toReview = pending.filter((t) => t.taskType === "document_review").length;
   const toApprove = pending.filter((t) => t.taskType === "document_approval").length;
   const returned = pending.filter((t) => t.taskType === "document_changes_requested").length;
-  return { toReview, toApprove, returned, total: pending.length };
+  const toMeasure = pending.filter((t) => t.taskType === "indicator_measurement_due").length;
+  return { toReview, toApprove, returned, toMeasure, total: pending.length };
 }
 
 /** Frases en singular/plural correctos: aparecen en la portada de Quality. */
@@ -123,6 +151,9 @@ export function summaryLines(summary: InboxSummary): string[] {
   }
   if (summary.returned > 0) {
     lines.push(n(summary.returned, "documento devuelto", "documentos devueltos"));
+  }
+  if (summary.toMeasure > 0) {
+    lines.push(n(summary.toMeasure, "medición pendiente", "mediciones pendientes"));
   }
   return lines;
 }

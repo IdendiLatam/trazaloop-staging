@@ -43,6 +43,9 @@ const QUALITY_01_ALLOWED = new Set([
   // con revisores y aprobadores, decisiones append-only, bandeja transversal
   // de tareas y alertas, y la lista maestra como vista derivada.
   "0116_document_control_revisions_workflow_and_tasks.sql",
+  // QUALITY-03: objetivos, indicadores con configuración versionada,
+  // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+  "0117_quality_objectives_indicators_and_measurements.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -147,6 +150,9 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

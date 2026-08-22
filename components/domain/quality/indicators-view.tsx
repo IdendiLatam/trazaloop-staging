@@ -295,8 +295,8 @@ export function QualityIndicatorsView({
                     </Link>
                     <span className="block text-ink-soft">{i.scopeLabel} · {i.ownerLabel}</span>
                   </td>
-                  <td className="px-3 py-2">{i.targetLabel}</td>
-                  <td className="px-3 py-2">{i.frequencyLabel}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{i.targetLabel}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{i.frequencyLabel}</td>
                   <td className="px-3 py-2">{i.sourceLabel}</td>
                   <td className="px-3 py-2">
                     {i.lastPeriodLabel ? (
@@ -308,7 +308,7 @@ export function QualityIndicatorsView({
                       <span className="text-ink-soft">Sin mediciones</span>
                     )}
                     {i.measurementPending ? (
-                      <span className="mt-0.5 block text-amber">
+                      <span className="mt-0.5 block whitespace-nowrap text-amber">
                         Falta {i.duePeriodLabel}
                       </span>
                     ) : i.nextMeasurementDueOn ? (

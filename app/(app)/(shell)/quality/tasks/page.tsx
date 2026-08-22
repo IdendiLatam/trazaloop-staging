@@ -33,6 +33,7 @@ export default async function QualityTasksPage() {
     description: t.description,
     documentId: t.subjectId,
     documentCode: t.documentCode,
+    subjectType: t.subjectType,
     moduleKey: t.subjectModuleKey,
     createdAt: t.createdAt,
   });
@@ -48,6 +49,7 @@ export default async function QualityTasksPage() {
         title: a.title,
         message: a.message,
         documentId: a.subjectId,
+        subjectType: a.subjectType,
         moduleKey: a.subjectModuleKey,
         createdAt: a.createdAt,
       }))}

@@ -252,6 +252,9 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

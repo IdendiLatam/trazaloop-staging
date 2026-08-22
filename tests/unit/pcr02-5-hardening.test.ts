@@ -42,6 +42,9 @@ const QUALITY_01_ALLOWED = new Set([
   // con revisores y aprobadores, decisiones append-only, bandeja transversal
   // de tareas y alertas, y la lista maestra como vista derivada.
   "0116_document_control_revisions_workflow_and_tasks.sql",
+  // QUALITY-03: objetivos, indicadores con configuración versionada,
+  // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+  "0117_quality_objectives_indicators_and_measurements.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -468,6 +471,9 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

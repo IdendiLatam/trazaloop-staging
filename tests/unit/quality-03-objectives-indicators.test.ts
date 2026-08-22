@@ -25,7 +25,7 @@ import {
   computeCalculated, computeTrend, describeFormula, describeTarget, describeWarning,
   evaluate, evaluationTone, formatValue, nativeSource,
   validateCalcDefinition, validateTargetShape,
-  type Direction, type SeriesPoint, type TargetShape,
+  type SeriesPoint, type TargetShape,
 } from "../../lib/domain/quality-indicators";
 
 const ROOT = join(__dirname, "..", "..");
@@ -50,6 +50,9 @@ console.log("A · Las separaciones que no se difuminan");
 // ---------------------------------------------------------------------------
 
 check("A1. estado administrativo y desempeño son vocabularios DISTINTOS (OI-03)", () => {
+  for (const st of OBJECTIVE_ADMIN_STATES) {
+    assert(OBJECTIVE_ADMIN_STATE_LABEL[st]?.length > 0, `falta la etiqueta de ${st}`);
+  }
   // Si un valor apareciera en los dos, alguien acabaría usando uno por el otro.
   const admin = new Set<string>([...INDICATOR_ADMIN_STATES, ...OBJECTIVE_ADMIN_STATES]);
   for (const e of EVALUATIONS) {
@@ -322,6 +325,17 @@ check("E1. las unidades del encargo están todas", () => {
     assert((UNIT_CODES as readonly string[]).includes(needed), `falta la unidad ${needed}`);
   }
   for (const u of UNIT_CODES) assert(UNIT_LABEL[u]?.length > 0, `falta la etiqueta de ${u}`);
+});
+
+check("E3. la base escribe los números como los lee un hispanohablante", () => {
+  // La explicación de la evaluación acaba junto al valor que formatea la
+  // aplicación. Verlo escrito «66.67» al lado de «66,67 %» hace dudar de si
+  // son el mismo dato.
+  assert(SQL.includes("quality_fmt_number"), "la base no unifica el formato numérico");
+  assert(!/to_char\(p_(target|warning), 'FM/.test(SQL), "quedó un formato numérico sin unificar");
+  assert(SQL.includes("'.', ','"), "el ayudante no cambia el punto por la coma");
+  // Y el dominio hace lo mismo del lado de la aplicación.
+  assert(formatValue(66.67, "percent") === "66,67 %", formatValue(66.67, "percent"));
 });
 
 check("E2. la unidad es presentación: no transforma el valor", () => {

@@ -551,6 +551,9 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

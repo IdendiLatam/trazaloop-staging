@@ -174,7 +174,7 @@ export default async function QualityHomePage() {
           href="/quality/objectives"
           step="Desempeño"
           title="Objetivos e indicadores"
-          description="Qué quiere lograr la organización, con qué indicadores se comprueba y cómo va. Los indicadores automáticos se alimentan de lo que Trazaloop ya tiene registrado: nadie teclea el resultado."
+          description="Qué quiere lograr la empresa, con qué indicadores se comprueba y cómo va. Los indicadores automáticos se alimentan de lo que Trazaloop ya tiene registrado: nadie teclea el resultado."
           meta={
             activeObjectives.length === 0
               ? "Aún no hay objetivos activos."

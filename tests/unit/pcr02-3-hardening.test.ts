@@ -271,6 +271,9 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

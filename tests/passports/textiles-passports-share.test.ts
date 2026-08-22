@@ -89,6 +89,9 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     // con revisores y aprobadores, decisiones append-only, bandeja transversal
     // de tareas y alertas, y la lista maestra como vista derivada.
     "0116_document_control_revisions_workflow_and_tasks.sql",
+    // QUALITY-03: objetivos, indicadores con configuración versionada,
+    // mediciones con linaje, eventos de desempeño y cierre de ciclo.
+    "0117_quality_objectives_indicators_and_measurements.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

@@ -188,7 +188,7 @@ export function QualityObjectivesView({
       {objectives.length === 0 ? (
         <EmptyState
           title="Todavía no hay objetivos"
-          description="Un objetivo dice qué quiere lograr la organización y con qué indicadores se comprueba. Empieza por uno: es preferible un objetivo que se mida de verdad a diez que nadie mire."
+          description="Un objetivo dice qué quiere lograr la empresa y con qué indicadores se comprueba. Empieza por uno: es preferible un objetivo que se mida de verdad a diez que nadie mire."
         />
       ) : (
         <ul className="space-y-2">

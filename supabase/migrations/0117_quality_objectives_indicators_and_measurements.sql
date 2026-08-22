@@ -1062,6 +1062,24 @@ grant execute on function public.quality_previous_period(text, date) to authenti
 -- regla. Un indicador de reclamos mejora bajando, y uno de temperatura mejora
 -- quedandose dentro de un rango.
 -- ----------------------------------------------------------------------------
+/**
+ * Un número tal como se lee en español: coma decimal y sin ceros de relleno.
+ * Existe porque la explicación de una evaluación acaba en la misma pantalla
+ * que el valor formateado por la aplicación, y verlo escrito «66.67» junto a
+ * «66,67 %» hace dudar de si son el mismo dato.
+ */
+create or replace function public.quality_fmt_number(p_value numeric)
+returns text
+language sql
+immutable
+as $$
+  select replace(
+    trim(trailing '.' from trim(trailing '0' from to_char(p_value, 'FM999999999990.999'))),
+    '.', ','
+  );
+$$;
+revoke all on function public.quality_fmt_number(numeric) from public, anon, authenticated;
+
 create or replace function public.quality_evaluate_value(
   p_direction   text,
   p_target      numeric,
@@ -1078,8 +1096,8 @@ language plpgsql
 immutable
 as $$
 declare
-  v_n text := trim(trailing '.' from trim(trailing '0' from to_char(p_value, 'FM999999999990.999')));
-  v_t text := trim(trailing '.' from trim(trailing '0' from to_char(p_target, 'FM999999999990.999')));
+  v_n text := quality_fmt_number(p_value);
+  v_t text := quality_fmt_number(p_target);
 begin
   if p_data_state = 'not_applicable' then
     return query select 'no_data'::text, 'No aplica a este periodo.'::text; return;
@@ -1096,15 +1114,15 @@ begin
     end if;
     if p_value >= p_target_min and p_value <= p_target_max then
       return query select 'complies'::text,
-        (v_n || ' está dentro del rango ' || p_target_min || '–' || p_target_max || ' → cumple.')::text;
+        (v_n || ' está dentro del rango ' || quality_fmt_number(p_target_min) || '–' || quality_fmt_number(p_target_max) || ' → cumple.')::text;
     elsif p_warning_min is not null and p_warning_max is not null
           and p_value >= p_warning_min and p_value <= p_warning_max then
       return query select 'attention'::text,
-        (v_n || ' está fuera del rango ' || p_target_min || '–' || p_target_max ||
-         ' pero dentro del margen de atención ' || p_warning_min || '–' || p_warning_max || '.')::text;
+        (v_n || ' está fuera del rango ' || quality_fmt_number(p_target_min) || '–' || quality_fmt_number(p_target_max) ||
+         ' pero dentro del margen de atención ' || quality_fmt_number(p_warning_min) || '–' || quality_fmt_number(p_warning_max) || '.')::text;
     else
       return query select 'not_met'::text,
-        (v_n || ' está fuera del rango ' || p_target_min || '–' || p_target_max || ' → no cumple.')::text;
+        (v_n || ' está fuera del rango ' || quality_fmt_number(p_target_min) || '–' || quality_fmt_number(p_target_max) || ' → no cumple.')::text;
     end if;
     return;
   end if;
@@ -1122,7 +1140,7 @@ begin
       elsif p_warning is not null and p_value >= p_warning then
         return query select 'attention'::text,
           (v_n || ' no alcanza la meta ' || v_t || ', pero se mantiene por encima del umbral de atención ' ||
-           trim(trailing '.' from trim(trailing '0' from to_char(p_warning, 'FM999999999990.999'))) || '.')::text;
+           quality_fmt_number(p_warning) || '.')::text;
       else
         return query select 'not_met'::text, (v_n || ' < meta ' || v_t || ' → no cumple.')::text;
       end if;
@@ -1132,7 +1150,7 @@ begin
       elsif p_warning is not null and p_value <= p_warning then
         return query select 'attention'::text,
           (v_n || ' supera la meta ' || v_t || ', pero se mantiene por debajo del umbral de atención ' ||
-           trim(trailing '.' from trim(trailing '0' from to_char(p_warning, 'FM999999999990.999'))) || '.')::text;
+           quality_fmt_number(p_warning) || '.')::text;
       else
         return query select 'not_met'::text, (v_n || ' > meta ' || v_t || ' → no cumple.')::text;
       end if;

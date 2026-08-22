@@ -67,7 +67,10 @@ export function IndicatorChart({
   // Un margen del 10 % evita que el punto más alto toque el borde y que una
   // serie plana se dibuje como una línea pegada al eje.
   const span = hi - lo === 0 ? Math.max(Math.abs(hi) * 0.2, 1) : (hi - lo) * 0.1;
-  const min = lo - span;
+  // El eje no baja de cero cuando ningún dato es negativo: un «−9,6 %» en la
+  // esquina de una gráfica de porcentajes es ruido que invita a preguntarse
+  // qué significa, y no significa nada.
+  const min = lo >= 0 ? Math.max(0, lo - span) : lo - span;
   const max = hi + span;
 
   const x = (i: number) =>
@@ -117,7 +120,13 @@ export function IndicatorChart({
               x1={PAD_L} y1={y(targetValue)} x2={W - PAD_R} y2={y(targetValue)}
               stroke="#1f7a5a" strokeWidth="1" strokeDasharray="4 3" opacity="0.8"
             />
-            <text x={PAD_L} y={y(targetValue) - 4} fontSize="9" fill="#1f7a5a">
+            {/*
+              Debajo de la línea y a la izquierda. Ninguna posición es
+              perfecta —una serie que ronda su meta pasa por todas—, pero
+              encima y a la derecha choca justo con los puntos que más
+              interesan: los que están cumpliendo.
+            */}
+            <text x={PAD_L + 2} y={y(targetValue) + 11} fontSize="9" fill="#1f7a5a">
               meta {fmt(targetValue)}
             </text>
           </>

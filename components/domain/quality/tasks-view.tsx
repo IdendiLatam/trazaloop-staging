@@ -9,6 +9,7 @@ import {
   TASK_STATUS_LABEL,
   TASK_TYPE_LABEL,
   type AlertType,
+  type SubjectType,
   type TaskStatus,
   type TaskType,
 } from "@/lib/domain/work-inbox";
@@ -41,6 +42,7 @@ export type InboxTask = {
   description: string | null;
   documentId: string;
   documentCode: string | null;
+  subjectType: string;
   moduleKey: string | null;
   createdAt: string;
 };
@@ -52,6 +54,7 @@ export type InboxAlert = {
   title: string;
   message: string | null;
   documentId: string;
+  subjectType: string;
   moduleKey: string | null;
   createdAt: string;
 };
@@ -60,13 +63,37 @@ const TASK_TONE: Record<TaskType, string> = {
   document_review: "border-amber/40 bg-amber/5",
   document_approval: "border-loop/30 bg-loop/5",
   document_changes_requested: "border-danger/30 bg-danger/5",
+  indicator_measurement_due: "border-amber/40 bg-amber/5",
+  indicator_off_target: "border-danger/30 bg-danger/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
   document_review: "Revisar documento",
   document_approval: "Aprobar documento",
   document_changes_requested: "Corregir y reenviar",
+  indicator_measurement_due: "Registrar la medición",
+  indicator_off_target: "Ver el indicador",
 };
+
+/**
+ * A dónde lleva cada tarea. La bandeja es transversal, así que el destino lo
+ * decide el TIPO DE ASUNTO, no el módulo: mandar una tarea de indicador a la
+ * ruta de documentos daría un 404 con toda naturalidad.
+ */
+function subjectHref(
+  subjectType: string, subjectId: string, moduleKey: string | null
+): string | null {
+  switch (subjectType as SubjectType) {
+    case "trazadoc_document":
+      return trazadocDocumentHref(moduleKey ?? "quality", subjectId);
+    case "quality_indicator":
+      return `/quality/indicators/${subjectId}`;
+    case "quality_objective":
+      return `/quality/objectives/${subjectId}`;
+    default:
+      return null;
+  }
+}
 
 export function QualityTasksView({
   tasks,
@@ -82,8 +109,8 @@ export function QualityTasksView({
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Mis tareas</h1>
         <p className="text-sm text-ink-soft">
-          Lo que está esperando por ti en el sistema de gestión. Cada tarea lleva al documento
-          exacto, en el punto exacto donde debes decidir.
+          Lo que está esperando por ti en el sistema de gestión. Cada tarea lleva al sitio exacto
+          —el documento, el indicador— donde tienes que hacer algo.
         </p>
       </header>
 
@@ -97,7 +124,7 @@ export function QualityTasksView({
         ) : (
           <ul className="space-y-2">
             {tasks.map((t) => {
-              const href = trazadocDocumentHref(t.moduleKey ?? "quality", t.documentId);
+              const href = subjectHref(t.subjectType, t.documentId, t.moduleKey);
               return (
                 <li key={t.id} className={`rounded-lg border p-4 ${TASK_TONE[t.taskType]}`}>
                   <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft">
@@ -163,7 +190,7 @@ export function QualityTasksView({
 
 function AlertItem({ alert }: { alert: InboxAlert }) {
   const [state, formAction, pending] = useActionState(markQualityAlertAction, initial);
-  const href = trazadocDocumentHref(alert.moduleKey ?? "quality", alert.documentId);
+  const href = subjectHref(alert.subjectType, alert.documentId, alert.moduleKey);
   const tone =
     alert.severity === "warning"
       ? "border-danger/30 bg-danger/5"
@@ -183,7 +210,7 @@ function AlertItem({ alert }: { alert: InboxAlert }) {
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {href ? (
           <Link href={href} className="text-xs font-medium text-loop hover:underline">
-            Abrir el documento →
+            {alert.subjectType === "trazadoc_document" ? "Abrir el documento →" : "Abrir →"}
           </Link>
         ) : null}
         <form action={formAction} className="inline">

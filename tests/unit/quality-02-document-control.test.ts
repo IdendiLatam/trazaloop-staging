@@ -507,13 +507,13 @@ check("F1. el resumen de la portada cuenta lo pendiente, no lo cerrado", () => {
 });
 
 check("F2. singular y plural correctos: nadie lee «1 documentos»", () => {
-  const one = summaryLines({ toReview: 1, toApprove: 0, returned: 0, total: 1 });
+  const one = summaryLines({ toReview: 1, toApprove: 0, returned: 0, toMeasure: 0, total: 1 });
   assert(one[0] === "1 documento por revisar", one[0]);
-  const many = summaryLines({ toReview: 3, toApprove: 1, returned: 2, total: 6 });
+  const many = summaryLines({ toReview: 3, toApprove: 1, returned: 2, toMeasure: 0, total: 6 });
   assert(many[0] === "3 documentos por revisar", many[0]);
   assert(many[1] === "1 documento por aprobar", many[1]);
   assert(many[2] === "2 documentos devueltos", many[2]);
-  assert(summaryLines({ toReview: 0, toApprove: 0, returned: 0, total: 0 }).length === 0,
+  assert(summaryLines({ toReview: 0, toApprove: 0, returned: 0, toMeasure: 0, total: 0 }).length === 0,
     "sin pendientes debería no decir nada");
 });
 

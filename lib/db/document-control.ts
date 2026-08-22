@@ -415,6 +415,7 @@ export type TaskRow = {
   title: string;
   description: string | null;
   subjectId: string;
+  subjectType: string;
   subjectRevisionId: string | null;
   subjectModuleKey: string | null;
   documentCode: string | null;
@@ -435,7 +436,7 @@ export async function listMyTasks(
   let query = supabase
     .from("work_tasks")
     .select(
-      "id, task_type, status, title, description, subject_id, subject_revision_id, created_at, " +
+      "id, task_type, status, title, description, subject_id, subject_type, subject_revision_id, created_at, " +
         "due_at, completed_at, resolution, assignee_profile_id, " +
         "assignee:profiles!work_tasks_assignee_profile_id_fkey(full_name, email)"
     )
@@ -450,7 +451,9 @@ export async function listMyTasks(
     return [];
   }
   const rows = data as unknown as Record<string, unknown>[];
-  const documentIds = [...new Set(rows.map((r) => r.subject_id as string))];
+  const documentIds = [...new Set(rows
+    .filter((r) => r.subject_type === "trazadoc_document")
+    .map((r) => r.subject_id as string))];
   const documents = await getDocumentIdentityByIds(organizationId, documentIds);
 
   return rows.map((r) => {
@@ -463,6 +466,7 @@ export async function listMyTasks(
       title: r.title as string,
       description: (r.description as string | null) ?? null,
       subjectId: r.subject_id as string,
+      subjectType: r.subject_type as string,
       subjectRevisionId: (r.subject_revision_id as string | null) ?? null,
       subjectModuleKey: doc?.moduleKey ?? null,
       documentCode: doc?.code ?? null,
@@ -484,6 +488,7 @@ export type AlertRow = {
   title: string;
   message: string | null;
   subjectId: string;
+  subjectType: string;
   subjectModuleKey: string | null;
   createdAt: string;
 };
@@ -496,7 +501,7 @@ export async function listMyAlerts(
   const supabase = await createServerClient();
   let query = supabase
     .from("work_alerts")
-    .select("id, alert_type, severity, status, title, message, subject_id, created_at")
+    .select("id, alert_type, severity, status, title, message, subject_id, subject_type, created_at")
     .eq("organization_id", organizationId)
     .eq("recipient_profile_id", profileId)
     .order("created_at", { ascending: false });
@@ -510,7 +515,9 @@ export async function listMyAlerts(
   const rows = data as unknown as Record<string, unknown>[];
   const documents = await getDocumentIdentityByIds(
     organizationId,
-    [...new Set(rows.map((r) => r.subject_id as string))]
+    [...new Set(rows
+      .filter((r) => r.subject_type === "trazadoc_document")
+      .map((r) => r.subject_id as string))]
   );
   return rows.map((r) => ({
     id: r.id as string,
@@ -520,6 +527,7 @@ export async function listMyAlerts(
     title: r.title as string,
     message: (r.message as string | null) ?? null,
     subjectId: r.subject_id as string,
+    subjectType: r.subject_type as string,
     subjectModuleKey: documents.get(r.subject_id as string)?.moduleKey ?? null,
     createdAt: r.created_at as string,
   }));
