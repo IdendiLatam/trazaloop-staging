@@ -27,7 +27,12 @@ import {
 } from "@/lib/modules/catalog";
 import type { DerivedModuleState } from "@/lib/modules/access";
 import { formatRemainingTrial } from "@/lib/modules/access";
-import { DERIVED_STATE_LABEL, DERIVED_STATE_HINT, isEnterableState } from "@/lib/modules/messages";
+import {
+  DERIVED_STATE_LABEL,
+  DERIVED_STATE_HINT,
+  isEnterableState,
+  sortModulesForSelector,
+} from "@/lib/modules/messages";
 
 function formatExpiry(iso: string): string {
   try {
@@ -118,7 +123,7 @@ export default async function ModulesPortalPage() {
   const stateByKey = new Map(statuses.map((s) => [s.key, s]));
   const demoTrials = activeOrg
     ? await getDemoTrialSummary(activeOrg.organizationId)
-    : { activeTrials: [], hasExpired: false };
+    : { activeTrials: [], expiredModules: [], hasEnterableModule: false, notice: "none" as const };
 
   // Destinos que NO pueden conocerse de antemano porque dependen de la sesión.
   // Hoy solo CPR: su entrada es el dashboard, salvo que falte empresa activa o
@@ -127,6 +132,38 @@ export default async function ModulesPortalPage() {
   const runtimeHrefByKey: Partial<Record<CommercialModuleKey, string>> = {
     cpr: cprHref,
   };
+
+  // Las tarjetas se resuelven ANTES de pintarse para poder ordenarlas por su
+  // estado. Los módulos a los que la empresa SÍ puede entrar van primero: con
+  // el orden fijo del catálogo, una empresa con los dos primeros bloqueados
+  // encontraba el único módulo utilizable en la segunda fila, y su «Entrar →»
+  // —la última línea de la tarjeta— caía por debajo del borde de la pantalla.
+  // El criterio es el ESTADO, nunca la clave: un módulo futuro entra solo.
+  const cards = sortModulesForSelector(
+    COMMERCIAL_MODULES.map((mod) => {
+      const status = stateByKey.get(mod.key);
+      // Sin empresa activa: los funcionales piden empresa; los no
+      // funcionales se muestran como Próximamente.
+      const state: DerivedModuleState = status
+        ? status.access.derivedState
+        : mod.status === "functional"
+          ? "not_assigned"
+          : "coming_soon";
+      return {
+        key: mod.key,
+        name: mod.name,
+        tagline: mod.description,
+        state,
+        expiresAt: status?.access.expiresAt ?? null,
+        href: resolveModuleEntryHref({
+          mod,
+          isEnterable: isEnterableState(state),
+          runtimeHref: runtimeHrefByKey[mod.key],
+        }),
+      };
+    }),
+    (card) => isEnterableState(card.state) && card.href !== null
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6">
@@ -148,35 +185,25 @@ export default async function ModulesPortalPage() {
         )}
       </header>
 
-      <DemoTrialBanner trials={demoTrials.activeTrials} hasExpired={demoTrials.hasExpired} />
+      {/* Sin enlace al selector: ya estamos en él. */}
+      <DemoTrialBanner
+        trials={demoTrials.activeTrials}
+        expiredModules={demoTrials.expiredModules}
+        notice={demoTrials.notice}
+        showModulesLink={false}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {COMMERCIAL_MODULES.map((mod) => {
-          const status = stateByKey.get(mod.key);
-          // Sin empresa activa: los funcionales piden empresa; los no
-          // funcionales se muestran como Próximamente.
-          const state: DerivedModuleState = status
-            ? status.access.derivedState
-            : mod.status === "functional"
-              ? "not_assigned"
-              : "coming_soon";
-          const expiresAt = status?.access.expiresAt ?? null;
-          const href = resolveModuleEntryHref({
-            mod,
-            isEnterable: isEnterableState(state),
-            runtimeHref: runtimeHrefByKey[mod.key],
-          });
-          return (
-            <ModuleCard
-              key={mod.key}
-              name={mod.name}
-              tagline={mod.description}
-              state={state}
-              expiresAt={expiresAt}
-              href={href}
-            />
-          );
-        })}
+        {cards.map((card) => (
+          <ModuleCard
+            key={card.key}
+            name={card.name}
+            tagline={card.tagline}
+            state={card.state}
+            expiresAt={card.expiresAt}
+            href={card.href}
+          />
+        ))}
       </div>
 
       <p className="text-xs text-ink-soft">

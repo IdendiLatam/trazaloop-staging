@@ -116,7 +116,11 @@ export default async function ShellLayout({
         </header>
 
         <main className="flex-1 space-y-4 p-6">
-          <DemoTrialBanner trials={demoTrials.activeTrials} hasExpired={demoTrials.hasExpired} />
+          <DemoTrialBanner
+            trials={demoTrials.activeTrials}
+            expiredModules={demoTrials.expiredModules}
+            notice={demoTrials.notice}
+          />
           {children}
         </main>
       </div>

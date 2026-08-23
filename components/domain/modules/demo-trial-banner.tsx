@@ -3,13 +3,27 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatRemainingTrial } from "@/lib/modules/access";
+import {
+  DEMO_BANNER_INTRO,
+  DEMO_EXPIRED_BANNER,
+  DEMO_PARTIAL_BANNER_BODY,
+  DEMO_PARTIAL_BANNER_TITLE,
+  type DemoNoticeKind,
+} from "@/lib/modules/messages";
 
 /**
- * Trazaloop · Sprint T9F · Aviso del Demo TEMPORAL de 2 días.
+ * Trazaloop · Aviso de las pruebas Demo.
  *
  * Server-driven: las fechas de vencimiento las calcula el servidor (hora de
  * la BD) y llegan como ISO. El tiempo restante mostrado es INFORMATIVO — la
  * autorización real siempre es server-side.
+ *
+ * El aviso habla SIEMPRE de módulos, nunca de la cuenta. Antes decía «Tu
+ * periodo Demo ha finalizado» en cuanto no quedaba ninguna prueba en curso,
+ * de modo que una empresa con PCR y Textiles vencidos pero Quality en Full
+ * leía que su acceso había terminado —y lo leía también DENTRO de Quality,
+ * mientras lo estaba usando—. El vencimiento de un módulo no es un estado de
+ * la cuenta, y el texto ya no lo trata como tal.
  *
  * Accesible (role="status", aria-live), no depende solo del color, se adapta
  * a móvil. Se puede cerrar durante la sesión pero reaparece en cada carga
@@ -18,8 +32,15 @@ import { formatRemainingTrial } from "@/lib/modules/access";
 export type DemoTrialBannerProps = {
   /** Módulos en Demo temporal con su vencimiento ISO. */
   trials: { name: string; expiresAt: string }[];
-  /** ¿Hay algún módulo con la prueba ya finalizada? */
-  hasExpired: boolean;
+  /** Módulos cuya prueba ya venció, por nombre. */
+  expiredModules: string[];
+  /** Qué aviso corresponde (lo clasifica el servidor). */
+  notice: DemoNoticeKind;
+  /**
+   * ¿Ofrecer el enlace al selector? En el propio selector no: llevaría a la
+   * página en la que ya se está, que es un botón que no hace nada.
+   */
+  showModulesLink?: boolean;
 };
 
 function formatExpiry(iso: string): string {
@@ -37,32 +58,73 @@ function formatExpiry(iso: string): string {
   }
 }
 
-export function DemoTrialBanner({ trials, hasExpired }: DemoTrialBannerProps) {
+/** «PCR y Textiles», «PCR, Textiles y Quality» — como lo diría una persona. */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
+
+export function DemoTrialBanner({
+  trials,
+  expiredModules,
+  notice,
+  showModulesLink = true,
+}: DemoTrialBannerProps) {
   const [dismissed, setDismissed] = useState(false);
 
-  if (dismissed) return null;
-  if (trials.length === 0 && !hasExpired) return null;
+  if (dismissed || notice === "none") return null;
 
-  // ¿Todas las pruebas comparten la misma fecha? → un solo aviso general.
+  // ¿Todas las pruebas en curso comparten fecha? → una sola frase.
+  //
+  // Solo cuando NO hay nada vencido. En un aviso parcial esa frase —«Tu
+  // periodo de prueba finaliza el…»— volvería a hablar en nombre de la cuenta
+  // justo en el caso en que la cuenta no es la que vence, así que ahí se
+  // enumeran los módulos uno por uno aunque compartan fecha.
   const uniqueDates = [...new Set(trials.map((t) => t.expiresAt))];
-  const sharedExpiry = trials.length > 0 && uniqueDates.length === 1 ? uniqueDates[0] : null;
+  const sharedExpiry =
+    notice === "active" && trials.length > 0 && uniqueDates.length === 1 ? uniqueDates[0] : null;
   const now = new Date();
+
+  // Un vencimiento que deja módulos en pie es informativo; uno que no deja
+  // ninguno sí pide acción. El color acompaña esa diferencia en vez de gritar
+  // igual en los dos casos.
+  const tone =
+    notice === "partial"
+      ? "border-hairline bg-surface"
+      : "border-amber/40 bg-amber/10";
+  const titleTone = notice === "partial" ? "text-ink" : "text-amber";
+  const bodyTone = notice === "partial" ? "text-ink-soft" : "text-amber/90";
+
+  const title =
+    notice === "all_expired"
+      ? DEMO_EXPIRED_BANNER.split(" Tus datos")[0]
+      : notice === "partial"
+        ? DEMO_PARTIAL_BANNER_TITLE
+        : DEMO_BANNER_INTRO;
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex flex-col gap-3 rounded-lg border border-amber/40 bg-amber/10 p-4 text-sm sm:flex-row sm:items-start sm:justify-between"
+      className={`flex flex-col gap-3 rounded-lg border p-4 text-sm sm:flex-row sm:items-start sm:justify-between ${tone}`}
     >
       <div className="space-y-1">
-        <p className="font-semibold text-amber">
-          {trials.length > 0
-            ? "Tu empresa está utilizando Trazaloop en modo Demo. El acceso de prueba estará disponible durante 2 días."
-            : "Tu periodo Demo ha finalizado."}
-        </p>
+        <p className={`font-semibold ${titleTone}`}>{title}</p>
+
+        {notice === "partial" && expiredModules.length > 0 && (
+          <p className={bodyTone}>
+            {`${listNames(expiredModules)}: la prueba terminó y los datos se conservan. ${DEMO_PARTIAL_BANNER_BODY}`}
+          </p>
+        )}
+
+        {notice === "all_expired" && (
+          <p className={bodyTone}>
+            Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.
+          </p>
+        )}
 
         {sharedExpiry && (
-          <p className="text-amber/90">
+          <p className={bodyTone}>
             Tu periodo de prueba finaliza el {formatExpiry(sharedExpiry)}.
             {formatRemainingTrial(sharedExpiry, now) && (
               <> Queda {formatRemainingTrial(sharedExpiry, now)} de prueba.</>
@@ -71,7 +133,7 @@ export function DemoTrialBanner({ trials, hasExpired }: DemoTrialBannerProps) {
         )}
 
         {!sharedExpiry && trials.length > 0 && (
-          <ul className="list-disc space-y-0.5 pl-5 text-amber/90">
+          <ul className={`list-disc space-y-0.5 pl-5 ${bodyTone}`}>
             {trials.map((t) => (
               <li key={t.name}>
                 {t.name}: finaliza el {formatExpiry(t.expiresAt)}
@@ -80,27 +142,22 @@ export function DemoTrialBanner({ trials, hasExpired }: DemoTrialBannerProps) {
             ))}
           </ul>
         )}
-
-        {hasExpired && (
-          <p className="text-amber/90">
-            Algún módulo tiene la prueba finalizada. Tus datos se conservarán. Contacta al equipo de
-            Trazaloop para reactivar el acceso.
-          </p>
-        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <Link
-          href="/modules"
-          className="rounded-md border border-amber/40 bg-surface px-3 py-1.5 text-xs font-medium text-amber hover:bg-amber/10"
-        >
-          Ver módulos
-        </Link>
+        {showModulesLink && (
+          <Link
+            href="/modules"
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper"
+          >
+            Ver módulos
+          </Link>
+        )}
         <button
           type="button"
           onClick={() => setDismissed(true)}
           aria-label="Cerrar aviso de prueba (reaparecerá más tarde)"
-          className="rounded-md px-2 py-1.5 text-xs font-medium text-amber hover:bg-amber/10"
+          className="rounded-md px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-paper"
         >
           Cerrar
         </button>

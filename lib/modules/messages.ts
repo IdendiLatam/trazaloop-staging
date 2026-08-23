@@ -60,4 +60,82 @@ export const DEMO_BANNER_INTRO =
   "Tu empresa está utilizando Trazaloop en modo Demo. El acceso de prueba estará disponible durante 2 días.";
 
 export const DEMO_EXPIRED_BANNER =
-  "Tu periodo Demo ha finalizado. Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.";
+  "Tu periodo de prueba ha finalizado. Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.";
+
+export const DEMO_PARTIAL_BANNER_TITLE = "Algunas pruebas de módulos han finalizado.";
+
+export const DEMO_PARTIAL_BANNER_BODY =
+  "Los módulos con acceso vigente continúan disponibles.";
+
+// ---------------------------------------------------------------------------
+// AVISO DE PRUEBA — clasificación por MÓDULO, nunca por cuenta
+// ---------------------------------------------------------------------------
+
+/**
+ * El vencimiento es un hecho DE UN MÓDULO. La cuenta no vence.
+ *
+ * Antes de este arreglo el aviso se decidía con una sola pregunta —«¿hay algún
+ * demo activo?»— y, si la respuesta era no, anunciaba «Tu periodo Demo ha
+ * finalizado» aunque la empresa tuviera un módulo en Full plenamente usable.
+ * El mensaje se mostraba incluso DENTRO de ese módulo, contradiciendo lo que
+ * el usuario estaba haciendo en ese mismo momento.
+ *
+ * La clasificación necesita dos hechos independientes: qué venció y qué sigue
+ * siendo entrable. Con uno solo no se puede distinguir «se te acabó todo» de
+ * «se te acabó una prueba y lo demás sigue en pie», que es justo la diferencia
+ * que importa.
+ */
+export type DemoNoticeKind =
+  | "none" // nada que anunciar
+  | "active" // hay pruebas en curso
+  | "partial" // venció alguna prueba, pero queda al menos un módulo entrable
+  | "all_expired"; // venció alguna prueba y NO queda ningún módulo entrable
+
+/** Lo mínimo que hace falta de cada módulo para clasificar el aviso. */
+export type ModuleNoticeInput = { state: DerivedModuleState };
+
+/**
+ * ¿Qué aviso corresponde al conjunto de módulos de la empresa?
+ *
+ * Solo cuentan los módulos APLICABLES: los que la empresa tiene asignados y
+ * son funcionales. Uno «Próximamente» o «Sin asignar» no vence —nunca lo
+ * tuvo— y tampoco puede salvar a la cuenta de un aviso general.
+ */
+export function classifyDemoNotice(modules: ModuleNoticeInput[]): DemoNoticeKind {
+  const applicable = modules.filter(
+    (m) => m.state !== "coming_soon" && m.state !== "not_assigned"
+  );
+  const expired = applicable.some((m) => m.state === "demo_expired");
+  const enterable = applicable.some((m) => isEnterableState(m.state));
+  const activeDemo = applicable.some((m) => m.state === "demo_active");
+
+  if (expired) return enterable ? "partial" : "all_expired";
+  if (activeDemo) return "active";
+  return "none";
+}
+
+/**
+ * Ordena las tarjetas del selector dejando delante las que SÍ se pueden usar.
+ *
+ * El catálogo tiene un orden histórico (PCR, Textiles, Quality, Construcción)
+ * y las tarjetas se pintaban en ese orden sin más. Con PCR y Textiles
+ * bloqueados, el único módulo utilizable quedaba en la segunda fila y su
+ * «Entrar →» —la última línea de la tarjeta más alta— caía por debajo del
+ * borde inferior de la pantalla. El usuario veía «Plan Full · Acceso funcional
+ * completo» y ningún modo de entrar, sin nada que le indicara que había que
+ * desplazarse.
+ *
+ * El orden se decide por el ESTADO, no por la clave del módulo: cualquier
+ * módulo futuro entra en la regla sin tocar esta función.
+ */
+export function sortModulesForSelector<T>(
+  items: readonly T[],
+  isEnterable: (item: T) => boolean
+): T[] {
+  return items
+    .map((item, index) => ({ item, index, enterable: isEnterable(item) }))
+    .sort((a, b) =>
+      a.enterable === b.enterable ? a.index - b.index : a.enterable ? -1 : 1
+    )
+    .map((entry) => entry.item);
+}

@@ -11,6 +11,11 @@ import {
   type CommercialModule,
 } from "@/lib/modules/catalog";
 import {
+  classifyDemoNotice,
+  isEnterableState,
+  type DemoNoticeKind,
+} from "@/lib/modules/messages";
+import {
   resolveModuleAccess,
   buildModuleEntitlements,
   type ModuleAccessDecision,
@@ -474,12 +479,22 @@ export async function setOrganizationModuleAccess(
   return { error: null, changed: typeof changed === "boolean" ? changed : null };
 }
 
-/** Resumen de pruebas Demo TEMPORALES activas de la organización (para el
- *  banner). Solo módulos funcionales en demo con vencimiento futuro, más si
- *  hay alguno vencido. Sin datos sensibles. */
+/** Resumen de pruebas Demo de la organización, POR MÓDULO (para el banner).
+ *
+ *  Devuelve tres hechos independientes —qué está en prueba, qué venció y si
+ *  queda algo entrable— en vez de un único booleano global. Con un solo
+ *  booleano era imposible distinguir «se acabó todo» de «se acabó una prueba y
+ *  el resto sigue en pie», y el aviso terminaba anunciando lo primero cuando
+ *  la verdad era lo segundo. Sin datos sensibles. */
 export type DemoTrialSummary = {
+  /** Módulos en Demo temporal con vencimiento futuro. */
   activeTrials: { name: string; expiresAt: string }[];
-  hasExpired: boolean;
+  /** Módulos cuya prueba YA venció (por nombre, para poder decir cuáles). */
+  expiredModules: string[];
+  /** ¿Queda al menos un módulo al que la empresa pueda entrar ahora mismo? */
+  hasEnterableModule: boolean;
+  /** Qué aviso corresponde (clasificación pura, ver lib/modules/messages.ts). */
+  notice: DemoNoticeKind;
 };
 
 export async function getDemoTrialSummary(organizationId: string): Promise<DemoTrialSummary> {
@@ -487,6 +502,10 @@ export async function getDemoTrialSummary(organizationId: string): Promise<DemoT
   const activeTrials = statuses
     .filter((s) => s.access.derivedState === "demo_active" && s.access.expiresAt)
     .map((s) => ({ name: s.name, expiresAt: s.access.expiresAt as string }));
-  const hasExpired = statuses.some((s) => s.access.derivedState === "demo_expired");
-  return { activeTrials, hasExpired };
+  const expiredModules = statuses
+    .filter((s) => s.access.derivedState === "demo_expired")
+    .map((s) => s.name);
+  const hasEnterableModule = statuses.some((s) => isEnterableState(s.access.derivedState));
+  const notice = classifyDemoNotice(statuses.map((s) => ({ state: s.access.derivedState })));
+  return { activeTrials, expiredModules, hasEnterableModule, notice };
 }
