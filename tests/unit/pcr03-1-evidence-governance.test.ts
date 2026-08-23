@@ -47,6 +47,7 @@ const QUALITY_01_ALLOWED = new Set([
   // mediciones con linaje, eventos de desempeño y cierre de ciclo.
   "0117_quality_objectives_indicators_and_measurements.sql",
   "0118_quality_measurement_engine_privilege_hardening.sql",
+  "0119_quality_temporal_eligibility_and_lifecycle.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -155,6 +156,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
+    "0119_quality_temporal_eligibility_and_lifecycle.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

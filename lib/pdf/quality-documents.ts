@@ -16,12 +16,15 @@
  */
 import { A4_PORTRAIT, A4_LANDSCAPE, measureText } from "./writer";
 import { PdfLayout } from "./layout";
+import { fitWithin, type PdfImage } from "./image";
 import { LIFECYCLE_LABEL, formatDate, type LifecycleState } from "@/lib/domain/document-control";
 
 const SYSTEM_LINE = "Trazaloop Quality · control documental";
 
 export type DocumentPdfModel = {
   organizationName: string;
+  /** Logo ya decodificado por el servidor. Nunca una URL. */
+  logo?: PdfImage | null;
   companyLegalName: string | null;
   companyTaxId: string | null;
   code: string | null;
@@ -96,6 +99,34 @@ function formatDateTime(iso: string): string {
   }).format(d).replace(",", " ·") + " UTC";
 }
 
+
+/**
+ * Identidad de la empresa en la cabecera: logo si lo hay, y siempre el nombre.
+ *
+ * El logo se dibuja a la IZQUIERDA y el nombre al lado, que es como se lee un
+ * membrete. Si el logo no existe, no se puede decodificar o el formato no está
+ * soportado, el bloque queda exactamente como estaba antes de QUALITY-03.1: el
+ * nombre de la empresa, solo. Un PDF nunca deja de generarse por el logo — eso
+ * convertiría un adorno en un punto único de fallo.
+ */
+function companyIdentity(
+  doc: PdfLayout,
+  model: { organizationName: string; companyLegalName?: string | null; companyTaxId?: string | null; logo?: PdfImage | null }
+): void {
+  const logo = model.logo ?? null;
+  if (logo) {
+    const box = fitWithin(logo, 120, 40);
+    doc.ensure(box.height + 6);
+    const name = doc.writer.addImage("Logo", logo);
+    doc.writer.image(name, doc.left, doc.y, box.width, box.height);
+    doc.gap(box.height + 8);
+  }
+  doc.text(model.organizationName, { font: "bold", size: 9, gray: 0.35 });
+  doc.gap(12);
+  if (model.companyLegalName) { doc.text(model.companyLegalName, { size: 7.5, gray: 0.5 }); doc.gap(10); }
+  if (model.companyTaxId) { doc.text(`NIT ${model.companyTaxId}`, { size: 7.5, gray: 0.5 }); doc.gap(10); }
+}
+
 export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
   const doc = new PdfLayout(`${model.code ? `${model.code} · ` : ""}${model.title}`, A4_PORTRAIT, 48, {
     header: (d, pageIndex) => {
@@ -124,10 +155,7 @@ export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
   });
 
   // --- Identidad de la empresa y del documento
-  doc.text(model.organizationName, { font: "bold", size: 9, gray: 0.35 });
-  doc.gap(12);
-  if (model.companyLegalName) { doc.text(model.companyLegalName, { size: 7.5, gray: 0.5 }); doc.gap(10); }
-  if (model.companyTaxId) { doc.text(`NIT ${model.companyTaxId}`, { size: 7.5, gray: 0.5 }); doc.gap(10); }
+  companyIdentity(doc, model);
   doc.gap(6);
 
   if (model.code) { doc.text(model.code, { font: "bold", size: 9, gray: 0.4 }); doc.gap(13); }
@@ -220,6 +248,8 @@ export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
 // ---------------------------------------------------------------------------
 export type MasterListPdfModel = {
   organizationName: string;
+  /** Logo ya decodificado por el servidor. Nunca una URL. */
+  logo?: PdfImage | null;
   companyLegalName: string | null;
   companyTaxId: string | null;
   filtersCaption: string;
@@ -254,10 +284,7 @@ export function renderMasterListPdf(model: MasterListPdfModel): Buffer {
     },
   });
 
-  doc.text(model.organizationName, { font: "bold", size: 9, gray: 0.35 });
-  doc.gap(12);
-  if (model.companyLegalName) { doc.text(model.companyLegalName, { size: 7.5, gray: 0.5 }); doc.gap(10); }
-  if (model.companyTaxId) { doc.text(`NIT ${model.companyTaxId}`, { size: 7.5, gray: 0.5 }); doc.gap(10); }
+  companyIdentity(doc, model);
   doc.gap(4);
   doc.paragraph("Lista maestra de documentos", { font: "bold", size: 15, leading: 19 });
   doc.gap(2);

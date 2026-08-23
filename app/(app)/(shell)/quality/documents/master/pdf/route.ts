@@ -13,6 +13,7 @@ import {
   masterListToRows,
 } from "@/lib/domain/document-master-list";
 import { renderMasterListPdf } from "@/lib/pdf/quality-documents";
+import { loadCompanyLogoForPdf } from "@/lib/db/company-logo";
 
 /**
  * Trazaloop Quality · QUALITY-02 · PDF de la Lista Maestra.
@@ -34,14 +35,18 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const filters = readMasterFilters(Object.fromEntries(url.searchParams.entries()));
 
-  const [all, company] = await Promise.all([
+  const [all, company, logo] = await Promise.all([
     loadQualityMasterList(access.org.organizationId),
     getCompanySettings(access.org.organizationId),
+    // El logo se resuelve en SERVIDOR desde la empresa ya autorizada; si no
+    // hay o no se puede incrustar, `null` y el PDF sale igual (§14).
+    loadCompanyLogoForPdf(access.org.organizationId),
   ]);
   const rows = filterMasterList(all, filters);
 
   const pdf = renderMasterListPdf({
     organizationName: access.org.organizationName,
+    logo: logo?.image ?? null,
     companyLegalName: company?.legalName ?? null,
     companyTaxId: company?.taxId ?? null,
     filtersCaption: describeFilters(filters),

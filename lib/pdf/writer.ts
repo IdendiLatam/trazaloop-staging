@@ -159,6 +159,8 @@ function pdfString(text: string): string {
   return `(${encodeWinAnsi(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")})`;
 }
 
+import type { PdfImage } from "./image";
+
 // ---------------------------------------------------------------------------
 // Construcción del archivo
 // ---------------------------------------------------------------------------
@@ -167,11 +169,15 @@ export const A4_LANDSCAPE = { width: 841.89, height: 595.28 } as const;
 
 export type PageSize = { width: number; height: number };
 
-type Page = { size: PageSize; ops: string[] };
+type Page = { size: PageSize; ops: string[]; images: Set<string> };
 
 export class PdfWriter {
   private pages: Page[] = [];
   private page: Page | null = null;
+  /** Las imágenes se registran UNA vez y se referencian desde cada página que
+   *  las usa: el logo aparece en las siete páginas de un documento y no tiene
+   *  por qué viajar siete veces dentro del archivo. */
+  private images = new Map<string, PdfImage>();
   readonly title: string;
 
   constructor(title: string) {
@@ -179,7 +185,7 @@ export class PdfWriter {
   }
 
   addPage(size: PageSize): void {
-    this.page = { size, ops: [] };
+    this.page = { size, ops: [], images: new Set() };
     this.pages.push(this.page);
   }
 
@@ -219,6 +225,23 @@ export class PdfWriter {
     this.op(`${fmt(gray)} G ${fmt(width)} w ${fmt(x1)} ${fmt(h - y1FromTop)} m ${fmt(x2)} ${fmt(h - y2FromTop)} l S`);
   }
 
+  /** Registra una imagen y devuelve el nombre con el que dibujarla. */
+  addImage(name: string, image: PdfImage): string {
+    this.images.set(name, image);
+    return name;
+  }
+
+  /** Dibuja una imagen ya registrada. `y` se mide desde ARRIBA, como el texto. */
+  image(name: string, x: number, yFromTop: number, w: number, h: number): void {
+    if (!this.images.has(name)) throw new Error(`La imagen «${name}» no está registrada.`);
+    if (!this.page) throw new Error("No hay página abierta.");
+    this.page.images.add(name);
+    const bottom = this.currentSize.height - yFromTop - h;
+    // cm establece la matriz de transformación: una imagen se dibuja siempre
+    // en el cuadrado unidad, así que la escala ES el tamaño final.
+    this.op(`q ${fmt(w)} 0 0 ${fmt(h)} ${fmt(x)} ${fmt(bottom)} cm /${name} Do Q`);
+  }
+
   rect(x: number, yFromTop: number, w: number, h: number, gray: number): void {
     const top = this.currentSize.height - yFromTop - h;
     this.op(`${fmt(gray)} g ${fmt(x)} ${fmt(top)} ${fmt(w)} ${fmt(h)} re f`);
@@ -237,16 +260,44 @@ export class PdfWriter {
     const fontRegularId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
     const fontBoldId = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
 
+    // Las imágenes son flujos BINARIOS. El resto del archivo se compone como
+    // texto latin1, así que los bytes se pasan por esa misma codificación
+    // —latin1 es la única que mapea 1:1 byte a carácter— y vuelven intactos
+    // en el Buffer final.
+    const imageIds = new Map<string, number>();
+    for (const [name, image] of this.images) {
+      let smaskRef = "";
+      if (image.alpha) {
+        const smaskId = add(
+          `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} ` +
+          `/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode ` +
+          `/Length ${image.alpha.length} >>\nstream\n${image.alpha.toString("latin1")}\nendstream`
+        );
+        smaskRef = ` /SMask ${smaskId} 0 R`;
+      }
+      const id = add(
+        `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} ` +
+        `/ColorSpace /${image.colorSpace} /BitsPerComponent ${image.bitsPerComponent} ` +
+        `/Filter /${image.filter}${smaskRef} /Length ${image.data.length} >>\n` +
+        `stream\n${image.data.toString("latin1")}\nendstream`
+      );
+      imageIds.set(name, id);
+    }
+
     const pageIds: number[] = [];
     for (const page of this.pages) {
       const stream = page.ops.join("\n");
       // SIN comprimir a propósito: es lo que permite comprobar el contenido
       // del archivo generado en una prueba.
       const contentId = add(`<< /Length ${byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+      const xobjects = [...page.images]
+        .map((name) => `/${name} ${imageIds.get(name)} 0 R`)
+        .join(" ");
       const pageId = add(
         `<< /Type /Page /Parent ${pagesId} 0 R ` +
         `/MediaBox [0 0 ${fmt(page.size.width)} ${fmt(page.size.height)}] ` +
-        `/Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> >> ` +
+        `/Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >>` +
+        (xobjects ? ` /XObject << ${xobjects} >>` : "") + ` >> ` +
         `/Contents ${contentId} 0 R >>`
       );
       pageIds.push(pageId);

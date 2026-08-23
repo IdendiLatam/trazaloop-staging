@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireQualityForAction } from "@/lib/auth/require-quality-module";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
 import {
@@ -9,6 +10,8 @@ import {
   recordMeasurement, runIndicatorCalculation, correctMeasurement,
   scanPendingMeasurements, closePeriod, reopenPeriod,
   getIndicator,
+  deleteIndicatorRow,
+  deleteObjectiveRow,
 } from "@/lib/db/quality-indicators";
 import {
   canManageObjectives, canRecordMeasurement, canClosePeriod, canReopenPeriod,
@@ -283,6 +286,46 @@ export async function updateIndicatorAction(
   if (error) return { error };
   revalidateAll(undefined, indicatorId);
   return { error: null, success: true, message: "Indicador guardado." };
+}
+
+/**
+ * Eliminar definitivamente un indicador que todavía es desechable.
+ *
+ * No decide nada por su cuenta: el disparador BEFORE DELETE de 0119 vuelve a
+ * emitir el dictamen en el instante del borrado, así que la ventana entre «se
+ * mostró el aviso» y «se confirmó» no puede aprovecharse. Si en ese rato otra
+ * persona registró una medición, la base lo rechaza — y el motivo que llega al
+ * usuario es el mismo que habría leído antes de confirmar.
+ */
+export async function deleteIndicatorAction(
+  _prev: QualityIndicatorActionState, formData: FormData
+): Promise<QualityIndicatorActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  if (!canManageObjectives(g.ok.roleCode as never)) {
+    return { error: "Solo la administración o el área de calidad eliminan indicadores." };
+  }
+  const indicatorId = text(formData, "indicator_id");
+  const { error } = await deleteIndicatorRow(g.ok.organizationId, indicatorId);
+  if (error) return { error };
+  revalidateAll();
+  redirect("/quality/indicators");
+}
+
+/** Lo mismo para un objetivo todavía en borrador y sin resultados. */
+export async function deleteObjectiveAction(
+  _prev: QualityIndicatorActionState, formData: FormData
+): Promise<QualityIndicatorActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  if (!canManageObjectives(g.ok.roleCode as never)) {
+    return { error: "Solo la administración o el área de calidad eliminan objetivos." };
+  }
+  const objectiveId = text(formData, "objective_id");
+  const { error } = await deleteObjectiveRow(g.ok.organizationId, objectiveId);
+  if (error) return { error };
+  revalidateAll();
+  redirect("/quality/objectives");
 }
 
 export async function setIndicatorStateAction(

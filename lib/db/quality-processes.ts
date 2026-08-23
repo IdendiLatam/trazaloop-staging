@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { parseEligibility } from "@/lib/domain/lifecycle";
 
 /**
  * Trazaloop Quality · QUALITY-01 · Lecturas de la fundación de Procesos.
@@ -197,27 +198,49 @@ export type QualityPositionUsage = {
   assignments: number;
   /** true si el cargo no ha dejado rastro y puede borrarse sin perder nada. */
   isDeletable: boolean;
+  /** Todo lo que lo retiene, ya redactado («2 procesos de los que es
+   *  propietario», «1 indicador a su cargo»…). */
+  blocking: { label: string; count: number }[];
 };
 
+/**
+ * Qué retiene a un cargo.
+ *
+ * QUALITY-03.1: antes esto contaba SOLO procesos y asignaciones, y con eso
+ * decidía si prometer «se eliminará por completo». Pero un cargo también puede
+ * ser propietario de indicadores, de objetivos y de documentos —las tres cosas
+ * apuntan a él con ON DELETE RESTRICT—, así que el diálogo prometía un borrado
+ * que la base iba a rechazar y que terminaba en una desactivación silenciosa.
+ * Prometer una cosa y hacer otra es justo lo que la confirmación existe para
+ * evitar.
+ *
+ * Ahora la pregunta se la hace a la base, que cuenta las cinco referencias en
+ * la misma función que usa el disparador al eliminar. Ante un fallo de lectura
+ * se asume que SÍ hay uso: equivocarse hacia «desactivar» conserva los datos;
+ * equivocarse hacia «borrar» los destruye.
+ */
 export async function getQualityPositionUsage(
   organizationId: string,
   positionId: string
 ): Promise<QualityPositionUsage> {
   const supabase = await createServerClient();
-  const [processes, assignments] = await Promise.all([
-    supabase.from("quality_processes").select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId).eq("owner_position_id", positionId),
-    supabase.from("quality_position_assignments").select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId).eq("position_id", positionId),
-  ]);
-  if (processes.error) reportQueryFailure("getQualityPositionUsage/processes", processes.error);
-  if (assignments.error) reportQueryFailure("getQualityPositionUsage/assignments", assignments.error);
-
-  // Ante una lectura fallida se asume que SÍ hay uso: equivocarse hacia
-  // "desactivar" conserva los datos; equivocarse hacia "borrar" los destruye.
-  const p = processes.error ? 1 : processes.count ?? 0;
-  const a = assignments.error ? 1 : assignments.count ?? 0;
-  return { processes: p, assignments: a, isDeletable: p === 0 && a === 0 };
+  const { data, error } = await supabase.rpc("quality_deletion_eligibility", {
+    p_entity: "position",
+    p_id: positionId,
+  });
+  if (error) {
+    reportQueryFailure("getQualityPositionUsage", error);
+    return { processes: 1, assignments: 1, isDeletable: false, blocking: [] };
+  }
+  const verdict = parseEligibility(data);
+  const count = (needle: string) =>
+    verdict.blocking.find((b) => b.label.includes(needle))?.count ?? 0;
+  return {
+    processes: count("proceso"),
+    assignments: count("asignaci"),
+    isDeletable: verdict.canHardDelete,
+    blocking: verdict.blocking,
+  };
 }
 
 export async function getQualityPosition(

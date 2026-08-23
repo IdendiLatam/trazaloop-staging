@@ -204,10 +204,17 @@ export async function removeQualityPosition(positionId: string): Promise<Positio
       revalidatePath(PATH_POSITIONS);
       return { error: null, outcome: "deleted" };
     }
-    // 23503 = violación de clave foránea. Significa que apareció una
-    // referencia entre la lectura y el borrado: se desactiva, como si el uso
-    // se hubiera detectado antes.
-    if (error.code !== "23503") return { error: safeError(error), outcome: null };
+    // La base rechazó el borrado entre la lectura y la ejecución: apareció una
+    // referencia en ese intervalo. Se desactiva, como si el uso se hubiera
+    // detectado antes.
+    //
+    // Dos códigos, dos barreras. `23503` es la clave foránea de 0112, que
+    // siempre estuvo ahí. `P0001` es el disparador de 0119, que llega ANTES y
+    // explica en español qué retiene al cargo. Contemplar solo el primero
+    // dejaría esta carrera devolviendo un error en vez de desactivar.
+    if (error.code !== "23503" && error.code !== "P0001") {
+      return { error: safeError(error), outcome: null };
+    }
   }
 
   const { error } = await supabase

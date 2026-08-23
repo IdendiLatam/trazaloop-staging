@@ -11,6 +11,7 @@ import {
   type QualityAssignmentType,
 } from "@/lib/domain/quality-processes";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { describeBlocking } from "@/lib/domain/lifecycle";
 import {
   createQualityPosition,
   assignPersonToQualityPosition,
@@ -55,7 +56,11 @@ type AssignmentView = {
 type MemberOption = { profileId: string; name: string; email: string | null };
 
 /** Uso real de cada cargo, calculado en servidor: decide qué ofrece la UI. */
-type PositionUsage = { positionId: string; processes: number; assignments: number; isDeletable: boolean };
+type PositionUsage = {
+  positionId: string; processes: number; assignments: number; isDeletable: boolean;
+  /** Todo lo que lo retiene, ya redactado por el servidor (QUALITY-03.1). */
+  blocking?: { label: string; count: number }[];
+};
 
 const inputClass =
   "block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-loop";
@@ -172,16 +177,12 @@ export function QualityPositionsManager({
           if (!confirmRemove) return "";
           const u = usageByPosition.get(confirmRemove.id);
           if (u?.isDeletable) {
-            return "Este cargo no tiene procesos ni asignaciones, así que se eliminará por completo. La acción no se puede deshacer.";
+            return "Este cargo no tiene nada asociado todavía, así que se eliminará por completo. La acción no se puede deshacer.";
           }
-          const partes: string[] = [];
-          if (u && u.processes > 0) {
-            partes.push(`${u.processes} ${u.processes === 1 ? "proceso" : "procesos"} a su cargo`);
-          }
-          if (u && u.assignments > 0) {
-            partes.push(`${u.assignments} ${u.assignments === 1 ? "asignación" : "asignaciones"} de personas`);
-          }
-          const detalle = partes.length > 0 ? ` (${partes.join(" y ")})` : "";
+          // El servidor ya redactó QUÉ lo retiene, y cuenta las cinco
+          // referencias posibles —procesos, titulares, indicadores, objetivos y
+          // documentos—, no solo las dos que esta pantalla conocía.
+          const detalle = u?.blocking?.length ? ` (${describeBlocking(u.blocking)})` : "";
           return (
             `Este cargo tiene información asociada${detalle}, así que se DESACTIVARÁ en lugar de eliminarse, ` +
             "para conservar el historial de quién respondía por cada proceso. Podrás reactivarlo cuando quieras."

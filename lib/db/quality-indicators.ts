@@ -775,3 +775,47 @@ export async function previousPeriod(
     periodLabel: r.period_label as string,
   };
 }
+
+
+// ---------------------------------------------------------------------------
+// Eliminación de objetos todavía desechables (QUALITY-03.1)
+//
+// El `.eq("organization_id", …)` no es la barrera —la RLS y el disparador de
+// 0119 lo son—, pero evita que un identificador ajeno llegue siquiera a
+// intentarse. Un borrado que no afecta a ninguna fila NO es un éxito: se
+// informa, en vez de devolver un «listo» silencioso y falso.
+// ---------------------------------------------------------------------------
+
+export async function deleteIndicatorRow(
+  organizationId: string, indicatorId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("quality_indicators")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", indicatorId)
+    .select("id");
+  if (error) return { error: rpcError(error, "No fue posible eliminar el indicador.") };
+  if ((data ?? []).length === 0) {
+    return { error: "No fue posible eliminar el indicador: puede que ya no exista o que tu rol no lo permita." };
+  }
+  return { error: null };
+}
+
+export async function deleteObjectiveRow(
+  organizationId: string, objectiveId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("quality_objectives")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", objectiveId)
+    .select("id");
+  if (error) return { error: rpcError(error, "No fue posible eliminar el objetivo.") };
+  if ((data ?? []).length === 0) {
+    return { error: "No fue posible eliminar el objetivo: puede que ya no exista o que tu rol no lo permita." };
+  }
+  return { error: null };
+}

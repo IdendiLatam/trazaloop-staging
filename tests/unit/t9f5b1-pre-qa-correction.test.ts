@@ -471,6 +471,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
+    "0119_quality_temporal_eligibility_and_lifecycle.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

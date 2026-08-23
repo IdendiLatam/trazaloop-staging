@@ -14,10 +14,12 @@ import {
   type ObjectiveRule, type Trend,
 } from "@/lib/domain/quality-indicators";
 import {
-  updateObjectiveAction, setObjectiveStateAction,
+  updateObjectiveAction, setObjectiveStateAction, deleteObjectiveAction,
   setObjectiveProcessesAction, setObjectiveIndicatorsAction,
   type QualityIndicatorActionState,
 } from "@/server/actions/quality-indicators";
+import { LifecyclePanel } from "@/components/domain/quality/lifecycle-panel";
+import type { DeletionEligibility } from "@/lib/domain/lifecycle";
 
 /** Trazaloop Quality · QUALITY-03 · Ficha de un objetivo. */
 
@@ -64,6 +66,8 @@ export type ObjectiveDetailModel = {
   allIndicators: { id: string; name: string; code: string | null }[];
   positions: { id: string; name: string; holderName: string | null }[];
   canManage: boolean;
+  /** Dictamen de eliminación, resuelto en servidor (QUALITY-03.1). */
+  eligibility: DeletionEligibility;
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -344,6 +348,17 @@ export function QualityObjectiveDetail({ model }: { model: ObjectiveDetailModel 
           </section>
         </>
       ) : null}
+
+      {/* Eliminar, o entender por qué ya no (QUALITY-03.1). */}
+      <LifecyclePanel
+        entity="objective"
+        name={model.name}
+        eligibility={model.eligibility}
+        idFieldName="objective_id"
+        idValue={model.objectiveId}
+        deleteAction={deleteObjectiveAction}
+        canManage={model.canManage}
+      />
     </div>
   );
 }

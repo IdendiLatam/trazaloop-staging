@@ -261,7 +261,13 @@ async function main() {
     const { error } = await admin1.client.from("quality_positions")
       .delete().eq("id", usedPosition).eq("organization_id", orgA);
     assert(error, "se pudo borrar un cargo que tiene un proceso a su nombre");
-    assert(error!.code === "23503", `esperaba violación de clave foránea, fue ${error!.code}`);
+    // Desde QUALITY-03.1 hay DOS barreras y la primera en responder es el
+    // disparador de 0119 (P0001), que además explica en español qué retiene al
+    // cargo; detrás sigue la clave foránea de 0112 (23503). Lo que esta prueba
+    // exige es que la BASE se niegue, no cuál de las dos llegó primero.
+    assert(["23503", "P0001"].includes(error!.code ?? ""),
+      `esperaba que la base rechazara el borrado, fue ${error!.code}`);
+    assert((error!.message ?? "").length > 0, "el rechazo debe traer un motivo");
   });
 
   await check("A5. Desactivar el cargo en uso conserva el proceso y su propietario", async () => {
@@ -284,7 +290,8 @@ async function main() {
       .insert({ organization_id: orgA, position_id: pos!.id, profile_id: admin1.id, assignment_type: "holder" });
     const { error } = await admin1.client.from("quality_positions")
       .delete().eq("id", pos!.id).eq("organization_id", orgA);
-    assert(error?.code === "23503", `esperaba 23503, fue ${error?.code ?? "ningún error"}`);
+    assert(["23503", "P0001"].includes(error?.code ?? ""),
+      `esperaba que la base rechazara el borrado, fue ${error?.code ?? "ningún error"}`);
   });
 
   await check("A7. Cross-tenant: B no edita ni elimina un cargo de A", async () => {

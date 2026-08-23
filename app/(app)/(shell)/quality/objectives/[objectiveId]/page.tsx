@@ -14,6 +14,7 @@ import {
   canManageObjectives, computeTrend, describeTarget, formatValue,
 } from "@/lib/domain/quality-indicators";
 import { QualityObjectiveDetail } from "@/components/domain/quality/objective-detail";
+import { getDeletionEligibility } from "@/lib/db/lifecycle";
 
 export const metadata = { title: "Objetivo" };
 
@@ -28,6 +29,7 @@ export default async function QualityObjectivePage({
   const objective = await getObjective(org.organizationId, objectiveId);
   if (!objective) notFound();
 
+  const eligibility = await getDeletionEligibility("objective", objectiveId);
   const [processIds, indicatorIds, allProcesses, allIndicators, positions] = await Promise.all([
     listObjectiveProcessIds(org.organizationId, objectiveId),
     listObjectiveIndicatorIds(org.organizationId, objectiveId),
@@ -48,6 +50,7 @@ export default async function QualityObjectivePage({
     <QualityObjectiveDetail
       model={{
         objectiveId: objective.objectiveId,
+        eligibility,
         code: objective.code,
         name: objective.name,
         description: objective.description,

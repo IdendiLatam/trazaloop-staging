@@ -25,13 +25,14 @@ import {
   canRetireDocument,
   canSubmitRevision,
   displayRevision,
-  hardDeleteBlockReason,
   type ParticipantRole,
 } from "@/lib/domain/document-control";
 import {
   QualityDocumentControlDetail,
   type ResponsibleOption,
 } from "@/components/domain/quality/document-control-detail";
+import { getDeletionEligibility } from "@/lib/db/lifecycle";
+import { deletionBlockedMessage } from "@/lib/domain/lifecycle";
 
 export const metadata = { title: "Documento" };
 
@@ -82,16 +83,13 @@ export default async function QualityDocumentPage({
     .reverse()
     .find((d) => d.decisionType === "changes_requested");
 
-  const deleteFacts = {
-    lifecycle: detail.lifecycle,
-    disposition: detail.disposition,
-    everApproved: detail.revisions.some((r) => r.approvedAt !== null),
-    hasFormalHistory: detail.decisions.some((d) => d.decisionType !== "revision_created"),
-    revisionCount: detail.revisions.length,
-    linkedProcessCount: processes.length,
-  };
-  const deleteBlockedReason = hardDeleteBlockReason(deleteFacts);
-  const canDelete = canAttemptHardDelete(role) && deleteBlockedReason === null;
+  // QUALITY-03.1 · El dictamen lo emite la BASE, con las mismas preguntas que
+  // hace trazadoc_delete_document_safely al ejecutar. Antes se recalculaba aquí
+  // a partir de los datos ya cargados; funcionaba, pero eran dos copias de la
+  // misma regla y nada garantizaba que dijeran lo mismo el día que una cambiara.
+  const eligibility = await getDeletionEligibility("document", documentId);
+  const canDelete = canAttemptHardDelete(role) && eligibility.canHardDelete;
+  const deleteBlockedReason = eligibility.canHardDelete ? null : deletionBlockedMessage(eligibility);
 
   // Un cargo sin titular vigente no puede recibir una tarea: no hay persona a
   // quien asignársela. Se ofrece igualmente, pero la base lo rechaza con un

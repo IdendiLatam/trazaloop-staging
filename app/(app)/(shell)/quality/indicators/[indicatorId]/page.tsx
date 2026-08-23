@@ -19,6 +19,7 @@ import {
   describeTarget, describeWarning, formatValue, nativeSource,
 } from "@/lib/domain/quality-indicators";
 import { QualityIndicatorDetail } from "@/components/domain/quality/indicator-detail";
+import { getDeletionEligibility } from "@/lib/db/lifecycle";
 
 export const metadata = { title: "Indicador" };
 
@@ -47,10 +48,12 @@ export default async function QualityIndicatorPage({
   const indicator = await getIndicator(org.organizationId, indicatorId);
   if (!indicator) notFound();
 
-  const [configs, measurements, objectives] = await Promise.all([
+  const [configs, measurements, objectives, eligibility] = await Promise.all([
     listIndicatorConfigs(org.organizationId, indicatorId),
     listMeasurements(org.organizationId, indicatorId, { includeSuperseded: true }),
     listObjectivesUsingIndicator(org.organizationId, indicatorId),
+    // Quién decide si esto puede eliminarse es la base, no la pantalla.
+    getDeletionEligibility("indicator", indicatorId),
   ]);
 
   const current = measurements.filter((m) => m.isCurrent);
@@ -67,6 +70,7 @@ export default async function QualityIndicatorPage({
     <QualityIndicatorDetail
       model={{
         indicatorId: indicator.indicatorId,
+        eligibility,
         code: indicator.code,
         name: indicator.name,
         description: indicator.description,

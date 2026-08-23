@@ -355,6 +355,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
+    "0119_quality_temporal_eligibility_and_lifecycle.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

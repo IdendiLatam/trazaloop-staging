@@ -347,6 +347,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     // mediciones con linaje, eventos de desempeño y cierre de ciclo.
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
+    "0119_quality_temporal_eligibility_and_lifecycle.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

@@ -8,6 +8,8 @@ import {
   EvaluationBadge, IndicatorStateBadge, TrendBadge,
 } from "@/components/domain/quality/performance-badges";
 import { IndicatorChart, type ChartPoint } from "@/components/domain/quality/indicator-chart";
+import { LifecyclePanel } from "@/components/domain/quality/lifecycle-panel";
+import type { DeletionEligibility } from "@/lib/domain/lifecycle";
 import { formatDate } from "@/lib/domain/document-control";
 import {
   DATA_STATE_LABEL, DATA_QUALITY_LABEL, DIRECTION_LABEL, FREQUENCY_LABEL,
@@ -19,7 +21,7 @@ import {
 } from "@/lib/domain/quality-indicators";
 import {
   recordMeasurementAction, runIndicatorCalculationAction, correctMeasurementAction,
-  setIndicatorStateAction, publishIndicatorConfigAction,
+  setIndicatorStateAction, publishIndicatorConfigAction, deleteIndicatorAction,
   type QualityIndicatorActionState,
 } from "@/server/actions/quality-indicators";
 
@@ -115,6 +117,8 @@ export type IndicatorDetailModel = {
   objectives: { id: string; name: string }[];
 
   canManage: boolean;
+  /** Dictamen de eliminación, resuelto en servidor (QUALITY-03.1). */
+  eligibility: DeletionEligibility;
   canRecord: boolean;
 };
 
@@ -550,6 +554,18 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
           </form>
         </section>
       ) : null}
+
+      {/* Eliminar, o entender por qué ya no. El dictamen viene resuelto del
+          servidor: esta pantalla no cuenta mediciones ni decide nada. */}
+      <LifecyclePanel
+        entity="indicator"
+        name={model.name}
+        eligibility={model.eligibility}
+        idFieldName="indicator_id"
+        idValue={model.indicatorId}
+        deleteAction={deleteIndicatorAction}
+        canManage={model.canManage}
+      />
     </div>
   );
 }
