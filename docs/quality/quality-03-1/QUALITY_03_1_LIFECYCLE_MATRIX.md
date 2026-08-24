@@ -37,7 +37,7 @@ lógica específica es lo que permite entenderla.
 | Entidad | ¿Hard delete? | ¿Cuándo? | Qué la vuelve histórica | Qué hacer después | Quién | Qué lo impide |
 |---|---|---|---|---|---|---|
 | **Cargo** | **Sí** | sin nada asociado | un proceso, un titular, un indicador, un objetivo o un documento a su cargo | **desactivar** | admin / calidad | 5 FK `RESTRICT` + disparador |
-| **Proceso** | **No** (hoy) | — | — | nueva revisión / retiro | — | sin política de DELETE — ver §5 |
+| **Proceso** | **Sí** | borrador sin publicar y sin nada que dependa de él | publicarlo, entrar en un mapa publicado, o que algo lo referencie | **retirar** (o soltar la asociación) | admin / calidad / consultor | disparador de 0120 · ver `QUALITY_03_1A_DRAFT_PROCESS_DELETE.md` |
 | **Revisión de proceso** | **No** | — | existe | nueva revisión | — | sin política; privilegio retirado |
 | **Entrada / Salida** | **Sí** | dentro de una revisión en **borrador** | publicar la revisión | nueva revisión | admin / calidad | disparador `io_revision_must_be_draft` |
 | **Interacción** | **Sí** | íd. | íd. | íd. | admin / calidad | íd. |
@@ -73,20 +73,16 @@ La frontera es **haber producido un resultado**:
 
 ## 5. Diferencias con la matriz hipotética del encargo
 
-El encargo pedía verificar la matriz contra el modelo real y documentar las
-diferencias. Hay una:
+El encargo de QUALITY-03.1 pedía verificar la matriz contra el modelo real y
+documentar las diferencias. Había una —**PROCESO**, que no se podía eliminar ni
+siquiera en borrador— y quedó declarada como brecha G-1.
 
-> **PROCESO.** La hipótesis dice «borrador aislado → delete posible». En el
-> modelo real **no existe política de DELETE** sobre `quality_processes`, así
-> que hoy un proceso no se puede eliminar ni siquiera recién creado.
->
-> Peor: hasta 0119, `authenticated` conservaba el privilegio sin política, de
-> modo que el intento **no daba error**: afectaba a cero filas y devolvía 204.
-> 0119 retira el privilegio, con lo que ahora al menos falla de forma honesta.
->
-> **Habilitar la eliminación de un proceso en borrador queda declarada como
-> brecha** (G-1). Requiere política, dictamen, interfaz y pruebas propias, y el
-> encargo prohíbe expandir el sprint.
+**Cerrada en QUALITY-03.1a.** Un proceso en borrador, sin publicar y sin nada
+que dependa de él, se elimina; en cuanto cruza la frontera, se retira. La regla
+completa, las ocho referencias que la deciden y por qué las entradas y salidas
+en borrador sí se van con él: `QUALITY_03_1A_DRAFT_PROCESS_DELETE.md`.
+
+Con eso, **la matriz ya no tiene diferencias con el modelo real**.
 
 ## 6. Lo que se descubrió al auditar
 
@@ -111,6 +107,7 @@ no es historia de nadie—. Lo que se añade es la puerta.
 | `quality_objective_processes` / `_indicators` | asociaciones | **SAFE** — son enlaces, no historia |
 | `trazadoc_delete_document_safely` | borrador sin historial | **SAFE** — ya era correcto en 0116 |
 | `quality_indicators` (nuevo) | indicador sin resultados | **NEEDS GUARD → corregido** en 0119 |
+| `quality_processes` (nuevo) | proceso en borrador sin referencias | **NEEDS GUARD → corregido** en 0120 (QUALITY-03.1a) |
 | `quality_objectives` (nuevo) | objetivo en borrador | **NEEDS GUARD → corregido** en 0119 |
 | PCR / Textiles | fuera de Quality | **OUT OF SCOPE** — su política es propia |
 

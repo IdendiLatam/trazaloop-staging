@@ -135,7 +135,8 @@
     "test:quality03-ui": "tsx tests/e2e/quality-03-human-walkthrough.test.ts",
     "test:module-access-isolation": "tsx tests/unit/module-access-isolation.test.ts",
     "test:quality031-rls": "tsx tests/rls/quality-03-1-temporal-lifecycle.test.ts",
-    "test:quality031": "tsx tests/unit/quality-03-1-hardening.test.ts"
+    "test:quality031": "tsx tests/unit/quality-03-1-hardening.test.ts",
+    "test:quality031a-rls": "tsx tests/rls/quality-03-1a-draft-process-delete.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

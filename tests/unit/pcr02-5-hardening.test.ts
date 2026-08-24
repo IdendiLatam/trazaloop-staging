@@ -47,6 +47,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0117_quality_objectives_indicators_and_measurements.sql",
   "0118_quality_measurement_engine_privilege_hardening.sql",
   "0119_quality_temporal_eligibility_and_lifecycle.sql",
+  "0120_quality_draft_process_deletion.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -478,6 +479,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
     "0119_quality_temporal_eligibility_and_lifecycle.sql",
+    "0120_quality_draft_process_deletion.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

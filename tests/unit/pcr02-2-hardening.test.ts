@@ -284,6 +284,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
     "0119_quality_temporal_eligibility_and_lifecycle.sql",
+    "0120_quality_draft_process_deletion.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

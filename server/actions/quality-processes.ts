@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireQualityForAction } from "@/lib/auth/require-quality-module";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
@@ -20,6 +21,7 @@ import {
   validateQualityCode,
   validateQualityName,
   validateUuid,
+  canEditQuality,
 } from "@/lib/domain/quality-processes";
 
 /**
@@ -357,6 +359,69 @@ export async function createQualityProcess(
 
   revalidatePath(PATH_PROCESSES);
   return { error: null, processId: data.id as string };
+}
+
+/**
+ * Eliminar definitivamente un proceso que todavía es un borrador.
+ *
+ * No decide nada por su cuenta. El disparador de 0120 vuelve a emitir el
+ * dictamen en el instante del borrado, así que la ventana entre «se mostró el
+ * aviso» y «se confirmó» no puede aprovecharse: si en ese rato alguien publica
+ * una revisión o dibuja una relación, el borrado falla — y con el mismo motivo
+ * que se habría leído antes de confirmar.
+ *
+ * Lo que se lleva por delante son solo cosas que nunca salieron del borrador:
+ * las revisiones en borrador del propio proceso y, con ellas, sus entradas y
+ * salidas. Nada de eso es historia de nadie. Si lo fuera, no llegaríamos aquí.
+ */
+export async function deleteQualityProcess(processId: string): Promise<QualityActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error ?? QUALITY_ERRORS.generic };
+  // Los mismos roles que crean y editan procesos, que son los de la política
+  // de 0120. Quién puede intentarlo y si se puede son preguntas distintas: la
+  // segunda la responde el disparador.
+  if (!canEditQuality(g.ok.roleCode)) {
+    return { error: "Tu rol no permite eliminar procesos." };
+  }
+  const id = validateUuid(processId, "proceso");
+  if (id.error !== null) return { error: id.error };
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("quality_processes")
+    .delete()
+    .eq("id", id.value)
+    .eq("organization_id", g.ok.organizationId)
+    .select("id");
+
+  // El motivo que levanta el disparador ya está escrito para una persona: se
+  // deja pasar tal cual en vez de sustituirlo por un genérico.
+  if (error) {
+    return { error: error.code === "P0001" ? error.message : safeError(error) };
+  }
+  if ((data ?? []).length === 0) {
+    return { error: "No fue posible eliminar el proceso: puede que ya no exista o que tu rol no lo permita." };
+  }
+
+  revalidatePath(PATH_PROCESSES);
+  revalidatePath(PATH_MAP);
+  return { error: null };
+}
+
+/**
+ * La misma eliminación, con la forma que espera un `<form>`.
+ *
+ * El panel de ciclo de vida es el mismo componente en las cinco entidades, y
+ * habla por formulario para funcionar sin JavaScript. Esta envoltura existe
+ * solo para eso; la decisión y el trabajo siguen en deleteQualityProcess.
+ */
+export async function deleteProcessAction(
+  _prev: QualityActionState, formData: FormData
+): Promise<QualityActionState> {
+  const raw = formData.get("process_id");
+  const result = await deleteQualityProcess(typeof raw === "string" ? raw : "");
+  if (result.error) return result;
+  redirect(PATH_PROCESSES);
 }
 
 export async function updateQualityProcess(

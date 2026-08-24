@@ -17,7 +17,8 @@ import {
   listQualityProcessIoCatalog,
 } from "@/lib/db/quality-processes";
 import { listDocumentsLinkableFromQuality } from "@/lib/db/quality-documents";
-import { canPublishQuality } from "@/lib/domain/quality-processes";
+import { getDeletionEligibility } from "@/lib/db/lifecycle";
+import { canPublishQuality, canEditQuality } from "@/lib/domain/quality-processes";
 import { QualityProcessDetailView } from "@/components/domain/quality/process-detail";
 
 export const metadata = { title: "Proceso" };
@@ -36,7 +37,7 @@ export default async function QualityProcessPage({
   const detail = await getQualityProcessDetail(org.organizationId, processId, revision);
   if (!detail) notFound();
 
-  const [positions, categories, ioCatalog, documents] = await Promise.all([
+  const [positions, categories, ioCatalog, documents, eligibility] = await Promise.all([
     listQualityPositions(org.organizationId),
     listQualityCategories(),
     // QUALITY-01.2 · Para poder crear la relación desde CUALQUIERA de sus dos
@@ -44,6 +45,8 @@ export default async function QualityProcessPage({
     // y qué entradas tiene aquel al que se entrega.
     listQualityProcessIoCatalog(org.organizationId),
     listDocumentsLinkableFromQuality(org.organizationId),
+    // Quién decide si esto puede eliminarse es la base, no la pantalla.
+    getDeletionEligibility("process", processId),
   ]);
 
   const shownRevision = revision
@@ -62,6 +65,8 @@ export default async function QualityProcessPage({
       )}
       availableDocuments={documents}
       canPublish={canPublishQuality(org.roleCode)}
+      canManage={canEditQuality(org.roleCode)}
+      eligibility={eligibility}
     />
   );
 }

@@ -28,7 +28,7 @@
 
 /** Las entidades que hoy tienen ciclo de vida controlado. Se nombran aquí y no
  *  se infieren de una tabla genérica: cada una tiene sus propias preguntas. */
-export const LIFECYCLE_ENTITIES = ["indicator", "objective", "position", "document"] as const;
+export const LIFECYCLE_ENTITIES = ["indicator", "objective", "position", "document", "process"] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
 /** Una razón concreta por la que un objeto ya no es desechable, con su cuenta.
@@ -150,6 +150,8 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar este cargo mientras no tenga procesos, indicadores, documentos ni titulares asociados. Después podrás desactivarlo.",
   document:
     "Podrás eliminar este documento mientras siga en borrador y no haya entrado en revisión. Después podrás retirarlo, conservando su trazabilidad.",
+  process:
+    "Podrás eliminar este proceso mientras siga siendo un borrador sin publicar y nada dependa de él. Una vez publicado o incluido en un mapa, podrás retirarlo conservando su historia.",
 };
 
 /** Cómo se llama en español lo que se va a eliminar. */
@@ -158,6 +160,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   objective: "objetivo",
   position: "cargo",
   document: "documento",
+  process: "proceso",
 };
 
 /** Confirmación de un borrado que SÍ va a ocurrir. Nombra el objeto: aceptar

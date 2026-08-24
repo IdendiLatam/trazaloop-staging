@@ -28,6 +28,7 @@ const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 const stripSql = (s: string) => s.replace(/^\s*--.*$/gm, "");
 const MIG = "supabase/migrations/0119_quality_temporal_eligibility_and_lifecycle.sql";
+const MIG_A = "supabase/migrations/0120_quality_draft_process_deletion.sql";
 
 let passed = 0;
 let failed = 0;
@@ -469,6 +470,60 @@ check("M9. el privilegio que el entorno concede de más queda retirado", () => {
     assert(new RegExp(`revoke[^;]*${tabla}[^;]*from authenticated`, "s").test(sql),
       `${tabla} conserva el privilegio de borrado que el entorno concede`);
   }
+});
+
+check("M11. QUALITY-03.1a · el proceso entra en el MISMO patrón, sin uno propio", () => {
+  // La brecha G-1 se cierra reutilizando el dictamen, no inventando una
+  // segunda forma de decidir. Si algún día divergen, esto se pone rojo.
+  const sql = stripSql(read(MIG_A));
+  assert(/create or replace function public\.quality_process_deletion_verdict\(/.test(sql),
+    "falta el dictamen del proceso");
+  assert(/when 'process'\s+then quality_process_deletion_verdict\(p_id\)/.test(sql),
+    "el despachador público no conoce el proceso");
+  assert(/when 'process'\s+then quality_process_deletion_verdict\(old\.id\)/.test(sql),
+    "el disparador no consulta el dictamen del proceso");
+  assert(/before delete on public\.quality_processes/.test(sql), "el proceso no tiene puerta");
+  // Y las cuatro entidades de 0119 siguen en el despachador: reemplazar un
+  // `case` es fácil de hacer perdiendo una rama por el camino.
+  for (const ent of ["indicator", "objective", "position", "document"]) {
+    assert(new RegExp(`when '${ent}'\\s+then`).test(sql), `el despachador perdió ${ent}`);
+  }
+});
+
+check("M12. QUALITY-03.1a · la política nueva y la puerta son cosas distintas", () => {
+  const sql = stripSql(read(MIG_A));
+  // Sin política nadie borra; sin disparador el borrado se llevaría por
+  // delante un mapa publicado. Hacen falta las dos.
+  assert(/create policy quality_processes_delete on public\.quality_processes/.test(sql),
+    "falta la política de DELETE que no existía");
+  assert(/array\['admin','quality','consultant'\]/.test(sql),
+    "la política debe usar los mismos roles que ya crean y editan procesos");
+  assert(/grant delete on table public\.quality_processes to authenticated/.test(sql),
+    "0119 había retirado el privilegio: hay que devolverlo ahora que sí hay política");
+});
+
+check("M13. QUALITY-03.1a · la frontera mira las referencias REALES, no solo el estado", () => {
+  const sql = stripSql(read(MIG_A));
+  const fn = sql.slice(sql.indexOf("function public.quality_process_deletion_verdict"));
+  // El encargo lo pide explícitamente: `status === 'draft'` no basta.
+  for (const tabla of ["quality_process_revisions", "quality_process_map_nodes",
+                       "quality_process_map_edges", "quality_process_interactions",
+                       "quality_process_documents", "quality_objective_processes",
+                       "quality_indicators"]) {
+    assert(fn.includes(tabla), `la frontera no mira ${tabla}`);
+  }
+  // Y no destruye nada por el camino.
+  assert(!/^\s*(drop table|delete from|truncate)/im.test(sql),
+    "0120 solo añade: no borra ni destruye");
+});
+
+check("M14. QUALITY-03.1a · el proceso tiene ayuda propia y estado en español", () => {
+  assert(LIFECYCLE_ENTITIES.includes("process" as never), "el proceso no está en el patrón");
+  assert(ENTITY_LABEL.process === "proceso", "sin nombre visible");
+  assert(/[Pp]odrás eliminar/.test(DISPOSABLE_HINT.process), "la ayuda no dice que TODAVÍA puede eliminarse");
+  assert(!/nunca/i.test(DISPOSABLE_HINT.process), "dice «nunca» sobre algo que sí es posible ahora");
+  const sql = stripSql(read(MIG_A));
+  assert(/quality_process_state_label/.test(sql), "el estado debe decirse en español, no en código interno");
 });
 
 check("M10. la migración explica el porqué y ancla sus decisiones", () => {

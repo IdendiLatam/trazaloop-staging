@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
+import { LifecyclePanel } from "@/components/domain/quality/lifecycle-panel";
+import type { DeletionEligibility } from "@/lib/domain/lifecycle";
 import {
   QUALITY_DOCUMENT_RELATIONS,
   QUALITY_DOCUMENT_RELATION_LABEL,
@@ -33,6 +35,7 @@ import {
   unlinkTrazadocFromQualityProcess,
   updateQualityProcess,
   updateQualityRevisionContent,
+  deleteProcessAction,
 } from "@/server/actions/quality-processes";
 
 /**
@@ -419,6 +422,8 @@ export function QualityProcessDetailView({
   otherProcesses,
   availableDocuments,
   canPublish,
+  canManage,
+  eligibility,
 }: {
   detail: Detail;
   shownRevisionId: string | null;
@@ -428,6 +433,9 @@ export function QualityProcessDetailView({
   /** Documentos vinculables: de CUALQUIER módulo de la misma empresa. */
   availableDocuments: { id: string; title: string; code: string | null; status: string; moduleKey: string }[];
   canPublish: boolean;
+  canManage: boolean;
+  /** Dictamen de eliminación, resuelto en servidor (QUALITY-03.1a). */
+  eligibility: DeletionEligibility;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -1117,6 +1125,18 @@ export function QualityProcessDetailView({
           </ul>
         )}
       </Section>
+
+      {/* Eliminar, o entender por qué ya no. Mismo patrón y mismo dictamen que
+          el resto de Quality: esta pantalla no cuenta revisiones ni mapas. */}
+      <LifecyclePanel
+        entity="process"
+        name={process.name}
+        eligibility={eligibility}
+        idFieldName="process_id"
+        idValue={process.id}
+        deleteAction={deleteProcessAction}
+        canManage={canManage}
+      />
     </div>
   );
 }

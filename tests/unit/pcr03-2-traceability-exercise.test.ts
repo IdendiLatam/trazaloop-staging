@@ -47,6 +47,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0117_quality_objectives_indicators_and_measurements.sql",
   "0118_quality_measurement_engine_privilege_hardening.sql",
   "0119_quality_temporal_eligibility_and_lifecycle.sql",
+  "0120_quality_draft_process_deletion.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -329,6 +330,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0117_quality_objectives_indicators_and_measurements.sql",
     "0118_quality_measurement_engine_privilege_hardening.sql",
     "0119_quality_temporal_eligibility_and_lifecycle.sql",
+    "0120_quality_draft_process_deletion.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
