@@ -26,10 +26,12 @@
  *  16. el respaldo heredado no llega al cliente
  *  17. los hints CPR y Textiles conservan enlaces HTTPS e internos seguros
  *  18. el login permanece general para Trazaloop
+ *  19. las tres cuentas QA permanentes de staging sobreviven a la limpieza
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 import {
   COMMERCIAL_MODULES,
   FUNCTIONAL_MODULE_CODES,
@@ -534,6 +536,231 @@ check("9e. La herramienta documenta respaldo y recuperación", () => {
   assert(
     s.includes("NO se recuperan desde el dump"),
     "debe advertirse que los archivos de Storage no están en el dump de PostgreSQL"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Las tres cuentas QA permanentes de staging.
+//
+// Son los accesos humanos con los que se prueban los sprints de Quality. Viven
+// en una empresa que no depende de ningún Demo, y recrearlas significa recrear
+// también la empresa, los cargos y los titulares. El script las protege por
+// código y no por variable de entorno, precisamente para que no dependan de
+// que alguien recuerde declararlas.
+//
+// Comprobar que el archivo CONTIENE la cadena «ALWAYS_KEEP_EMAILS» no protege
+// nada: eso lo cumple un comentario. Lo que hay que blindar es la CONDUCTA —
+// que estas tres sobrevivan a cada decisión de borrado— y hay que hacerlo sin
+// importar el script, porque importarlo lo ejecutaría.
+//
+// De ahí el rodeo: se recortan del archivo las declaraciones y los filtros
+// REALES y se evalúan en un contexto aislado con un `process.env` controlado.
+// Si alguien cambia la lógica, aquí se ejecuta la lógica cambiada, no una
+// copia de ella que se quedaría antigua sin avisar.
+//
+// Las DIRECCIONES pueden estar versionadas: son `.local`, no enrutables, y no
+// hay ninguna persona real detrás. Las CONTRASEÑAS no aparecen aquí ni en el
+// script, y este archivo no debe adquirirlas nunca.
+// ---------------------------------------------------------------------------
+const PERMANENT_QA_EMAILS = [
+  "quality.admin@trazaloop-staging.local",
+  "quality.reviewer@trazaloop-staging.local",
+  "quality.approver@trazaloop-staging.local",
+];
+
+/** Recorta `const <nombre> = [ … ];` equilibrando corchetes. */
+function sliceArrayDecl(src: string, name: string): string {
+  const head = `const ${name} = [`;
+  const start = src.indexOf(head);
+  if (start < 0) throw new Error(`el script ya no declara ${name}`);
+  let depth = 0;
+  let i = start + head.length - 1;
+  for (; i < src.length; i++) {
+    if (src[i] === "[") depth++;
+    else if (src[i] === "]" && --depth === 0) break;
+  }
+  if (depth !== 0) throw new Error(`no se pudo delimitar la declaración de ${name}`);
+  return `${src.slice(start, i + 1)};`;
+}
+
+/** Recorta la línea que contiene un fragmento; falla si el fragmento desapareció. */
+function sliceLine(src: string, needle: string): string {
+  const line = src.split("\n").find((l) => l.includes(needle));
+  if (!line) throw new Error(`el script ya no contiene: ${needle}`);
+  return line.trim();
+}
+
+type CleanupVerdict = {
+  keep: string[];
+  kept: string[];
+  doomed: string[];
+  supers: string[];
+  unexpected: string[];
+};
+
+/**
+ * Ejecuta las decisiones REALES del script sobre un censo de cuentas.
+ *
+ * `src` admite una versión mutada del archivo: así se comprueba que quitar una
+ * cuenta permanente rompe el invariante de verdad, en lugar de confiar en que
+ * lo rompería.
+ */
+function runCleanupDecisions(
+  users: string[],
+  keepAuthEmails?: string,
+  src: string = read(CLEANUP)
+): CleanupVerdict {
+  const program = [
+    sliceArrayDecl(src, "ALWAYS_KEEP_EMAILS"),
+    sliceArrayDecl(src, "KEEP_EMAILS"),
+    "const allUsers = __users.map((email) => ({ id: email, email }));",
+    sliceLine(src, "const keptUsers = allUsers.filter"),
+    sliceLine(src, "const doomedUsers = allUsers.filter"),
+    "const superadmins = { rows: allUsers.map((u) => ({ id: u.id, email: u.email })) };",
+    sliceLine(src, "const survivingSupers = superadmins.rows.filter"),
+    "const finalUsers = __users.slice();",
+    sliceLine(src, "const unexpected = finalUsers.filter"),
+    `({
+       keep: KEEP_EMAILS,
+       kept: keptUsers.map((u) => u.email),
+       doomed: doomedUsers.map((u) => u.email),
+       supers: survivingSupers.map((s) => s.email),
+       unexpected,
+     });`,
+  ].join("\n");
+
+  const sandbox = {
+    __users: users,
+    process: { env: keepAuthEmails === undefined ? {} : { KEEP_AUTH_EMAILS: keepAuthEmails } },
+  };
+  return vm.runInNewContext(program, sandbox, { timeout: 2000 }) as CleanupVerdict;
+}
+
+const SUPERADMIN = "superadmin@trazaloop.dev";
+const TEMPORAL = ["demo-1@test.trazaloop.dev", "prueba@ejemplo.com", "qa-suite-9999@test.local"];
+
+check("9f. Las tres cuentas QA permanentes están protegidas por código", () => {
+  const s = read(CLEANUP);
+  const decl = sliceArrayDecl(s, "ALWAYS_KEEP_EMAILS");
+  for (const email of PERMANENT_QA_EMAILS) {
+    assert(decl.includes(`"${email}"`), `ALWAYS_KEEP_EMAILS debe incluir ${email}`);
+  }
+  // La protección vive en el código y no en el entorno: si se moviera al .env
+  // volvería a depender de que alguien la recuerde, que es lo que falló.
+  assert(
+    !/process\.env/.test(decl),
+    "la lista permanente no puede depender de una variable de entorno"
+  );
+  // Ninguna de estas direcciones es enrutable, y ninguna arrastra una clave.
+  for (const email of PERMANENT_QA_EMAILS) {
+    assert(email.endsWith(".local"), `${email} debería ser una dirección no enrutable`);
+  }
+  assert(
+    !/password|contrase|secret|token/i.test(decl),
+    "la lista solo contiene direcciones: jamás una credencial"
+  );
+});
+
+check("9g. La protección se SUMA a KEEP_AUTH_EMAILS y no la sustituye", () => {
+  // Con la lista del operador declarada, sobreviven las suyas Y las permanentes.
+  const conOperador = runCleanupDecisions([], `${SUPERADMIN}, OTRO@Ejemplo.COM `);
+  assert(conOperador.keep.includes(SUPERADMIN), "debe conservarse el correo declarado por el operador");
+  assert(
+    conOperador.keep.includes("otro@ejemplo.com"),
+    "los correos del operador deben normalizarse a minúsculas y sin espacios"
+  );
+  for (const email of PERMANENT_QA_EMAILS) {
+    assert(conOperador.keep.includes(email), `${email} debe seguir protegida junto a las del operador`);
+  }
+
+  // Sin lista del operador, las permanentes siguen ahí: es el caso que falló.
+  const sinOperador = runCleanupDecisions([]);
+  for (const email of PERMANENT_QA_EMAILS) {
+    assert(sinOperador.keep.includes(email), `${email} debe protegerse aunque KEEP_AUTH_EMAILS esté vacía`);
+  }
+
+  // Declarar una permanente a mano no la duplica.
+  const duplicada = runCleanupDecisions([], `${PERMANENT_QA_EMAILS[0]},${SUPERADMIN}`);
+  const veces = duplicada.keep.filter((e) => e === PERMANENT_QA_EMAILS[0]).length;
+  assert(veces === 1, `declararla a mano no debe duplicarla (aparece ${veces} veces)`);
+});
+
+check("9h. Las decisiones de borrado respetan la lista permanente", () => {
+  const censo = [...PERMANENT_QA_EMAILS, SUPERADMIN, ...TEMPORAL];
+  const v = runCleanupDecisions(censo, SUPERADMIN);
+
+  for (const email of PERMANENT_QA_EMAILS) {
+    assert(v.kept.includes(email), `${email} debe quedar entre las cuentas conservadas`);
+    assert(!v.doomed.includes(email), `${email} JAMÁS puede quedar entre las condenadas`);
+    assert(
+      !v.unexpected.includes(email),
+      `${email} no debe figurar como cuenta no prevista en el censo final`
+    );
+  }
+  assert(v.kept.includes(SUPERADMIN), "el superadministrador declarado debe sobrevivir");
+  assert(v.supers.includes(SUPERADMIN), "y debe contarse como superadministrador superviviente");
+});
+
+check("9i. Una cuenta temporal no protegida sigue siendo eliminable", () => {
+  const censo = [...PERMANENT_QA_EMAILS, SUPERADMIN, ...TEMPORAL];
+  const v = runCleanupDecisions(censo, SUPERADMIN);
+
+  for (const email of TEMPORAL) {
+    assert(v.doomed.includes(email), `${email} debe seguir siendo eliminable: la limpieza tiene que limpiar`);
+    assert(!v.kept.includes(email), `${email} no debe conservarse por accidente`);
+  }
+  assert(
+    v.doomed.length === TEMPORAL.length,
+    `solo deben condenarse las temporales (condenadas: ${v.doomed.join(", ") || "ninguna"})`
+  );
+});
+
+check("9j. Quitar una cuenta permanente rompe el invariante (control negativo)", () => {
+  const src = read(CLEANUP);
+  for (const victima of PERMANENT_QA_EMAILS) {
+    const mutado = src
+      .split("\n")
+      .filter((l) => !l.includes(`"${victima}"`))
+      .join("\n");
+    assert(
+      !mutado.includes(`"${victima}"`),
+      `la mutación no llegó a retirar ${victima}: el control negativo no probaría nada`
+    );
+
+    const v = runCleanupDecisions([...PERMANENT_QA_EMAILS, SUPERADMIN], SUPERADMIN, mutado);
+    assert(
+      v.doomed.includes(victima),
+      `sin su línea, ${victima} debería quedar condenada — si no, esta prueba no está comprobando nada`
+    );
+    assert(
+      !v.kept.includes(victima),
+      `sin su línea, ${victima} no debería figurar entre las conservadas`
+    );
+    // Las otras dos siguen protegidas: la mutación es quirúrgica.
+    for (const otra of PERMANENT_QA_EMAILS.filter((e) => e !== victima)) {
+      assert(v.kept.includes(otra), `la mutación de ${victima} no debía afectar a ${otra}`);
+    }
+  }
+});
+
+check("9k. La salvaguarda de correos ausentes solo exige los declarados", () => {
+  const s = read(CLEANUP);
+  // Un proyecto recién creado todavía no tiene las cuentas QA. Exigir su
+  // existencia convertiría la protección en un bloqueo, así que la
+  // comprobación de «correos que no existen» debe mirar SOLO lo que declaró
+  // el operador, no la lista permanente.
+  const bloque = s.slice(s.indexOf("const declared ="), s.indexOf("const declared =") + 600);
+  assert(
+    bloque.includes("process.env.KEEP_AUTH_EMAILS"),
+    "la comprobación de correos ausentes debe partir de KEEP_AUTH_EMAILS"
+  );
+  assert(
+    !bloque.includes("ALWAYS_KEEP_EMAILS") && !bloque.includes("KEEP_EMAILS.filter"),
+    "no debe exigirse que las cuentas permanentes existan ya en el proyecto"
+  );
+  assert(
+    s.includes("const missing = declared.filter"),
+    "debe seguir abortando si falta un correo que el operador declaró"
   );
 });
 
