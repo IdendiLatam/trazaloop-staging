@@ -99,6 +99,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0118_quality_measurement_engine_privilege_hardening.sql",
   "0119_quality_temporal_eligibility_and_lifecycle.sql",
   "0120_quality_draft_process_deletion.sql",
+  "0121_work_cases_and_actions_engine.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -907,6 +908,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0118_quality_measurement_engine_privilege_hardening.sql",
     "0119_quality_temporal_eligibility_and_lifecycle.sql",
     "0120_quality_draft_process_deletion.sql",
+    "0121_work_cases_and_actions_engine.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));

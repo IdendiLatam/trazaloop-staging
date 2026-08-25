@@ -239,6 +239,19 @@ export const QUALITY_DESEMPENO_GROUP: ModuleNavGroup = {
 };
 
 /**
+ * QUALITY-04 · Casos y acciones. Grupo propio y no un enlace dentro de
+ * Desempeño: un caso puede nacer de un indicador, pero también de un documento,
+ * de una auditoría o de una queja. Colgarlo del desempeño sugeriría que solo
+ * los indicadores producen casos, que es justo lo que AC-02 evita.
+ */
+export const QUALITY_CASOS_GROUP: ModuleNavGroup = {
+  title: "Casos y acciones",
+  items: [
+    { label: "Casos", href: "/quality/cases" },
+  ],
+};
+
+/**
  * Documentos de Quality. Grupo propio, no un enlace suelto: el espacio
  * documental es una de las dos patas del módulo, no un accesorio de Procesos.
  *
@@ -267,7 +280,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_DOCUMENTOS_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,10 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
  *  que lleva a un 404. */
 export const SUBJECT_TYPES = [
   "trazadoc_document", "quality_indicator", "quality_objective",
+  // QUALITY-04 · Casos y acciones. Se añaden AQUÍ por la misma razón que los
+  // de QUALITY-03: si el dominio no conoce el tipo de asunto, el enlace de la
+  // tarea acaba apuntando a Documentos, que fue el defecto histórico.
+  "work_case", "work_action",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -44,6 +48,11 @@ export const TASK_TYPES = [
   // paralelo: si el dominio no los conoce, la pantalla los pinta sin etiqueta.
   "indicator_measurement_due",
   "indicator_off_target",
+  // QUALITY-04
+  "case_evaluation",
+  "case_closure",
+  "action_execution",
+  "action_effectiveness",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -53,6 +62,10 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   document_changes_requested: "Corregir y reenviar",
   indicator_measurement_due: "Registrar medición",
   indicator_off_target: "Indicador fuera de meta",
+  case_evaluation: "Evaluar un caso",
+  case_closure: "Cerrar un caso",
+  action_execution: "Ejecutar una acción",
+  action_effectiveness: "Verificar si la acción sirvió",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -75,6 +88,11 @@ export const ALERT_TYPES = [
   "indicator_measurement_due",
   "indicator_target_missed",
   "objective_at_risk",
+  // QUALITY-04
+  "case_assigned",
+  "action_assigned",
+  "action_overdue",
+  "effectiveness_due",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -87,6 +105,10 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   indicator_measurement_due: "Falta una medición",
   indicator_target_missed: "Un indicador no cumplió su meta",
   objective_at_risk: "Un objetivo está en riesgo",
+  case_assigned: "Te asignaron un caso",
+  action_assigned: "Te asignaron una acción",
+  action_overdue: "Una acción tuya venció",
+  effectiveness_due: "Falta verificar si una acción sirvió",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

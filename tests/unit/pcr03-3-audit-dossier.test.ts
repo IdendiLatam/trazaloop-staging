@@ -43,6 +43,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0118_quality_measurement_engine_privilege_hardening.sql",
   "0119_quality_temporal_eligibility_and_lifecycle.sql",
   "0120_quality_draft_process_deletion.sql",
+  "0121_work_cases_and_actions_engine.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

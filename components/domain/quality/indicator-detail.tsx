@@ -555,6 +555,27 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
         </section>
       ) : null}
 
+      {/* QUALITY-04 · De la SEÑAL al CASO, con un acto explícito.
+          Un indicador fuera de meta no abre un caso solo, y menos aún crea una
+          no conformidad (AC-04): alguien decide. El caso REFERENCIA el
+          indicador y guarda el contexto de este momento; no copia el dato. */}
+      {model.canManage && model.lastEvaluation === "not_met" ? (
+        <section className={cardClass}>
+          <h2 className="text-sm font-semibold">¿Esto hay que atenderlo?</h2>
+          <p className="mt-1 text-xs text-ink-soft">
+            Este indicador no cumplió su meta. Eso es una señal, no una no conformidad:
+            puede ser una variación puntual, un cambio de método o un error de captura.
+            Si hay que analizarlo, abre un caso — y allí se decidirá qué es.
+          </p>
+          <form action="/quality/cases" method="get" className="mt-2">
+            <input type="hidden" name="from_indicator" value={model.indicatorId} />
+            <Button type="submit" variant="quiet" className="w-auto px-3 py-1.5 text-xs">
+              Crear un caso a partir de esta señal →
+            </Button>
+          </form>
+        </section>
+      ) : null}
+
       {/* Eliminar, o entender por qué ya no. El dictamen viene resuelto del
           servidor: esta pantalla no cuenta mediciones ni decide nada. */}
       <LifecyclePanel

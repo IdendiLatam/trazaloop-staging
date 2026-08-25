@@ -14,6 +14,7 @@ import { requireSession } from "@/lib/auth/require-session";
 import { getQualitySummary } from "@/lib/db/quality-processes";
 import { listMyTasks } from "@/lib/db/document-control";
 import { listObjectives, listIndicators } from "@/lib/db/quality-indicators";
+import { getCaseSummary } from "@/lib/db/work-cases";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -50,11 +51,12 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks, objectives, indicators] = await Promise.all([
+  const [summary, tasks, objectives, indicators, cases] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
     listIndicators(org.organizationId),
+    getCaseSummary(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -71,8 +73,25 @@ export default async function QualityHomePage() {
   const needingAttention = activeIndicators.filter((i) => i.lastEvaluation === "attention");
   const pendingMeasurement = activeIndicators.filter((i) => i.measurementPending);
 
-  const performanceLines: string[] = [];
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+  // QUALITY-04 · Solo se dice lo que pide una acción. Una portada llena de
+  // ceros decorativos enseña a no mirarla.
+  const caseLines: string[] = [];
+  if (cases.openCases > 0) {
+    caseLines.push(plural(cases.openCases, "caso abierto", "casos abiertos"));
+  }
+  if (cases.openNonconformities > 0) {
+    caseLines.push(plural(cases.openNonconformities, "no conformidad abierta", "no conformidades abiertas"));
+  }
+  if (cases.overdueActions > 0) {
+    caseLines.push(plural(cases.overdueActions, "acción vencida", "acciones vencidas"));
+  }
+  if (cases.pendingEffectiveness > 0) {
+    caseLines.push(plural(cases.pendingEffectiveness, "eficacia por verificar", "eficacias por verificar"));
+  }
+
+  const performanceLines: string[] = [];
   if (offTarget.length > 0) {
     performanceLines.push(plural(offTarget.length, "indicador fuera de meta", "indicadores fuera de meta"));
   }
@@ -122,6 +141,20 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/indicators" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver indicadores →
+          </Link>
+        </section>
+      ) : null}
+
+      {caseLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Casos y acciones</h2>
+          <ul className="mt-1 space-y-0.5">
+            {caseLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <Link href="/quality/cases" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver casos →
           </Link>
         </section>
       ) : null}
@@ -181,6 +214,19 @@ export default async function QualityHomePage() {
               : `${activeObjectives.length} ${activeObjectives.length === 1 ? "objetivo activo" : "objetivos activos"} · ${activeIndicators.length} ${activeIndicators.length === 1 ? "indicador" : "indicadores"}.`
           }
           cta="Ir a Objetivos"
+        />
+
+        <Card
+          href="/quality/cases"
+          step="Atención"
+          title="Casos y acciones"
+          description="Lo que hay que atender: qué pasó, si incumple algo, qué se hizo y qué se hará para que no se repita. Un indicador fuera de meta o un documento vencido son señales; alguien decide si abren un caso."
+          meta={
+            cases.openCases === 0
+              ? "No hay casos abiertos."
+              : `${plural(cases.openCases, "caso abierto", "casos abiertos")}${cases.openNonconformities > 0 ? ` · ${plural(cases.openNonconformities, "es no conformidad", "son no conformidades")}` : ""}.`
+          }
+          cta="Ir a Casos"
         />
 
         <Card

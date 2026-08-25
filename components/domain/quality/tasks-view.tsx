@@ -65,6 +65,10 @@ const TASK_TONE: Record<TaskType, string> = {
   document_changes_requested: "border-danger/30 bg-danger/5",
   indicator_measurement_due: "border-amber/40 bg-amber/5",
   indicator_off_target: "border-danger/30 bg-danger/5",
+  case_evaluation: "border-amber/40 bg-amber/5",
+  case_closure: "border-loop/30 bg-loop/5",
+  action_execution: "border-amber/40 bg-amber/5",
+  action_effectiveness: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -73,6 +77,10 @@ const TASK_CTA: Record<TaskType, string> = {
   document_changes_requested: "Corregir y reenviar",
   indicator_measurement_due: "Registrar la medición",
   indicator_off_target: "Ver el indicador",
+  case_evaluation: "Evaluar el caso",
+  case_closure: "Ver el caso",
+  action_execution: "Ver la acción",
+  action_effectiveness: "Verificar si sirvió",
 };
 
 /**
@@ -90,6 +98,13 @@ function subjectHref(
       return `/quality/indicators/${subjectId}`;
     case "quality_objective":
       return `/quality/objectives/${subjectId}`;
+    // QUALITY-04 · Una acción no tiene página propia: se ve dentro de su caso,
+    // así que la tarea lleva al caso. Enlazar a una ruta inventada sería peor
+    // que no enlazar.
+    case "work_case":
+      return `/quality/cases/${subjectId}`;
+    case "work_action":
+      return `/quality/cases`;
     default:
       return null;
   }
