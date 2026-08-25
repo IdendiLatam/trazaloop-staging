@@ -149,10 +149,34 @@ const ALLOWLIST = (
   .map((s) => s.trim())
   .filter(Boolean);
 
-const KEEP_EMAILS = (process.env.KEEP_AUTH_EMAILS ?? "")
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+/**
+ * Cuentas QA PERMANENTES de Staging que esta herramienta no debe borrar nunca.
+ *
+ * No son cuentas de suite: son los accesos humanos con los que se prueban los
+ * sprints de Quality, y viven en una empresa que no depende de ningún Demo. Si
+ * dependieran de que alguien acordara ponerlas en KEEP_AUTH_EMAILS, la primera
+ * limpieza hecha con prisa se las llevaría — y recrearlas significa recrear
+ * también la empresa, los cargos y los titulares.
+ *
+ * Van aquí y no en el .env por eso mismo: una lista que hay que recordar no es
+ * una protección. Son direcciones `.local`, no enrutables: no existe ninguna
+ * persona real detrás.
+ */
+const ALWAYS_KEEP_EMAILS = [
+  "quality.admin@trazaloop-staging.local",
+  "quality.reviewer@trazaloop-staging.local",
+  "quality.approver@trazaloop-staging.local",
+];
+
+const KEEP_EMAILS = [
+  ...new Set([
+    ...(process.env.KEEP_AUTH_EMAILS ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+    ...ALWAYS_KEEP_EMAILS,
+  ]),
+];
 
 // ===========================================================================
 // Tablas GLOBALES que jamás se tocan (además de todo lo que no se derive
@@ -466,7 +490,12 @@ async function main() {
     info(`Se BORRAN:        ${doomedUsers.length}`);
 
     // Salvaguarda crítica: ningún correo de KEEP_AUTH_EMAILS puede faltar.
-    const missing = KEEP_EMAILS.filter((e) => !allUsers.some((u) => u.email === e));
+    // Solo se exige que existan los correos que el OPERADOR declaró. Las
+    // cuentas QA permanentes pueden no estar todavía en un proyecto recién
+    // creado, y eso no es un error: simplemente no hay nada que conservar.
+    const declared = (process.env.KEEP_AUTH_EMAILS ?? "")
+      .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const missing = declared.filter((e) => !allUsers.some((u) => u.email === e));
     if (missing.length > 0) {
       abort(
         `Correos de KEEP_AUTH_EMAILS que NO existen en este proyecto: ${missing.join(", ")}`,

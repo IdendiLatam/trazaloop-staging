@@ -21,14 +21,31 @@ export type ActiveModule = {
 
 /**
  * Organizaciones donde el usuario tiene membership activa.
- * RLS garantiza que solo se ven las propias memberships y organizaciones.
+ *
+ * El filtro por `user_id` es OBLIGATORIO y no una redundancia. La política de
+ * `memberships` es `user_id = auth.uid() OR is_org_admin(organization_id)`: un
+ * administrador ve TODAS las membresías de su empresa, porque eso es lo que
+ * necesita la pantalla de Equipo. Sin el filtro, esta consulta le devolvía una
+ * fila POR MIEMBRO, de modo que:
+ *
+ *   · el selector de empresa mostraba la misma empresa repetida N veces;
+ *   · cada copia traía el rol de OTRA persona, así que elegir la fila
+ *     equivocada dejaba al administrador operando con un rol ajeno.
+ *
+ * No se veía porque hacía falta un administrador en una empresa con varios
+ * miembros, y las empresas de prueba solían tener uno solo. Apareció al montar
+ * la empresa QA permanente, que tiene tres.
  */
 export async function getUserOrganizations(): Promise<UserOrganization[]> {
   const supabase = await createServerClient();
 
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
   const { data, error } = await supabase
     .from("memberships")
     .select("organization_id, role_code, status, organizations(id, name)")
+    .eq("user_id", auth.user.id)
     .eq("status", "active")
     .order("created_at", { ascending: true });
 
@@ -69,16 +86,24 @@ export async function getActiveOrganization(): Promise<ActiveOrganization | null
   return null;
 }
 
-/** Rol del usuario en una organización concreta (bajo RLS). */
+/** Rol del usuario en una organización concreta (bajo RLS).
+ *
+ *  Mismo motivo que arriba: sin `user_id`, para un administrador la consulta
+ *  devuelve varias filas y `maybeSingle()` falla — o peor, devuelve el rol de
+ *  otra persona. */
 export async function getRoleInOrganization(
   organizationId: string
 ): Promise<RoleCode | null> {
   const supabase = await createServerClient();
 
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+
   const { data, error } = await supabase
     .from("memberships")
     .select("role_code")
     .eq("organization_id", organizationId)
+    .eq("user_id", auth.user.id)
     .eq("status", "active")
     .maybeSingle();
 
