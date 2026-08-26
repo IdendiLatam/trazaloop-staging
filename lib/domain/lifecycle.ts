@@ -28,7 +28,14 @@
 
 /** Las entidades que hoy tienen ciclo de vida controlado. Se nombran aquí y no
  *  se infieren de una tabla genérica: cada una tiene sus propias preguntas. */
-export const LIFECYCLE_ENTITIES = ["indicator", "objective", "position", "document", "process"] as const;
+// QUALITY-04 anadio caso y accion al despachador de SQL; QUALITY-05 anade
+// riesgo, oportunidad, control y version de metodologia. La lista vive aqui
+// para que la aplicacion no pueda pedir un dictamen que la base no sabe dar.
+export const LIFECYCLE_ENTITIES = [
+  "indicator", "objective", "position", "document", "process",
+  "case", "action",
+  "risk", "opportunity", "control", "methodology_version",
+] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
 /** Una razón concreta por la que un objeto ya no es desechable, con su cuenta.
@@ -152,6 +159,18 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar este documento mientras siga en borrador y no haya entrado en revisión. Después podrás retirarlo, conservando su trazabilidad.",
   process:
     "Podrás eliminar este proceso mientras siga siendo un borrador sin publicar y nada dependa de él. Una vez publicado o incluido en un mapa, podrás retirarlo conservando su historia.",
+  case:
+    "Podrás eliminar este caso mientras siga sin evaluar y sin hallazgos. En cuanto tenga historia, se conserva.",
+  action:
+    "Podrás eliminar esta acción mientras siga planificada y nadie haya registrado avance sobre ella.",
+  risk:
+    "Podrás eliminar este riesgo mientras siga en borrador y nadie lo haya evaluado. Después podrás cerrarlo o retirarlo, conservando su histórico.",
+  opportunity:
+    "Podrás eliminar esta oportunidad mientras siga en borrador y sin priorizar. Después podrás descartarla dejando dicho por qué.",
+  control:
+    "Podrás eliminar este control mientras siga en borrador y no sustente ninguna evaluación residual. Después podrás retirarlo, conservando su historia.",
+  methodology_version:
+    "Podrás eliminar esta versión mientras siga en borrador y no se haya usado para evaluar. Una vez publicada, se sustituye por una versión nueva en lugar de reescribirla.",
 };
 
 /** Cómo se llama en español lo que se va a eliminar. */
@@ -161,10 +180,31 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   position: "cargo",
   document: "documento",
   process: "proceso",
+  case: "caso",
+  action: "acción",
+  risk: "riesgo",
+  opportunity: "oportunidad",
+  control: "control",
+  methodology_version: "versión de la metodología",
 };
+
+/**
+ * Las entidades cuyo nombre es FEMENINO. Sin esto la pantalla escribe «Este
+ * oportunidad», que es exactamente el tipo de descuido que hace que un sistema
+ * parezca traducido a máquina.
+ */
+const FEMININE_ENTITIES: ReadonlySet<LifecycleEntity> = new Set([
+  "action", "opportunity", "methodology_version",
+]);
+
+/** «Este proceso» / «Esta acción», según toque. */
+export function entityDemonstrative(entity: LifecycleEntity): string {
+  return FEMININE_ENTITIES.has(entity) ? "Esta" : "Este";
+}
 
 /** Confirmación de un borrado que SÍ va a ocurrir. Nombra el objeto: aceptar
  *  «¿Eliminar?» a ciegas es como no preguntar. */
 export function hardDeleteConfirmation(entity: LifecycleEntity, name: string): string {
-  return `Esta acción eliminará definitivamente el ${ENTITY_LABEL[entity]} «${name}». No se puede deshacer.`;
+  const article = FEMININE_ENTITIES.has(entity) ? "la" : "el";
+  return `Esta acción eliminará definitivamente ${article} ${ENTITY_LABEL[entity]} «${name}». No se puede deshacer.`;
 }

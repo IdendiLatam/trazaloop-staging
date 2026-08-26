@@ -44,6 +44,9 @@ const QUALITY_01_ALLOWED = new Set([
   "0119_quality_temporal_eligibility_and_lifecycle.sql",
   "0120_quality_draft_process_deletion.sql",
   "0121_work_cases_and_actions_engine.sql",
+  // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
+  // metodología configurable y versionada.
+  "0122_quality_risks_and_opportunities.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

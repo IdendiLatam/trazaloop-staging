@@ -69,6 +69,11 @@ const TASK_TONE: Record<TaskType, string> = {
   case_closure: "border-loop/30 bg-loop/5",
   action_execution: "border-amber/40 bg-amber/5",
   action_effectiveness: "border-loop/30 bg-loop/5",
+  risk_review_due: "border-amber/40 bg-amber/5",
+  risk_assessment_due: "border-amber/40 bg-amber/5",
+  risk_treatment_approval: "border-loop/30 bg-loop/5",
+  control_verification: "border-loop/30 bg-loop/5",
+  opportunity_review: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -81,6 +86,11 @@ const TASK_CTA: Record<TaskType, string> = {
   case_closure: "Ver el caso",
   action_execution: "Ver la acción",
   action_effectiveness: "Verificar si sirvió",
+  risk_review_due: "Revisar el riesgo",
+  risk_assessment_due: "Reevaluar el riesgo",
+  risk_treatment_approval: "Ver la aceptación pendiente",
+  control_verification: "Comprobar el control",
+  opportunity_review: "Ver la oportunidad",
 };
 
 /**
@@ -105,6 +115,15 @@ function subjectHref(
       return `/quality/cases/${subjectId}`;
     case "work_action":
       return `/quality/cases`;
+    // QUALITY-05 · El riesgo SÍ tiene ficha propia, así que la tarea lleva
+    // exactamente ahí. El control no la tiene —se ve dentro del riesgo al que
+    // sirve—, así que lleva al listado en vez de a una ruta inventada.
+    case "quality_risk":
+      return `/quality/risks/${subjectId}`;
+    case "quality_opportunity":
+      return `/quality/risks/opportunities/${subjectId}`;
+    case "quality_control":
+      return `/quality/risks`;
     default:
       return null;
   }

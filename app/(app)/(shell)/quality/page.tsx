@@ -15,6 +15,7 @@ import { getQualitySummary } from "@/lib/db/quality-processes";
 import { listMyTasks } from "@/lib/db/document-control";
 import { listObjectives, listIndicators } from "@/lib/db/quality-indicators";
 import { getCaseSummary } from "@/lib/db/work-cases";
+import { getRiskSummary } from "@/lib/db/risks";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -51,12 +52,13 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks, objectives, indicators, cases] = await Promise.all([
+  const [summary, tasks, objectives, indicators, cases, risks] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
     listIndicators(org.organizationId),
     getCaseSummary(org.organizationId),
+    getRiskSummary(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -89,6 +91,26 @@ export default async function QualityHomePage() {
   }
   if (cases.pendingEffectiveness > 0) {
     caseLines.push(plural(cases.pendingEffectiveness, "eficacia por verificar", "eficacias por verificar"));
+  }
+
+  // QUALITY-05 · Igual criterio: solo se dice lo que pide una acción. Un
+  // riesgo activo y dentro del criterio no necesita aparecer en la portada.
+  const riskLines: string[] = [];
+  if (risks.aboveAppetite > 0) {
+    riskLines.push(
+      `${plural(risks.aboveAppetite, "riesgo por encima del criterio aceptable", "riesgos por encima del criterio aceptable")}`
+    );
+  }
+  if (risks.pendingApproval > 0) {
+    riskLines.push(plural(risks.pendingApproval, "aceptación por aprobar", "aceptaciones por aprobar"));
+  }
+  if (risks.reviewsOverdue > 0) {
+    riskLines.push(plural(risks.reviewsOverdue, "revisión de riesgo vencida", "revisiones de riesgo vencidas"));
+  }
+  if (risks.overdueActions > 0) {
+    riskLines.push(
+      plural(risks.overdueActions, "acción de tratamiento vencida", "acciones de tratamiento vencidas")
+    );
   }
 
   const performanceLines: string[] = [];
@@ -141,6 +163,24 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/indicators" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver indicadores →
+          </Link>
+        </section>
+      ) : null}
+
+      {riskLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Riesgos</h2>
+          <ul className="mt-1 space-y-0.5">
+            {riskLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Que un riesgo esté por encima del criterio no es una no conformidad: pide decidir qué
+            se hace con él.
+          </p>
+          <Link href="/quality/risks" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver riesgos →
           </Link>
         </section>
       ) : null}
@@ -214,6 +254,19 @@ export default async function QualityHomePage() {
               : `${activeObjectives.length} ${activeObjectives.length === 1 ? "objetivo activo" : "objetivos activos"} · ${activeIndicators.length} ${activeIndicators.length === 1 ? "indicador" : "indicadores"}.`
           }
           cta="Ir a Objetivos"
+        />
+
+        <Card
+          href="/quality/risks"
+          step="Prevención"
+          title="Riesgos y oportunidades"
+          description="Qué puede salir mal y qué podría salir mejor. Se valora con la metodología que define la empresa, se decide qué hacer, y lo que se decidió queda registrado con su fecha y su fundamento."
+          meta={
+            risks.aboveAppetite === 0
+              ? "Ningún riesgo por encima del criterio aceptable."
+              : `${plural(risks.aboveAppetite, "riesgo", "riesgos")} por encima del criterio aceptable.`
+          }
+          cta="Ir a Riesgos"
         />
 
         <Card

@@ -25,6 +25,10 @@ export const SUBJECT_TYPES = [
   // de QUALITY-03: si el dominio no conoce el tipo de asunto, el enlace de la
   // tarea acaba apuntando a Documentos, que fue el defecto histórico.
   "work_case", "work_action",
+  // QUALITY-05 · Riesgos, oportunidades y controles. Igual que antes: el tipo
+  // entra aqui, no en un enumerado paralelo, para que la tarea sepa a donde
+  // lleva.
+  "quality_risk", "quality_opportunity", "quality_control",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -53,6 +57,12 @@ export const TASK_TYPES = [
   "case_closure",
   "action_execution",
   "action_effectiveness",
+  // QUALITY-05
+  "risk_review_due",
+  "risk_assessment_due",
+  "risk_treatment_approval",
+  "control_verification",
+  "opportunity_review",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -66,6 +76,11 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   case_closure: "Cerrar un caso",
   action_execution: "Ejecutar una acción",
   action_effectiveness: "Verificar si la acción sirvió",
+  risk_review_due: "Revisar un riesgo",
+  risk_assessment_due: "Reevaluar un riesgo",
+  risk_treatment_approval: "Aprobar la aceptación de un riesgo",
+  control_verification: "Comprobar si un control funciona",
+  opportunity_review: "Revisar una oportunidad",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -93,6 +108,12 @@ export const ALERT_TYPES = [
   "action_assigned",
   "action_overdue",
   "effectiveness_due",
+  // QUALITY-05
+  "risk_review_overdue",
+  "risk_above_appetite",
+  "risk_materialized",
+  "control_ineffective",
+  "opportunity_assigned",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -109,6 +130,11 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   action_assigned: "Te asignaron una acción",
   action_overdue: "Una acción tuya venció",
   effectiveness_due: "Falta verificar si una acción sirvió",
+  risk_review_overdue: "La revisión de un riesgo venció",
+  risk_above_appetite: "Un riesgo está por encima del criterio aceptable",
+  risk_materialized: "Un riesgo se materializó",
+  control_ineffective: "Un control resultó no eficaz",
+  opportunity_assigned: "Te asignaron una oportunidad",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

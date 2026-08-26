@@ -303,6 +303,12 @@ function isClassification(v: string): v is Classification {
 export const REFERENCE_KINDS = [
   "quality_indicator", "quality_measurement", "quality_process", "quality_process_revision",
   "quality_process_io", "trazadoc_document", "trazadoc_document_revision", "work_case", "work_action",
+  // QUALITY-05 · Un caso puede nacer de un riesgo, y entonces referencia al
+  // riesgo, al hecho que lo materializó y a la evaluación que regía entonces.
+  // Si el dominio no conoce el tipo, la ficha pinta la fila EN BLANCO: no es
+  // una hipótesis, es lo que se vio en pantalla antes de añadirlos aquí.
+  "quality_objective", "quality_risk", "quality_opportunity", "quality_control",
+  "quality_risk_assessment", "quality_risk_materialization",
 ] as const;
 export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
 
@@ -316,6 +322,12 @@ export const REFERENCE_KIND_LABEL: Record<ReferenceKind, string> = {
   trazadoc_document_revision: "Revisión documental",
   work_case: "Caso",
   work_action: "Acción",
+  quality_objective: "Objetivo",
+  quality_risk: "Riesgo",
+  quality_opportunity: "Oportunidad",
+  quality_control: "Control",
+  quality_risk_assessment: "Evaluación del riesgo",
+  quality_risk_materialization: "El riesgo se materializó",
 };
 
 /** A dónde lleva una referencia. Que un enlace apunte al sitio correcto suena
@@ -326,9 +338,12 @@ export function referenceHref(kind: ReferenceKind, id: string): string | null {
     case "quality_process": return `/quality/processes/${id}`;
     case "trazadoc_document": return `/quality/documents/${id}`;
     case "work_case": return `/quality/cases/${id}`;
-    // Medición, revisiones y entradas/salidas no tienen página propia: se ven
-    // dentro de su padre, y enlazar a una ruta inventada sería peor que no
-    // enlazar.
+    case "quality_objective": return `/quality/objectives/${id}`;
+    case "quality_risk": return `/quality/risks/${id}`;
+    case "quality_opportunity": return `/quality/risks/opportunities/${id}`;
+    // Medición, revisiones, entradas/salidas, controles, evaluaciones y
+    // materializaciones no tienen página propia: se ven dentro de su padre, y
+    // enlazar a una ruta inventada sería peor que no enlazar.
     default: return null;
   }
 }

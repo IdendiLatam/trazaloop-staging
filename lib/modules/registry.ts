@@ -239,6 +239,24 @@ export const QUALITY_DESEMPENO_GROUP: ModuleNavGroup = {
 };
 
 /**
+ * QUALITY-05 · Riesgos y oportunidades. Grupo propio y ANTES de casos, porque
+ * ese es el orden real del trabajo: primero se piensa qué puede pasar, después
+ * se atiende lo que pasó. Ponerlo detrás de los casos sugeriría que los
+ * riesgos se identifican a partir de los problemas, que es justo lo contrario.
+ *
+ * Riesgos y oportunidades comparten entrada porque son las dos caras de la
+ * misma pregunta —qué nos puede pasar— pero dentro se distinguen sin
+ * ambigüedad (RO-01): son objetos distintos, no un filtro cosmético.
+ */
+export const QUALITY_RIESGOS_GROUP: ModuleNavGroup = {
+  title: "Riesgos y oportunidades",
+  items: [
+    { label: "Riesgos y oportunidades", href: "/quality/risks", exact: true },
+    { label: "Metodología", href: "/quality/risks/methodology" },
+  ],
+};
+
+/**
  * QUALITY-04 · Casos y acciones. Grupo propio y no un enlace dentro de
  * Desempeño: un caso puede nacer de un indicador, pero también de un documento,
  * de una auditoría o de una queja. Colgarlo del desempeño sugeriría que solo
@@ -280,7 +298,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
+           QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

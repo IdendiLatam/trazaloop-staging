@@ -5,6 +5,7 @@ import {
   deletionBlockedMessage,
   describeBlocking,
   DISPOSABLE_HINT,
+  entityDemonstrative,
   ENTITY_LABEL,
   hardDeleteConfirmation,
   type DeletionEligibility,
@@ -59,7 +60,9 @@ export function LifecyclePanel({
   if (!eligibility.canHardDelete) {
     return (
       <section className="rounded-lg border border-hairline bg-surface p-4">
-        <h3 className="text-sm font-semibold">Este {ENTITY_LABEL[entity]} ya no puede eliminarse</h3>
+        <h3 className="text-sm font-semibold">
+          {entityDemonstrative(entity)} {ENTITY_LABEL[entity]} ya no puede eliminarse
+        </h3>
         <p className="mt-1 text-sm text-ink-soft">{eligibility.reason}</p>
         {eligibility.blocking.length > 0 && (
           <p className="mt-1 text-sm text-ink">

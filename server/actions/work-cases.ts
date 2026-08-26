@@ -312,7 +312,19 @@ export async function createActionAction(
   const g = await gate();
   if (!g.ok) return { error: g.error };
   if (!canManageCases(g.ok.roleCode)) return { error: "Tu rol no permite planificar acciones." };
+
+  // QUALITY-05 · Una acción puede nacer de un caso, de un riesgo o de una
+  // oportunidad (AC-12: varios objetos de origen; MDR-24: relación N:M). El
+  // origen se resuelve aquí, y la rama del CASO queda exactamente como estaba:
+  // ensanchar no puede costarle nada a lo que ya funcionaba.
   const caseId = text(formData, "case_id");
+  const riskId = text(formData, "risk_id");
+  const opportunityId = text(formData, "opportunity_id");
+  const origin =
+    caseId ? { kind: "work_case" as const, id: caseId } :
+    riskId ? { kind: "quality_risk" as const, id: riskId } :
+    opportunityId ? { kind: "quality_opportunity" as const, id: opportunityId } : null;
+  if (!origin) return { error: "Una acción tiene que nacer de algo: un caso, un riesgo o una oportunidad." };
 
   const kind = text(formData, "action_kind");
   if (!(ACTION_KINDS as readonly string[]).includes(kind)) return { error: "Tipo de acción no válido." };
@@ -352,8 +364,8 @@ export async function createActionAction(
   // que una acción puede tener varios objetos de origen, y mañana los tendrá.
   const ref = await insertRow("work_references", {
     organization_id: g.ok.organizationId, owner_kind: "action", owner_id: actionId,
-    ref_kind: "work_case", ref_id: caseId, relation: "origin", created_by: g.ok.userId || null,
-  }, "No fue posible enlazar la acción con el caso.");
+    ref_kind: origin.kind, ref_id: origin.id, relation: "origin", created_by: g.ok.userId || null,
+  }, "No fue posible enlazar la acción con su origen.");
   if (ref.error) return { error: ref.error };
 
   await insertRow("work_decisions", {
@@ -380,8 +392,21 @@ export async function createActionAction(
     }
   }
 
-  await updateCase(g.ok.organizationId, caseId, { status: "in_action" });
-  revalidateCase(caseId);
+  // Solo el CASO cambia de estado al planificar una acción: un riesgo no pasa
+  // a «en acción» —su estado administrativo y su tratamiento son otra cosa
+  // (RO-18)— y una oportunidad tampoco.
+  if (origin.kind === "work_case") {
+    await updateCase(g.ok.organizationId, caseId, { status: "in_action" });
+    revalidateCase(caseId);
+  } else if (origin.kind === "quality_risk") {
+    revalidatePath("/quality");
+    revalidatePath("/quality/risks");
+    revalidatePath(`/quality/risks/${origin.id}`);
+  } else {
+    revalidatePath("/quality");
+    revalidatePath("/quality/risks");
+    revalidatePath(`/quality/risks/opportunities/${origin.id}`);
+  }
   return { ...OK, message: "Acción planificada." };
 }
 

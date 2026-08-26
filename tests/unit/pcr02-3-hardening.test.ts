@@ -278,6 +278,9 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0119_quality_temporal_eligibility_and_lifecycle.sql",
     "0120_quality_draft_process_deletion.sql",
     "0121_work_cases_and_actions_engine.sql",
+    // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
+    // metodología configurable y versionada.
+    "0122_quality_risks_and_opportunities.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,
