@@ -385,6 +385,53 @@ check("E3. el registro declara TODAS las claves que el inventario promete", () =
 });
 
 // ---------------------------------------------------------------------------
+console.log("\nG · Un embebido mal nombrado devuelve vacío, no un error");
+
+check("G1. las relaciones COMPUESTAS se embeben por el nombre de la restricción", () => {
+  // Encontrado ejecutando esta validación contra Staging: PostgREST no resuelve
+  // una clave foránea compuesta (MDR-42) por el nombre de la columna. Responde
+  // «Could not find a relationship», el error viaja en `error` y no en `data`,
+  // y la consulta devuelve [] SIN DECIR NADA. La tabla de acciones del caso
+  // salía vacía en pantalla y en el PDF, como si el caso no tuviera acciones.
+  const src = read("lib/db/work-cases.ts");
+  assert(
+    !/quality_positions:owner_position_id\(/.test(src),
+    "el embebido del cargo vuelve a nombrarse por la columna: devolverá vacío en silencio"
+  );
+  assert(
+    /quality_positions!work_actions_owner_position_fk\(/.test(src),
+    "el embebido del cargo debe nombrar la restricción compuesta"
+  );
+  assert(
+    !/trazadoc_documents:document_id\(/.test(src),
+    "el embebido del documento vuelve a nombrarse por la columna"
+  );
+  assert(
+    /trazadoc_documents!work_case_requirements_doc_fk\(/.test(src),
+    "el embebido del documento debe nombrar la restricción compuesta"
+  );
+});
+
+check("G2. ningún embebido nuevo por columna entra sin pensarlo", () => {
+  // Los embebidos por COLUMNA solo son válidos cuando la clave foránea es
+  // simple. La lista blanca obliga a comprobarlo al añadir uno nuevo, en vez
+  // de descubrirlo cuando una pantalla aparezca vacía.
+  const PERMITIDOS = new Set(["requirements:requirement_id", "frameworks:framework_id"]);
+  const dir = "lib/db";
+  for (const f of readdirSync(join(ROOT, dir))) {
+    if (!f.endsWith(".ts")) continue;
+    const src = stripComments(read(`${dir}/${f}`));
+    for (const m of src.matchAll(/([a-z_]+):([a-z_]+_id)\(/g)) {
+      const hint = `${m[1]}:${m[2]}`;
+      assert(
+        PERMITIDOS.has(hint),
+        `${dir}/${f}: embebido por columna «${hint}». Si la clave foránea es COMPUESTA devolverá vacío en silencio: nómbrala por la restricción, o añádela a la lista blanca si de verdad es simple.`
+      );
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 console.log("\nF · Los documentos siguen al dato");
 
 check("F1. la matriz publicada nombra TODAS las entidades del inventario", () => {

@@ -163,7 +163,7 @@ export async function listCaseActions(organizationId: string, caseId: string): P
   if (ids.length === 0) return [];
   const { data } = await supabase
     .from("work_actions")
-    .select("*, quality_positions:owner_position_id(name)")
+    .select("*, quality_positions!work_actions_owner_position_fk(name)")
     .eq("organization_id", organizationId).in("id", ids)
     .order("created_at", { ascending: true });
   return (data ?? []).map((r) => mapActionRow(r as Record<string, unknown>));
@@ -172,6 +172,19 @@ export async function listCaseActions(organizationId: string, caseId: string): P
 /** Mapea una fila cruda de `work_actions` al modelo de la aplicación. Existe
  *  para que la lectura por caso y la lectura por identificador no puedan
  *  divergir: una acción tiene que decir lo mismo mire por donde se mire. */
+/*
+ * POR QUÉ EL EMBEBIDO SE NOMBRA POR LA RESTRICCIÓN Y NO POR LA COLUMNA
+ *
+ * `work_actions.owner_position_id` forma parte de una clave foránea COMPUESTA
+ * —`(organization_id, owner_position_id)`, MDR-42— y PostgREST no sabe
+ * resolverla por el nombre de la columna: responde «Could not find a
+ * relationship». Y como el error viaja en `error` y no en `data`, la consulta
+ * devolvía `[]` sin decir nada: la tabla de acciones del caso salía VACÍA en
+ * pantalla y en el PDF, como si el caso no tuviera acciones.
+ *
+ * Un fallo que se manifiesta como «no hay datos» es el más caro de todos: nadie
+ * lo reporta. Se nombra la restricción, que sí es unívoca.
+ */
 function mapActionRow(r: Record<string, unknown>): ActionRow {
   const pos = r.quality_positions as { name?: string } | null;
   return {
@@ -206,7 +219,7 @@ export async function getAction(
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("work_actions")
-    .select("*, quality_positions:owner_position_id(name)")
+    .select("*, quality_positions!work_actions_owner_position_fk(name)")
     .eq("organization_id", organizationId).eq("id", actionId)
     .maybeSingle();
   return data ? mapActionRow(data as Record<string, unknown>) : null;
@@ -257,7 +270,7 @@ export async function listAllActions(organizationId: string): Promise<ActionRow[
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("work_actions")
-    .select("*, quality_positions:owner_position_id(name)")
+    .select("*, quality_positions!work_actions_owner_position_fk(name)")
     .eq("organization_id", organizationId)
     .order("due_on", { ascending: true, nullsFirst: false });
   return (data ?? []).map((r) => mapActionRow(r as Record<string, unknown>));
@@ -344,7 +357,7 @@ export async function listCaseRequirements(organizationId: string, caseId: strin
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("work_case_requirements")
-    .select("id, custom_text, note, requirements:requirement_id(code, title, frameworks:framework_id(code, name)), trazadoc_documents:document_id(code, title)")
+    .select("id, custom_text, note, requirements:requirement_id(code, title, frameworks:framework_id(code, name)), trazadoc_documents!work_case_requirements_doc_fk(code, title)")
     .eq("organization_id", organizationId).eq("case_id", caseId);
   return (data ?? []).map((r) => {
     const row = r as Record<string, unknown>;
