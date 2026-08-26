@@ -163,6 +163,23 @@ sostener en el tiempo.
 
 ---
 
+## Addendum EXPORT-01.3 · EX-35
+
+- **EX-35** — **Todo logo que Trazaloop acepta se NORMALIZA a una representación
+  canónica en servidor antes de renderizar el PDF.**
+
+  El escritor de PDF no interpreta variantes de formato: recibe siempre PNG de 8
+  bits, RGBA, sRGB, sin entrelazar y ya orientado. Y el formato de partida se
+  reconoce por el CONTENIDO del archivo, nunca por su extensión ni por el tipo
+  que declara quien lo sube: una etiqueta equivocada —basta renombrar un
+  archivo— no puede volver a hacer que un logo válido desaparezca del papel.
+
+  Corolario: lo que se acepta al subir es exactamente lo que se sabe normalizar.
+  Aceptar un formato y luego no poder usarlo es el defecto que esta decisión
+  cierra.
+
+---
+
 ## Contrato para módulos futuros
 
 Toda entidad de negocio visible que se implemente a partir de ahora debe
