@@ -37,6 +37,7 @@ import {
   updateQualityRevisionContent,
   deleteProcessAction,
 } from "@/server/actions/quality-processes";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-01 · Detalle del proceso.
@@ -518,9 +519,12 @@ export function QualityProcessDetailView({
                 : "Sin cargo propietario"}
             </p>
           </div>
-          <span className="inline-flex shrink-0 rounded-full border border-hairline px-2 py-0.5 text-[11px]">
-            {QUALITY_PROCESS_STATUS_LABEL[process.status as QualityProcessStatus] ?? process.status}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex rounded-full border border-hairline px-2 py-0.5 text-[11px]">
+              {QUALITY_PROCESS_STATUS_LABEL[process.status as QualityProcessStatus] ?? process.status}
+            </span>
+            <ExportPdfButton exportKey="quality.process.detail" id={process.id} />
+          </div>
         </div>
       </header>
 

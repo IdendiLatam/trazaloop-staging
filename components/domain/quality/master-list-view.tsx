@@ -20,6 +20,7 @@ import {
   type MasterListRow,
 } from "@/lib/domain/document-master-list";
 import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-02 · Lista Maestra de documentos.
@@ -78,12 +79,11 @@ export function QualityMasterListView({
             : `${rows.length} de ${totalBeforeFilters} documentos · ${describeFilters(filters)}`}
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Link
-            href={`/quality/documents/master/pdf${queryString(filters)}`}
-            className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"
-          >
-            Descargar PDF
-          </Link>
+          {/* EXPORT-01 · La descarga pasa por el endpoint único. El PDF sigue
+              siendo EL MISMO artefacto validado (§27); lo que cambió es la
+              puerta: una sola clave, una sola política de nombres y cabeceras.
+              Los filtros viajan con los MISMOS nombres que la pantalla. */}
+          <ExportPdfButton exportKey="quality.master-list.list" filters={filters} />
           <Link
             href={`/quality/documents/master/csv${queryString(filters)}`}
             className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"

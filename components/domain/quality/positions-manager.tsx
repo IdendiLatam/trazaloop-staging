@@ -19,6 +19,7 @@ import {
   removeQualityPosition,
   updateQualityPosition,
 } from "@/server/actions/quality-processes";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-01 · Gestor de cargos.
@@ -281,7 +282,8 @@ export function QualityPositionsManager({
                       </span>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <ExportPdfButton exportKey="quality.position.detail" id={p.id} />
                     <Button
                       variant="quiet"
                       className="w-auto px-3 py-1 text-xs"

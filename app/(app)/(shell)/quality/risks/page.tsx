@@ -6,6 +6,7 @@ import { listObjectives } from "@/lib/db/quality-indicators";
 import { listQualityPositions, listQualityProcesses } from "@/lib/db/quality-processes";
 import { canManageRisks } from "@/lib/domain/risks";
 import { QualityRisksView } from "@/components/domain/quality/risks-view";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export const metadata = { title: "Riesgos y oportunidades" };
 
@@ -36,8 +37,28 @@ export default async function QualityRisksPage({
   return (
     <div className="max-w-4xl space-y-6">
       <header className="space-y-2">
-        <p className="eyebrow">Trazaloop Quality</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Riesgos y oportunidades</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="eyebrow">Trazaloop Quality</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Riesgos y oportunidades</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ExportPdfButton
+              exportKey="quality.risk.list"
+              filters={{ vista: "activos" }}
+              label="Descargar PDF · riesgos"
+              disabled={risks.length === 0}
+              disabledReason="no hay riesgos"
+            />
+            <ExportPdfButton
+              exportKey="quality.opportunity.list"
+              filters={{ estado: "abiertas" }}
+              label="Descargar PDF · oportunidades"
+              disabled={opportunities.length === 0}
+              disabledReason="no hay oportunidades"
+            />
+          </div>
+        </div>
         <p className="text-sm text-ink-soft">
           Un riesgo es algo que <strong>podría</strong> pasar y afectaría al sistema de gestión;
           una oportunidad es una posibilidad de mejorar que alguien vio. Identificar un riesgo no

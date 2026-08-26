@@ -15,6 +15,7 @@ import {
   isTextileEvidenceExpired,
 } from "@/lib/domain/textiles-evidences";
 import { isOneOf } from "@/lib/domain/textiles-catalogs";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const STATUS_TONE: Record<string, string> = {
   pending_review: "border-amber/40 bg-amber/10 text-amber",
@@ -45,6 +46,9 @@ export default async function TextileEvidencesPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Evidencias</p>
         <h1 className="text-2xl font-semibold tracking-tight">Evidencias textiles</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.evidence.list" disabled={evidences.length === 0} disabledReason="no hay evidencias" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Carga y vincula soportes documentales para composición, origen, proveedores,
           procesos y declaraciones preliminares.

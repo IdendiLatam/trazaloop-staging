@@ -11,6 +11,7 @@ import { SupplierForm } from "@/components/domain/catalog/forms";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function SuppliersPage({
   searchParams,
@@ -69,6 +70,9 @@ export default async function SuppliersPage({
           <Link href="/catalog" className="hover:underline">Catálogos</Link> · Proveedores
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Proveedores</h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.supplier.list" disabled={result.total === 0} disabledReason="no hay proveedores" />
+        </div>
       </header>
 
       <section className="rounded-lg border border-hairline bg-surface p-5">

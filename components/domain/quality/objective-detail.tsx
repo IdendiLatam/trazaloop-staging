@@ -20,6 +20,7 @@ import {
 } from "@/server/actions/quality-indicators";
 import { LifecyclePanel } from "@/components/domain/quality/lifecycle-panel";
 import type { DeletionEligibility } from "@/lib/domain/lifecycle";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /** Trazaloop Quality · QUALITY-03 · Ficha de un objetivo. */
 
@@ -104,6 +105,7 @@ export function QualityObjectiveDetail({ model }: { model: ObjectiveDetailModel 
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{model.name}</h1>
+          <ExportPdfButton exportKey="quality.objective.detail" id={model.objectiveId} />
           <ObjectivePerformanceBadge performance={model.performance} />
           <ObjectiveStateBadge state={model.adminState} />
         </div>

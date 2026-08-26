@@ -22,6 +22,7 @@ import {
   orderDeletionBlockedMessage,
   orderReopenAllowed,
 } from "@/lib/domain/production-alerts";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Borrador",
@@ -93,6 +94,9 @@ export default async function ProductionOrdersPage({
           <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Órdenes / corridas de producción
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Órdenes / corridas de producción</h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.production-order.list" disabled={result.total === 0} disabledReason="no hay órdenes" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           La orden / corrida es el eje del proceso: consume lotes (externos o
           producidos internos) y genera lotes producidos como salidas. Abre una

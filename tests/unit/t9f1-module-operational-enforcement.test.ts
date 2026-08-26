@@ -102,7 +102,13 @@ check("8. FRONTERA ESTRUCTURAL: el layout (cpr) del shell aplica requireCprModul
   // de NO-CPR: una ruta CPR nueva creada fuera de la frontera rompe esta
   // prueba hasta declararla conscientemente.
   // QUALITY-01 añadió "quality", que tiene su propio guard de namespace.
-  const NON_CPR_ALLOWED = new Set(["(cpr)", "textiles", "quality", "settings", "support", "team", "layout.tsx"]);
+  //
+  // EXPORT-01 añadió "export": es TRANSVERSAL, no pertenece a ningún módulo, y
+  // por eso no puede colgar de (cpr) ni de /quality. Su route handler comprueba
+  // el entitlement del módulo que corresponda a CADA exportación —un PDF de
+  // PCR exige PCR, uno de Textiles exige Textiles— antes de cargar nada. Un
+  // layout no serviría: los layouts de Next no envuelven route handlers.
+  const NON_CPR_ALLOWED = new Set(["(cpr)", "textiles", "quality", "export", "settings", "support", "team", "layout.tsx"]);
   const entries = readdirSync(join(process.cwd(), "app/(app)/(shell)"));
   const intruders = entries.filter((e) => !NON_CPR_ALLOWED.has(e));
   assert(intruders.length === 0, `segmentos del shell fuera de (cpr) y fuera de la lista no-CPR: ${intruders.join(", ")}`);
@@ -111,6 +117,13 @@ check("8. FRONTERA ESTRUCTURAL: el layout (cpr) del shell aplica requireCprModul
   // segmento nuevo quedaría solo con las guardas genéricas del shell.
   assert(/requireQualityModule\(\)/.test(stripTs(read("app/(app)/(shell)/quality/layout.tsx"))), "el layout /quality debe ejecutar requireQualityModule()");
   assert(/requireTextilesModule\(\)/.test(stripTs(read("app/(app)/(shell)/textiles/layout.tsx"))), "el layout /textiles debe ejecutar requireTextilesModule()");
+
+  // El segmento transversal no queda sin guard: lo aplica su propio handler.
+  const exportRoute = stripTs(read("app/(app)/(shell)/export/[key]/route.ts"));
+  assert(/resolveModuleAccessForOrg/.test(exportRoute),
+    "/export debe comprobar el entitlement del módulo de cada exportación");
+  assert(/requireActiveOrg\(\)/.test(exportRoute),
+    "/export debe resolver la empresa desde la sesión");
 
   const CPR_SEGMENTS = ["audit-support", "catalog", "dashboard", "diagnostic", "evidences", "guided-flow", "implementation", "imports", "onboarding", "recycled-content", "traceability", "trazadocs"];
   const inCpr = readdirSync(join(process.cwd(), "app/(app)/(shell)/(cpr)"));

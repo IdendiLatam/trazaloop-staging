@@ -11,6 +11,7 @@ import {
   canManageObjectives, computeTrend, describeTarget, formatValue, nativeSource,
 } from "@/lib/domain/quality-indicators";
 import { QualityIndicatorsView } from "@/components/domain/quality/indicators-view";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export const metadata = { title: "Indicadores" };
 
@@ -27,46 +28,51 @@ export default async function QualityIndicatorsPage() {
   );
 
   return (
-    <QualityIndicatorsView
-      indicators={indicators.map((i, index) => ({
-        indicatorId: i.indicatorId,
-        code: i.code,
-        name: i.name,
-        adminState: i.adminState,
-        scopeLabel: i.scopeProcessName ?? SCOPE_TYPE_LABEL[i.scopeType],
-        ownerLabel: i.ownerPositionName
-          ? `${i.ownerPositionName}${i.ownerHolderName ? ` · ${i.ownerHolderName}` : ""}`
-          : (i.ownerProfileName ?? "Sin responsable"),
-        targetLabel: describeTarget({
-          direction: i.direction ?? "higher_is_better",
-          targetValue: i.targetValue, targetMin: i.targetMin, targetMax: i.targetMax,
-          warningValue: i.warningValue, warningMin: i.warningMin, warningMax: i.warningMax,
-          unitCode: i.unitCode, unitLabel: i.unitLabel,
-        }),
-        frequencyLabel: i.frequency ? FREQUENCY_LABEL[i.frequency] : "—",
-        sourceLabel: i.sourceKind
-          ? (nativeSource(i.sourceKey)?.label ?? SOURCE_KIND_LABEL[i.sourceKind].split(" — ")[0])
-          : "—",
-        lastPeriodLabel: i.lastPeriodLabel,
-        lastValueLabel: formatValue(i.lastValue, i.unitCode, i.unitLabel, i.lastDataState ?? "reported"),
-        lastEvaluation: i.lastEvaluation,
-        trend: computeTrend(
-          series[index].map((m) => ({
-            periodStart: m.periodStart, value: m.value, dataState: m.dataState,
-          })),
-          i.direction ?? "higher_is_better",
-          { targetMin: i.targetMin, targetMax: i.targetMax, targetValue: i.targetValue }
-        ),
-        measurementPending: i.measurementPending,
-        duePeriodLabel: i.duePeriodLabel,
-        nextMeasurementDueOn: i.nextMeasurementDueOn,
-      }))}
-      positions={positions
-        .filter((p) => p.isActive)
-        .map((p) => ({ id: p.id, name: p.name, holderName: p.holderName }))}
-      processes={processes.map((p) => ({ id: p.id, name: p.name }))}
-      canManage={canManageObjectives(org.roleCode as never)}
-      today={new Date().toISOString().slice(0, 10)}
-    />
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ExportPdfButton exportKey="quality.indicator.list" />
+      </div>
+      <QualityIndicatorsView
+        indicators={indicators.map((i, index) => ({
+          indicatorId: i.indicatorId,
+          code: i.code,
+          name: i.name,
+          adminState: i.adminState,
+          scopeLabel: i.scopeProcessName ?? SCOPE_TYPE_LABEL[i.scopeType],
+          ownerLabel: i.ownerPositionName
+            ? `${i.ownerPositionName}${i.ownerHolderName ? ` · ${i.ownerHolderName}` : ""}`
+            : (i.ownerProfileName ?? "Sin responsable"),
+          targetLabel: describeTarget({
+            direction: i.direction ?? "higher_is_better",
+            targetValue: i.targetValue, targetMin: i.targetMin, targetMax: i.targetMax,
+            warningValue: i.warningValue, warningMin: i.warningMin, warningMax: i.warningMax,
+            unitCode: i.unitCode, unitLabel: i.unitLabel,
+          }),
+          frequencyLabel: i.frequency ? FREQUENCY_LABEL[i.frequency] : "—",
+          sourceLabel: i.sourceKind
+            ? (nativeSource(i.sourceKey)?.label ?? SOURCE_KIND_LABEL[i.sourceKind].split(" — ")[0])
+            : "—",
+          lastPeriodLabel: i.lastPeriodLabel,
+          lastValueLabel: formatValue(i.lastValue, i.unitCode, i.unitLabel, i.lastDataState ?? "reported"),
+          lastEvaluation: i.lastEvaluation,
+          trend: computeTrend(
+            series[index].map((m) => ({
+              periodStart: m.periodStart, value: m.value, dataState: m.dataState,
+            })),
+            i.direction ?? "higher_is_better",
+            { targetMin: i.targetMin, targetMax: i.targetMax, targetValue: i.targetValue }
+          ),
+          measurementPending: i.measurementPending,
+          duePeriodLabel: i.duePeriodLabel,
+          nextMeasurementDueOn: i.nextMeasurementDueOn,
+        }))}
+        positions={positions
+          .filter((p) => p.isActive)
+          .map((p) => ({ id: p.id, name: p.name, holderName: p.holderName }))}
+        processes={processes.map((p) => ({ id: p.id, name: p.name }))}
+        canManage={canManageObjectives(org.roleCode as never)}
+        today={new Date().toISOString().slice(0, 10)}
+      />
+    </div>
   );
 }

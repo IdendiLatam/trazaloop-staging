@@ -21,6 +21,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true },
@@ -73,6 +74,9 @@ export default async function TextileSuppliersPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Proveedores</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.supplier.list" disabled={suppliers.length === 0} disabledReason="no hay proveedores" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Proveedores de telas, avíos, hilos, empaque y terceros de proceso. La información
           es declarativa: el soporte documental se gestiona como evidencias en una etapa

@@ -247,6 +247,28 @@ export class PdfWriter {
     this.op(`${fmt(gray)} g ${fmt(x)} ${fmt(top)} ${fmt(w)} ${fmt(h)} re f`);
   }
 
+  /**
+   * EXPORT-01 · Relleno en color.
+   *
+   * El escritor solo sabía pintar en gris, que basta para una ficha pero no
+   * para una matriz de riesgo: distinguir cuatro bandas con cuatro grises
+   * obliga a mirar de cerca. El color AYUDA; nunca informa solo, porque cada
+   * celda lleva además su etiqueta (§38).
+   *
+   * Los componentes van de 0 a 1.
+   */
+  rectRgb(x: number, yFromTop: number, w: number, h: number, rgb: [number, number, number]): void {
+    const top = this.currentSize.height - yFromTop - h;
+    const [r, g, b] = rgb;
+    this.op(`${fmt(r)} ${fmt(g)} ${fmt(b)} rg ${fmt(x)} ${fmt(top)} ${fmt(w)} ${fmt(h)} re f`);
+  }
+
+  /** Contorno sin relleno. Sirve para señalar una celda sin taparla. */
+  strokeRect(x: number, yFromTop: number, w: number, h: number, width = 1, gray = 0): void {
+    const top = this.currentSize.height - yFromTop - h;
+    this.op(`${fmt(gray)} G ${fmt(width)} w ${fmt(x)} ${fmt(top)} ${fmt(w)} ${fmt(h)} re S`);
+  }
+
   /** Serializa el archivo completo, con su tabla de referencias cruzadas. */
   build(): Buffer {
     if (this.pages.length === 0) throw new Error("Un PDF necesita al menos una página.");

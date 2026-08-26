@@ -16,6 +16,7 @@ import {
   type RiskActionState,
 } from "@/server/actions/risks";
 import { ACTION_STATUS_LABEL, type ActionStatus } from "@/lib/domain/work-cases";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import { LifecyclePanel } from "./lifecycle-panel";
 import { PlanActionForm } from "./risk-detail";
 import { OpportunityBadges } from "./risk-badges";
@@ -88,10 +89,13 @@ export function QualityOpportunityDetail({
             decision={opportunity.treatmentDecision}
           />
         </div>
-        <p className="text-sm text-ink-soft">
-          Identificada el {opportunity.identifiedOn} · Responsable:{" "}
-          {opportunity.ownerPositionName ?? "sin asignar"}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink-soft">
+            Identificada el {opportunity.identifiedOn} · Responsable:{" "}
+            {opportunity.ownerPositionName ?? "sin asignar"}
+          </p>
+          <ExportPdfButton exportKey="quality.opportunity.detail" id={opportunity.opportunityId} />
+        </div>
       </header>
 
       <Step n="Paso 1" title="Qué se vio" question="¿Cuál es la situación y qué mejoraría?">

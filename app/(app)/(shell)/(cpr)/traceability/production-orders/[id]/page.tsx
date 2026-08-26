@@ -45,6 +45,7 @@ import {
   orderDeletionBlockedMessage,
   isReopenedHistoricalOrder,
 } from "@/lib/domain/production-alerts";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /** PCR-02.1 (hallazgo 4) · Buscador server-side de un selector acotado:
  *  formulario GET que conserva los términos de las otras secciones y ancla
@@ -203,6 +204,7 @@ export default async function ProductionOrderDetailPage({
             <span className="rounded-full border border-hairline bg-paper px-2.5 py-0.5 text-xs font-medium">
               {STATUS_LABEL[order.status] ?? order.status}
             </span>
+            <ExportPdfButton exportKey="cpr.production-order.detail" id={order.id} />
             {/* PCR-02.3 (§14/§34): la orden finalizada NO ofrece edición
                 genérica — la reapertura es una acción explícita y auditada
                 que conserva el candado histórico. */}

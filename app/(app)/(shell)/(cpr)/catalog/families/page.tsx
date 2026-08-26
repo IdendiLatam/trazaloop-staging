@@ -11,6 +11,7 @@ import { FamilyForm } from "@/components/domain/catalog/forms";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function FamiliesPage({
   searchParams,
@@ -69,6 +70,9 @@ export default async function FamiliesPage({
           <Link href="/catalog" className="hover:underline">Catálogos</Link> · Familias
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Familias de producto</h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.family.list" disabled={result.total === 0} disabledReason="no hay familias" />
+        </div>
       </header>
 
       <section className="rounded-lg border border-hairline bg-surface p-5">

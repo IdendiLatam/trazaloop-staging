@@ -13,6 +13,7 @@ import { MaterialForm, ReclassifyForm } from "@/components/domain/catalog/forms"
 import { LinkedEvidenceList, ViewEvidenceButton } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function MaterialsPage({
   searchParams,
@@ -87,6 +88,9 @@ export default async function MaterialsPage({
           <Link href="/catalog" className="hover:underline">Catálogos</Link> · Materiales
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Materiales</h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.material.list" disabled={result.total === 0} disabledReason="no hay materiales" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Para que un material reciclado cuente en el cálculo, debe tener una
           evidencia de origen asociada y validada.

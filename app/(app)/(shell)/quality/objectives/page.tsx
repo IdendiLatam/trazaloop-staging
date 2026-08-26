@@ -9,6 +9,7 @@ import { listQualityPositions, listQualityProcesses } from "@/lib/db/quality-pro
 import { canManageObjectives, canClosePeriod, canReopenPeriod } from "@/lib/domain/quality-indicators";
 import { QualityObjectivesView } from "@/components/domain/quality/objectives-view";
 import { QualityPeriodClosures } from "@/components/domain/quality/period-closures";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export const metadata = { title: "Objetivos" };
 
@@ -26,6 +27,9 @@ export default async function QualityObjectivesPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      <div className="flex justify-end">
+        <ExportPdfButton exportKey="quality.objective.list" />
+      </div>
       <QualityObjectivesView
         objectives={objectives.map((o) => ({
           objectiveId: o.objectiveId,

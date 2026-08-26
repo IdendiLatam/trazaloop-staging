@@ -24,6 +24,7 @@ import {
   setIndicatorStateAction, publishIndicatorConfigAction, deleteIndicatorAction,
   type QualityIndicatorActionState,
 } from "@/server/actions/quality-indicators";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-03 · Ficha de un indicador.
@@ -157,6 +158,7 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{model.name}</h1>
+          <ExportPdfButton exportKey="quality.indicator.detail" id={model.indicatorId} />
           <IndicatorStateBadge state={model.adminState} />
           {model.lastEvaluation ? <EvaluationBadge evaluation={model.lastEvaluation} /> : null}
         </div>

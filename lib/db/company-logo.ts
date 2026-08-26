@@ -2,6 +2,7 @@ import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
 import { decodeImage, MAX_LOGO_BYTES, type PdfImage } from "@/lib/pdf/image";
+import { toEmbeddableImage } from "@/lib/pdf/convert";
 
 /**
  * Trazaloop · QUALITY-03.1 · El logo de la empresa, para incrustarlo en un PDF.
@@ -62,7 +63,15 @@ export async function loadCompanyLogoForPdf(organizationId: string): Promise<Com
   const bytes = Buffer.from(await file.arrayBuffer());
   if (bytes.length > MAX_LOGO_BYTES) return null;
 
-  const decoded = decodeImage(bytes);
+  // EXPORT-01 · Si el formato no se incrusta directamente —WebP es el caso
+  // real, porque la plataforma lo acepta al subir— se convierte en servidor
+  // antes de rendirse. Antes esto devolvía `null` en silencio y la empresa
+  // veía sus PDF sin logo sin saber por qué.
+  let decoded = decodeImage(bytes);
+  if (decoded.error !== null) {
+    const converted = await toEmbeddableImage(bytes, file.type ?? null);
+    if (converted.outcome === "converted") decoded = decodeImage(converted.bytes);
+  }
   if (decoded.error !== null) return null;
 
   return { image: decoded.image, storagePath };

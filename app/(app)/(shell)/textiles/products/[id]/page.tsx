@@ -23,6 +23,7 @@ import { listEntityTextileEvidences } from "@/lib/db/textiles-evidences";
 import { TextileEntityForm } from "@/components/domain/textiles/entity-form";
 import { ToggleActiveButton } from "@/components/domain/textiles/toggle-active-button";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileProductDetailPage({
   params,
@@ -87,6 +88,9 @@ export default async function TextileProductDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Productos</p>
         <h1 className="text-2xl font-semibold tracking-tight">{product.name}</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.product.detail" id={product.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             TEXTILE_PRODUCT_CATEGORY_LABEL[product.category as keyof typeof TEXTILE_PRODUCT_CATEGORY_LABEL] ?? product.category,

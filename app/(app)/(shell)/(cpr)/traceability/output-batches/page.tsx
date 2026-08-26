@@ -37,6 +37,7 @@ import { formatKg, inventoryState, INVENTORY_STATE_LABEL } from "@/lib/domain/in
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function OutputBatchesPage({
   searchParams,
@@ -312,6 +313,7 @@ export default async function OutputBatchesPage({
                     >
                       Genealogía
                     </Link>
+                    <ExportPdfButton exportKey="cpr.output-batch.detail" id={b.id} />
                     <Link href={`/traceability/output-batches?edit=${b.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>

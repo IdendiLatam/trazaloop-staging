@@ -25,6 +25,7 @@ import {
   ACTION_KINDS, ACTION_KIND_LABEL, ACTION_STATUS_LABEL, PRIORITIES, PRIORITY_LABEL,
   type ActionStatus,
 } from "@/lib/domain/work-cases";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import { LifecyclePanel } from "./lifecycle-panel";
 import { RiskMatrix } from "./risk-matrix";
 import { ControlBadges, RiskLevelBadge, RiskStatusBadge, SeverityBadge, TreatmentBadge } from "./risk-badges";
@@ -101,10 +102,13 @@ export function QualityRiskDetail({
           <RiskStatusBadge status={risk.status} />
           <TreatmentBadge strategy={risk.treatmentStrategy} status={risk.treatmentStatus} />
         </div>
-        <p className="text-sm text-ink-soft">
-          Identificado el {risk.identifiedOn} · Responsable:{" "}
-          {risk.ownerPositionName ?? "sin asignar"} · {describeReview(risk.nextReviewOn)}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink-soft">
+            Identificado el {risk.identifiedOn} · Responsable:{" "}
+            {risk.ownerPositionName ?? "sin asignar"} · {describeReview(risk.nextReviewOn)}
+          </p>
+          <ExportPdfButton exportKey="quality.risk.detail" id={risk.riskId} />
+        </div>
         {risk.status === "closed" || risk.status === "retired" ? (
           <p className="rounded-md border border-hairline bg-canvas p-3 text-sm text-ink">
             {risk.closureReason}

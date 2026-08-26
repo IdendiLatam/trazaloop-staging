@@ -19,6 +19,7 @@ import {
 } from "@/server/actions/textiles-products";
 import { TextileEntityForm } from "@/components/domain/textiles/entity-form";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileProductsPage() {
   const org = await requireTextilesModule();
@@ -61,6 +62,9 @@ export default async function TextileProductsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Productos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Productos textiles</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.product.list" disabled={products.length === 0} disabledReason="no hay productos" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Registra productos, referencias y composición estructurada para preparar
           trazabilidad, evidencias y pasaporte técnico textil.

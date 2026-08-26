@@ -33,6 +33,7 @@ import { listTextileCircularityAssessments } from "@/lib/db/textiles-circularity
 import { TEXTILE_READINESS_LEVEL_LABEL } from "@/lib/domain/textiles-circularity";
 import { RecalculateTraceabilityButton } from "@/components/domain/textiles/recalculate-traceability-button";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const TRACE_TONE: Record<TextileTraceabilityStatus, string> = {
   not_started: "border-hairline bg-paper text-ink-soft",
@@ -81,6 +82,9 @@ export default async function TextileOutputLotDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Trazabilidad técnica</p>
         <h1 className="text-2xl font-semibold tracking-tight">{lot.outputLotCode}</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.output-lot.detail" id={lot.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             `${lot.quantityProduced} ${lot.unit}`,

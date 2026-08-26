@@ -6,6 +6,7 @@ import { getIndicator } from "@/lib/db/quality-indicators";
 import { listQualityPositions, listQualityProcesses } from "@/lib/db/quality-processes";
 import { canManageCases } from "@/lib/domain/work-cases";
 import { QualityCasesView } from "@/components/domain/quality/cases-view";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export const metadata = { title: "Casos y acciones" };
 
@@ -50,25 +51,30 @@ export default async function QualityCasesPage({
   }
 
   return (
-    <QualityCasesView
-      cases={cases.map((c) => ({
-        caseId: c.caseId, code: c.code, title: c.title,
-        caseType: c.caseType, originKind: c.originKind,
-        classification: c.classification, status: c.status, priority: c.priority,
-        detectedOn: c.detectedOn, processNames: c.processNames,
-        ownerLabel: c.ownerPositionName
-          ? `${c.ownerPositionName}${c.ownerHolderName ? ` · ${c.ownerHolderName}` : ""}`
-          : "",
-        openActionCount: c.openActionCount,
-        overdueActionCount: c.overdueActionCount,
-        pendingEffectivenessCount: c.pendingEffectivenessCount,
-      }))}
-      positions={positions.filter((p) => p.isActive).map((p) => ({
-        id: p.id, name: p.name, holderName: p.holderName,
-      }))}
-      processes={processes.map((p) => ({ id: p.id, name: p.name }))}
-      canManage={canManageCases(org.roleCode)}
-      prefill={prefill}
-    />
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <ExportPdfButton exportKey="quality.case.list" />
+      </div>
+      <QualityCasesView
+        cases={cases.map((c) => ({
+          caseId: c.caseId, code: c.code, title: c.title,
+          caseType: c.caseType, originKind: c.originKind,
+          classification: c.classification, status: c.status, priority: c.priority,
+          detectedOn: c.detectedOn, processNames: c.processNames,
+          ownerLabel: c.ownerPositionName
+            ? `${c.ownerPositionName}${c.ownerHolderName ? ` · ${c.ownerHolderName}` : ""}`
+            : "",
+          openActionCount: c.openActionCount,
+          overdueActionCount: c.overdueActionCount,
+          pendingEffectivenessCount: c.pendingEffectivenessCount,
+        }))}
+        positions={positions.filter((p) => p.isActive).map((p) => ({
+          id: p.id, name: p.name, holderName: p.holderName,
+        }))}
+        processes={processes.map((p) => ({ id: p.id, name: p.name }))}
+        canManage={canManageCases(org.roleCode)}
+        prefill={prefill}
+      />
+    </div>
   );
 }

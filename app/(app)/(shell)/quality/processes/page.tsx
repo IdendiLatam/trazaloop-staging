@@ -10,6 +10,7 @@ import {
   listQualityProcesses,
 } from "@/lib/db/quality-processes";
 import { QualityProcessList } from "@/components/domain/quality/process-list";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export const metadata = { title: "Procesos" };
 
@@ -27,6 +28,7 @@ export default async function QualityProcessesPage() {
       <header className="space-y-2">
         <p className="eyebrow">Trazaloop Quality</p>
         <h1 className="text-2xl font-semibold tracking-tight">Procesos</h1>
+        <ExportPdfButton exportKey="quality.process.list" label="Descargar PDF" />
         <p className="text-sm text-ink-soft">
           Cada proceso tiene un cargo propietario y un contenido que se versiona. Se trabaja
           sobre un borrador —propósito, alcance, entradas, salidas y relaciones— y se publica

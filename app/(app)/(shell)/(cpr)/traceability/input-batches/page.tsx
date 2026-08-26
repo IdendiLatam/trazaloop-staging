@@ -19,6 +19,7 @@ import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { MaterialInventorySection } from "@/components/domain/traceability/inventory-section";
 import { SuccessAlert } from "@/components/ui/alert";
 import { ImportWizard } from "@/components/domain/import/import-wizard";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const RESIDUE_LABEL: Record<string, string> = {
   preconsumer: "Preconsumo",
@@ -271,6 +272,7 @@ export default async function InputBatchesPage({
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    <ExportPdfButton exportKey="cpr.input-batch.detail" id={b.id} />
                     <Link href={`/traceability/input-batches?edit=${b.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>

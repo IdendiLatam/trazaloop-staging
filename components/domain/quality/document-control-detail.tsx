@@ -40,6 +40,7 @@ import {
   deleteQualityDocumentAction,
   type QualityDocumentActionState,
 } from "@/server/actions/quality-documents";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-02 · Ficha de un documento controlado.
@@ -272,12 +273,8 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
         </p>
         <p className="text-xs text-ink-soft">{LIFECYCLE_HELP[model.lifecycle]}</p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Link
-            href={`/quality/documents/${model.documentId}/pdf`}
-            className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"
-          >
-            Descargar PDF
-          </Link>
+          {/* EXPORT-01 · Mismo PDF, puerta única (§27). */}
+          <ExportPdfButton exportKey="quality.document.detail" id={model.documentId} />
           <Link
             href="/quality/documents/master"
             className="inline-flex w-auto items-center justify-center rounded-md border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:border-loop"

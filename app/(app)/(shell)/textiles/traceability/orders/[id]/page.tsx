@@ -55,6 +55,7 @@ import {
   type AssociationRowView,
 } from "@/components/domain/textiles/reference-association-manager";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const TRACE_TONE: Record<TextileTraceabilityStatus, string> = {
   not_started: "border-hairline bg-paper text-ink-soft",
@@ -248,6 +249,9 @@ export default async function TextileOrderDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Trazabilidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">{order.orderCode}</h1>
+        <div>
+          <ExportPdfButton exportKey="textiles.production-order.detail" id={order.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             order.sku ? `Referencia: ${order.sku}` : "",

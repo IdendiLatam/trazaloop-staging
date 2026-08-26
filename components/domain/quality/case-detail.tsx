@@ -20,6 +20,7 @@ import {
 import {
   ActionKindBadge, ActionStandingBadge, CaseStatusBadge, ClassificationBadge,
 } from "./case-badges";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const initial: CaseActionState = { error: null };
 const inputClass =
@@ -117,6 +118,7 @@ export function QualityCaseDetail({ model }: { model: CaseDetailModel }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-ink-soft">{model.code}</span>
           <h1 className="text-2xl font-semibold tracking-tight">{model.title}</h1>
+          <ExportPdfButton exportKey="quality.case.detail" id={model.caseId} />
           <ClassificationBadge value={model.classification} />
           <CaseStatusBadge value={model.status} />
         </div>
