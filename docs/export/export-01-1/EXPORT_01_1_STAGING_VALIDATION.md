@@ -76,6 +76,49 @@ Corregido en los cuatro sitios, con dos pruebas que impiden que vuelva: una fija
 la forma correcta y otra prohíbe cualquier embebido por columna en `lib/db/` que
 no esté en una lista blanca verificada.
 
+## Muestreo visual (§52) · 9 familias con estructura distinta
+
+Segunda fase, con datos sembrados para cada familia que la primera no pudo
+ejercitar por falta de contenido:
+
+| PDF real generado | Qué demuestra |
+|---|---|
+| `cpr.diagnostic.detail` | Imprime el avance y **lleva el aviso de estado actual** |
+| `textiles.diagnostic.detail` | Igual, en el otro módulo |
+| `trazadocs.document.detail` | El motor documental de Quality sirviendo a **PCR** |
+| `textiles.document.detail` | El mismo motor sirviendo a **Textiles** |
+| `textiles.reference.detail` | Composición por fibra, materiales y componentes |
+| `textiles.circularity.detail` | Nombra la metodología usada y **declara su límite histórico** |
+| `textiles.passport.detail` | Imprime el pasaporte y **no usa lenguaje de certificación** |
+| `quality.map-version.detail` | Imprime la versión publicada y dice que es un snapshot |
+| `quality.methodology-version.detail` | **v1 se descarga como v1**, con sus escalas |
+| `quality.risk-assessment.detail` | Distingue la referencia histórica, imprime los factores y **no lleva** el aviso de estado actual |
+
+La evaluación de riesgo se probó en una ejecución anterior del mismo guion y no
+se repitió en la última: `quality_assess_risk` registra una **decisión formal**,
+y una decisión formal es inmutable por diseño.
+
+## Residuo en Staging, y por qué existe
+
+Tres empresas efímeras y tres usuarios efímeros **no se pudieron borrar**. Las
+tres razones son reglas del producto funcionando:
+
+| Bloqueo | Regla |
+|---|---|
+| Una **decisión formal** no se modifica ni se borra | Si la conclusión cambió, se registra otra decisión |
+| Un **diagnóstico completado** no se modifica ni se elimina | Es una autoevaluación cerrada |
+| Una **versión de metodología publicada** es inmutable | RO-04: no se reescribe, se publica otra |
+
+No se desactivó ninguna guarda para limpiar datos de prueba. Las tres empresas
+quedaron **retiradas lógicamente**: sin miembros, con todos los módulos
+deshabilitados y con el nombre prefijado `RETIRADA ·`. Ningún usuario puede
+alcanzarlas. Los tres usuarios efímeros no tienen membresía en ninguna empresa.
+
+> **Hallazgo que conviene registrar:** la plataforma no tiene hoy una forma
+> soportada de retirar una empresa que ya registró un acto inmutable. Para
+> Producción eso es probablemente lo correcto; para datos efímeros de QA es
+> incómodo. No es un problema de exportación y no se resolvió aquí.
+
 ## Tres veces que la base tuvo razón
 
 El guion de validación falló al sembrar y al limpiar, y las tres veces el
