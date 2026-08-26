@@ -268,6 +268,15 @@ function drawBlock(d: PdfLayout, b: PrintBlock): void {
       d.newPage();
       return;
   }
+
+  /* Un bloque que no encaje en ningún caso desaparecería del papel SIN decir
+     nada, y un documento incompleto que parece completo es peor que un fallo.
+     El tipo lo impide en compilación; esto lo impide también en ejecución, y
+     el endpoint lo convierte en un 500 en vez de en una descarga engañosa. */
+  const desconocido: never = b;
+  throw new Error(
+    `bloque de impresión desconocido: ${JSON.stringify(desconocido).slice(0, 120)}`
+  );
 }
 
 function drawTimeline(d: PdfLayout, b: Extract<PrintBlock, { type: "timeline" }>): void {

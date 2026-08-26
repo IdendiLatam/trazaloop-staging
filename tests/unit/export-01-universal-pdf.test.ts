@@ -616,5 +616,49 @@ check("H6. la descarga del documento controlado pasa por el endpoint único", ()
 });
 
 // ---------------------------------------------------------------------------
+// I · EL INVENTARIO NO PUEDE ENVEJECER EN SILENCIO
+// ---------------------------------------------------------------------------
+console.log("\nI · Nada desaparece en silencio");
+
+check("I0. un bloque desconocido FALLA en vez de desaparecer del papel", () => {
+  // Descubierto al escribir un banco de pruebas con el discriminante mal
+  // escrito: el PDF salió válido, con encabezado y pie… y sin la tabla. Un
+  // documento incompleto que parece completo es peor que un error.
+  let lanzo = false;
+  try {
+    renderPrintDocument(doc({
+      sections: [{ title: null, blocks: [{ type: "inventado" } as never] }],
+    }));
+  } catch { lanzo = true; }
+  assert(lanzo, "el renderizador se tragó un bloque desconocido en silencio");
+});
+
+check("I1. la matriz de cobertura nombra TODAS las claves del registro", () => {
+  // Un documento de cobertura que se queda atrás es peor que no tenerlo: se
+  // consulta creyendo que dice la verdad.
+  const matriz = read("docs/export/export-01/EXPORT_01_PDF_COVERAGE_MATRIX.md");
+  const faltan = DEFS.map((d) => d.key).filter((k) => !matriz.includes(k));
+  assert(faltan.length === 0, `la matriz no menciona: ${faltan.join(", ")}`);
+});
+
+check("I2. la matriz no inventa claves que el registro no tiene", () => {
+  const conocidas = new Set(DEFS.map((d) => d.key));
+  const matriz = read("docs/export/export-01/EXPORT_01_PDF_COVERAGE_MATRIX.md");
+  const citadas = new Set([...matriz.matchAll(/`([a-z]+\.[a-z-]+\.[a-z-]+)`/g)].map((m) => m[1]));
+  const sobran = [...citadas].filter((k) => !conocidas.has(k));
+  assert(sobran.length === 0, `la matriz promete lo que no existe: ${sobran.join(", ")}`);
+});
+
+check("I3. el recuento del inventario concuerda con el registro", () => {
+  const inv = read("docs/export/export-01/EXPORT_01_INVENTORY.md");
+  const m = /Exportadores en el registro \| \*\*(\d+)\*\*/.exec(inv);
+  assert(m, "el inventario no declara cuántos exportadores hay");
+  assert(
+    Number(m[1]) === DEFS.length,
+    `el inventario dice ${m[1]} y el registro tiene ${DEFS.length}`
+  );
+});
+
+// ---------------------------------------------------------------------------
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);
 process.exit(failed === 0 ? 0 : 1);

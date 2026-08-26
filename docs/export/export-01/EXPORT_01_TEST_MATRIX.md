@@ -1,6 +1,6 @@
 # EXPORT-01 · Matriz de pruebas
 
-`npm run test:export01` · **50 comprobaciones, 0 fallos.**
+`npm run test:export01` · **54 comprobaciones, 0 fallos.**
 
 No es una suite que compruebe que el endpoint responde 200. Genera **archivos
 PDF reales**, los vuelve a leer y comprueba qué dice el papel (§60).
@@ -24,6 +24,7 @@ de cero bytes».
 | **F · Identidad e imagen** | todo formato aceptado al subir se puede incrustar; el logo nunca llega de la petición; si falla, el PDF sale igual | 3 |
 | **G · Lo que NO se hizo** | servidor y no navegador; nada guardado en Storage; una sola nomenclatura; ninguna migración nueva | 4 |
 | **H · Alcanzabilidad** | toda clave tiene botón; ningún botón inventa claves; los tres módulos ofrecen descarga; la Lista Maestra filtra por los mismos nombres que la pantalla; el documento pasa por la puerta única | 6 |
+| **I · Nada desaparece en silencio** | un bloque desconocido falla en vez de esfumarse; la matriz nombra todas las claves, no inventa ninguna, y el recuento del inventario concuerda con el registro | 4 |
 
 ## Las que costaron más, y por qué existen
 
@@ -66,6 +67,33 @@ dos ficheros.
 | Cabeceras | `application/pdf`, `attachment`, `private, no-store, max-age=0, must-revalidate`, `nosniff` |
 | 11 ataques | 7 → 404; 4 → 200 con el parámetro hostil **neutralizado**, verificado abriendo el PDF |
 | Listado filtrado | `?vista=activos` trae A y C, no el cerrado B, y declara «Vista: Activos — 3 registros»; `?vista=todos` trae los cuatro |
+
+**I0 — un bloque desconocido falla en vez de desaparecer del papel.**
+Apareció escribiendo un banco de medición con el discriminante mal escrito
+(`kind` en vez de `type`). El renderizador devolvió un PDF **válido**, con
+encabezado, pie y numeración… y sin la tabla. El tipo lo impide en compilación;
+ahora también lo impide en ejecución, y el endpoint lo convierte en un 500 en
+vez de en una descarga engañosa.
+
+**I1–I3 — el inventario no puede envejecer en silencio.**
+Un documento de cobertura desactualizado es peor que no tenerlo: se consulta
+creyendo que dice la verdad. Estas tres comparan la matriz y el recuento del
+inventario contra el registro real.
+
+## Rendimiento
+
+El renderizador, medido en frío y en caliente (`renderPrintDocument`, sin base
+ni red):
+
+| Filas | Tamaño | Tiempo |
+|---|---|---|
+| 1 | 2 KiB | 0,2 ms |
+| 50 | 20 KiB | 1,0 ms |
+| 200 | 76 KiB | 3,3 ms |
+| 1000 | 377 KiB | 15,3 ms |
+
+Crece linealmente. El coste de una exportación es la CONSULTA, no el dibujo:
+para un listado grande, el tiempo de PDF es ruido frente al viaje a la base.
 
 ## Regresión
 
