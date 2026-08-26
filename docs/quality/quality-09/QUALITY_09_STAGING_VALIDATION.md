@@ -178,13 +178,16 @@ vercel env ls preview feature/quality-09-audits
 ```
 
 **URL de Preview:**
-`https://trazaloop-production-ogse7t9xf-idendi-latam-s-projects.vercel.app`
+`https://trazaloop-production-hc2duxqcr-idendi-latam-s-projects.vercel.app`
+(el despliegue del commit final; el anterior, `…ogse7t9xf…`, también quedó
+● READY con las mismas 302)
 
 ```
 /                              → 302
 /quality                       → 302
 /quality/audits                → 302
 /quality/audits/programs       → 302
+/quality/audits/list           → 302
 /quality/audits/findings       → 302
 /quality/audits/checklists     → 302
 ```
