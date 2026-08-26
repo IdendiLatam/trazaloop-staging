@@ -142,6 +142,9 @@ export default async function OutputBatchesPage({
           <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Lotes producidos / lotes finales
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Lotes producidos / lotes finales</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.output-batch.list" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Registra el lote obtenido de una orden/corrida. Sobre este lote se
           calcula el contenido reciclado.

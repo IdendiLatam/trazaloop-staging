@@ -216,7 +216,26 @@ check("12. Separación en capa de datos: default 'cpr' preserva CPR; envolturas 
   }
   assert(dbTextiles.includes(`const MODULE = "textiles" as const;`), "la capa textil debía fijar el módulo en servidor");
   const master = read("lib/db/trazadocs-master.ts");
-  assert(master.includes(`.eq("module_key", "cpr")`), "el maestro documental sigue siendo CPR (Textil no se mezcla)");
+  // EXPORT-01.1 · El maestro pasó a recibir el módulo como parámetro, igual que
+  // las cinco funciones de arriba, para que el maestro TEXTIL sea la MISMA
+  // consulta y no una copia que acabe divergiendo. La invariante que este
+  // sprint protege sigue intacta y ahora se comprueba mejor: la consulta filtra
+  // por módulo, el valor por defecto es 'cpr', y el maestro de la aplicación
+  // CPR lo llama sin pasar módulo — así Textil no se mezcla nunca.
+  assert(
+    master.includes(`moduleKey: string = "cpr"`),
+    "el maestro documental debía seguir siendo CPR por defecto"
+  );
+  assert(
+    master.includes(`.eq("module_key", moduleKey)`),
+    "el maestro documental debía filtrar por módulo"
+  );
+  const masterActions = read("server/actions/trazadocs-master.ts");
+  assert(
+    /listDocumentMaster\(org\.organizationId\)/.test(masterActions) &&
+      !/listDocumentMaster\([^)]*textiles/.test(masterActions),
+    "el maestro de la aplicación CPR no puede pedir documentos textiles"
+  );
 });
 
 check("13. Tips Textil no se mezclan con tips CPR: los hints viven por blueprint y las envolturas listan solo estructuras textiles (punto 16)", () => {

@@ -15,10 +15,11 @@ import { qualityDocumentCategoryLabel } from "@/lib/domain/quality-documents";
 import {
   MASTER_COLUMNS, describeFilters, filterMasterList, masterListHeaders, masterListToRows,
 } from "@/lib/domain/document-master-list";
-import type { ExportDefinition, ExportResult } from "../registry-types";
+import type { ExportDefinition, ExportModule, ExportResult } from "../registry-types";
 
 /**
  * EXPORT-01 · Documento controlado y Lista Maestra.
+ * EXPORT-01.1 · El MISMO motor para Quality, PCR y Textiles (§15, §49).
  *
  * ESTOS DOS SON LA EXCEPCIÓN, Y ESTÁ RAZONADA.
  *
@@ -38,22 +39,45 @@ import type { ExportDefinition, ExportResult } from "../registry-types";
  * con riesgo real de regresión sobre un artefacto en producción.
  */
 
-export const qualityDocumentDetail: ExportDefinition = {
-  key: "quality.document.detail",
-  module: "quality",
-  entity: "Documento controlado",
+/**
+ * UNA definición de documento, parametrizada por módulo.
+ *
+ * §15 lo dice sin rodeos: la diferencia entre el documento de Quality, el de
+ * PCR y el textil es de CONTEXTO —qué módulo, qué entitlement, qué empresa—,
+ * no de motor. Escribir `pcrDocumentPdf()` y `textileDocumentPdf()` habría
+ * triplicado el mismo archivo y garantizado que dentro de seis meses los tres
+ * dijeran cosas distintas.
+ *
+ * `listQualityProcessesUsingDocument` se consulta solo para Quality: en los
+ * otros módulos no hay procesos que referencien documentos, y preguntar por
+ * ellos devolvería una lista vacía que ensuciaría el papel.
+ */
+function documentDetail(spec: {
+  key: string;
+  module: ExportModule;
+  moduleKey: string;
+  entity: string;
+  withProcesses: boolean;
+}): ExportDefinition {
+  return {
+  key: spec.key,
+  module: spec.module,
+  entity: spec.entity,
   recordType: "Documento",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
+  temporality: "historical",
   async load(req): Promise<ExportResult | null> {
     if (!req.id) return null;
-    const detail = await getDocumentControlDetail(req.organizationId, req.id, QUALITY_DOC_MODULE);
+    const detail = await getDocumentControlDetail(req.organizationId, req.id, spec.moduleKey);
     if (!detail) return null;
 
     const [company, processes, logo] = await Promise.all([
       getCompanySettings(req.organizationId),
-      listQualityProcessesUsingDocument(req.organizationId, req.id),
+      spec.withProcesses
+        ? listQualityProcessesUsingDocument(req.organizationId, req.id)
+        : Promise.resolve([] as { processName: string }[]),
       loadCompanyLogoForPdf(req.organizationId),
     ]);
 
@@ -127,7 +151,32 @@ export const qualityDocumentDetail: ExportDefinition = {
       },
     };
   },
-};
+  };
+}
+
+export const qualityDocumentDetail = documentDetail({
+  key: "quality.document.detail",
+  module: "quality",
+  moduleKey: QUALITY_DOC_MODULE,
+  entity: "Documento controlado",
+  withProcesses: true,
+});
+
+export const trazadocsDocumentDetail = documentDetail({
+  key: "trazadocs.document.detail",
+  module: "trazadocs",
+  moduleKey: "cpr",
+  entity: "Documento TrazaDocs",
+  withProcesses: false,
+});
+
+export const textilesDocumentDetail = documentDetail({
+  key: "textiles.document.detail",
+  module: "textiles",
+  moduleKey: "textiles",
+  entity: "Documento TrazaDocs textil",
+  withProcesses: false,
+});
 
 export const qualityMasterList: ExportDefinition = {
   key: "quality.master-list.list",

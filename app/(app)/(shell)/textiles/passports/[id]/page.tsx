@@ -19,6 +19,7 @@ import { Badge, Field } from "@/components/textiles/passports/passport-ui";
 import { PassportSections, PassportFindings } from "@/components/textiles/passports/passport-sections";
 import { PassportActions } from "@/components/textiles/passports/passport-actions";
 import { ShareLinkManager } from "@/components/textiles/passports/share-link-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 type J = Record<string, unknown>;
 const obj = (v: unknown): J => (v && typeof v === "object" ? (v as J) : {});
@@ -74,12 +75,18 @@ export default async function TextilePassportDetailPage({
               <Badge tone={TEXTILE_PASSPORT_STATUS_TONE[status]}>{TEXTILE_PASSPORT_STATUS_LABEL[status]}</Badge>
             </div>
           </div>
-          <Link
-            href={`/textiles/passports/${id}/print`}
-            className="rounded-md border border-loop/40 bg-loop/5 px-3 py-1.5 text-sm font-medium text-loop-deep hover:border-loop"
-          >
-            Imprimir
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* EXPORT-01.1 · La descarga real: PDF generado en servidor con el
+                snapshot del pasaporte. La vista de impresión sigue existiendo
+                para quien la use, pero deja de ser la única forma de sacarlo. */}
+            <ExportPdfButton exportKey="textiles.passport.detail" id={id} />
+            <Link
+              href={`/textiles/passports/${id}/print`}
+              className="rounded-md border border-loop/40 bg-loop/5 px-3 py-1.5 text-sm font-medium text-loop-deep hover:border-loop"
+            >
+              Vista de impresión
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 rounded-lg border border-hairline bg-surface p-4 sm:grid-cols-4">

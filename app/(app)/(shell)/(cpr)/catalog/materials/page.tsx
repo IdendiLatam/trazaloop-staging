@@ -234,6 +234,7 @@ export default async function MaterialsPage({
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
+                    <ExportPdfButton exportKey="cpr.material.detail" id={m.id} />
                     <Link href={`/catalog/materials?edit=${m.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>

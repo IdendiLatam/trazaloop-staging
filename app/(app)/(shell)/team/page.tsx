@@ -20,6 +20,7 @@ import {
   resolveShellModuleForPath,
   SHELL_MODULE_PARAM,
 } from "@/lib/modules/registry";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TeamPage({
   searchParams,
@@ -57,6 +58,9 @@ export default async function TeamPage({
       <header className="space-y-1">
         <p className="eyebrow">Equipo</p>
         <h1 className="text-2xl font-semibold tracking-tight">Equipo de la empresa</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="core.team.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Administra usuarios, roles y accesos dentro de la empresa activa.
         </p>

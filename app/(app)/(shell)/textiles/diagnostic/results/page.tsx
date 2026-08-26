@@ -27,6 +27,7 @@ import {
   type TextileMaturityLevel,
 } from "@/lib/domain/textiles-diagnostic";
 import { checkTextilesFeatureEnabled } from "@/server/actions/module-plans";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const LEVEL_TONE: Record<TextileMaturityLevel, string> = {
   inicial: "border-danger/30 bg-danger/5 text-danger",
@@ -89,6 +90,9 @@ export default async function TextileDiagnosticResultsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">
           Resultados del diagnóstico textil
         </h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.diagnostic.detail" />
+        </div>
         <p className="text-sm text-ink-soft">
           Estado:{" "}
           <span className="font-medium">{isCompleted ? "Finalizado" : "Borrador (en progreso)"}</span>

@@ -147,6 +147,7 @@ export default async function SuppliersPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
+                    <ExportPdfButton exportKey="cpr.supplier.detail" id={s.id} />
                     <Link href={`/catalog/suppliers?edit=${s.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>

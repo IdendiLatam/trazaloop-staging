@@ -13,6 +13,7 @@ import {
   createMethodologyAction, createVersionAction, publishVersionAction, type RiskActionState,
 } from "@/server/actions/risks";
 import { RiskMatrix } from "./risk-matrix";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const initial: RiskActionState = { error: null };
 const inputClass =
@@ -153,6 +154,8 @@ export function QualityMethodologyView({
                         {v.effectiveFrom ? ` · vigente desde ${v.effectiveFrom}` : ""}
                         {v.effectiveTo ? ` hasta ${v.effectiveTo}` : ""}
                       </span>
+                      {/* v1 se descarga como v1 aunque hoy rija la v2. */}
+                      <ExportPdfButton exportKey="quality.methodology-version.detail" id={v.versionId} />
                     </div>
                     {v.changeNote ? <p className="mt-1 text-xs text-ink">{v.changeNote}</p> : null}
 

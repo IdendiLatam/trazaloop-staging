@@ -20,6 +20,7 @@ import { RequirementForm, RequirementRowControls, RequirementLinkForm } from
   "@/components/domain/customer-requirements/forms";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CustomerRequirementsPage({
   searchParams,
@@ -52,6 +53,9 @@ export default async function CustomerRequirementsPage({
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
         <h1 className="text-xl font-semibold">Acuerdos y requisitos de cliente</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.customer-requirement.list" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Registra qué exige o acordó cada cliente, en qué periodo, y vincúlalo
           con tus productos, lotes producidos / lotes finales, órdenes o

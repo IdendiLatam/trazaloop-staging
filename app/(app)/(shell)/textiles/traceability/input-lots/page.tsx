@@ -30,6 +30,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileInputLotsPage() {
   const org = await requireTextilesModule();
@@ -123,6 +124,9 @@ export default async function TextileInputLotsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Trazabilidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">Lotes de entrada</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.input-lot.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Telas, hilos, forros, etiquetas, botones, cierres y empaques recibidos, con
           proveedor, cantidad y saldo. El saldo solo compara consumos registrados en la
@@ -141,6 +145,7 @@ export default async function TextileInputLotsPage() {
         createAction={createTextileInputLotAction}
         updateAction={updateTextileInputLotAction}
         setActiveAction={setTextileInputLotActiveAction}
+        rowExportKey="textiles.input-lot.detail"
       />
     </div>
   );

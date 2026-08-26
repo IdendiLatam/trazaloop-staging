@@ -30,6 +30,7 @@ import {
   type DocumentStatus,
 } from "@/lib/domain/trazadocs";
 import { TextileTrazadocEditor } from "@/components/domain/textiles/trazadoc-editor";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileTrazadocDetailPage({
   params,
@@ -65,6 +66,9 @@ export default async function TextileTrazadocDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · TrazaDocs</p>
         <h1 className="text-2xl font-semibold tracking-tight">{doc.title}</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.document.detail" id={doc.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             blueprint?.code ?? doc.code ?? "",

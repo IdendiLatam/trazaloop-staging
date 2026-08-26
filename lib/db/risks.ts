@@ -675,6 +675,114 @@ export async function getRisk(riskId: string): Promise<RiskDetail | null> {
 // Escrituras de riesgo. Las que crean HISTORIA van por RPC; las demás, no.
 // ---------------------------------------------------------------------------
 
+export type AssessmentDetail = AssessmentRow & {
+  riskId: string; riskTitle: string; riskCode: string | null;
+  levelLabel: string | null;
+  methodologyVersionId: string;
+  /** Qué se eligió en cada escala. Es el «cómo se llegó a ese número». */
+  factors: { scaleLabel: string; levelLabel: string; levelValue: number; weight: number }[];
+};
+
+/**
+ * EXPORT-01.1 · Una evaluación de riesgo POR SÍ MISMA.
+ *
+ * Una evaluación es un HECHO FECHADO: se hizo un día, con una versión concreta
+ * de metodología y unos niveles concretos. Que solo se pudiera imprimir dentro
+ * de la ficha del riesgo —que cambia— dejaba sin papel propio justo al objeto
+ * que sí es histórico de verdad.
+ */
+export async function getRiskAssessment(
+  organizationId: string, assessmentId: string
+): Promise<AssessmentDetail | null> {
+  const supabase = await createServerClient();
+  const { data: a } = await supabase
+    .from("quality_risk_assessments")
+    .select(`id, risk_id, assessment_kind, assessed_on, score, derivation, rationale,
+             methodology_version_id, result_level_id,
+             profiles!quality_risk_assessments_assessed_by_fkey (full_name),
+             quality_risk_methodology_versions (version_number, quality_risk_methodologies (name))`)
+    .eq("organization_id", organizationId).eq("id", assessmentId)
+    .maybeSingle();
+  if (!a) return null;
+
+  const one = <T,>(v: unknown): T | null => (Array.isArray(v) ? ((v[0] as T) ?? null) : ((v as T) ?? null));
+  const ver = one<{ version_number: number; quality_risk_methodologies: unknown }>(
+    a.quality_risk_methodology_versions
+  );
+  const meth = one<{ name: string }>(ver?.quality_risk_methodologies);
+
+  const [risk, code, factors, level, considered] = await Promise.all([
+    supabase.from("quality_risks").select("id, title").eq("id", a.risk_id).maybeSingle(),
+    supabase.from("quality_risk_codes").select("code").eq("risk_id", a.risk_id).maybeSingle(),
+    supabase.from("quality_risk_assessment_factors")
+      .select(`scale_id, level_id,
+               quality_risk_scales!quality_risk_assessment_factors_scale_fk (label, weight, position),
+               quality_risk_scale_levels!quality_risk_assessment_factors_level_fk (label, value)`)
+      .eq("organization_id", organizationId).eq("assessment_id", assessmentId),
+    a.result_level_id
+      ? supabase.from("quality_risk_scale_levels").select("label").eq("id", a.result_level_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("work_references")
+      .select("ref_id, snapshot")
+      .eq("organization_id", organizationId)
+      .eq("owner_kind", "risk_assessment").eq("ref_kind", "quality_control")
+      .eq("owner_id", assessmentId),
+  ]);
+
+  const controlIds = (considered.data ?? []).map((r) => String(r.ref_id));
+  const { data: ctrlRows } = controlIds.length
+    ? await supabase.from("quality_controls").select("id, code, title").in("id", controlIds)
+    : { data: [] as Record<string, unknown>[] };
+
+  return {
+    assessmentId: String(a.id),
+    kind: a.assessment_kind as AssessmentKind,
+    assessedOn: String(a.assessed_on),
+    assessedByName: one<{ full_name?: string }>(a.profiles)?.full_name ?? null,
+    score: Number(a.score),
+    derivation: (a.derivation as Derivation | null) ?? null,
+    rationale: (a.rationale as string | null) ?? null,
+    methodologyName: meth?.name ?? "Metodología",
+    versionNumber: Number(ver?.version_number ?? 0),
+    methodologyVersionId: String(a.methodology_version_id),
+    riskId: String(a.risk_id),
+    riskTitle: String((risk.data as { title?: string } | null)?.title ?? "Riesgo"),
+    riskCode: (code.data as { code?: string } | null)?.code ?? null,
+    levelLabel: (level?.data as { label?: string } | null)?.label ?? null,
+    factors: (factors.data ?? []).flatMap((f) => {
+      const sc = one<{ label: string; weight: number; position: number }>(f.quality_risk_scales);
+      const lv = one<{ label: string; value: number }>(f.quality_risk_scale_levels);
+      return sc && lv
+        ? [{ scaleLabel: sc.label, levelLabel: lv.label, levelValue: Number(lv.value), weight: Number(sc.weight) }]
+        : [];
+    }),
+    // El snapshot conserva LO QUE DECÍA el control aquel día (RO-27): si hoy
+    // dice otra cosa, el papel de la evaluación sigue diciendo lo de entonces.
+    controlsConsidered: (considered.data ?? []).map((r) => {
+      const snap = (r.snapshot as Record<string, unknown> | null) ?? {};
+      const row = (ctrlRows ?? []).find((c) => String(c.id) === String(r.ref_id));
+      return {
+        controlCode: String(snap.code ?? row?.code ?? "—"),
+        controlTitle: String(snap.title ?? row?.title ?? "—"),
+        effectiveness: String(snap.effectiveness ?? snap.effectiveness_verdict ?? "no registrada"),
+      };
+    }),
+  };
+}
+
+/** Una versión concreta de metodología, buscada por su propio identificador.
+ *  v1 sigue siendo v1 aunque hoy rija la v2 (RO-14). */
+export async function getMethodologyVersion(
+  organizationId: string, versionId: string
+): Promise<{ methodology: MethodologyRow; version: MethodologyVersionRow } | null> {
+  const all = await listMethodologies(organizationId);
+  for (const m of all) {
+    const v = m.versions.find((x) => x.versionId === versionId);
+    if (v) return { methodology: m, version: v };
+  }
+  return null;
+}
+
 export async function createRisk(input: {
   organizationId: string; title: string; eventDescription: string;
   contextNote: string | null; originKind: RiskOrigin; ownerPositionId: string | null;
@@ -855,6 +963,125 @@ export async function listControls(organizationId: string): Promise<ControlRow[]
     ownerPositionName: ((pos ?? []).find((p) => String(p.id) === String(c.owner_position_id))?.name as string) ?? null,
     lastReview: null, reviewCount: 0, documentRefs: [], indicatorRefs: [],
   }));
+}
+
+export type ControlDetail = ControlRow & {
+  /** Dónde opera: los procesos declarados en `quality_control_activity_links`. */
+  processes: { processId: string; name: string; code: string | null; note: string | null }[];
+  /** Todas las revisiones de eficacia, de la más reciente a la más antigua. */
+  reviews: {
+    reviewId: string; reviewedOn: string; design: DesignVerdict;
+    implementation: ImplementationVerdict; effectiveness: EffectivenessVerdict;
+    criterion: string | null; note: string | null; reviewedByName: string | null;
+  }[];
+  /** Los riesgos donde este control fue considerado. */
+  risks: { riskId: string; code: string | null; title: string; status: string }[];
+};
+
+/**
+ * EXPORT-01.1 · Un control POR SÍ MISMO.
+ *
+ * Hasta ahora el control solo se leía como una fila de la tabla del riesgo, y
+ * eso arrastraba una confusión que RO-23 separa expresamente: un CONTROL no es
+ * una ACCIÓN DE TRATAMIENTO. El control existe y opera de forma permanente; la
+ * acción se hace una vez y se cierra. Un control con ficha propia es lo que
+ * hace visible esa diferencia.
+ */
+export async function getControl(
+  organizationId: string, controlId: string
+): Promise<ControlDetail | null> {
+  const supabase = await createServerClient();
+  const { data: c } = await supabase
+    .from("quality_controls")
+    .select("id, code, title, description, control_nature, operation_mode, frequency, status, owner_position_id")
+    .eq("organization_id", organizationId).eq("id", controlId)
+    .maybeSingle();
+  if (!c) return null;
+
+  const [pos, links, reviews, refs, riskLinks] = await Promise.all([
+    c.owner_position_id
+      ? supabase.from("quality_positions").select("name").eq("id", c.owner_position_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("quality_control_activity_links")
+      .select("process_id, note, quality_processes!quality_control_activity_links_process_fk (id, name, code)")
+      .eq("organization_id", organizationId).eq("control_id", controlId),
+    supabase.from("quality_control_effectiveness_reviews")
+      .select("id, reviewed_on, design_verdict, implementation_verdict, effectiveness_verdict, criterion, note, profiles (full_name)")
+      .eq("organization_id", organizationId).eq("control_id", controlId)
+      .order("reviewed_on", { ascending: false }),
+    supabase.from("work_references")
+      .select("ref_kind, ref_id")
+      .eq("organization_id", organizationId).eq("owner_kind", "control").eq("owner_id", controlId),
+    supabase.from("quality_risk_control_links")
+      .select("risk_id, quality_risks!quality_risk_control_links_risk_fk (id, title, status)")
+      .eq("organization_id", organizationId).eq("control_id", controlId),
+  ]);
+
+  const one = <T,>(v: unknown): T | null => (Array.isArray(v) ? ((v[0] as T) ?? null) : ((v as T) ?? null));
+  const nameOf = (v: unknown): string | null => {
+    const p = one<{ full_name?: string }>(v);
+    return p?.full_name ?? null;
+  };
+
+  const docIds = (refs.data ?? []).filter((r) => r.ref_kind === "trazadoc_document").map((r) => String(r.ref_id));
+  const indIds = (refs.data ?? []).filter((r) => r.ref_kind === "quality_indicator").map((r) => String(r.ref_id));
+  const [docRows, indRows] = await Promise.all([
+    docIds.length
+      ? supabase.from("trazadoc_documents").select("id, title, code").in("id", docIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    indIds.length
+      ? supabase.from("quality_indicators").select("id, name, code").in("id", indIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
+
+  const riskIds = (riskLinks.data ?? []).map((l) => String(l.risk_id));
+  const { data: riskCodes } = riskIds.length
+    ? await supabase.from("quality_risk_codes").select("risk_id, code").in("risk_id", riskIds)
+    : { data: [] as Record<string, unknown>[] };
+
+  const all = (reviews.data ?? []).map((r) => ({
+    reviewId: String(r.id), reviewedOn: String(r.reviewed_on),
+    design: r.design_verdict as DesignVerdict,
+    implementation: r.implementation_verdict as ImplementationVerdict,
+    effectiveness: r.effectiveness_verdict as EffectivenessVerdict,
+    criterion: (r.criterion as string | null) ?? null,
+    note: (r.note as string | null) ?? null,
+    reviewedByName: nameOf(r.profiles),
+  }));
+
+  return {
+    controlId: String(c.id), code: String(c.code), title: String(c.title),
+    description: (c.description as string | null) ?? null,
+    controlNature: c.control_nature as ControlNature,
+    operationMode: c.operation_mode as OperationMode,
+    frequency: (c.frequency as string | null) ?? null,
+    status: c.status as ControlStatus,
+    ownerPositionId: (c.owner_position_id as string | null) ?? null,
+    ownerPositionName: ((pos?.data as { name?: string } | null)?.name) ?? null,
+    lastReview: all[0] ?? null,
+    reviewCount: all.length,
+    documentRefs: (docRows.data ?? []).map((d) => ({
+      refId: String(d.id), title: String(d.title), code: (d.code as string | null) ?? null,
+    })),
+    indicatorRefs: (indRows.data ?? []).map((i) => ({
+      refId: String(i.id), name: String(i.name), code: (i.code as string | null) ?? null,
+    })),
+    processes: (links.data ?? []).flatMap((l) => {
+      const proc = one<{ id: string; name: string; code: string | null }>(l.quality_processes);
+      return proc
+        ? [{ processId: proc.id, name: proc.name, code: proc.code, note: (l.note as string | null) ?? null }]
+        : [];
+    }),
+    reviews: all,
+    risks: (riskLinks.data ?? []).flatMap((l) => {
+      const r = one<{ id: string; title: string; status: string }>(l.quality_risks);
+      if (!r) return [];
+      const code = (riskCodes ?? []).find((rc) => String(rc.risk_id) === r.id);
+      return [{
+        riskId: r.id, code: code ? String(code.code) : null, title: r.title, status: r.status,
+      }];
+    }),
+  };
 }
 
 export async function createControl(input: {

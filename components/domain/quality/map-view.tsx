@@ -20,6 +20,7 @@ import {
   publishQualityMapVersion,
   removeProcessFromQualityMap,
 } from "@/server/actions/quality-processes";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-01 · Mapa de procesos.
@@ -380,10 +381,13 @@ export function QualityMapView({
         </p>
         <ul className="space-y-1">
           {versions.map((v) => (
-            <li key={v.id}>
+            <li key={v.id} className="flex items-center gap-2">
+              {/* La versión publicada se descarga como quedó: los cambios
+                  posteriores en los procesos no la modifican. */}
+              <ExportPdfButton exportKey="quality.map-version.detail" id={v.id} />
               <Link
                 href={`/quality/map?map=${map.id}&version=${v.id}`}
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:border-loop ${
+                className={`flex flex-1 flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:border-loop ${
                   v.id === shownVersion?.id ? "border-loop bg-loop/5" : "border-hairline bg-paper"
                 }`}
               >

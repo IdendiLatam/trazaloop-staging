@@ -21,6 +21,7 @@ import {
 import { StartExerciseButton, ArchiveExerciseButton } from
   "@/components/domain/audit-prep/exercise-controls";
 import { ListPagination } from "@/components/ui/list-controls";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TraceabilityExercisesPage({
   searchParams,
@@ -46,6 +47,9 @@ export default async function TraceabilityExercisesPage({
           Preparación para auditoría
         </p>
         <h1 className="text-xl font-semibold">Ejercicios de trazabilidad</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.exercise.list" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Selecciona un lote producido / lote final y reconstruye su
           trazabilidad hacia atrás con los datos reales de Trazaloop:

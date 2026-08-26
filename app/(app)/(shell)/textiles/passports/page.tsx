@@ -11,6 +11,7 @@ import {
   TEXTILE_PASSPORT_DISCLAIMER,
 } from "@/lib/domain/textiles-passport";
 import { Badge } from "@/components/textiles/passports/passport-ui";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextilePassportsPage() {
   const org = await requireTextilesModule();
@@ -21,6 +22,9 @@ export default async function TextilePassportsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Pasaportes</p>
         <h1 className="text-2xl font-semibold tracking-tight">Pasaportes técnicos textiles</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.passport.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Consolida el estado técnico de una referencia/SKU (y lote opcional) en un pasaporte:
           composición, materiales, proveedores, evidencias, trazabilidad, circularidad y

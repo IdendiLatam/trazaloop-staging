@@ -23,6 +23,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true },
@@ -71,6 +72,9 @@ export default async function TextileProcessesPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Procesos internos</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.process.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Corte, confección, acabado, inspección, empaque y despacho, con su riesgo de
           trazabilidad y los registros que se esperan de cada uno.

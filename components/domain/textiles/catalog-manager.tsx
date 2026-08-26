@@ -35,6 +35,7 @@ export {
   emptyFieldValues,
   type CatalogFieldDef,
 } from "@/lib/domain/textiles-forms";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Select controlado con invariante visual↔estado: si el valor actual no
@@ -97,6 +98,7 @@ export function TextileCatalogManager<TInput extends Record<string, unknown>>({
   setActiveAction,
   deleteAction,
   canDelete = false,
+  rowExportKey,
 }: {
   entityLabel: string;
   entityLabelPlural: string;
@@ -109,6 +111,16 @@ export function TextileCatalogManager<TInput extends Record<string, unknown>>({
   deleteAction?: (id: string) => Promise<ActionResult>;
   /** T9E: rol autorizado calculado en SERVIDOR (admin/quality). */
   canDelete?: boolean;
+  /**
+   * EXPORT-01.1 · Clave de exportación de la FICHA de cada fila.
+   *
+   * Va aquí y no en cada pantalla porque los catálogos textiles comparten este
+   * gestor: ponerlo una vez es lo que hace que «tiene ficha exportable» sea una
+   * propiedad del catálogo y no un detalle que alguien recuerde repetir.
+   * Omitirla deja el listado sin botón por fila, que es lo correcto cuando la
+   * entidad no tiene ficha propia.
+   */
+  rowExportKey?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -286,7 +298,10 @@ export function TextileCatalogManager<TInput extends Record<string, unknown>>({
                     <p className="text-xs text-ink-soft">{row.display.join(" · ")}</p>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 items-center gap-2">
+                  {rowExportKey ? (
+                    <ExportPdfButton exportKey={rowExportKey} id={row.id} />
+                  ) : null}
                   <button
                     type="button"
                     disabled={pending}

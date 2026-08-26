@@ -192,6 +192,7 @@ export function QualityRiskDetail({
                     status={c.status}
                     effectiveness={c.lastReview?.effectiveness ?? null}
                   />
+                  <ExportPdfButton exportKey="quality.control.detail" id={c.controlId} />
                 </div>
                 {c.description ? <p className="mt-1 text-xs text-ink-soft">{c.description}</p> : null}
                 <p className="mt-1 text-xs text-ink-soft">
@@ -333,13 +334,18 @@ export function QualityRiskDetail({
         ) : (
           <ul className="space-y-1">
             {risk.actions.map((a) => (
-              <li key={a.actionId} className="rounded-md border border-hairline p-2 text-sm">
-                <span className="font-mono text-[11px] text-ink-soft">{a.code}</span>{" "}
-                {a.title}
-                <span className="text-xs text-ink-soft">
-                  {" "}· {ACTION_STATUS_LABEL[a.status as ActionStatus] ?? a.status}
-                  {a.dueOn ? ` · vence el ${a.dueOn}` : ""}
+              <li key={a.actionId} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-hairline p-2 text-sm">
+                <span>
+                  <span className="font-mono text-[11px] text-ink-soft">{a.code}</span>{" "}
+                  {a.title}
+                  <span className="text-xs text-ink-soft">
+                    {" "}· {ACTION_STATUS_LABEL[a.status as ActionStatus] ?? a.status}
+                    {a.dueOn ? ` · vence el ${a.dueOn}` : ""}
+                  </span>
                 </span>
+                {/* La MISMA clave que en la ficha del caso: la acción es
+                    transversal, y su papel no depende de quién la originó. */}
+                <ExportPdfButton exportKey="quality.action.detail" id={a.actionId} />
               </li>
             ))}
           </ul>
@@ -540,6 +546,10 @@ function AssessmentBlock({
         <span className="text-xs text-ink-soft">
           {assessment.assessedOn} · {assessment.assessedByName ?? "—"}
         </span>
+        {/* La evaluación es un HECHO FECHADO: tiene hoja propia, con la
+            versión de metodología que usó y la eficacia que el control tenía
+            aquel día. */}
+        <ExportPdfButton exportKey="quality.risk-assessment.detail" id={assessment.assessmentId} />
       </div>
       {explanation ? <p className="mt-1 text-xs text-ink">{explanation}</p> : null}
       <p className="mt-1 text-xs text-ink-soft">

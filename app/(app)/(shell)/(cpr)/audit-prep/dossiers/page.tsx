@@ -16,6 +16,7 @@ import { DOSSIER_STATUS_LABEL, DOSSIER_DISCLAIMER } from "@/lib/domain/audit-dos
 import { GenerateDossierButton, ArchiveDossierButton } from
   "@/components/domain/audit-prep/dossier-controls";
 import { ListPagination } from "@/components/ui/list-controls";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function AuditDossiersPage({
   searchParams,
@@ -43,6 +44,9 @@ export default async function AuditDossiersPage({
           Preparación para auditoría
         </p>
         <h1 className="text-xl font-semibold">Expedientes</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.dossier.list" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Expediente interno de preparación para auditoría por lote producido /
           lote final: consolida identificación, genealogía, balances, cálculo

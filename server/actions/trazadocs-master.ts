@@ -47,6 +47,7 @@ import {
   DUPLICATE_MASTER_TITLE_MESSAGE,
   isCategoryCode,
   canReplaceFileDocumentFile,
+  filterDocumentMaster,
   type MasterRow,
   type MasterCategoryGroup,
 } from "@/lib/domain/trazadocs-master";
@@ -91,17 +92,10 @@ export type MasterFilters = {
   sourceType?: string;
 };
 
+/** El filtrado vive en el dominio (`filterDocumentMaster`) para que la
+ *  pantalla, el CSV y el PDF no puedan enseñar conjuntos distintos. */
 function applyFilters(rows: MasterRow[], filters?: MasterFilters): MasterRow[] {
-  if (!filters) return rows;
-  let result = rows;
-  if (filters.search) {
-    const q = filters.search.trim().toLowerCase();
-    result = result.filter((r) => r.title.toLowerCase().includes(q) || (r.code ?? "").toLowerCase().includes(q));
-  }
-  if (filters.categoryCode) result = result.filter((r) => r.categoryCode === filters.categoryCode);
-  if (filters.status) result = result.filter((r) => r.status === filters.status);
-  if (filters.sourceType) result = result.filter((r) => r.sourceType === filters.sourceType);
-  return result;
+  return filterDocumentMaster(rows, filters);
 }
 
 export async function listDocumentMasterAction(filters?: MasterFilters): Promise<MasterCategoryGroup[]> {

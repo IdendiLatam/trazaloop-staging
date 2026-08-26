@@ -18,6 +18,7 @@ import {
   type ExerciseSnapshot,
   type ExerciseResult,
 } from "@/lib/domain/traceability-exercise";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const LEVEL_TONE: Record<string, string> = {
   info: "border-hairline bg-canvas text-ink-soft",
@@ -48,6 +49,9 @@ export default async function ExerciseDetailPage({
         <h1 className="text-xl font-semibold">
           Ejercicio de trazabilidad — lote {snapshot?.target.batch_code ?? "…"}
         </h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.exercise.detail" id={id} />
+        </div>
         <p className="mt-1 text-xs text-ink-soft">
           {[
             EXERCISE_STATUS_LABEL[exercise.status as string] ?? exercise.status,

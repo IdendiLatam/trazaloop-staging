@@ -94,6 +94,47 @@ histórico, relaciones, filtros aplicados y privacidad.
 
 ---
 
+## Addendum EXPORT-01.1 · EX-25 … EX-30
+
+EXPORT-01 construyó el motor. EXPORT-01.1 cerró la promesa funcional: **toda
+entidad de negocio administrada por Trazaloop que tenga sentido documental se
+puede descargar**. Estas seis decisiones son lo que hace que esa frase se pueda
+sostener en el tiempo.
+
+- **EX-25** — El inventario es un DATO, no un documento. Vive en
+  `lib/export/inventory.ts` y las pruebas lo recorren. Un markdown no falla: se
+  queda atrás en silencio mientras el registro crece.
+
+- **EX-26** — Existen CUATRO estados finales, y ninguno es «pendiente»:
+  `AVAILABLE`, `EMBEDDED`, `NOT_APPLICABLE` y `HISTORICAL_NOT_SUPPORTED`. Cada
+  uno es una afirmación que alguien puede discutir; «pendiente» es una deuda que
+  nadie discute porque no dice nada.
+
+- **EX-27** — `HISTORICAL_NOT_SUPPORTED` significa que el dominio no conserva
+  versión temporal suficiente para reconstruir el pasado con verdad. **Nunca**
+  significa que falte el PDF actual. Usarlo para no implementar es exactamente
+  lo que la clasificación existe para impedir, y una prueba lo comprueba.
+
+- **EX-28** — Toda exportación declara qué afirma sobre el tiempo:
+  `temporality: "historical" | "current"`. Una declarada `current` está obligada
+  a explicar QUÉ no guarda el dominio, y su PDF lleva el aviso
+  «Representación del estado actual» con la fecha de generación. Un documento
+  que retrata el presente y lo dice es honesto; uno que lo disfraza de pasado no.
+
+- **EX-29** — Una entidad con IDENTIDAD DE NEGOCIO propia tiene ficha propia,
+  aunque hoy solo se consulte dentro de su padre. Una acción, un control y una
+  evaluación de riesgo se llevan a una reunión, se entregan a un auditor y se
+  adjuntan a un expediente por separado. «Aparece dentro de X» no es razón
+  suficiente para negarles hoja propia; sí lo es no tener identidad — una fila
+  de relación, un estado técnico.
+
+- **EX-30** — Un mismo motor documental sirve a varios módulos POR PARÁMETRO,
+  nunca por copia. La diferencia entre el documento de Quality, el de PCR y el
+  textil es de contexto —módulo, entitlement, empresa—, no de motor. Tres copias
+  del mismo archivo garantizan que dentro de seis meses digan tres cosas.
+
+---
+
 ## Contrato para módulos futuros
 
 Toda entidad de negocio visible que se implemente a partir de ahora debe
@@ -106,11 +147,27 @@ EXPORT_HISTORICAL = YES | NO
 ```
 
 Un `NO` exige una razón explícita y defendible en el informe del sprint. La
-omisión silenciosa no se acepta: si una entidad no aparece en
-`EXPORT_01_INVENTORY.md`, el sprint está incompleto.
+omisión silenciosa no se acepta.
+
+**Desde EXPORT-01.1 esto no es una convención: es una prueba.** La entidad se
+añade como fila en `lib/export/inventory.ts` con sus tres ejes clasificados, y
+la suite falla si:
+
+- una ficha o un listado declarados `AVAILABLE` no tienen definición en el
+  registro;
+- una definición del registro no está clasificada en el inventario;
+- un `NOT_APPLICABLE` o un `EMBEDDED` no traen motivo con sustancia;
+- un `EMBEDDED` nombra un padre que no existe;
+- un `HISTORICAL_NOT_SUPPORTED` no explica qué no guarda el dominio, o se usa
+  en una entidad que tampoco tiene PDF actual;
+- una exportación existe y ninguna pantalla la ofrece.
 
 «No alcanzó el tiempo» no es una razón arquitectónica. «No es un objeto
-documentable» sí lo es, y hay que sostenerlo.
+documentable» sí lo es, y hay que sostenerlo — por escrito y en el sitio donde
+una prueba lo lee.
+
+**No se vuelve a crear un backlog general de PDFs.** Cada dominio nuevo cumple
+esto durante su propio sprint.
 
 ---
 

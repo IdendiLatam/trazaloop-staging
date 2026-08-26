@@ -9,6 +9,7 @@ import { getCalculationDossierAction } from "@/server/actions/audit-support";
 import { listTraceabilityChain } from "@/lib/db/audit-support";
 import { DossierBody } from "@/components/domain/audit-support/dossier-body";
 import { ExportDossierJsonButton, ExportMatrixCsvButton } from "@/components/domain/audit-support/export-buttons";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CalculationDossierPage({
   params,
@@ -31,12 +32,10 @@ export default async function CalculationDossierPage({
           <Link href="/audit-support" className="hover:underline">Soporte técnico</Link> · Dossier
         </p>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/audit-support/calculations/${id}/print`}
-            className="rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:bg-loop-deep"
-          >
-            Imprimir / guardar como PDF
-          </Link>
+          {/* EXPORT-01.1 (§54) · La descarga real sustituye a la vista de
+              impresión del navegador: un solo nombre en toda la plataforma, y
+              un PDF generado EN SERVIDOR en vez de una captura de pantalla. */}
+          <ExportPdfButton exportKey="cpr.support-calculation.detail" id={id} />
           <ExportDossierJsonButton calculationId={id} />
           <ExportMatrixCsvButton outputBatchId={bundle.dossier.output_batch_id} />
           <Link

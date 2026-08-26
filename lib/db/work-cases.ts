@@ -166,25 +166,101 @@ export async function listCaseActions(organizationId: string, caseId: string): P
     .select("*, quality_positions:owner_position_id(name)")
     .eq("organization_id", organizationId).in("id", ids)
     .order("created_at", { ascending: true });
+  return (data ?? []).map((r) => mapActionRow(r as Record<string, unknown>));
+}
+
+/** Mapea una fila cruda de `work_actions` al modelo de la aplicación. Existe
+ *  para que la lectura por caso y la lectura por identificador no puedan
+ *  divergir: una acción tiene que decir lo mismo mire por donde se mire. */
+function mapActionRow(r: Record<string, unknown>): ActionRow {
+  const pos = r.quality_positions as { name?: string } | null;
+  return {
+    id: r.id as string, code: r.code as string, actionKind: r.action_kind as ActionKind,
+    title: r.title as string, description: (r.description as string | null) ?? null,
+    expectedResult: (r.expected_result as string | null) ?? null,
+    ownerPositionId: (r.owner_position_id as string | null) ?? null,
+    ownerPositionName: pos?.name ?? null,
+    dueOn: (r.due_on as string | null) ?? null,
+    originalDueOn: (r.original_due_on as string | null) ?? null,
+    priority: r.priority as Priority, status: r.status as ActionStatus,
+    completedOn: (r.completed_on as string | null) ?? null,
+    completionNote: (r.completion_note as string | null) ?? null,
+    requiresEffectiveness: r.requires_effectiveness as boolean,
+    effectivenessCriteria: (r.effectiveness_criteria as string | null) ?? null,
+    effectiveness: r.effectiveness_result as Effectiveness,
+    closedAt: (r.closed_at as string | null) ?? null,
+  };
+}
+
+/**
+ * EXPORT-01.1 · Una acción POR SÍ MISMA, sin pasar por su padre.
+ *
+ * MDR-46 dice que las acciones son transversales: nacen de un caso, de un
+ * riesgo, de una oportunidad o de lo que venga después. Leerlas solo «desde el
+ * caso» convertía esa transversalidad en una promesa de papel. Esta consulta
+ * las lee por identidad propia, y la RLS decide igual que siempre.
+ */
+export async function getAction(
+  organizationId: string, actionId: string
+): Promise<ActionRow | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("work_actions")
+    .select("*, quality_positions:owner_position_id(name)")
+    .eq("organization_id", organizationId).eq("id", actionId)
+    .maybeSingle();
+  return data ? mapActionRow(data as Record<string, unknown>) : null;
+}
+
+/** De dónde viene una acción: su caso, su riesgo, su oportunidad. Es lo que
+ *  permite que la ficha diga el contexto sin ser una copia del padre. */
+export async function listActionContexts(
+  organizationId: string, actionId: string
+): Promise<ReferenceRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("work_references").select("id, ref_kind, ref_id, relation, note, snapshot")
+    .eq("organization_id", organizationId).eq("owner_kind", "action").eq("owner_id", actionId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((r) => ({
+    id: r.id as string, refKind: r.ref_kind as ReferenceKind, refId: r.ref_id as string,
+    relation: r.relation as string, note: (r.note as string | null) ?? null,
+    snapshot: (r.snapshot as Record<string, unknown> | null) ?? null,
+  }));
+}
+
+/** Las decisiones tomadas SOBRE esta acción: prórrogas, cierres, reaperturas. */
+export async function listActionHistory(
+  organizationId: string, actionId: string
+): Promise<DecisionRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("work_decisions")
+    .select("id, subject_kind, subject_id, decision_kind, outcome, rationale, decided_at, profiles:decided_by(full_name, email)")
+    .eq("organization_id", organizationId).eq("subject_id", actionId)
+    .order("decided_at", { ascending: true });
   return (data ?? []).map((r) => {
-    const pos = (r as Record<string, unknown>).quality_positions as { name?: string } | null;
+    const p = (r as Record<string, unknown>).profiles as { full_name?: string; email?: string } | null;
     return {
-      id: r.id as string, code: r.code as string, actionKind: r.action_kind as ActionKind,
-      title: r.title as string, description: (r.description as string | null) ?? null,
-      expectedResult: (r.expected_result as string | null) ?? null,
-      ownerPositionId: (r.owner_position_id as string | null) ?? null,
-      ownerPositionName: pos?.name ?? null,
-      dueOn: (r.due_on as string | null) ?? null,
-      originalDueOn: (r.original_due_on as string | null) ?? null,
-      priority: r.priority as Priority, status: r.status as ActionStatus,
-      completedOn: (r.completed_on as string | null) ?? null,
-      completionNote: (r.completion_note as string | null) ?? null,
-      requiresEffectiveness: r.requires_effectiveness as boolean,
-      effectivenessCriteria: (r.effectiveness_criteria as string | null) ?? null,
-      effectiveness: r.effectiveness_result as Effectiveness,
-      closedAt: (r.closed_at as string | null) ?? null,
+      id: r.id as string, subjectKind: r.subject_kind as "case" | "action",
+      subjectId: r.subject_id as string, decisionKind: r.decision_kind as DecisionKind,
+      outcome: (r.outcome as string | null) ?? null,
+      rationale: (r.rationale as string | null) ?? null,
+      decidedAt: r.decided_at as string,
+      decidedByName: p ? (p.full_name?.trim() || p.email || null) : null,
     };
   });
+}
+
+/** Todas las acciones de la empresa, para «Mis tareas» y para los listados. */
+export async function listAllActions(organizationId: string): Promise<ActionRow[]> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("work_actions")
+    .select("*, quality_positions:owner_position_id(name)")
+    .eq("organization_id", organizationId)
+    .order("due_on", { ascending: true, nullsFirst: false });
+  return (data ?? []).map((r) => mapActionRow(r as Record<string, unknown>));
 }
 
 export type VerificationRow = {

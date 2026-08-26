@@ -142,6 +142,7 @@ export default async function ProductsPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
+                    <ExportPdfButton exportKey="cpr.product.detail" id={p.id} />
                     <Link href={`/catalog/products?edit=${p.id}`} className="text-sm text-loop hover:underline">
                       Editar
                     </Link>

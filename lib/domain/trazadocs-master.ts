@@ -260,3 +260,49 @@ export function buildMasterCsvRow(row: MasterRow): string[] {
     formatBytesForCsv(row.sizeBytes),
   ];
 }
+
+
+/**
+ * EXPORT-01.1 (§16) · El filtrado del Maestro de documentos, en el dominio.
+ *
+ * Vivía dentro de la server action, así que la exportación habría tenido que
+ * reimplementarlo — y ese es exactamente el camino por el que EXPORT-01 acabó
+ * descargando la lista COMPLETA cuando el usuario había filtrado. Pantalla,
+ * CSV y PDF comparten ahora esta única función.
+ */
+export type DocumentMasterFilters = {
+  search?: string | null;
+  categoryCode?: string | null;
+  status?: string | null;
+  sourceType?: string | null;
+};
+
+export function filterDocumentMaster(
+  rows: MasterRow[], filters?: DocumentMasterFilters
+): MasterRow[] {
+  if (!filters) return rows;
+  let result = rows;
+  if (filters.search) {
+    const q = filters.search.trim().toLowerCase();
+    result = result.filter(
+      (r) => r.title.toLowerCase().includes(q) || (r.code ?? "").toLowerCase().includes(q)
+    );
+  }
+  if (filters.categoryCode) result = result.filter((r) => r.categoryCode === filters.categoryCode);
+  if (filters.status) result = result.filter((r) => r.status === filters.status);
+  if (filters.sourceType) result = result.filter((r) => r.sourceType === filters.sourceType);
+  return result;
+}
+
+/** Describe en palabras los filtros aplicados, para el encabezado del PDF. */
+export function describeDocumentMasterFilters(
+  filters?: DocumentMasterFilters
+): { label: string; value: string }[] {
+  const out: { label: string; value: string }[] = [];
+  if (!filters) return out;
+  if (filters.search) out.push({ label: "Búsqueda", value: filters.search });
+  if (filters.categoryCode) out.push({ label: "Categoría", value: filters.categoryCode });
+  if (filters.status) out.push({ label: "Estado", value: filters.status });
+  if (filters.sourceType) out.push({ label: "Tipo", value: filters.sourceType });
+  return out;
+}

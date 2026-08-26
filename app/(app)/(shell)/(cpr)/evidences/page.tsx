@@ -37,6 +37,7 @@ import {
   listProductionOrders,
   listOutputBatches,
 } from "@/lib/db/traceability";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   pending: { label: "Pendiente", tone: "border-amber/40 bg-amber/10 text-amber" },
@@ -161,6 +162,9 @@ export default async function EvidencesPage({
         <h1 className="text-2xl font-semibold tracking-tight">
           Evidencias de {org.organizationName}
         </h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.evidence.list" filters={{ q: params.q }} />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Aquí vive el soporte documental: declaraciones de proveedor, registros
           y fichas. Una evidencia solo la valida administrador o calidad.

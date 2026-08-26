@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/recycled";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { PrintButton } from "@/components/domain/audit-support/print-button";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 function AggregateTable({
   title,
@@ -110,6 +111,9 @@ export default async function RecycledReportsPage() {
           Trazaloop — Vista ejecutiva de contenido reciclado
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Agregaciones ponderadas</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.recycled-content.list" />
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
           Los porcentajes se ponderan por masa (suma de masa reciclada sobre
           suma de masa total) y se calculan solo con los lotes que tienen

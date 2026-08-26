@@ -19,6 +19,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true, placeholder: "p. ej. Línea institucional 2026" },
@@ -68,6 +69,9 @@ export default async function TextileCollectionsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Productos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Colecciones / líneas</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.collection.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Colecciones, líneas, temporadas o programas comerciales que agrupan productos
           textiles.

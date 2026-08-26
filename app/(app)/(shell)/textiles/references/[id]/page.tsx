@@ -71,6 +71,7 @@ import {
   type AssociationRowView,
 } from "@/components/domain/textiles/reference-association-manager";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const STATUS_TONE: Record<TextileCompositionStatus, string> = {
   not_started: "border-hairline bg-paper text-ink-soft",
@@ -320,6 +321,9 @@ export default async function TextileReferenceDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Referencias</p>
         <h1 className="text-2xl font-semibold tracking-tight">{reference.sku}</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.reference.detail" id={reference.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             reference.name ?? "",

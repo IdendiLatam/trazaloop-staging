@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { getCompanySettingsAction } from "@/server/actions/settings";
 import { CompanySettingsForm } from "@/components/domain/settings/company-settings-form";
 import { LogoUploadForm } from "@/components/domain/settings/logo-upload-form";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CompanySettingsPage() {
   const { data: company, canManage } = await getCompanySettingsAction();
@@ -21,6 +22,9 @@ export default async function CompanySettingsPage() {
           </Link>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Datos de empresa</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="core.company.detail" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Actualiza la información básica de la empresa activa.
         </p>

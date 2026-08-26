@@ -21,6 +21,35 @@ import {
   textileEvidenceList, textileOutputLotDetail, textileProductDetail, textileProductList,
   textileProductionOrderDetail, textileSupplierList,
 } from "./adapters/textiles";
+import {
+  coreCompanyDetail, coreSupportTicketDetail, coreSupportTicketList, coreTeamList,
+} from "./adapters/core";
+import {
+  qualityActionDetail, qualityActionList, qualityControlDetail, qualityControlList,
+  qualityPeriodClosureList, qualityRiskAssessmentDetail,
+} from "./adapters/quality-work";
+import {
+  qualityDocumentRevisionDetail, qualityMapVersionDetail, qualityMeasurementDetail,
+  qualityMethodologyVersionDetail, qualityProcessRevisionDetail, qualityTaskList,
+} from "./adapters/quality-history";
+import { textilesDocumentDetail, trazadocsDocumentDetail } from "./adapters/quality-documents";
+import { textilesMasterList, trazadocsMasterList } from "./adapters/trazadocs";
+import {
+  cprCustomerRequirementList, cprDiagnosticDetail, cprDossierDetail, cprDossierList,
+  cprEvidenceList, cprEvidenceMatrixDetail, cprExerciseDetail, cprExerciseList,
+  cprInputBatchList, cprMaterialDetail, cprOutputBatchList, cprProductDetail,
+  cprRecycledContentDetail, cprRecycledContentList, cprSupplierDetail,
+  cprSupportCalculationDetail,
+} from "./adapters/cpr-extended";
+import {
+  textilesCircularityDetail, textilesCircularityList, textilesCollectionList,
+  textilesComponentList, textilesDiagnosticDetail, textilesEvidenceDetail,
+  textilesFiberList, textilesInputLotDetail, textilesInputLotList,
+  textilesMaterialList, textilesOutputLotList, textilesOutsourcedProcessList,
+  textilesPassportDetail, textilesPassportList, textilesProcessList,
+  textilesProductionOrderList,
+  textilesReferenceDetail,
+} from "./adapters/textiles-extended";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -62,6 +91,49 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   textileProductDetail, textileProductList,
   textileProductionOrderDetail, textileOutputLotDetail,
   textileSupplierList, textileEvidenceList,
+
+  // ------------------------------------------------------------------
+  // EXPORT-01.1 · lo que faltaba para que PENDING sea 0
+  // ------------------------------------------------------------------
+
+  // Transversal (no pertenece a ningún módulo: pertenece a la cuenta)
+  coreCompanyDetail, coreTeamList,
+  coreSupportTicketDetail, coreSupportTicketList,
+
+  // Quality · entidades con identidad propia que no tenían papel propio
+  qualityActionDetail, qualityActionList,
+  qualityControlDetail, qualityControlList,
+  qualityRiskAssessmentDetail,
+  qualityPeriodClosureList, qualityTaskList,
+
+  // Quality · los registros que SÍ son del pasado
+  qualityProcessRevisionDetail, qualityMapVersionDetail,
+  qualityDocumentRevisionDetail, qualityMeasurementDetail,
+  qualityMethodologyVersionDetail,
+
+  // TrazaDocs · mismo motor documental, otro módulo
+  trazadocsDocumentDetail, trazadocsMasterList,
+  textilesDocumentDetail, textilesMasterList,
+
+  // PCR · el resto
+  cprProductDetail, cprMaterialDetail, cprSupplierDetail,
+  cprInputBatchList, cprOutputBatchList,
+  cprCustomerRequirementList, cprEvidenceList,
+  cprRecycledContentDetail, cprRecycledContentList,
+  cprSupportCalculationDetail, cprEvidenceMatrixDetail,
+  cprDossierDetail, cprDossierList,
+  cprExerciseDetail, cprExerciseList,
+  cprDiagnosticDetail,
+
+  // Textiles · el resto
+  textilesReferenceDetail, textilesCollectionList,
+  textilesFiberList, textilesMaterialList, textilesComponentList,
+  textilesProcessList, textilesOutsourcedProcessList,
+  textilesInputLotDetail, textilesInputLotList,
+  textilesProductionOrderList, textilesOutputLotList,
+  textilesEvidenceDetail,
+  textilesCircularityDetail, textilesCircularityList,
+  textilesPassportDetail, textilesPassportList, textilesDiagnosticDetail,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

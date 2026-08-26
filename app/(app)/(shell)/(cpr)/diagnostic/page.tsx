@@ -16,6 +16,7 @@ import { checkCprFeatureEnabled } from "@/server/actions/module-plans";
 import { DiagnosticWizard } from "@/components/domain/diagnostic/wizard";
 import { Button } from "@/components/ui/button";
 import { InfoAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const LEVEL_TONE: Record<ReadinessLevel, string> = {
   low: "border-danger/30 bg-danger/5 text-danger",
@@ -44,6 +45,9 @@ export default async function DiagnosticPage() {
       <h1 className="text-2xl font-semibold tracking-tight">
         Grado de preparación de {org.organizationName}
       </h1>
+      <div className="pt-1">
+        <ExportPdfButton exportKey="cpr.diagnostic.detail" />
+      </div>
       <p className="max-w-2xl text-sm text-ink-soft">
         Este diagnóstico estima el grado de preparación frente a NTC 6632:2022 y
         UNE-EN 15343:2008. Son preguntas de Sí o No, en lenguaje sencillo;

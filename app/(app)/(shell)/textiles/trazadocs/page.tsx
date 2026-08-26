@@ -17,6 +17,7 @@ import {
 } from "@/lib/domain/textiles-trazadocs";
 import { DOCUMENT_STATUS_LABEL, canCreateDocument, type DocumentStatus } from "@/lib/domain/trazadocs";
 import { CreateTextileTrazadocButton } from "@/components/domain/textiles/create-trazadoc-button";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileTrazadocsPage() {
   const org = await requireTextilesModule();
@@ -32,6 +33,9 @@ export default async function TextileTrazadocsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles</p>
         <h1 className="text-2xl font-semibold tracking-tight">TrazaDocs Textil</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.master-list.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Construye y mantiene la documentación técnica para trazabilidad, evidencias,
           declaraciones ambientales y preparación circular textil.

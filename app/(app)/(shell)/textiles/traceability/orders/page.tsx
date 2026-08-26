@@ -16,6 +16,7 @@ import {
 import { TextileEntityForm } from "@/components/domain/textiles/entity-form";
 import { isOneOf } from "@/lib/domain/textiles-catalogs";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileOrdersPage({
   searchParams,
@@ -60,6 +61,9 @@ export default async function TextileOrdersPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Trazabilidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">Órdenes / corridas de confección</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.production-order.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Cada orden conecta una referencia/SKU con sus consumos de lotes, procesos y
           lotes producidos.

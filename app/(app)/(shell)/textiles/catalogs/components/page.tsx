@@ -23,6 +23,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileComponentsPage() {
   const org = await requireTextilesModule();
@@ -87,6 +88,9 @@ export default async function TextileComponentsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Avíos / componentes</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.component.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Botones, cierres, elásticos, etiquetas y demás componentes. La separabilidad es
           una estimación preliminar que alimentará la evaluación de circularidad.

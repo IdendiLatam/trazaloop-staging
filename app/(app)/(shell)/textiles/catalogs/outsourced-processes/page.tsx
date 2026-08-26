@@ -26,6 +26,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileOutsourcedProcessesPage() {
   const org = await requireTextilesModule();
@@ -91,6 +92,9 @@ export default async function TextileOutsourcedProcessesPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Procesos tercerizados</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.outsourced-process.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Lavado, tintura, estampación, bordado y otros procesos ejecutados con terceros.
           Cada tercero debería existir también como proveedor para trazabilidad futura.

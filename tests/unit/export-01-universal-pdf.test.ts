@@ -76,19 +76,26 @@ const ADAPTERS = readdirSync(join(ROOT, ADAPTER_DIR))
  * Extrae las claves de las DEFINICIONES, no las de los filtros.
  *
  * Un filtro también se declara con `key:`, así que buscarlo a secas contaba
- * «estado» o «vista» como si fueran exportaciones. Solo cuenta la primera
- * `key:` de cada bloque `ExportDefinition`, más las que produce la fábrica de
- * catálogos.
+ * «estado» o «vista» como si fueran exportaciones. El discriminante es la
+ * FORMA de la clave: `modulo.entidad.tipo`, con dos puntos. Ningún filtro los
+ * lleva, y la comprobación A3 exige esa forma, así que las dos reglas se
+ * sostienen mutuamente.
+ *
+ * Se busca por forma y no por bloque `export const … : ExportDefinition`
+ * porque varias definiciones se construyen con fábricas —el documento
+ * controlado por módulo, los catálogos— y un analizador atado a la sintaxis
+ * del bloque las perdía en silencio: contaba menos exportaciones de las que
+ * hay, que es la peor forma de fallar para una prueba de cobertura.
  */
 function declaredDefinitions(): { key: string; source: string; file: string }[] {
   const out: { key: string; source: string; file: string }[] = [];
+  const KEY = /"([a-z0-9-]+\.[a-z0-9-]+\.(?:detail|list|historical))"/g;
   for (const a of ADAPTERS) {
-    for (const block of a.source.split(/export const \w+: ExportDefinition = \{/).slice(1)) {
-      const m = block.match(/^\s*key:\s*"([^"]+)"/);
-      if (m) out.push({ key: m[1], source: a.source, file: a.file });
-    }
-    // Definiciones producidas por una fábrica: `catalogList("cpr.x.list", …)`.
-    for (const m of a.source.matchAll(/catalogList\(\s*\n?\s*"([^"]+)"/g)) {
+    // Sin comentarios: un archivo puede NOMBRAR una clave para explicar algo, y
+    // contar esa mención inflaría el registro con exportaciones inexistentes.
+    const code = a.source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    for (const m of code.matchAll(KEY)) {
+      if (out.some((d) => d.key === m[1])) continue;
       out.push({ key: m[1], source: a.source, file: a.file });
     }
   }
@@ -530,10 +537,16 @@ function wiredKeys(): Map<string, string[]> {
       const rel = join(root, f);
       let src: string;
       try { src = read(rel); } catch { continue; }
-      if (!src.includes("ExportPdfButton")) continue;
-      for (const m of src.matchAll(/exportKey="([^"]+)"/g)) {
+      // Se busca la CLAVE por su forma, no el nombre del prop: algunas
+      // pantallas la pasan como `exportKey`, otras a través de un componente
+      // que la recibe con otro nombre (`rowExportKey`). Atarse al nombre del
+      // prop hacía que una exportación perfectamente alcanzable apareciera
+      // como huérfana.
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      if (!/ExportPdfButton|ExportKey|exportKey/.test(code)) continue;
+      for (const m of code.matchAll(/"([a-z0-9-]+\.[a-z0-9-]+\.(?:detail|list|historical))"/g)) {
         const list = found.get(m[1]) ?? [];
-        list.push(rel);
+        if (!list.includes(rel)) list.push(rel);
         found.set(m[1], list);
       }
     }

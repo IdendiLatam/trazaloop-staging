@@ -465,6 +465,7 @@ export function QualityCaseDetail({ model }: { model: CaseDetailModel }) {
                   <ActionKindBadge value={a.actionKind} />
                   <span className="text-sm font-medium">{a.title}</span>
                   <ActionStandingBadge status={a.status} effectiveness={a.effectiveness} />
+                  <ExportPdfButton exportKey="quality.action.detail" id={a.id} />
                 </div>
                 <p className="mt-1 text-xs text-ink-soft">
                   {a.ownerPositionName ? `${a.ownerPositionName} · ` : ""}

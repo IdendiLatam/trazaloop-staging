@@ -8,6 +8,7 @@ import { CATEGORY_CODES, CATEGORY_LABEL } from "@/lib/domain/trazadocs-master";
 import { DOCUMENT_STATUS_LABEL } from "@/lib/domain/trazadocs";
 import { DocumentMasterTable } from "@/components/domain/trazadocs/document-master-table";
 import { ExportMasterCsvButton } from "@/components/domain/trazadocs/export-master-csv-button";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const STATUS_OPTIONS = Object.entries(DOCUMENT_STATUS_LABEL);
 
@@ -38,6 +39,17 @@ export default async function DocumentMasterPage({
           </Link>
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Maestro de documentos</h1>
+        <div className="pt-1">
+          {/* §16 · Los filtros viajan con los MISMOS nombres que la pantalla: lo
+              que se ve y lo que se descarga no pueden separarse. */}
+          <ExportPdfButton
+            exportKey="trazadocs.master-list.list"
+            filters={{
+              q: params.q, category: params.category,
+              status: params.status, type: params.type,
+            }}
+          />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Vista única de todos los documentos de la empresa: documentos vivos (diligenciados en
           Trazaloop) y documentos descargables (archivos controlados que la empresa sube y

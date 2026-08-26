@@ -672,7 +672,8 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
                 <th className="py-1 pr-3 font-medium">Aprobada</th>
                 <th className="py-1 pr-3 font-medium">Vigente desde</th>
                 <th className="py-1 pr-3 font-medium">Vigente hasta</th>
-                <th className="py-1 font-medium">Nota</th>
+                <th className="py-1 pr-3 font-medium">Nota</th>
+                <th className="py-1 font-medium">PDF</th>
               </tr>
             </thead>
             <tbody>
@@ -683,7 +684,14 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
                   <td className="py-1.5 pr-3">{r.approvedAt ? formatDate(r.approvedAt) : "—"}</td>
                   <td className="py-1.5 pr-3">{r.effectiveFrom ? formatDate(r.effectiveFrom) : "—"}</td>
                   <td className="py-1.5 pr-3">{r.effectiveTo ? formatDate(r.effectiveTo) : "—"}</td>
-                  <td className="py-1.5 text-ink-soft">{r.changeNote ?? "—"}</td>
+                  <td className="py-1.5 pr-3 text-ink-soft">{r.changeNote ?? "—"}</td>
+                  <td className="py-1.5">
+                    <ExportPdfButton
+                      exportKey="quality.document-revision.detail"
+                      id={r.id}
+                      filters={{ documento: model.documentId }}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

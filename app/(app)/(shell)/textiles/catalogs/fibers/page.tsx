@@ -32,6 +32,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const CUSTOM_FIBER_FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true, placeholder: "p. ej. Bambú (declarado)" },
@@ -82,6 +83,9 @@ export default async function TextileFibersPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Fibras</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.fiber.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Tipos de fibra para registrar materiales y composiciones. Seleccionar una fibra
           “reciclada” u “orgánica” registra una declaración de catálogo — no afirma soporte

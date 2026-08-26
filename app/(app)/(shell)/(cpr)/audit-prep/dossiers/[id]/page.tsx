@@ -19,6 +19,7 @@ import {
   type ExerciseResult,
 } from "@/lib/domain/traceability-exercise";
 import { PrintButton } from "@/components/domain/audit-support/print-button";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const SEVERITY_TONE: Record<string, string> = {
   info: "border-hairline bg-canvas text-ink-soft",
@@ -69,6 +70,9 @@ export default async function DossierDetailPage({
         <h1 className="code mt-1 text-2xl font-semibold">
           {snapshot.cover.dossier_code} · v{snapshot.cover.version}
         </h1>
+        <div className="mt-2">
+          <ExportPdfButton exportKey="cpr.dossier.detail" id={id} />
+        </div>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-ink-soft">Empresa</dt>

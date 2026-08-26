@@ -9,6 +9,7 @@ import {
   TEXTILE_READINESS_LEVEL_LABEL,
   TEXTILE_CIRCULARITY_DISCLAIMER,
 } from "@/lib/domain/textiles-circularity";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileCircularityAssessmentsPage() {
   const org = await requireTextilesModule();
@@ -19,6 +20,9 @@ export default async function TextileCircularityAssessmentsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Circularidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">Evaluaciones de circularidad</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.circularity.list" />
+        </div>
         <p className="max-w-2xl text-xs text-ink-soft">{TEXTILE_CIRCULARITY_DISCLAIMER}</p>
         <div className="flex gap-3">
           <Link href="/textiles/circularity" className="text-sm font-medium text-loop hover:underline">

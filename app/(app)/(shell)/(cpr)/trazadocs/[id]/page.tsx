@@ -12,6 +12,7 @@ import { DocumentStatusBadge } from "@/components/domain/trazadocs/document-stat
 import { DocumentStatusActions } from "@/components/domain/trazadocs/document-status-actions";
 import { DeleteDraftButton } from "@/components/domain/trazadocs/delete-draft-button";
 import { DocumentQualityProcessesPanel } from "@/components/domain/quality/document-processes-panel";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const SOURCE_LABEL: Record<string, string> = {
   suggested: "Estructura sugerida",
@@ -43,6 +44,7 @@ export default async function TrazaDocViewPage({ params }: { params: Promise<{ i
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{doc.title}</h1>
+          <ExportPdfButton exportKey="trazadocs.document.detail" id={doc.id} />
           <DocumentStatusBadge status={doc.status} />
         </div>
         {doc.code ? <p className="code text-xs text-ink-soft">{doc.code}</p> : null}

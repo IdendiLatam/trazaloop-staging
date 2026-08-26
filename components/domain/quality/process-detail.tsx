@@ -1111,10 +1111,13 @@ export function QualityProcessDetailView({
         ) : (
           <ul className="space-y-1">
             {revisions.map((r) => (
-              <li key={r.id}>
+              <li key={r.id} className="flex items-center gap-2">
+                {/* Cada revisión se descarga sola: el proceso cambia, la
+                    revisión que se aprobó aquel día no. */}
+                <ExportPdfButton exportKey="quality.process-revision.detail" id={r.id} />
                 <Link
                   href={`/quality/processes/${process.id}?revision=${r.id}`}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:border-loop ${
+                  className={`flex flex-1 flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors hover:border-loop ${
                     r.id === shownRevisionId ? "border-loop bg-loop/5" : "border-hairline bg-paper"
                   }`}
                 >

@@ -33,15 +33,23 @@ function mapMasterRow(r: Record<string, unknown>): MasterRow {
   };
 }
 
-export async function listDocumentMaster(orgId: string): Promise<MasterRow[]> {
+/**
+ * El maestro documental de un módulo.
+ *
+ * T8 dejó la columna `module_key` preparada y el maestro de la aplicación
+ * apuntando a CPR. EXPORT-01.1 usa ese parámetro tal como estaba previsto —el
+ * maestro textil es la MISMA consulta con otra clave— en vez de escribir una
+ * segunda consulta que tarde o temprano diría otra cosa.
+ */
+export async function listDocumentMaster(
+  orgId: string,
+  moduleKey: string = "cpr"
+): Promise<MasterRow[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("v_trazadoc_document_master")
     .select("*")
-    // T8: el maestro documental de la app sigue siendo CPR; los documentos
-    // de TrazaDocs Textil viven en /textiles/trazadocs (un maestro Textil
-    // queda preparado por la columna module_key, no forzado en T8).
-    .eq("module_key", "cpr")
+    .eq("module_key", moduleKey)
     .eq("organization_id", orgId)
     .order("title", { ascending: true });
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(mapMasterRow);

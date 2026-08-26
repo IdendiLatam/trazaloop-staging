@@ -25,6 +25,22 @@ export type ExportFilterSpec = {
 
 export type ExportKind = "detail" | "list" | "historical";
 
+/**
+ * EXPORT-01.1 · Qué puede afirmar este PDF sobre el tiempo.
+ *
+ * `historical`  — el registro conserva su propia versión y el PDF la imprime
+ *                 tal como fue. Es un documento del pasado.
+ * `current`     — el dominio NO conserva una versión temporal suficiente para
+ *                 reconstruir el pasado con verdad. El PDF imprime el estado
+ *                 vigente y lo DICE en el papel.
+ *
+ * La distinción existe porque la alternativa es peor de lo que parece:
+ * imprimir los valores de hoy bajo el aspecto de un documento histórico es
+ * afirmar algo falso con formato de prueba. Antes de fabricar un pasado que la
+ * base no guarda, se declara que no se guarda.
+ */
+export type ExportTemporality = "historical" | "current";
+
 export type ExportRequest = {
   organizationId: string;
   roleCode: string;
@@ -84,5 +100,18 @@ export type ExportDefinition = {
   permission: ExportPermission;
   orientation: "portrait" | "landscape";
   filters?: readonly ExportFilterSpec[];
+  /**
+   * Qué afirma este PDF sobre el tiempo. Por omisión, `current`: la mayoría de
+   * las fichas retratan el estado vigente y eso está bien mientras el papel no
+   * pretenda otra cosa. Solo `historical` autoriza a presentarlo como
+   * documento del pasado, y solo cuando la base guarda esa versión.
+   */
+  temporality?: ExportTemporality;
+  /**
+   * Por qué este registro NO puede exportarse como histórico. Obligatorio en
+   * las entidades cuyo dominio aún no conserva versión temporal: es lo que
+   * impide que «no se puede» se confunda con «no se hizo».
+   */
+  historicalLimitReason?: string;
   load: (req: ExportRequest) => Promise<ExportResult | null>;
 };

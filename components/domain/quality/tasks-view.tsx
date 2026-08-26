@@ -18,6 +18,7 @@ import {
   markQualityAlertAction,
   type QualityDocumentActionState,
 } from "@/server/actions/quality-documents";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 /**
  * Trazaloop Quality · QUALITY-02 · Mis tareas.
@@ -142,6 +143,10 @@ export function QualityTasksView({
     <div className="max-w-3xl space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Mis tareas</h1>
+        <div className="pt-1 flex flex-wrap gap-2">
+          <ExportPdfButton exportKey="quality.task.list" label="Descargar PDF · mis tareas" />
+          <ExportPdfButton exportKey="quality.action.list" label="Descargar PDF · acciones" />
+        </div>
         <p className="text-sm text-ink-soft">
           Lo que está esperando por ti en el sistema de gestión. Cada tarea lleva al sitio exacto
           —el documento, el indicador— donde tienes que hacer algo.

@@ -57,6 +57,12 @@ export default async function QualityRisksPage({
               disabled={opportunities.length === 0}
               disabledReason="no hay oportunidades"
             />
+            {/* RO-23 · El control tiene ficha y listado PROPIOS porque no es
+                una acción de tratamiento: existe de forma permanente. */}
+            <ExportPdfButton
+              exportKey="quality.control.list"
+              label="Descargar PDF · controles"
+            />
           </div>
         </div>
         <p className="text-sm text-ink-soft">

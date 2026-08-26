@@ -10,6 +10,7 @@ import {
   TEXTILE_TRACEABILITY_DISCLAIMER,
   type TextileTraceabilityStatus,
 } from "@/lib/domain/textiles-traceability";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 const TRACE_TONE: Record<TextileTraceabilityStatus, string> = {
   not_started: "border-hairline bg-paper text-ink-soft",
@@ -27,6 +28,9 @@ export default async function TextileOutputLotsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Trazabilidad</p>
         <h1 className="text-2xl font-semibold tracking-tight">Lotes producidos / finales</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.output-lot.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Cada lote final nace desde una orden/corrida (se crean en el detalle de la
           orden) y hereda su cadena: referencia, consumos, procesos y evidencias.

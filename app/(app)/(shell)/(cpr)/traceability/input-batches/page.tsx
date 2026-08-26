@@ -130,6 +130,9 @@ export default async function InputBatchesPage({
           <Link href="/traceability" className="hover:underline">Trazabilidad</Link> · Lotes de entrada
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Lotes de entrada</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="cpr.input-batch.list" />
+        </div>
       </header>
 
       {suppliers.length === 0 || materials.length === 0 ? (

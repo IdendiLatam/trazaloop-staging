@@ -20,6 +20,7 @@ import {
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CalculationDetailPage({
   params,
@@ -81,12 +82,20 @@ export default async function CalculationDetailPage({
               .join(" · ")}
           </p>
         </div>
-        <CalculateButton
-          outputBatchId={batch.id}
-          hasCalculation={Boolean(latest)}
-          disabled={composition.length === 0}
-          disabledReason="Sin composición registrada no se puede calcular."
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportPdfButton
+            exportKey="cpr.recycled-content.detail"
+            id={latest?.id ?? null}
+            disabled={!latest}
+            disabledReason="todavía no hay cálculo"
+          />
+          <CalculateButton
+            outputBatchId={batch.id}
+            hasCalculation={Boolean(latest)}
+            disabled={composition.length === 0}
+            disabledReason="Sin composición registrada no se puede calcular."
+          />
+        </div>
       </header>
 
       <div className="flex justify-end">

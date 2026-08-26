@@ -6,6 +6,7 @@ import Link from "next/link";
 import { listSupportTicketsAction, type SupportFilters } from "@/server/actions/support";
 import { TICKET_STATUSES, TICKET_STATUS_LABEL, TICKET_CATEGORIES, TICKET_CATEGORY_LABEL, TICKET_PRIORITIES, TICKET_PRIORITY_LABEL, FIRST_RESPONSE_TARGET_MESSAGE } from "@/lib/domain/support";
 import { SupportTicketTable } from "@/components/domain/support/support-ticket-table";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function SupportCenterPage({
   searchParams,
@@ -26,6 +27,9 @@ export default async function SupportCenterPage({
       <header className="space-y-1">
         <p className="eyebrow">Sistema</p>
         <h1 className="text-2xl font-semibold tracking-tight">Centro de soporte</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="core.support-ticket.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Registra solicitudes de soporte y consulta el estado de tus tickets.
         </p>

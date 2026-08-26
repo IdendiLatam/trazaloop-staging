@@ -951,6 +951,33 @@ export async function getQualityMapDetail(
 }
 
 /** El mapa por defecto de la empresa (el que abre /quality/map). */
+/** EXPORT-01.1 · De qué proceso es esta revisión. Permite exportar UNA
+ *  revisión por su propio identificador sin que el cliente tenga que saber a
+ *  qué proceso pertenece —ni pueda mentir sobre ello: la empresa sigue
+ *  saliendo de la sesión. */
+export async function findProcessIdByRevision(
+  organizationId: string, revisionId: string
+): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("quality_process_revisions").select("process_id")
+    .eq("organization_id", organizationId).eq("id", revisionId)
+    .maybeSingle();
+  return (data as { process_id?: string } | null)?.process_id ?? null;
+}
+
+/** Lo mismo para una versión del mapa. */
+export async function findMapIdByVersion(
+  organizationId: string, versionId: string
+): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("quality_process_map_versions").select("map_id")
+    .eq("organization_id", organizationId).eq("id", versionId)
+    .maybeSingle();
+  return (data as { map_id?: string } | null)?.map_id ?? null;
+}
+
 export async function getDefaultQualityMapId(organizationId: string): Promise<string | null> {
   const maps = await listQualityMaps(organizationId);
   return maps[0]?.id ?? null;

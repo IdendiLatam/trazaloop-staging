@@ -33,6 +33,7 @@ import {
   TextileEvidenceOpenButton,
 } from "@/components/domain/textiles/evidence-status-panel";
 import { TextileEvidenceLinkManager } from "@/components/domain/textiles/evidence-link-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileEvidenceDetailPage({
   params,
@@ -57,6 +58,9 @@ export default async function TextileEvidenceDetailPage({
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Evidencias</p>
         <h1 className="text-2xl font-semibold tracking-tight">{evidence.title}</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.evidence.detail" id={evidence.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             TEXTILE_EVIDENCE_TYPE_LABEL[evidence.evidenceType as keyof typeof TEXTILE_EVIDENCE_TYPE_LABEL] ?? evidence.evidenceType,

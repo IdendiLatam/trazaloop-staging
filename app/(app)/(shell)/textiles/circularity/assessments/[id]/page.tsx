@@ -29,6 +29,7 @@ import {
   TEXTILE_EVIDENCE_LINK_TYPE_LABEL,
 } from "@/lib/domain/textiles-evidences";
 import { CircularityCriteriaForm } from "@/components/domain/textiles/circularity-criteria-form";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileCircularityAssessmentDetailPage({
   params,
@@ -58,6 +59,9 @@ export default async function TextileCircularityAssessmentDetailPage({
         <h1 className="text-2xl font-semibold tracking-tight">
           Evaluación {assessment.assessmentCode}
         </h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.circularity.detail" id={assessment.id} />
+        </div>
         <p className="text-sm text-ink-soft">
           {[
             assessment.sku ? `Referencia: ${assessment.sku}` : "",

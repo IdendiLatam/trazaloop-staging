@@ -10,6 +10,7 @@ import { TicketStatusBadge, TicketPriorityBadge, SlaStatusBadge } from "@/compon
 import { SupportTicketThread } from "@/components/domain/support/support-ticket-thread";
 import { ReplySupportTicketForm, ReopenSupportTicketButton } from "@/components/domain/support/support-ticket-reply-forms";
 import { InfoAlert } from "@/components/ui/alert";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function SupportTicketDetailPage({
   params,
@@ -34,6 +35,7 @@ export default async function SupportTicketDetailPage({
         {created === "1" ? <InfoAlert message="Ticket creado correctamente." /> : null}
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{ticket.subject}</h1>
+          <ExportPdfButton exportKey="core.support-ticket.detail" id={ticket.ticketId} />
           <TicketStatusBadge status={ticket.status} />
           <TicketPriorityBadge priority={ticket.priority} />
         </div>

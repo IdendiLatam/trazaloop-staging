@@ -321,7 +321,8 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
                   <th className="py-1 pr-3 font-medium">Evaluación</th>
                   <th className="py-1 pr-3 font-medium">Origen</th>
                   <th className="py-1 pr-3 font-medium">Registrada</th>
-                  <th className="py-1 font-medium">Estado</th>
+                  <th className="py-1 pr-3 font-medium">Estado</th>
+                  <th className="py-1 font-medium">PDF</th>
                 </tr>
               </thead>
               <tbody>
@@ -369,6 +370,16 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
                       {m.correctionReason && m.isCurrent ? (
                         <span className="block text-ink-soft">«{m.correctionReason}»</span>
                       ) : null}
+                    </td>
+                    <td className="py-1.5">
+                      {/* La medición se descarga sola, con la META QUE REGÍA en
+                          su periodo. Ese es el dato que una auditoría pide y el
+                          que un PDF de hoy falsearía sin querer. */}
+                      <ExportPdfButton
+                        exportKey="quality.measurement.detail"
+                        id={m.id}
+                        filters={{ indicador: model.indicatorId }}
+                      />
                     </td>
                   </tr>
                 ))}

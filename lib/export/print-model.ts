@@ -216,6 +216,38 @@ export function note(text: string): PrintBlock {
   return { type: "note", text };
 }
 
+/**
+ * EXPORT-01.1 (§41) · El aviso de estado actual.
+ *
+ * Va en los PDF de entidades cuyo dominio todavía NO conserva una versión
+ * temporal suficiente para reconstruir el pasado con verdad. Decirlo no es una
+ * disculpa: es la diferencia entre un documento honesto y uno que aparenta ser
+ * una prueba de lo que ocurrió.
+ *
+ * No lleva tono alarmista. Un lector que sabe qué tiene en la mano puede
+ * usarlo; uno que cree tener otra cosa, no.
+ */
+export const CURRENT_STATE_TITLE = "Representación del estado actual";
+
+export function currentStateNote(generatedAt: string): PrintBlock {
+  return {
+    type: "note",
+    text:
+      `${CURRENT_STATE_TITLE}. Este PDF refleja la información vigente en ` +
+      `Trazaloop al momento de su generación (${formatStamp(generatedAt)}). ` +
+      "No es una reconstrucción histórica.",
+  };
+}
+
+/** Fecha y hora legibles a partir de un ISO. Puro: el instante llega como
+ *  dato, nunca del reloj. */
+export function formatStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} UTC`;
+}
+
 /** Cuenta los bloques que de verdad pintan algo. Sirve para decidir si una
  *  sección entera sobra. */
 export function isEmptySection(s: PrintSection): boolean {

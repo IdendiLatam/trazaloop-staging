@@ -104,9 +104,36 @@ check("10. Hardening quirúrgico: sin nuevas migraciones, sin tocar el builder n
   });
   assert(t9c1Migrations.length === 0, `T9C.1 no debía crear migraciones (hay: ${t9c1Migrations.join(", ")})`);
   // No se tocó CPR ni se introdujo alcance prohibido en los archivos cambiados.
-  const changed = [createForm, newPage, detailPage, actionsSrc, dbSrc].join("\n");
+  //
+  // EXPORT-01.1 · La descarga en PDF del pasaporte SÍ entró después, por un
+  // sprint que la autorizó expresamente, y pasa por el botón y el endpoint
+  // comunes. Lo que esta comprobación congela es el alcance de T9C.1, no la
+  // existencia futura de un PDF: se excluyen del rastreo las líneas de la
+  // descarga común y se exige, a cambio, que sea la ÚNICA superficie de PDF
+  // aquí — nada de un generador propio del pasaporte.
+  const exportLine = /ExportPdfButton|textiles\.passport\.detail|export-pdf-button/;
+  // Sin comentarios: un archivo puede NOMBRAR algo para explicar por qué está,
+  // y contar esa mención convertiría la explicación en una infracción.
+  const codeOf = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
+  const sources = [createForm, newPage, detailPage, actionsSrc, dbSrc].map(codeOf);
+  const changed = sources
+    .join("\n")
+    .split("\n")
+    .filter((l) => !exportLine.test(l))
+    .join("\n");
   for (const banned of ["qr_code", "public_portal", "\\bpdf\\b", "carbon", "module_subscription", "textile_material_passports"]) {
     assert(!new RegExp(banned, "i").test(changed), `alcance prohibido en T9C.1: ${banned}`);
+  }
+  const pdfSurfaces = sources
+    .join("\n")
+    .split("\n")
+    .filter((l) => /\bpdf\b/i.test(l));
+  for (const line of pdfSurfaces) {
+    assert(
+      exportLine.test(line),
+      `el pasaporte no puede tener su propia maquinaria de PDF: ${line.trim().slice(0, 80)}`
+    );
   }
 });
 

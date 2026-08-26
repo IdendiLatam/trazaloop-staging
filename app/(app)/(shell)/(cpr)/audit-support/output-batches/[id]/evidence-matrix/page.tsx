@@ -13,6 +13,7 @@ import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { EvidenceMatrixTable } from "@/components/domain/audit-support/evidence-matrix-table";
 import { ExportMatrixCsvButton } from "@/components/domain/audit-support/export-buttons";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function EvidenceMatrixPage({
   params,
@@ -44,6 +45,9 @@ export default async function EvidenceMatrixPage({
             <span className="code text-loop-deep">{batch.batch_code}</span>
             {calc ? <DefensibilityBadge level={calc.defensibility_level} /> : null}
           </h1>
+          <div className="pt-2">
+            <ExportPdfButton exportKey="cpr.evidence-matrix.detail" id={id} />
+          </div>
           <p className="mt-1 text-sm text-ink-soft">
             {[batch.product_label ?? "Sin producto asociado", `orden ${batch.production_order_code}`]
               .filter(Boolean)

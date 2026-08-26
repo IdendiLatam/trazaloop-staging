@@ -28,7 +28,10 @@ export default async function QualityObjectivesPage() {
   return (
     <div className="max-w-5xl space-y-6">
       <div className="flex justify-end">
-        <ExportPdfButton exportKey="quality.objective.list" />
+        <div className="flex flex-wrap gap-2">
+          <ExportPdfButton exportKey="quality.objective.list" label="Descargar PDF · objetivos" />
+          <ExportPdfButton exportKey="quality.period-closure.list" label="Descargar PDF · cierres de periodo" />
+        </div>
       </div>
       <QualityObjectivesView
         objectives={objectives.map((o) => ({

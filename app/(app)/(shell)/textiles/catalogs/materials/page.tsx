@@ -25,6 +25,7 @@ import {
   type CatalogFieldDef,
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function TextileMaterialsPage() {
   const org = await requireTextilesModule();
@@ -115,6 +116,9 @@ export default async function TextileMaterialsPage() {
       <header className="space-y-1">
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Materiales e insumos</h1>
+        <div className="pt-1">
+          <ExportPdfButton exportKey="textiles.material.list" />
+        </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Telas, forros, hilos, entretelas, etiquetas y empaques. Los campos de
           declaración (reciclado, orgánico, soportes) son preliminares: registran lo que
