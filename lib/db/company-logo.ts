@@ -26,14 +26,38 @@ import { toEmbeddableImage } from "@/lib/pdf/convert";
  * que la RLS del Storage vuelve a comprobarlo. En ningún punto de la cadena
  * hay un valor que venga del cliente.
  *
- * Y si algo falla —no hay logo, el formato no se puede incrustar, el archivo
- * está corrupto, el bucket no responde— se devuelve `null` y el PDF se genera
- * igual, con el nombre de la empresa. Un adorno no puede impedir que alguien
- * descargue su procedimiento.
+ * Y si algo falla el PDF se genera igual, con el nombre de la empresa. Un
+ * adorno no puede impedir que alguien descargue su procedimiento.
+ *
+ * EXPORT-01.2 (§10) · PERO «no hay logo» y «hay logo y no sirve» NO son lo
+ * mismo.
+ *
+ * Antes las dos situaciones devolvían `null`, así que una empresa que había
+ * subido su logo y cuyo archivo estaba dañado veía exactamente lo mismo que una
+ * que nunca subió nada: un PDF sin logo y ninguna explicación. El resultado es
+ * que el problema podía durar años sin que nadie lo supiera.
+ *
+ * Ahora se devuelve un VEREDICTO. El motivo es interno —nunca se enseña la ruta
+ * de Storage ni el error del bucket—, pero el encabezado sí puede decir, en una
+ * línea, que el logo configurado no se pudo usar.
  */
+export type LogoFailure =
+  | "path_mismatch"
+  | "too_large"
+  | "download_failed"
+  | "unsupported_format";
+
+export type CompanyLogoResult =
+  /** La empresa no ha cargado ningún logo. Es un estado normal. */
+  | { outcome: "none" }
+  /** Hay logo y se puede incrustar. */
+  | { outcome: "ok"; image: PdfImage; storagePath: string }
+  /** Hay un logo DECLARADO que no se pudo usar. Esto hay que decirlo. */
+  | { outcome: "unusable"; reason: LogoFailure };
+
 export type CompanyLogo = { image: PdfImage; storagePath: string };
 
-export async function loadCompanyLogoForPdf(organizationId: string): Promise<CompanyLogo | null> {
+export async function loadCompanyLogo(organizationId: string): Promise<CompanyLogoResult> {
   const supabase = await createServerClient();
 
   // La ruta sale de la FILA de la empresa, jamás de la petición. El `.eq` la
@@ -45,23 +69,25 @@ export async function loadCompanyLogoForPdf(organizationId: string): Promise<Com
     .maybeSingle();
 
   const storagePath = (org?.logo_storage_path as string | null) ?? null;
-  if (!storagePath) return null;
+  if (!storagePath) return { outcome: "none" };
 
   // Segundo cinturón: la ruta guardada debe pertenecer a ESTA empresa. Si una
   // fila quedara con una ruta ajena —por un error de datos o por una escritura
   // maliciosa— no se leería igualmente.
-  if (!storagePath.startsWith(`${organizationId}/`)) return null;
+  if (!storagePath.startsWith(`${organizationId}/`)) return { outcome: "unusable", reason: "path_mismatch" };
 
   const declaredSize = (org?.logo_size_bytes as number | null) ?? null;
-  if (declaredSize !== null && declaredSize > MAX_LOGO_BYTES) return null;
+  if (declaredSize !== null && declaredSize > MAX_LOGO_BYTES) {
+    return { outcome: "unusable", reason: "too_large" };
+  }
 
   const { data: file, error } = await supabase.storage
     .from("organization-assets")
     .download(storagePath);
-  if (error || !file) return null;
+  if (error || !file) return { outcome: "unusable", reason: "download_failed" };
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  if (bytes.length > MAX_LOGO_BYTES) return null;
+  if (bytes.length > MAX_LOGO_BYTES) return { outcome: "unusable", reason: "too_large" };
 
   // EXPORT-01 · Si el formato no se incrusta directamente —WebP es el caso
   // real, porque la plataforma lo acepta al subir— se convierte en servidor
@@ -72,7 +98,17 @@ export async function loadCompanyLogoForPdf(organizationId: string): Promise<Com
     const converted = await toEmbeddableImage(bytes, file.type ?? null);
     if (converted.outcome === "converted") decoded = decodeImage(converted.bytes);
   }
-  if (decoded.error !== null) return null;
+  if (decoded.error !== null) return { outcome: "unusable", reason: "unsupported_format" };
 
-  return { image: decoded.image, storagePath };
+  return { outcome: "ok", image: decoded.image, storagePath };
+}
+
+/**
+ * Compatibilidad: los dos artefactos documentales heredados y las pruebas de
+ * QUALITY-03.1 piden «el logo o nada». Se conserva como envoltorio del
+ * veredicto para no tener dos lecturas del bucket.
+ */
+export async function loadCompanyLogoForPdf(organizationId: string): Promise<CompanyLogo | null> {
+  const r = await loadCompanyLogo(organizationId);
+  return r.outcome === "ok" ? { image: r.image, storagePath: r.storagePath } : null;
 }

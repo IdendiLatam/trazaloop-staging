@@ -51,6 +51,7 @@ const yesNo = (v: boolean | null | undefined): string =>
 function catalogList(spec: {
   key: string;
   entity: string;
+  documentName: string;
   columns: { header: string; width: number }[];
   load: (orgId: string) => Promise<Record<string, unknown>[]>;
   toRow: (r: Record<string, unknown>) => string[];
@@ -62,6 +63,7 @@ function catalogList(spec: {
     module: "textiles",
     entity: spec.entity,
     recordType: spec.entity,
+    documentName: spec.documentName,
     kind: "list",
     permission: "member",
     orientation: "landscape",
@@ -102,6 +104,7 @@ export const textilesReferenceDetail: ExportDefinition = {
   module: "textiles",
   entity: "Referencia",
   recordType: "Referencia",
+  documentName: "Ficha de referencia",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -184,6 +187,7 @@ export const textilesReferenceDetail: ExportDefinition = {
 
 export const textilesCollectionList = catalogList({
   key: "textiles.collection.list",
+  documentName: "Listado de colecciones",
   entity: "Colecciones",
   columns: [
     { header: "Colección", width: 3 }, { header: "Código", width: 1.5 },
@@ -206,6 +210,7 @@ export const textilesCollectionList = catalogList({
 
 export const textilesFiberList = catalogList({
   key: "textiles.fiber.list",
+  documentName: "Listado de fibras",
   entity: "Fibras",
   columns: [
     { header: "Fibra", width: 3 }, { header: "Código", width: 1.5 },
@@ -227,6 +232,7 @@ export const textilesFiberList = catalogList({
 
 export const textilesMaterialList = catalogList({
   key: "textiles.material.list",
+  documentName: "Listado de materiales e insumos",
   entity: "Materiales textiles",
   columns: [
     { header: "Material", width: 3 }, { header: "Código", width: 1.5 },
@@ -246,6 +252,7 @@ export const textilesMaterialList = catalogList({
 
 export const textilesComponentList = catalogList({
   key: "textiles.component.list",
+  documentName: "Listado de avíos / componentes",
   entity: "Componentes",
   columns: [
     { header: "Componente", width: 3 }, { header: "Tipo", width: 2 },
@@ -264,6 +271,7 @@ export const textilesComponentList = catalogList({
 
 export const textilesProcessList = catalogList({
   key: "textiles.process.list",
+  documentName: "Listado de procesos internos",
   entity: "Procesos textiles",
   columns: [
     { header: "Proceso", width: 3 }, { header: "Tipo", width: 2 },
@@ -281,6 +289,7 @@ export const textilesProcessList = catalogList({
 
 export const textilesOutsourcedProcessList = catalogList({
   key: "textiles.outsourced-process.list",
+  documentName: "Listado de procesos tercerizados",
   entity: "Procesos tercerizados",
   columns: [
     { header: "Proceso", width: 3 }, { header: "Tipo", width: 2 },
@@ -305,6 +314,7 @@ export const textilesInputLotDetail: ExportDefinition = {
   module: "textiles",
   entity: "Lote de entrada",
   recordType: "Lote de entrada",
+  documentName: "Ficha de lote de entrada",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -355,6 +365,7 @@ export const textilesInputLotDetail: ExportDefinition = {
 
 export const textilesInputLotList = catalogList({
   key: "textiles.input-lot.list",
+  documentName: "Listado de lotes de entrada",
   entity: "Lotes de entrada",
   columns: [
     { header: "Lote", width: 2 }, { header: "Tipo", width: 1.5 },
@@ -378,6 +389,7 @@ export const textilesInputLotList = catalogList({
 
 export const textilesProductionOrderList = catalogList({
   key: "textiles.production-order.list",
+  documentName: "Listado de órdenes / corridas de producción",
   entity: "Órdenes / corridas de producción",
   columns: [
     { header: "Orden", width: 2 }, { header: "Referencia", width: 2 },
@@ -400,6 +412,7 @@ export const textilesProductionOrderList = catalogList({
 
 export const textilesOutputLotList = catalogList({
   key: "textiles.output-lot.list",
+  documentName: "Listado de lotes producidos / lotes finales",
   entity: "Lotes producidos",
   columns: [
     { header: "Lote", width: 2 }, { header: "Orden", width: 2 },
@@ -429,6 +442,7 @@ export const textilesEvidenceDetail: ExportDefinition = {
   module: "textiles",
   entity: "Evidencia textil",
   recordType: "Evidencia",
+  documentName: "Ficha de evidencia",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -499,6 +513,7 @@ export const textilesCircularityDetail: ExportDefinition = {
   module: "textiles",
   entity: "Evaluación de circularidad",
   recordType: "Evaluación de circularidad",
+  documentName: "Evaluación de circularidad",
   kind: "detail",
   permission: "member",
   orientation: "landscape",
@@ -608,6 +623,7 @@ export const textilesCircularityDetail: ExportDefinition = {
 
 export const textilesCircularityList = catalogList({
   key: "textiles.circularity.list",
+  documentName: "Listado de evaluaciones de circularidad",
   entity: "Evaluaciones de circularidad",
   columns: [
     { header: "Evaluación", width: 2 }, { header: "Referencia", width: 2 },
@@ -645,6 +661,7 @@ export const textilesPassportDetail: ExportDefinition = {
   module: "textiles",
   entity: "Pasaporte técnico",
   recordType: "Pasaporte técnico",
+  documentName: "Pasaporte de producto",
   kind: "historical",
   permission: "member",
   orientation: "portrait",
@@ -724,6 +741,7 @@ export const textilesPassportDetail: ExportDefinition = {
 
 export const textilesPassportList = catalogList({
   key: "textiles.passport.list",
+  documentName: "Listado de pasaportes de producto",
   entity: "Pasaportes técnicos",
   columns: [
     { header: "Pasaporte", width: 2.2 }, { header: "Versión", width: 1 },
@@ -753,6 +771,7 @@ export const textilesDiagnosticDetail: ExportDefinition = {
   module: "textiles",
   entity: "Diagnóstico textil",
   recordType: "Diagnóstico textil",
+  documentName: "Diagnóstico textil",
   kind: "detail",
   permission: "member",
   orientation: "portrait",

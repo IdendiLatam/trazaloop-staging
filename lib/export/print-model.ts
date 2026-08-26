@@ -113,6 +113,13 @@ export type PrintBlock =
   | { type: "spacer"; height?: number }
   | { type: "pageBreak" };
 
+/**
+ * Lo que un ADAPTADOR construye: el documento entero menos su nombre
+ * documental, que pone el registro. Es una garantía de compilación, no una
+ * convención: un adaptador no puede inventarse el encabezado ni olvidarlo.
+ */
+export type PrintDocumentDraft = Omit<PrintDocument, "documentName">;
+
 /** Una sección con título. Agrupar importa: un PDF sin secciones es una pared
  *  de texto que nadie audita. */
 export type PrintSection = {
@@ -134,9 +141,29 @@ export type PrintOrganization = {
   /** Bytes ya decodificados por el servidor desde el Storage privado de ESA
    *  empresa. Si es null, el nombre hace de identidad (§20). */
   logo?: unknown | null;
+  /**
+   * EXPORT-01.2 (§10) · `true` cuando la empresa SÍ tiene un logo configurado
+   * y ese archivo no se pudo usar. No es lo mismo que no tener logo, y el
+   * encabezado lo dice.
+   */
+  logoUnusable?: boolean;
 };
 
 export type PrintDocument = {
+  /**
+   * EXPORT-01.2 (§5, §6) · El NOMBRE DOCUMENTAL, en lenguaje humano:
+   * «Ficha de proceso», «Listado de riesgos», «Lista maestra de documentos».
+   *
+   * No es el título de la entidad ni el nombre técnico de la exportación. Es lo
+   * que va bajo el nombre de la empresa en el encabezado de todas las páginas,
+   * y por eso lo declara el REGISTRO, no el adaptador: si cada adaptador
+   * escribiera el suyo, dos exportaciones del mismo tipo acabarían llamándose
+   * distinto.
+   *
+   * El adaptador no puede ponerlo —su tipo lo excluye— y el endpoint lo
+   * completa desde la definición.
+   */
+  documentName: string;
   /** Qué clase de registro es: «Riesgo», «Proceso», «Casos abiertos». */
   recordType: string;
   /** El título principal. */

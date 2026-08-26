@@ -29,6 +29,7 @@ export const cprProductionOrderDetail: ExportDefinition = {
   module: "cpr",
   entity: "Orden / corrida de producción",
   recordType: "Orden / corrida de producción",
+  documentName: "Orden / corrida de producción",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -91,6 +92,7 @@ export const cprProductionOrderList: ExportDefinition = {
   module: "cpr",
   entity: "Órdenes / corridas de producción",
   recordType: "Órdenes / corridas de producción",
+  documentName: "Listado de órdenes / corridas de producción",
   kind: "list",
   permission: "member",
   orientation: "portrait",
@@ -127,6 +129,7 @@ export const cprOutputBatchDetail: ExportDefinition = {
   module: "cpr",
   entity: "Lote producido",
   recordType: "Lote producido",
+  documentName: "Lote producido / lote final",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -181,6 +184,7 @@ export const cprInputBatchDetail: ExportDefinition = {
   module: "cpr",
   entity: "Lote de entrada",
   recordType: "Lote de entrada",
+  documentName: "Ficha de lote de entrada",
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -222,14 +226,14 @@ export const cprInputBatchDetail: ExportDefinition = {
 /** Los catálogos comparten forma: son listados de referencia que una auditoría
  *  pide para comprobar que lo que se declara existe. */
 function catalogList(
-  key: string, entity: string, recordType: string,
+  key: string, entity: string, recordType: string, documentName: string,
   columns: { header: string; width: number }[],
   load: (orgId: string) => Promise<Record<string, unknown>[]>,
   toRow: (r: Record<string, unknown>) => string[],
   empty: string
 ): ExportDefinition {
   return {
-    key, module: "cpr", entity, recordType, kind: "list",
+    key, module: "cpr", entity, recordType, documentName, kind: "list",
     permission: "member", orientation: "portrait",
     async load(req): Promise<ExportResult | null> {
       const rows = await load(req.organizationId);
@@ -249,7 +253,7 @@ function catalogList(
 }
 
 export const cprProductList = catalogList(
-  "cpr.product.list", "Productos", "Productos",
+  "cpr.product.list", "Productos", "Productos", "Listado de productos",
   [{ header: "Código", width: 2 }, { header: "Producto", width: 5 }, { header: "Familia", width: 3 }],
   async (o) => (await listProducts(o)) as unknown as Record<string, unknown>[],
   (r) => [String(r.code ?? "—"), String(r.name ?? "—"), String(r.family_name ?? r.familyName ?? "—")],
@@ -257,7 +261,7 @@ export const cprProductList = catalogList(
 );
 
 export const cprMaterialList = catalogList(
-  "cpr.material.list", "Materiales", "Materiales",
+  "cpr.material.list", "Materiales", "Materiales", "Listado de materiales",
   [{ header: "Código", width: 2 }, { header: "Material", width: 5 }, { header: "Clasificación", width: 3 }],
   async (o) => (await listMaterials(o)) as unknown as Record<string, unknown>[],
   (r) => [String(r.code ?? "—"), String(r.name ?? "—"), String(r.classification_code ?? r.classificationCode ?? "—")],
@@ -265,7 +269,7 @@ export const cprMaterialList = catalogList(
 );
 
 export const cprSupplierList = catalogList(
-  "cpr.supplier.list", "Proveedores", "Proveedores",
+  "cpr.supplier.list", "Proveedores", "Proveedores", "Listado de proveedores",
   [{ header: "Código", width: 2 }, { header: "Proveedor", width: 5 }, { header: "Contacto", width: 3 }],
   async (o) => (await listSuppliers(o)) as unknown as Record<string, unknown>[],
   (r) => [String(r.code ?? "—"), String(r.name ?? "—"), String(r.contact_name ?? r.contactName ?? "—")],
@@ -273,7 +277,7 @@ export const cprSupplierList = catalogList(
 );
 
 export const cprFamilyList = catalogList(
-  "cpr.family.list", "Familias", "Familias de producto",
+  "cpr.family.list", "Familias", "Familias de producto", "Listado de familias de producto",
   [{ header: "Código", width: 2 }, { header: "Familia", width: 6 }],
   async (o) => (await listFamilies(o)) as unknown as Record<string, unknown>[],
   (r) => [String(r.code ?? "—"), String(r.name ?? "—")],

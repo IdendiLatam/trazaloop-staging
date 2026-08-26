@@ -16,15 +16,23 @@
  */
 import { A4_PORTRAIT, A4_LANDSCAPE, measureText } from "./writer";
 import { PdfLayout } from "./layout";
-import { fitWithin, type PdfImage } from "./image";
+import { renderCorporateHeader } from "./corporate-header";
+import { type PdfImage } from "./image";
 import { LIFECYCLE_LABEL, formatDate, type LifecycleState } from "@/lib/domain/document-control";
 
 const SYSTEM_LINE = "Trazaloop Quality · control documental";
 
 export type DocumentPdfModel = {
   organizationName: string;
+  /**
+   * EXPORT-01.2 · Nombre documental, del registro de exportaciones. Va en el
+   * encabezado de todas las páginas, bajo el nombre de la empresa.
+   */
+  documentName: string;
   /** Logo ya decodificado por el servidor. Nunca una URL. */
   logo?: PdfImage | null;
+  /** §10 · Hay logo configurado y NO se pudo usar. Distinto de no tenerlo. */
+  logoUnusable?: boolean;
   companyLegalName: string | null;
   companyTaxId: string | null;
   code: string | null;
@@ -101,43 +109,43 @@ function formatDateTime(iso: string): string {
 
 
 /**
- * Identidad de la empresa en la cabecera: logo si lo hay, y siempre el nombre.
+ * EXPORT-01.2 · La identidad ya NO se dibuja en el cuerpo de la primera página.
  *
- * El logo se dibuja a la IZQUIERDA y el nombre al lado, que es como se lee un
- * membrete. Si el logo no existe, no se puede decodificar o el formato no está
- * soportado, el bloque queda exactamente como estaba antes de QUALITY-03.1: el
- * nombre de la empresa, solo. Un PDF nunca deja de generarse por el logo — eso
- * convertiría un adorno en un punto único de fallo.
+ * Antes el logo y el nombre iban dentro del contenido: la página 1 tenía
+ * membrete y las siguientes una línea fina con el código. Una hoja suelta de la
+ * página cuatro de un procedimiento no decía de qué empresa era.
+ *
+ * Ahora los dos motores —este y el del Print Model— llaman a la MISMA
+ * primitiva desde el `header` de cada página. El cuerpo empieza debajo.
  */
-function companyIdentity(
-  doc: PdfLayout,
-  model: { organizationName: string; companyLegalName?: string | null; companyTaxId?: string | null; logo?: PdfImage | null }
-): void {
-  const logo = model.logo ?? null;
-  if (logo) {
-    const box = fitWithin(logo, 120, 40);
-    doc.ensure(box.height + 6);
-    const name = doc.writer.addImage("Logo", logo);
-    doc.writer.image(name, doc.left, doc.y, box.width, box.height);
-    doc.gap(box.height + 8);
-  }
-  doc.text(model.organizationName, { font: "bold", size: 9, gray: 0.35 });
-  doc.gap(12);
-  if (model.companyLegalName) { doc.text(model.companyLegalName, { size: 7.5, gray: 0.5 }); doc.gap(10); }
-  if (model.companyTaxId) { doc.text(`NIT ${model.companyTaxId}`, { size: 7.5, gray: 0.5 }); doc.gap(10); }
+function chromeHeader(model: {
+  organizationName: string;
+  companyLegalName?: string | null;
+  companyTaxId?: string | null;
+  logo?: PdfImage | null;
+  logoUnusable?: boolean;
+  documentName: string;
+  code?: string | null;
+}) {
+  return (d: PdfLayout): number =>
+    renderCorporateHeader(d, {
+      identity: {
+        organizationName: model.organizationName,
+        legalName: model.companyLegalName ?? null,
+        taxId: model.companyTaxId ?? null,
+        logo: model.logo ?? null,
+        logoUnusable: model.logoUnusable === true,
+      },
+      documentName: model.documentName,
+      code: model.code ?? null,
+      systemLine: SYSTEM_LINE,
+      top: d.margin,
+    });
 }
 
 export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
   const doc = new PdfLayout(`${model.code ? `${model.code} · ` : ""}${model.title}`, A4_PORTRAIT, 48, {
-    header: (d, pageIndex) => {
-      if (pageIndex === 0) return d.margin;
-      // Páginas siguientes: encabezado breve, para que una hoja suelta siga
-      // identificando de qué documento y de qué revisión es.
-      d.writer.text(d.left, d.margin, model.organizationName, "regular", 7, 0.5);
-      d.textRight(`${model.code ? `${model.code} · ` : ""}${model.revisionText}`, d.margin - 7, "bold", 7, 0.5);
-      d.writer.line(d.left, d.margin + 6, d.right, d.margin + 6, 0.5, 0.85);
-      return d.margin + 16;
-    },
+    header: chromeHeader({ ...model, code: model.code }),
     footer: (d, pageIndex, pageCount) => {
       const y = d.size.height - d.margin + 12;
       d.writer.line(d.left, y - 8, d.right, y - 8, 0.5, 0.85);
@@ -154,11 +162,9 @@ export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
     },
   });
 
-  // --- Identidad de la empresa y del documento
-  companyIdentity(doc, model);
-  doc.gap(6);
-
-  if (model.code) { doc.text(model.code, { font: "bold", size: 9, gray: 0.4 }); doc.gap(13); }
+  // --- Título real del documento. La identidad de empresa y el nombre
+  // documental («Documento controlado») ya van en el encabezado de cada
+  // página; aquí empieza el documento concreto (§15).
   doc.paragraph(model.title, { font: "bold", size: 16, leading: 20 });
   doc.gap(4);
   if (model.description) {
@@ -248,8 +254,10 @@ export function renderDocumentPdf(model: DocumentPdfModel): Buffer {
 // ---------------------------------------------------------------------------
 export type MasterListPdfModel = {
   organizationName: string;
+  documentName: string;
   /** Logo ya decodificado por el servidor. Nunca una URL. */
   logo?: PdfImage | null;
+  logoUnusable?: boolean;
   companyLegalName: string | null;
   companyTaxId: string | null;
   filtersCaption: string;
@@ -262,12 +270,7 @@ export type MasterListPdfModel = {
 
 export function renderMasterListPdf(model: MasterListPdfModel): Buffer {
   const doc = new PdfLayout("Lista maestra de documentos", A4_LANDSCAPE, 34, {
-    header: (d, pageIndex) => {
-      if (pageIndex === 0) return d.margin;
-      d.writer.text(d.left, d.margin, `${model.organizationName} · Lista maestra de documentos`, "regular", 7, 0.5);
-      d.writer.line(d.left, d.margin + 6, d.right, d.margin + 6, 0.5, 0.85);
-      return d.margin + 16;
-    },
+    header: chromeHeader(model),
     footer: (d, pageIndex, pageCount) => {
       const y = d.size.height - d.margin + 10;
       d.writer.line(d.left, y - 7, d.right, y - 7, 0.5, 0.85);
@@ -284,10 +287,8 @@ export function renderMasterListPdf(model: MasterListPdfModel): Buffer {
     },
   });
 
-  companyIdentity(doc, model);
-  doc.gap(4);
-  doc.paragraph("Lista maestra de documentos", { font: "bold", size: 15, leading: 19 });
-  doc.gap(2);
+  // La identidad y el nombre del reporte ya están en el encabezado (§16); el
+  // cuerpo empieza por los filtros que produjeron estas filas.
   doc.paragraph(model.filtersCaption, { size: 8, gray: 0.4 });
   doc.paragraph(
     `${model.totalCount} ${model.totalCount === 1 ? "documento" : "documentos"} · generada el ${formatDateTime(model.generatedAt)}`,

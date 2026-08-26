@@ -6,7 +6,7 @@ import { listQualityProcessesUsingDocument } from "@/lib/db/quality-processes";
 import { QUALITY_DOC_MODULE } from "@/lib/db/quality-documents";
 import { loadQualityMasterList, readMasterFilters } from "@/lib/db/quality-master-list";
 import { renderDocumentPdf, renderMasterListPdf } from "@/lib/pdf/quality-documents";
-import { loadCompanyLogoForPdf } from "@/lib/db/company-logo";
+import { loadCompanyLogo } from "@/lib/db/company-logo";
 import {
   DECISION_TYPE_LABEL, WORKFLOW_STATE_LABEL, displayRevision, orPending,
   type DecisionType,
@@ -57,6 +57,7 @@ function documentDetail(spec: {
   module: ExportModule;
   moduleKey: string;
   entity: string;
+  documentName: string;
   withProcesses: boolean;
 }): ExportDefinition {
   return {
@@ -64,6 +65,7 @@ function documentDetail(spec: {
   module: spec.module,
   entity: spec.entity,
   recordType: "Documento",
+  documentName: spec.documentName,
   kind: "detail",
   permission: "member",
   orientation: "portrait",
@@ -78,7 +80,7 @@ function documentDetail(spec: {
       spec.withProcesses
         ? listQualityProcessesUsingDocument(req.organizationId, req.id)
         : Promise.resolve([] as { processName: string }[]),
-      loadCompanyLogoForPdf(req.organizationId),
+      loadCompanyLogo(req.organizationId),
     ]);
 
     const revision = detail.effectiveRevision ?? detail.currentRevision;
@@ -89,7 +91,9 @@ function documentDetail(spec: {
 
     const buffer = renderDocumentPdf({
       organizationName: (await orgName(req.organizationId)) ?? "Empresa",
-      logo: logo?.image ?? null,
+      documentName: spec.documentName,
+      logo: logo.outcome === "ok" ? logo.image : null,
+      logoUnusable: logo.outcome === "unusable",
       companyLegalName: company?.legalName ?? null,
       companyTaxId: company?.taxId ?? null,
       code: detail.code,
@@ -156,6 +160,7 @@ function documentDetail(spec: {
 
 export const qualityDocumentDetail = documentDetail({
   key: "quality.document.detail",
+  documentName: "Documento controlado",
   module: "quality",
   moduleKey: QUALITY_DOC_MODULE,
   entity: "Documento controlado",
@@ -164,6 +169,7 @@ export const qualityDocumentDetail = documentDetail({
 
 export const trazadocsDocumentDetail = documentDetail({
   key: "trazadocs.document.detail",
+  documentName: "Documento controlado",
   module: "trazadocs",
   moduleKey: "cpr",
   entity: "Documento TrazaDocs",
@@ -172,6 +178,7 @@ export const trazadocsDocumentDetail = documentDetail({
 
 export const textilesDocumentDetail = documentDetail({
   key: "textiles.document.detail",
+  documentName: "Documento controlado",
   module: "textiles",
   moduleKey: "textiles",
   entity: "Documento TrazaDocs textil",
@@ -183,6 +190,7 @@ export const qualityMasterList: ExportDefinition = {
   module: "quality",
   entity: "Lista Maestra",
   recordType: "Lista Maestra",
+  documentName: "Lista maestra de documentos",
   kind: "list",
   permission: "member",
   orientation: "landscape",
@@ -212,13 +220,15 @@ export const qualityMasterList: ExportDefinition = {
     const [all, company, logo] = await Promise.all([
       loadQualityMasterList(req.organizationId),
       getCompanySettings(req.organizationId),
-      loadCompanyLogoForPdf(req.organizationId),
+      loadCompanyLogo(req.organizationId),
     ]);
     const rows = filterMasterList(all, filters);
 
     const buffer = renderMasterListPdf({
       organizationName: (await orgName(req.organizationId)) ?? "Empresa",
-      logo: logo?.image ?? null,
+      documentName: "Lista maestra de documentos",
+      logo: logo.outcome === "ok" ? logo.image : null,
+      logoUnusable: logo.outcome === "unusable",
       companyLegalName: company?.legalName ?? null,
       companyTaxId: company?.taxId ?? null,
       filtersCaption: describeFilters(filters),

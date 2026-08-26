@@ -529,6 +529,7 @@ console.log("\nG · PDF");
 // ---------------------------------------------------------------------------
 
 const PDF_DOC = renderDocumentPdf({
+  documentName: "Documento controlado",
   organizationName: "Empresa de Prueba S.A.S.",
   companyLegalName: "Empresa de Prueba Sociedad por Acciones Simplificada",
   companyTaxId: "900.111.222-3",
@@ -600,6 +601,7 @@ check("G4. un documento que no rige lo dice en su primera página", () => {
   );
   const draft = renderDocumentPdf({
     ...JSON.parse(JSON.stringify({
+      documentName: "Documento controlado",
       organizationName: "X", companyLegalName: null, companyTaxId: null, code: null,
       title: "Borrador", description: null, categoryLabel: "Otros", lifecycle: "draft",
       revisionText: "Revisión 1", ownerText: "—", reviewersText: "—", approversText: "—",
@@ -634,6 +636,7 @@ check("G7. el contenido sin diligenciar se declara, no se calla", () => {
 
 check("G8. la lista maestra en PDF lleva empresa, filtros, fecha y paginación", () => {
   const master = renderMasterListPdf({
+    documentName: "Lista maestra de documentos",
     organizationName: "Empresa de Prueba S.A.S.", companyLegalName: null, companyTaxId: "900.111.222-3",
     filtersCaption: "Estado: Vigente", headers: masterListHeaders(),
     weights: MASTER_COLUMNS.map((c) => c.width),
@@ -660,6 +663,7 @@ check("G8. la lista maestra en PDF lleva empresa, filtros, fecha y paginación",
 
 check("G9. una lista maestra vacía lo dice, en vez de imprimir una tabla vacía", () => {
   const empty = renderMasterListPdf({
+    documentName: "Lista maestra de documentos",
     organizationName: "X", companyLegalName: null, companyTaxId: null,
     filtersCaption: "Estado: Vigente", headers: masterListHeaders(),
     weights: MASTER_COLUMNS.map((c) => c.width), rows: [], totalCount: 0,

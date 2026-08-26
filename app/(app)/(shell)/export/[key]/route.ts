@@ -122,7 +122,14 @@ export async function GET(
     return NextResponse.json({ error: "No se encontró lo que pediste." }, { status: 404 });
   }
 
-  const bytes = result.buffer ?? (result.document ? renderPrintDocument(result.document) : null);
+  // EXPORT-01.2 (§6) · El nombre documental lo pone el REGISTRO, no el
+  // adaptador. Aquí es donde se une: el adaptador entregó un borrador sin
+  // nombre —su tipo se lo impide— y esta línea lo completa. Un adaptador no
+  // puede inventarse el encabezado ni olvidarlo.
+  const bytes = result.buffer
+    ?? (result.document
+      ? renderPrintDocument({ ...result.document, documentName: definition.documentName })
+      : null);
   if (!bytes) {
     return NextResponse.json({ error: "No fue posible generar el documento." }, { status: 500 });
   }

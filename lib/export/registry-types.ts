@@ -4,7 +4,7 @@
  * Tipos PUROS, sin `server-only`, para que una prueba estática pueda leer el
  * registro y comprobar que ninguna entidad se quedó sin declarar.
  */
-import type { PrintDocument } from "./print-model";
+import type { PrintDocumentDraft } from "./print-model";
 
 export type ExportModule = "quality" | "trazadocs" | "cpr" | "textiles" | "core";
 
@@ -58,8 +58,12 @@ export type ExportResult = {
   /**
    * El documento a imprimir. La forma normal: el adaptador describe y el
    * renderizador común dibuja.
+   *
+   * EXPORT-01.2 · Es un BORRADOR: le falta el nombre documental, que pone el
+   * registro. El adaptador no puede escribirlo aunque quiera, y el endpoint no
+   * puede olvidarlo porque el tipo del renderizador lo exige.
    */
-  document?: PrintDocument;
+  document?: PrintDocumentDraft;
   /**
    * ESCAPE DOCUMENTADO, y solo para dos artefactos.
    *
@@ -96,6 +100,19 @@ export type ExportDefinition = {
   entity: string;
   /** Cómo se llama el registro en el papel: «Riesgo», «Casos abiertos». */
   recordType: string;
+  /**
+   * EXPORT-01.2 (§5, §6) · El NOMBRE DOCUMENTAL que va en el encabezado de
+   * TODAS las páginas, bajo el nombre de la empresa.
+   *
+   * En lenguaje humano y con la nomenclatura real de la plataforma: «Ficha de
+   * proceso», «Listado de riesgos», «Orden / corrida de producción». Nunca la
+   * clave técnica, nunca el título de la entidad.
+   *
+   * Vive AQUÍ y no en el adaptador porque es un contrato: dos exportaciones del
+   * mismo tipo tienen que llamarse igual, y quien añada una tercera tiene que
+   * decidir cómo se llama antes de que exista.
+   */
+  documentName: string;
   kind: ExportKind;
   permission: ExportPermission;
   orientation: "portrait" | "landscape";

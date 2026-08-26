@@ -13,7 +13,7 @@ import {
   type DecisionType,
 } from "@/lib/domain/document-control";
 import { qualityDocumentCategoryLabel } from "@/lib/domain/quality-documents";
-import { loadCompanyLogoForPdf } from "@/lib/db/company-logo";
+import { loadCompanyLogo } from "@/lib/db/company-logo";
 
 /**
  * Trazaloop Quality · QUALITY-02 · PDF de UN documento controlado.
@@ -52,7 +52,7 @@ export async function GET(
     listQualityProcessesUsingDocument(access.org.organizationId, documentId),
     // El logo se resuelve en SERVIDOR desde la empresa ya autorizada; si no
     // hay o no se puede incrustar, `null` y el PDF sale igual (§14).
-    loadCompanyLogoForPdf(access.org.organizationId),
+    loadCompanyLogo(access.org.organizationId),
   ]);
 
   // La revisión que se imprime es la VIGENTE si la hay; si no, la que está en
@@ -65,8 +65,10 @@ export async function GET(
     p.positionName ? `${p.positionName} (${p.profileName})` : p.profileName;
 
   const pdf = renderDocumentPdf({
+    documentName: "Documento controlado",
     organizationName: access.org.organizationName,
-    logo: logo?.image ?? null,
+    logo: logo.outcome === "ok" ? logo.image : null,
+    logoUnusable: logo.outcome === "unusable",
     companyLegalName: company?.legalName ?? null,
     companyTaxId: company?.taxId ?? null,
     code: detail.code,

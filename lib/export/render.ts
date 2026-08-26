@@ -12,7 +12,8 @@
  */
 import { A4_LANDSCAPE, A4_PORTRAIT, measureText, wrapText } from "@/lib/pdf/writer";
 import { PdfLayout } from "@/lib/pdf/layout";
-import { fitWithin, type PdfImage } from "@/lib/pdf/image";
+import { renderCorporateHeader } from "@/lib/pdf/corporate-header";
+import { type PdfImage } from "@/lib/pdf/image";
 import type {
   PrintBadge, PrintBlock, PrintDocument, PrintGraph, PrintMatrix, PrintNode,
 } from "./print-model";
@@ -53,34 +54,26 @@ export function renderPrintDocument(doc: PrintDocument): Buffer {
 // ---------------------------------------------------------------------------
 
 function drawHeader(d: PdfLayout, doc: PrintDocument, logo: PdfImage | null, pageIndex: number): number {
-  let y = MARGIN;
-
-  // El logo solo en la primera página: repetirlo en un listado de doce
-  // páginas gasta espacio sin añadir nada.
-  let textLeft = d.left;
-  if (logo && pageIndex === 0) {
-    const box = fitWithin(logo, 92, 34);
-    const name = d.writer.addImage("LogoOrg", logo);
-    d.writer.image(name, d.left, y, box.width, box.height);
-    textLeft = d.left + box.width + 14;
-  }
-
   const org = doc.organization;
-  d.writer.text(textLeft, y + 9, org.name, "bold", 10, 0);
-  d.writer.text(textLeft, y + 21, doc.systemLine, "regular", 7.5, 0.45);
-  if (org.legalName || org.taxId) {
-    const line = [org.legalName, org.taxId ? `NIT ${org.taxId}` : null].filter(Boolean).join(" · ");
-    d.writer.text(textLeft, y + 31, line, "regular", 6.5, 0.55);
-  }
 
-  // Tipo de registro, a la derecha. Es lo que permite reconocer un papel
-  // suelto encima de una mesa.
-  d.textRight(doc.recordType.toUpperCase(), y + 9, "bold", 7.5, 0.45);
-  if (doc.code) d.textRight(doc.code, y + 21, "bold", 9, 0.1);
-
-  y += logo && pageIndex === 0 ? 44 : 40;
-  d.writer.line(d.left, y, d.right, y, 0.7, 0.82);
-  y += 12;
+  // EXPORT-01.2 · El encabezado corporativo, en TODAS las páginas y con la
+  // MISMA primitiva que usa el motor documental heredado. Antes el logo se
+  // dibujaba solo en la primera —«repetirlo gasta espacio»— y eso dejaba las
+  // páginas interiores de un listado de doce sin identidad ninguna: una hoja
+  // suelta no decía de quién era.
+  let y = renderCorporateHeader(d, {
+    identity: {
+      organizationName: org.name,
+      legalName: org.legalName ?? null,
+      taxId: org.taxId ?? null,
+      logo,
+      logoUnusable: org.logoUnusable === true,
+    },
+    documentName: doc.documentName,
+    code: doc.code ?? null,
+    systemLine: doc.systemLine,
+    top: MARGIN,
+  });
 
   if (pageIndex === 0) {
     // El título, solo en la primera página.

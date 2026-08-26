@@ -31,6 +31,7 @@ function masterList(spec: {
   module: ExportModule;
   moduleKey: string;
   entity: string;
+  documentName: string;
   systemLine: string;
 }): ExportDefinition {
   return {
@@ -38,6 +39,7 @@ function masterList(spec: {
     module: spec.module,
     entity: spec.entity,
     recordType: "Maestro de documentos",
+    documentName: spec.documentName,
     kind: "list",
     permission: "member",
     orientation: "landscape",
@@ -109,6 +111,7 @@ function masterList(spec: {
 
 export const trazadocsMasterList = masterList({
   key: "trazadocs.master-list.list",
+  documentName: "Maestro de documentos",
   module: "trazadocs",
   moduleKey: "cpr",
   entity: "Maestro de documentos",
@@ -117,6 +120,7 @@ export const trazadocsMasterList = masterList({
 
 export const textilesMasterList = masterList({
   key: "textiles.master-list.list",
+  documentName: "Maestro de documentos textil",
   module: "textiles",
   moduleKey: "textiles",
   entity: "Maestro de documentos textil",

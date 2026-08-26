@@ -154,9 +154,30 @@ function encodeWinAnsi(text: string): string {
   return out;
 }
 
+/**
+ * EXPORT-01.2 (§45) · Caracteres de control fuera del papel.
+ *
+ * Un salto de línea o un retorno de carro dentro de un literal de cadena PDF no
+ * rompe el archivo, pero sí rompe el RENGLÓN: el medidor de ancho los cuenta
+ * como un carácter cualquiera, así que un nombre de empresa con un `\n` se
+ * dibuja fuera de su caja y puede pisar lo que hay debajo. Y un texto que llega
+ * de la base puede traerlos sin que nadie lo haya querido.
+ *
+ * Se limpian AQUÍ porque este es el único sitio por el que pasa todo lo que
+ * acaba siendo visible. Limpiarlo en cada llamada sería confiar en que nadie
+ * olvide una.
+ */
+const PDF_CONTROL = new RegExp("[\u0000-\u001f\u007f]", "g");
+
 /** Escapa lo que un literal de cadena PDF no admite tal cual. */
 function pdfString(text: string): string {
-  return `(${encodeWinAnsi(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")})`;
+  const limpio = text.replace(PDF_CONTROL, " ");
+  return `(${encodeWinAnsi(limpio).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")})`;
+}
+
+/** La misma limpieza, para medir antes de dibujar. */
+export function sanitizeForPdf(text: string): string {
+  return text.replace(PDF_CONTROL, " ");
 }
 
 import type { PdfImage } from "./image";

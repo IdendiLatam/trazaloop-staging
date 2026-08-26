@@ -89,6 +89,7 @@ function makeJpeg(width = 60, height = 20): Buffer {
 }
 
 const DOC_MODEL = {
+  documentName: "Documento controlado",
   organizationName: "Reciclados del Caribe S.A.S.",
   companyLegalName: "Reciclados del Caribe S.A.S.",
   companyTaxId: "900123456-7",
@@ -112,6 +113,7 @@ const DOC_MODEL = {
 };
 
 const MASTER_MODEL = {
+  documentName: "Lista maestra de documentos",
   organizationName: "Reciclados del Caribe S.A.S.",
   companyLegalName: "Reciclados del Caribe S.A.S.",
   companyTaxId: "900123456-7",
@@ -187,8 +189,12 @@ check("P7. el PDF del DOCUMENTO incrusta el logo de verdad", () => {
   assert(text.startsWith("%PDF-1.7"), "no es un PDF");
   assert(text.includes("/Subtype /Image"), "no hay ningún objeto de imagen");
   assert(text.includes("/SMask"), "perdió la transparencia del logo");
-  assert(/\/XObject << \/Logo \d+ 0 R >>/.test(text), "la página no referencia el logo");
-  assert(text.includes("/Logo Do"), "el logo no se llega a dibujar");
+  // EXPORT-01.2 · El recurso pasó a llamarse `OrgLogo` al centralizarse el
+  // encabezado corporativo. Lo que esta comprobación protege —que la página lo
+  // referencie y lo dibuje— es lo mismo, y ahora además vale para TODAS las
+  // páginas, no solo la primera.
+  assert(/\/XObject << \/OrgLogo \d+ 0 R >>/.test(text), "la página no referencia el logo");
+  assert(text.includes("/OrgLogo Do"), "el logo no se llega a dibujar");
   assert(text.includes("%%EOF"), "el archivo quedó truncado");
 });
 
@@ -216,7 +222,7 @@ check("P10. la Lista Maestra comparte la MISMA identidad", () => {
   const pdf = renderMasterListPdf({ ...MASTER_MODEL, logo: image });
   const text = pdf.toString("latin1");
   assert(text.includes("/Subtype /Image"), "la Lista Maestra no lleva logo");
-  assert(text.includes("/Logo Do"), "el logo no se dibuja en la Lista Maestra");
+  assert(text.includes("/OrgLogo Do"), "el logo no se dibuja en la Lista Maestra");
   assert(text.includes("Reciclados del Caribe"), "falta el nombre de la empresa");
   const sinLogo = renderMasterListPdf({ ...MASTER_MODEL, logo: null });
   assert(!sinLogo.toString("latin1").includes("/Subtype /Image"), "inventó un logo");

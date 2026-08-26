@@ -52,6 +52,7 @@ const ORG = { name: "Fábrica de Ñandúes S.A.S.", legalName: null, taxId: "900
 
 function doc(overrides: Partial<PrintDocument> = {}): PrintDocument {
   return {
+    documentName: "Ficha de riesgo",
     recordType: "Riesgo", title: "Interrupción de un proveedor crítico", code: "R-2026-001",
     organization: ORG, systemLine: "Trazaloop Quality · riesgos",
     orientation: "portrait", generatedAt: "2026-08-26T10:00:00.000Z",
@@ -465,7 +466,10 @@ check("F1. todo formato de logo que la plataforma acepta se puede incrustar", ()
 
 check("F2. el logo NUNCA llega desde la petición", () => {
   const branding = read("lib/export/branding.ts");
-  assert(/loadCompanyLogoForPdf\(organizationId\)/.test(branding),
+  // EXPORT-01.2 · El resolutor pasó a devolver un VEREDICTO para distinguir
+  // «no hay logo» de «hay logo y no sirve». Sigue siendo el mismo resolutor
+  // seguro y sigue partiendo del identificador ya validado en servidor.
+  assert(/loadCompanyLogo\(organizationId\)/.test(branding),
     "debe reutilizar el resolutor seguro, no descargar una URL");
   assert(!/http/.test(branding.replace(/\/\*[\s\S]*?\*\//g, "")),
     "no puede haber ninguna URL en el resolutor de identidad");
@@ -473,7 +477,7 @@ check("F2. el logo NUNCA llega desde la petición", () => {
 
 check("F3. si el logo falla, el PDF se genera igual", () => {
   const branding = read("lib/export/branding.ts");
-  assert(/catch\(\(\) => null\)/.test(branding),
+  assert(/\.catch\(/.test(branding),
     "un fallo de logo no puede romper la descarga");
 });
 
