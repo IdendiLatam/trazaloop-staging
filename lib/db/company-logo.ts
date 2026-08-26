@@ -2,7 +2,7 @@ import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
 import { decodeImage, MAX_LOGO_BYTES, type PdfImage } from "@/lib/pdf/image";
-import { toEmbeddableImage } from "@/lib/pdf/convert";
+import { normalizeLogo, type CanonicalLogo } from "@/lib/pdf/logo-normalize";
 
 /**
  * Trazaloop · QUALITY-03.1 · El logo de la empresa, para incrustarlo en un PDF.
@@ -50,8 +50,9 @@ export type LogoFailure =
 export type CompanyLogoResult =
   /** La empresa no ha cargado ningún logo. Es un estado normal. */
   | { outcome: "none" }
-  /** Hay logo y se puede incrustar. */
-  | { outcome: "ok"; image: PdfImage; storagePath: string }
+  /** Hay logo y se puede incrustar. `canonical` trae la metadata técnica del
+   *  original, útil para diagnóstico; nunca sale al papel. */
+  | { outcome: "ok"; image: PdfImage; storagePath: string; canonical?: CanonicalLogo }
   /** Hay un logo DECLARADO que no se pudo usar. Esto hay que decirlo. */
   | { outcome: "unusable"; reason: LogoFailure };
 
@@ -89,18 +90,48 @@ export async function loadCompanyLogo(organizationId: string): Promise<CompanyLo
   const bytes = Buffer.from(await file.arrayBuffer());
   if (bytes.length > MAX_LOGO_BYTES) return { outcome: "unusable", reason: "too_large" };
 
-  // EXPORT-01 · Si el formato no se incrusta directamente —WebP es el caso
-  // real, porque la plataforma lo acepta al subir— se convierte en servidor
-  // antes de rendirse. Antes esto devolvía `null` en silencio y la empresa
-  // veía sus PDF sin logo sin saber por qué.
-  let decoded = decodeImage(bytes);
-  if (decoded.error !== null) {
-    const converted = await toEmbeddableImage(bytes, file.type ?? null);
-    if (converted.outcome === "converted") decoded = decodeImage(converted.bytes);
+  // EXPORT-01.3 · NORMALIZACIÓN, no adivinanza.
+  //
+  // Hasta aquí llegaba una cadena de suposiciones: se intentaba incrustar los
+  // bytes tal cual y, si fallaba, se preguntaba por el tipo DECLARADO para
+  // decidir si convertirlos. Una empresa subió su logo como `logo.png`, el
+  // almacenamiento lo registró como `image/png` y por dentro era AVIF: la
+  // conversión miró el tipo declarado, lo dio por bueno, devolvió los bytes
+  // originales y nadie reintentó nada. El logo se veía en pantalla —el
+  // navegador mira el contenido— y desaparecía del PDF.
+  //
+  // Ahora el contenido manda desde el primer paso y el resultado es siempre el
+  // mismo: PNG de 8 bits, RGBA, sRGB, sin entrelazar y ya orientado. El
+  // escritor de PDF no tiene que entender de variantes.
+  const normalized = await normalizeLogo(bytes);
+  if (normalized.outcome !== "ok") {
+    return { outcome: "unusable", reason: motivoDeNormalizacion(normalized.reason) };
   }
-  if (decoded.error !== null) return { outcome: "unusable", reason: "unsupported_format" };
 
-  return { outcome: "ok", image: decoded.image, storagePath };
+  const decoded = decodeImage(normalized.logo.png);
+  if (decoded.error !== null) {
+    // No debería ocurrir: el canónico es exactamente lo que el escritor admite.
+    // Si ocurre, es un defecto nuestro y se trata como logo inservible, no como
+    // «no hay logo».
+    return { outcome: "unusable", reason: "unsupported_format" };
+  }
+
+  return { outcome: "ok", image: decoded.image, storagePath, canonical: normalized.logo };
+}
+
+/** Traduce el motivo técnico de la normalización al catálogo de fallos que ya
+ *  usaba el resto de la plataforma. */
+function motivoDeNormalizacion(reason: string): LogoFailure {
+  switch (reason) {
+    case "too_large":
+    case "too_many_pixels":
+      return "too_large";
+    case "no_normalizer":
+    case "unsupported_format":
+      return "unsupported_format";
+    default:
+      return "unsupported_format";
+  }
 }
 
 /**

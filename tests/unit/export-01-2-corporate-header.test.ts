@@ -431,14 +431,13 @@ console.log("\nE · Formatos, proporción y textos largos");
 
 check("E1. todo formato aceptado al subir se resuelve para el encabezado", () => {
   const settings = read("lib/domain/settings.ts");
-  const convert = read("lib/pdf/convert.ts");
-  const image = read("lib/pdf/image.ts");
+  const kinds = read("lib/pdf/image-kind.ts");
   const mimes = [...settings.matchAll(/"(image\/[a-z+]+)"/g)].map((m) => m[1]);
   assert(mimes.length >= 3, "no se encontraron los formatos aceptados");
   for (const mime of mimes) {
     const sub = mime.split("/")[1];
-    assert(new RegExp(sub, "i").test(image) || new RegExp(sub, "i").test(convert),
-      `${mime} se acepta al subir y no se resuelve para el encabezado`);
+    assert(new RegExp(`"${sub}"`).test(kinds),
+      `${mime} se acepta al subir y el normalizador no lo reconoce`);
   }
 });
 

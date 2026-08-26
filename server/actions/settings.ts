@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  extensionForKind, isSupportedLogoKind, mimeForKind, sniffImageKind,
+} from "@/lib/pdf/image-kind";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
 import { requireSession } from "@/lib/auth/require-session";
@@ -23,7 +26,7 @@ import {
   validateProfileSettings,
   buildProfileUpdatePayload,
   validateLogoFile,
-  logoExtensionForType,
+  LOGO_CONTENT_MISMATCH_MESSAGE,
 } from "@/lib/domain/settings";
 
 /**
@@ -121,8 +124,24 @@ export async function uploadCompanyLogoAction(
   if (!storageCheck.allowed) return { error: storageCheck.error };
 
   const bytes = await file.arrayBuffer();
-  const extension = logoExtensionForType(file.type);
-  const { error } = await uploadCompanyLogo(org.organizationId, bytes, file.type, extension);
+
+  // EXPORT-01.3 (§23) · El tipo que declara el navegador es una afirmación de
+  // quien sube el archivo, y basta renombrarlo para que mienta. Aquí se mira el
+  // CONTENIDO: es lo que impide que un HTML, un SVG con scripts o un binario
+  // cualquiera entren marcados como `image/png`, y también lo que evita el
+  // defecto que originó este sprint —un AVIF llamado `logo.png` que se veía en
+  // pantalla y desaparecía de los PDF—.
+  const buffer = Buffer.from(bytes);
+  const kind = sniffImageKind(buffer);
+  if (!isSupportedLogoKind(kind)) {
+    return { error: LOGO_CONTENT_MISMATCH_MESSAGE };
+  }
+
+  // El tipo y la extensión con que se guarda salen de lo que el archivo ES, no
+  // de lo que dice ser: así el almacenamiento deja de propagar la mentira.
+  const realMime = mimeForKind(kind) ?? file.type;
+  const extension = extensionForKind(kind);
+  const { error } = await uploadCompanyLogo(org.organizationId, bytes, realMime, extension);
   if (error) return { error };
 
   revalidatePath("/settings/company");

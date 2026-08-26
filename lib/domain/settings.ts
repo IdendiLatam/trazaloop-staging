@@ -169,17 +169,36 @@ export function buildProfileUpdatePayload(input: ProfileSettingsInput): TrustedP
 // Logo de empresa (Sprint 9.2, Parte 6). Bucket privado `organization-assets`
 // (0049) — separado de `evidences`: un logo no es una evidencia técnica.
 // ---------------------------------------------------------------------------
-export const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+/**
+ * EXPORT-01.3 (§22) · Lo que se acepta al subir es EXACTAMENTE lo que la
+ * plataforma sabe normalizar para un PDF.
+ *
+ * Aceptar un formato que después no se puede usar es el defecto que este sprint
+ * vino a cerrar: la empresa sube su logo, lo ve en pantalla y sus documentos
+ * salen sin él. AVIF entra en la lista porque el normalizador lo resuelve, no
+ * al revés. Una prueba compara esta lista con `SUPPORTED_LOGO_KINDS`.
+ *
+ * SVG sigue fuera, y es una decisión, no un olvido: un SVG es un documento con
+ * scripts, no un mapa de bits, y admitirlo exige saneamiento propio.
+ */
+export const ALLOWED_LOGO_TYPES = [
+  "image/png", "image/jpeg", "image/webp", "image/avif",
+] as const;
 export const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export const LOGO_TOO_LARGE_MESSAGE = "El logo no puede pesar más de 2 MB.";
 export const LOGO_INVALID_TYPE_MESSAGE =
-  "Formato no admitido. Usa PNG, JPG/JPEG o WebP (SVG no se admite por ahora).";
+  "Formato no admitido. Usa PNG, JPG/JPEG, WebP o AVIF (SVG no se admite por ahora).";
+/** §23 · El contenido no coincide con ninguna imagen que sepamos procesar. */
+export const LOGO_CONTENT_MISMATCH_MESSAGE =
+  "El archivo no es una imagen que podamos procesar. Vuelve a exportarlo como PNG, JPG, WebP o AVIF.";
 
-/** Validación de negocio (Parte 6/9): tamaño máximo 2 MB, solo
- *  PNG/JPG/JPEG/WebP — SVG excluido a propósito ("si no se maneja de
- *  forma segura, no permitir SVG por ahora": un SVG puede llevar
- *  script embebido, y este sprint no agrega saneamiento para eso). */
+/** Validación de negocio: tamaño máximo 2 MB y un tipo declarado de la lista.
+ *
+ *  OJO: el tipo declarado es una AFIRMACIÓN DEL NAVEGADOR, y basta renombrar un
+ *  archivo para que mienta. Esta comprobación es la primera puerta, no la
+ *  única: el servidor vuelve a mirar el CONTENIDO antes de guardar nada
+ *  (§23). */
 export function validateLogoFile(file: { size: number; type: string }): SettingsValidation {
   if (file.size <= 0) {
     return { error: "Selecciona un archivo de imagen." };
@@ -201,6 +220,8 @@ export function logoExtensionForType(type: string): string {
       return "png";
     case "image/webp":
       return "webp";
+    case "image/avif":
+      return "avif";
     default:
       return "jpg";
   }

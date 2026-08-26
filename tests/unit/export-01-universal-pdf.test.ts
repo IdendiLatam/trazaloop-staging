@@ -454,14 +454,19 @@ check("E12. el mapa dibuja nodos, categorías y relaciones", () => {
 console.log("\nF · Identidad de empresa y formatos de imagen");
 
 check("F1. todo formato de logo que la plataforma acepta se puede incrustar", () => {
-  const convert = read("lib/pdf/convert.ts");
-  for (const mime of ALLOWED_LOGO_TYPES) {
-    assert(convert.includes(`"${mime}"`) || /NATIVE\.has/.test(convert),
-      `${mime} se acepta al subir pero no se resuelve para el PDF`);
+  // EXPORT-01.3 · La resolución dejó de ser «convertir lo que el escritor no
+  // entiende» y pasó a ser «normalizar SIEMPRE». La invariante es la misma y
+  // más fuerte: lo que se acepta al subir tiene que poder normalizarse.
+  const settings = read("lib/domain/settings.ts");
+  const kinds = read("lib/pdf/image-kind.ts");
+  const mimes = [...settings.matchAll(/"(image\/[a-z+]+)"/g)].map((m) => m[1]);
+  assert(mimes.length >= 3, "no se encontraron los formatos aceptados");
+  for (const mime of mimes) {
+    const sub = mime.split("/")[1];
+    assert(new RegExp(`"${sub}"`).test(kinds),
+      `${mime} se acepta al subir pero el normalizador no lo reconoce`);
   }
-  assert(convert.includes("image/webp"),
-    "WebP se acepta al subir: el PDF tiene que poder convertirlo");
-  assert(/canEmbed/.test(convert), "debe existir la comprobación pública");
+  assert(/SUPPORTED_LOGO_KINDS/.test(kinds), "debe existir la lista pública de formatos");
 });
 
 check("F2. el logo NUNCA llega desde la petición", () => {
