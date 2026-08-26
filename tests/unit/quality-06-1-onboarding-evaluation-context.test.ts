@@ -52,11 +52,20 @@ console.log("\nQUALITY-06.1 · puras y estáticas\n");
 // ---------------------------------------------------------------------------
 console.log("A · El onboarding es DERIVADO: no hay dominio nuevo");
 
-check("A1. este sprint no añade ninguna migración", () => {
-  const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
-  const posteriores = files.filter((f) => Number(f.slice(0, 4)) > 124);
-  assert(posteriores.length === 0,
-    `QUALITY-06.1 debía resolverse sin esquema y apareció: ${posteriores.join(", ")}`);
+check("A1. este sprint no añadió ninguna migración propia", () => {
+  // La comprobación original decía «ninguna migración por encima de 0124», que
+  // era cierto ese día y deja de serlo en cuanto otro sprint añade esquema. Lo
+  // que QUALITY-06.1 tiene que sostener es que SUS dos funcionalidades se
+  // resolvieron sin esquema: no existe ninguna migración de onboarding ni de
+  // contexto de evaluación. El contenido lo comprueba A2.
+  // Solo las migraciones POSTERIORES a QUALITY-06: `0067` y `0069` son el
+  // onboarding de la EMPRESA en la plataforma, del Sprint 10D, y no tienen
+  // nada que ver con el de una persona en un cargo.
+  const files = readdirSync(join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) > 124);
+  const mias = files.filter((f) => /onboarding|evaluation[_-]context|contexto/i.test(f));
+  assert(mias.length === 0,
+    `QUALITY-06.1 debía resolverse sin esquema y apareció: ${mias.join(", ")}`);
 });
 
 check("A2. no existe ninguna tabla ni columna de onboarding", () => {

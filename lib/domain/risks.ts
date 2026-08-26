@@ -21,12 +21,20 @@
 // Metodología (RO-03, RO-04, RO-15)
 // ---------------------------------------------------------------------------
 
-export const METHODOLOGY_SCOPES = ["risk", "opportunity"] as const;
+/**
+ * QUALITY-07 · A este motor se le añadió un tercer alcance:
+ * «supplier_criticality». No es un tipo de riesgo distinto, es el mismo
+ * mecanismo —escalas, niveles, versiones, bandas de resultado— aplicado a
+ * cuánto pesa depender de un proveedor. Duplicarlo habría significado mantener
+ * dos motores de metodología que hacen lo mismo (MDR-46).
+ */
+export const METHODOLOGY_SCOPES = ["risk", "opportunity", "supplier_criticality"] as const;
 export type MethodologyScope = (typeof METHODOLOGY_SCOPES)[number];
 
 export const METHODOLOGY_SCOPE_LABEL: Record<MethodologyScope, string> = {
   risk: "Riesgos",
   opportunity: "Oportunidades",
+  supplier_criticality: "Criticidad de proveedores",
 };
 
 export const METHODOLOGY_APPROACHES = ["qualitative", "semi_quantitative", "custom"] as const;

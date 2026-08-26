@@ -797,6 +797,128 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: noHistory(
       "El onboarding se compone en el momento de la descarga: el perfil del cargo SÍ se lee por la fecha de la asignación, pero el desarrollo abierto, el conocimiento por recibir y las tareas pendientes solo existen en su estado de hoy. Imprimir esas tres como si fueran del pasado sería fabricarlo."),
   },
+  // ------------------------------------------------------------------
+  // QUALITY-07 · proveedores
+  //
+  // Los nombres llevan apellido: PCR ya tiene «Proveedor» y Textiles tiene
+  // «Proveedor textil». Son la MISMA empresa vista desde otro módulo, pero no
+  // el mismo objeto documental, y dos filas con el mismo nombre convierten el
+  // inventario en una trampa.
+  // ------------------------------------------------------------------
+  {
+    entity: "Proveedor evaluado", module: "quality", route: "/quality/suppliers/[profileId]",
+    klass: "C",
+    detail: has("quality.supplier.detail"),
+    list: has("quality.supplier.list"),
+    historical: has("quality.supplier-approval.historical"),
+  },
+  {
+    entity: "Empresa externa", module: "quality", route: null, klass: "D",
+    detail: embedded("Proveedor evaluado",
+      "La identidad empresarial se comparte con PCR y con Textiles; se imprime dentro de la ficha del papel que la usa, porque «empresa externa» sin decir en qué papel no responde ninguna pregunta."),
+    list: embedded("Proveedor evaluado",
+      "La identidad empresarial se comparte con PCR y con Textiles; se imprime dentro de la ficha del papel que la usa."),
+    historical: embedded("Decisión de aprobación de proveedor",
+      "Lo que cambia con el tiempo no es la empresa: son las decisiones que se tomaron sobre ella."),
+  },
+  {
+    entity: "Sede de proveedor", module: "quality",
+    route: "/quality/suppliers/[profileId]/sites/[siteId]", klass: "A",
+    detail: has("quality.supplier-site.detail"),
+    list: embedded("Proveedor evaluado",
+      "Las sedes de un proveedor se listan dentro de su ficha: un listado global de sedes sin decir de quién no se consulta nunca."),
+    historical: noHistory(
+      "La sede no versiona. Lo que cambia con el tiempo son los alcances que la incluyen, y eso se lee en la decisión de aprobación del alcance, que sí conserva su versión."),
+  },
+  {
+    entity: "Contacto de proveedor", module: "quality", route: null, klass: "D",
+    detail: embedded("Proveedor evaluado"),
+    list: embedded("Proveedor evaluado"),
+    historical: embedded("Proveedor evaluado"),
+  },
+  {
+    entity: "Categoría de proveedor", module: "quality",
+    route: "/quality/suppliers/categories", klass: "B",
+    detail: na(LIST_ONLY_NO_SHEET),
+    list: has("quality.supplier-category.list"),
+    historical: noHistory(
+      "El catálogo de categorías no versiona. Lo fechado es la ASIGNACIÓN de una categoría a un proveedor, que lleva su propio periodo y se imprime en la ficha."),
+  },
+  {
+    entity: "Alcance de suministro", module: "quality", route: null, klass: "D",
+    detail: embedded("Proveedor evaluado",
+      "El alcance es la unidad sobre la que se clasifica, se evalúa y se decide; su ficha propia sería la del proveedor con una sola fila. Sus dos documentos con identidad —la criticidad y la decisión— sí existen aparte."),
+    list: embedded("Proveedor evaluado",
+      "Los alcances se listan dentro de la ficha del proveedor al que pertenecen."),
+    historical: has("quality.supplier-approval.historical"),
+  },
+  {
+    entity: "Criticidad de proveedor", module: "quality", route: null, klass: "A",
+    detail: has("quality.supplier-criticality.detail"),
+    list: embedded("Proveedor evaluado",
+      "La criticidad de cada alcance se lee en la tabla de alcances de la ficha del proveedor."),
+    historical: has("quality.supplier-criticality.detail"),
+  },
+  {
+    entity: "Requisito a proveedores", module: "quality",
+    route: "/quality/suppliers/categories", klass: "B",
+    detail: na(LIST_ONLY_NO_SHEET),
+    list: has("quality.supplier-requirement.list"),
+    historical: noHistory(
+      "El requisito no versiona; su asignación sí lleva periodo, y el listado la imprime con sus fechas de entrada y de retirada."),
+  },
+  {
+    entity: "Documento de proveedor", module: "quality", route: null, klass: "D",
+    detail: embedded("Proveedor evaluado",
+      "Un certificado del proveedor es evidencia dentro de su ficha; el archivo original vive donde lo emitieron."),
+    list: embedded("Proveedor evaluado"),
+    historical: embedded("Evaluación de proveedor",
+      "Qué evidencia sostuvo cada criterio queda escrito en la evaluación que la usó."),
+  },
+  {
+    entity: "Plantilla de evaluación de proveedor", module: "quality",
+    route: "/quality/suppliers/templates", klass: "D",
+    detail: embedded("Evaluación de proveedor",
+      "Los criterios y los pesos se imprimen DENTRO de la evaluación que los usó: es la única forma de que el papel diga con qué se midió realmente."),
+    list: embedded("Evaluación de proveedor"),
+    historical: embedded("Evaluación de proveedor",
+      "La evaluación guarda la versión con la que se hizo, así que su PDF ya es el documento de esa versión."),
+  },
+  {
+    entity: "Evaluación de proveedor", module: "quality",
+    route: "/quality/suppliers/evaluations/[evaluationId]", klass: "C",
+    detail: has("quality.supplier-evaluation.detail"),
+    list: has("quality.supplier-evaluation.list"),
+    historical: has("quality.supplier-evaluation.detail"),
+  },
+  {
+    entity: "Decisión de aprobación de proveedor", module: "quality", route: null, klass: "A",
+    detail: has("quality.supplier-approval.detail"),
+    list: has("quality.approved-supplier.list"),
+    historical: has("quality.supplier-approval.historical"),
+  },
+  {
+    entity: "Incidente de proveedor", module: "quality", route: null, klass: "D",
+    detail: embedded("Proveedor evaluado",
+      "Un incidente es un hecho anotado, no una no conformidad. Cuando merece tratamiento se abre un CASO, y el caso sí tiene su propio documento."),
+    list: embedded("Desempeño de proveedor"),
+    historical: embedded("Desempeño de proveedor"),
+  },
+  {
+    entity: "Desempeño de proveedor", module: "quality", route: null, klass: "A",
+    detail: has("quality.supplier-performance.detail"),
+    list: na(PROJECTION_NOT_ENTITY),
+    historical: noHistory(
+      "El informe reúne las evaluaciones cerradas y los incidentes hasta hoy. Cada evaluación, por separado, sí es un documento del pasado con su propia versión de plantilla."),
+  },
+  {
+    entity: "Reevaluación pendiente de proveedor", module: "quality",
+    route: "/quality/suppliers/reevaluations", klass: "B",
+    detail: na(PROJECTION_NOT_ENTITY),
+    list: has("quality.supplier-reevaluation.list"),
+    historical: noHistory(
+      "Reconstruir qué estaba pendiente en una fecha pasada exigiría guardar cada fecha de revisión calculada, y el dominio no la guarda: la deriva de la última evaluación y de la cadencia vigentes."),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

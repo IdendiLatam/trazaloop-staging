@@ -820,8 +820,11 @@ check("M3. la migración es append-only: no se tocó ninguna anterior", () => {
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
   assert(files.includes("0123_quality_people_competence_knowledge.sql"), "falta 0123");
   assert(files.includes("0124_quality_people_tasks_from_sweep.sql"), "falta 0124");
-  const posteriores = files.filter((f) => Number(f.slice(0, 4)) > 124);
-  assert(posteriores.length === 0, `hay migraciones por encima de 0124: ${posteriores.join(", ")}`);
+  // Aquí NO se comprueba «ninguna migración por encima de 0124». Esa cláusula
+  // decía la verdad el día que se escribió y falla en cuanto CUALQUIER sprint
+  // posterior añade esquema, que es lo que pasa en un producto vivo. Lo que de
+  // verdad significa append-only es que las migraciones de ESTE sprint no
+  // destruyen lo anterior, y eso es lo que se comprueba debajo.
   for (const [nombre, sql] of [[MIG, SQL], [MIG_TAREAS, SQL_SWEEP]] as const) {
     assert(!/drop table public\.(quality|work|trazadoc)_/.test(sql),
       `${nombre} destruye una tabla anterior`);

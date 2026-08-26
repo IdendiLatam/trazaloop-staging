@@ -35,6 +35,9 @@ export const LIFECYCLE_ENTITIES = [
   "indicator", "objective", "position", "document", "process",
   "case", "action",
   "risk", "opportunity", "control", "methodology_version",
+  // QUALITY-07 · El proveedor entra AQUÍ y no en un enumerado propio: el
+  // dictamen lo emite la misma función de la base que para todo lo demás.
+  "supplier",
 ] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
@@ -169,6 +172,8 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar esta oportunidad mientras siga en borrador y sin priorizar. Después podrás descartarla dejando dicho por qué.",
   control:
     "Podrás eliminar este control mientras siga en borrador y no sustente ninguna evaluación residual. Después podrás retirarlo, conservando su historia.",
+  supplier:
+    "Podrás eliminar este proveedor mientras no tenga evaluaciones, decisiones ni incidentes. En cuanto tenga historia se retira, no se borra: lo que se decidió sobre él sigue haciendo falta para explicar por qué se le compró.",
   methodology_version:
     "Podrás eliminar esta versión mientras siga en borrador y no se haya usado para evaluar. Una vez publicada, se sustituye por una versión nueva en lugar de reescribirla.",
 };
@@ -186,6 +191,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   opportunity: "oportunidad",
   control: "control",
   methodology_version: "versión de la metodología",
+  supplier: "proveedor",
 };
 
 /**

@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **127** |
-| Ejes clasificados (ficha · listado · histórico) | **381** |
-| `AVAILABLE` | **151** |
-| `EMBEDDED` | **143** |
-| `NOT_APPLICABLE` | **55** |
-| `HISTORICAL_NOT_SUPPORTED` | **32** |
+| Entidades clasificadas | **142** |
+| Ejes clasificados (ficha · listado · histórico) | **426** |
+| `AVAILABLE` | **168** |
+| `EMBEDDED` | **162** |
+| `NOT_APPLICABLE` | **59** |
+| `HISTORICAL_NOT_SUPPORTED` | **37** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **110** |
+| Claves distintas en el registro | **123** |
 
 ## Quality
 
@@ -100,6 +100,21 @@ No existe `PENDING`.
 | Lección aprendida | `/quality/people/lessons` | C | **AVAILABLE** · `quality.lesson.detail` | **AVAILABLE** · `quality.lesson.list` | **AVAILABLE** · `quality.lesson.detail` |
 | Propuesta de lección | — | D | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* |
 | Onboarding del sistema de gestión | `/quality/people/[id]/onboarding/[assignmentId]` | A | **AVAILABLE** · `quality.onboarding.detail` | N/A | **HISTORICAL_NOT_SUPPORTED** |
+| Proveedor evaluado | `/quality/suppliers/[profileId]` | C | **AVAILABLE** · `quality.supplier.detail` | **AVAILABLE** · `quality.supplier.list` | **AVAILABLE** · `quality.supplier-approval.historical` |
+| Empresa externa | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Decisión de aprobación de proveedor* |
+| Sede de proveedor | `/quality/suppliers/[profileId]/sites/[siteId]` | A | **AVAILABLE** · `quality.supplier-site.detail` | EMBEDDED · dentro de *Proveedor evaluado* | **HISTORICAL_NOT_SUPPORTED** |
+| Contacto de proveedor | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Proveedor evaluado* |
+| Categoría de proveedor | `/quality/suppliers/categories` | B | N/A | **AVAILABLE** · `quality.supplier-category.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Alcance de suministro | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Proveedor evaluado* | **AVAILABLE** · `quality.supplier-approval.historical` |
+| Criticidad de proveedor | — | A | **AVAILABLE** · `quality.supplier-criticality.detail` | EMBEDDED · dentro de *Proveedor evaluado* | **AVAILABLE** · `quality.supplier-criticality.detail` |
+| Requisito a proveedores | `/quality/suppliers/categories` | B | N/A | **AVAILABLE** · `quality.supplier-requirement.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Documento de proveedor | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Evaluación de proveedor* |
+| Plantilla de evaluación de proveedor | `/quality/suppliers/templates` | D | EMBEDDED · dentro de *Evaluación de proveedor* | EMBEDDED · dentro de *Evaluación de proveedor* | EMBEDDED · dentro de *Evaluación de proveedor* |
+| Evaluación de proveedor | `/quality/suppliers/evaluations/[evaluationId]` | C | **AVAILABLE** · `quality.supplier-evaluation.detail` | **AVAILABLE** · `quality.supplier-evaluation.list` | **AVAILABLE** · `quality.supplier-evaluation.detail` |
+| Decisión de aprobación de proveedor | — | A | **AVAILABLE** · `quality.supplier-approval.detail` | **AVAILABLE** · `quality.approved-supplier.list` | **AVAILABLE** · `quality.supplier-approval.historical` |
+| Incidente de proveedor | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Desempeño de proveedor* | EMBEDDED · dentro de *Desempeño de proveedor* |
+| Desempeño de proveedor | — | A | **AVAILABLE** · `quality.supplier-performance.detail` | N/A | **HISTORICAL_NOT_SUPPORTED** |
+| Reevaluación pendiente de proveedor | `/quality/suppliers/reevaluations` | B | N/A | **AVAILABLE** · `quality.supplier-reevaluation.list` | **HISTORICAL_NOT_SUPPORTED** |
 
 ## TrazaDocs
 
@@ -416,3 +431,31 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Propuesta de lección | Histórico | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Onboarding del sistema de gestión | Listado | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
 | Onboarding del sistema de gestión | Histórico | HISTORICAL_NOT_SUPPORTED | El onboarding se compone en el momento de la descarga: el perfil del cargo SÍ se lee por la fecha de la asignación, pero el desarrollo abierto, el conocimiento por recibir y las tareas pendientes solo existen en su estado de hoy. Imprimir esas tres como si fueran del pasado sería fabricarlo. |
+| Empresa externa | Ficha | EMBEDDED | Dentro de *Proveedor evaluado*. La identidad empresarial se comparte con PCR y con Textiles; se imprime dentro de la ficha del papel que la usa, porque «empresa externa» sin decir en qué papel no responde ninguna pregunta. |
+| Empresa externa | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. La identidad empresarial se comparte con PCR y con Textiles; se imprime dentro de la ficha del papel que la usa. |
+| Empresa externa | Histórico | EMBEDDED | Dentro de *Decisión de aprobación de proveedor*. Lo que cambia con el tiempo no es la empresa: son las decisiones que se tomaron sobre ella. |
+| Sede de proveedor | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. Las sedes de un proveedor se listan dentro de su ficha: un listado global de sedes sin decir de quién no se consulta nunca. |
+| Sede de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | La sede no versiona. Lo que cambia con el tiempo son los alcances que la incluyen, y eso se lee en la decisión de aprobación del alcance, que sí conserva su versión. |
+| Contacto de proveedor | Ficha | EMBEDDED | Dentro de *Proveedor evaluado*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Contacto de proveedor | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Contacto de proveedor | Histórico | EMBEDDED | Dentro de *Proveedor evaluado*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Categoría de proveedor | Ficha | NOT_APPLICABLE | Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Categoría de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | El catálogo de categorías no versiona. Lo fechado es la ASIGNACIÓN de una categoría a un proveedor, que lleva su propio periodo y se imprime en la ficha. |
+| Alcance de suministro | Ficha | EMBEDDED | Dentro de *Proveedor evaluado*. El alcance es la unidad sobre la que se clasifica, se evalúa y se decide; su ficha propia sería la del proveedor con una sola fila. Sus dos documentos con identidad —la criticidad y la decisión— sí existen aparte. |
+| Alcance de suministro | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. Los alcances se listan dentro de la ficha del proveedor al que pertenecen. |
+| Criticidad de proveedor | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. La criticidad de cada alcance se lee en la tabla de alcances de la ficha del proveedor. |
+| Requisito a proveedores | Ficha | NOT_APPLICABLE | Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Requisito a proveedores | Histórico | HISTORICAL_NOT_SUPPORTED | El requisito no versiona; su asignación sí lleva periodo, y el listado la imprime con sus fechas de entrada y de retirada. |
+| Documento de proveedor | Ficha | EMBEDDED | Dentro de *Proveedor evaluado*. Un certificado del proveedor es evidencia dentro de su ficha; el archivo original vive donde lo emitieron. |
+| Documento de proveedor | Listado | EMBEDDED | Dentro de *Proveedor evaluado*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Documento de proveedor | Histórico | EMBEDDED | Dentro de *Evaluación de proveedor*. Qué evidencia sostuvo cada criterio queda escrito en la evaluación que la usó. |
+| Plantilla de evaluación de proveedor | Ficha | EMBEDDED | Dentro de *Evaluación de proveedor*. Los criterios y los pesos se imprimen DENTRO de la evaluación que los usó: es la única forma de que el papel diga con qué se midió realmente. |
+| Plantilla de evaluación de proveedor | Listado | EMBEDDED | Dentro de *Evaluación de proveedor*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Plantilla de evaluación de proveedor | Histórico | EMBEDDED | Dentro de *Evaluación de proveedor*. La evaluación guarda la versión con la que se hizo, así que su PDF ya es el documento de esa versión. |
+| Incidente de proveedor | Ficha | EMBEDDED | Dentro de *Proveedor evaluado*. Un incidente es un hecho anotado, no una no conformidad. Cuando merece tratamiento se abre un CASO, y el caso sí tiene su propio documento. |
+| Incidente de proveedor | Listado | EMBEDDED | Dentro de *Desempeño de proveedor*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Incidente de proveedor | Histórico | EMBEDDED | Dentro de *Desempeño de proveedor*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Desempeño de proveedor | Listado | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Desempeño de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | El informe reúne las evaluaciones cerradas y los incidentes hasta hoy. Cada evaluación, por separado, sí es un documento del pasado con su propia versión de plantilla. |
+| Reevaluación pendiente de proveedor | Ficha | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Reevaluación pendiente de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | Reconstruir qué estaba pendiente en una fecha pasada exigiría guardar cada fecha de revisión calculada, y el dominio no la guarda: la deriva de la última evaluación y de la cadencia vigentes. |

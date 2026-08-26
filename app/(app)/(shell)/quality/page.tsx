@@ -17,6 +17,7 @@ import { listObjectives, listIndicators } from "@/lib/db/quality-indicators";
 import { getCaseSummary } from "@/lib/db/work-cases";
 import { getRiskSummary } from "@/lib/db/risks";
 import { getPeopleSignals } from "@/lib/db/quality-people";
+import { getSupplierHomeSignals } from "@/lib/db/quality-suppliers";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -53,7 +54,8 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks, objectives, indicators, cases, risks, people] = await Promise.all([
+  const [summary, tasks, objectives, indicators, cases, risks, people, suppliers] =
+    await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
@@ -61,6 +63,7 @@ export default async function QualityHomePage() {
     getCaseSummary(org.organizationId),
     getRiskSummary(org.organizationId),
     getPeopleSignals(org.organizationId),
+    getSupplierHomeSignals(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -156,6 +159,36 @@ export default async function QualityHomePage() {
     performanceLines.push(plural(pendingMeasurement.length, "medición pendiente", "mediciones pendientes"));
   }
 
+  // QUALITY-07 · Lo que pide una decisión humana sobre un proveedor. Ninguna de
+  // estas líneas cambia nada por su cuenta: una revisión vencida no suspende, y
+  // un certificado por caducar no retira ninguna aprobación.
+  const supplierLines: string[] = [];
+  if (suppliers.reevaluationOverdue > 0) {
+    supplierLines.push(
+      plural(suppliers.reevaluationOverdue, "proveedor con reevaluación vencida", "proveedores con reevaluación vencida")
+    );
+  }
+  if (suppliers.approvalsExpired > 0) {
+    supplierLines.push(
+      plural(suppliers.approvalsExpired, "aprobación caducada", "aprobaciones caducadas")
+    );
+  }
+  if (suppliers.criticalWithoutApproval > 0) {
+    supplierLines.push(
+      plural(suppliers.criticalWithoutApproval, "alcance crítico sin decisión de aprobación", "alcances críticos sin decisión de aprobación")
+    );
+  }
+  if (suppliers.documentsExpiring > 0) {
+    supplierLines.push(
+      plural(suppliers.documentsExpiring, "documento de proveedor por vencer", "documentos de proveedor por vencer")
+    );
+  }
+  if (suppliers.openIncidents > 0) {
+    supplierLines.push(
+      plural(suppliers.openIncidents, "incidente de proveedor abierto", "incidentes de proveedor abiertos")
+    );
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <header className="space-y-2">
@@ -232,6 +265,25 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/people" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver personas →
+          </Link>
+        </section>
+      ) : null}
+
+      {supplierLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Proveedores</h2>
+          <ul className="mt-1 space-y-0.5">
+            {supplierLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Todo esto son avisos. Una reevaluación vencida no suspende a nadie y un
+            certificado caducado no retira ninguna aprobación: quien decide sigue siendo
+            una persona, y para un alcance concreto.
+          </p>
+          <Link href="/quality/suppliers" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver proveedores →
           </Link>
         </section>
       ) : null}

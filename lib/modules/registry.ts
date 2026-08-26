@@ -311,6 +311,23 @@ export const QUALITY_PERSONAS_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * QUALITY-07 · Proveedores.
+ *
+ * Cuatro entradas y ni una más. Categorías, requisitos y plantillas de
+ * evaluación son configuración del dominio y viven dentro, no en el menú: un
+ * módulo con quince opciones no se explora, se sufre.
+ */
+export const QUALITY_PROVEEDORES_GROUP: ModuleNavGroup = {
+  title: "Proveedores",
+  items: [
+    { label: "Proveedores", href: "/quality/suppliers", exact: true },
+    { label: "Categorías", href: "/quality/suppliers/categories" },
+    { label: "Evaluaciones", href: "/quality/suppliers/evaluations" },
+    { label: "Reevaluaciones", href: "/quality/suppliers/reevaluations" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -324,8 +341,9 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_DESEMPENO_GROUP,
-           QUALITY_RIESGOS_GROUP, QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
+           QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP, QUALITY_CASOS_GROUP,
+           QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

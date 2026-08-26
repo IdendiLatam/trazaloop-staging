@@ -83,6 +83,11 @@ const TASK_TONE: Record<TaskType, string> = {
   knowledge_transfer_execution: "border-amber/40 bg-amber/5",
   knowledge_continuity_review: "border-amber/40 bg-amber/5",
   lesson_proposal_decision: "border-loop/30 bg-loop/5",
+  supplier_reevaluation_due: "border-amber/40 bg-amber/5",
+  supplier_evaluation_completion: "border-loop/30 bg-loop/5",
+  supplier_approval_review: "border-amber/40 bg-amber/5",
+  supplier_document_renewal: "border-amber/40 bg-amber/5",
+  supplier_criticality_review: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -108,6 +113,11 @@ const TASK_CTA: Record<TaskType, string> = {
   knowledge_transfer_execution: "Ver la transferencia",
   knowledge_continuity_review: "Ver el conocimiento",
   lesson_proposal_decision: "Ver la lección",
+  supplier_reevaluation_due: "Reevaluar el proveedor",
+  supplier_evaluation_completion: "Terminar la evaluación",
+  supplier_approval_review: "Ver la ficha del proveedor",
+  supplier_document_renewal: "Ver el documento",
+  supplier_criticality_review: "Revisar la criticidad",
 };
 
 /**
@@ -160,6 +170,17 @@ function subjectHref(
       return `/quality/people/knowledge`;
     case "quality_lesson_learned":
       return `/quality/people/lessons`;
+    // QUALITY-07 · El proveedor y la evaluación tienen ficha propia. El alcance
+    // y el documento se ven DENTRO de la ficha del proveedor, y la tarea no
+    // guarda a cuál pertenecen, así que llevan al listado en lugar de a una
+    // ruta que no existe.
+    case "quality_supplier_profile":
+      return `/quality/suppliers/${subjectId}`;
+    case "quality_supplier_evaluation":
+      return `/quality/suppliers/evaluations/${subjectId}`;
+    case "quality_supplier_scope":
+    case "quality_supplier_document":
+      return `/quality/suppliers`;
     default:
       return null;
   }

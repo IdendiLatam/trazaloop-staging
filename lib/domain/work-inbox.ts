@@ -37,6 +37,11 @@ export const SUBJECT_TYPES = [
   "quality_learning_activity", "quality_performance_evaluation",
   "quality_knowledge_item", "quality_knowledge_transfer_plan",
   "quality_lesson_learned",
+  // QUALITY-07 · Proveedores. El asunto de una tarea de proveedor es el
+  // ALCANCE o la evaluación, no «el proveedor» a secas: la mayoría de las
+  // preguntas de este dominio no tienen respuesta sin decir para qué.
+  "quality_supplier_profile", "quality_supplier_scope",
+  "quality_supplier_evaluation", "quality_supplier_document",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -80,6 +85,12 @@ export const TASK_TYPES = [
   "knowledge_transfer_execution",
   "knowledge_continuity_review",
   "lesson_proposal_decision",
+  // QUALITY-07
+  "supplier_reevaluation_due",
+  "supplier_evaluation_completion",
+  "supplier_approval_review",
+  "supplier_document_renewal",
+  "supplier_criticality_review",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -106,6 +117,11 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   knowledge_transfer_execution: "Transferir conocimiento",
   knowledge_continuity_review: "Revisar un conocimiento concentrado",
   lesson_proposal_decision: "Decidir sobre una propuesta de una lección",
+  supplier_reevaluation_due: "Reevaluar un proveedor",
+  supplier_evaluation_completion: "Terminar una evaluación de proveedor",
+  supplier_approval_review: "Revisar la aprobación de un proveedor",
+  supplier_document_renewal: "Renovar un documento de un proveedor",
+  supplier_criticality_review: "Revisar la criticidad de un proveedor",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -149,6 +165,15 @@ export const ALERT_TYPES = [
   "knowledge_single_holder",
   "knowledge_transfer_overdue",
   "critical_position_vacant",
+  // QUALITY-07 · Ninguno de estos suspende a nadie ni retira una aprobación:
+  // dicen que hay algo que mirar, y quien decide sigue siendo una persona.
+  "supplier_reevaluation_overdue",
+  "supplier_approval_expiring",
+  "supplier_approval_expired",
+  "supplier_document_expiring",
+  "supplier_document_expired",
+  "supplier_critical_unapproved",
+  "supplier_incident_streak",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -178,6 +203,13 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   knowledge_single_holder: "Un conocimiento crítico depende de una sola persona",
   knowledge_transfer_overdue: "Una transferencia de conocimiento venció",
   critical_position_vacant: "Un cargo crítico se quedó sin titular",
+  supplier_reevaluation_overdue: "La reevaluación de un proveedor venció",
+  supplier_approval_expiring: "Una aprobación de proveedor está por caducar",
+  supplier_approval_expired: "Una aprobación de proveedor caducó",
+  supplier_document_expiring: "Un documento de un proveedor está por vencer",
+  supplier_document_expired: "Un documento de un proveedor venció",
+  supplier_critical_unapproved: "Hay un alcance crítico sin decisión de aprobación",
+  supplier_incident_streak: "Un proveedor acumula incidentes",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

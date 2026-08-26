@@ -64,6 +64,14 @@ import {
   qualityTransferPlanDetail,
 } from "./adapters/quality-development";
 import { qualityOnboardingDetail } from "./adapters/quality-onboarding";
+import {
+  qualityApprovedSupplierList, qualitySupplierApprovalDetail,
+  qualitySupplierApprovalHistorical, qualitySupplierCategoryList,
+  qualitySupplierCriticalityDetail, qualitySupplierDetail,
+  qualitySupplierEvaluationDetail, qualitySupplierEvaluationList, qualitySupplierList,
+  qualitySupplierPerformanceDetail, qualitySupplierReevaluationList,
+  qualitySupplierRequirementList, qualitySupplierSiteDetail,
+} from "./adapters/quality-suppliers";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -174,6 +182,23 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   // QUALITY-06.1 · el onboarding, que es una VISTA derivada y no una tabla
   // ------------------------------------------------------------------
   qualityOnboardingDetail,
+
+  // ------------------------------------------------------------------
+  // QUALITY-07 · proveedores, criticidad, evaluación y reevaluación
+  //
+  // Ninguno de estos papeles dice «proveedor aprobado» a secas: la aprobación
+  // se imprime por ALCANCE, porque una afirmación más amplia que la decisión
+  // que documenta es exactamente lo que se enseña en una auditoría creyendo
+  // que dice lo que no dice.
+  // ------------------------------------------------------------------
+  qualitySupplierDetail, qualitySupplierList,
+  qualityApprovedSupplierList,
+  qualitySupplierSiteDetail,
+  qualitySupplierCategoryList, qualitySupplierRequirementList,
+  qualitySupplierEvaluationDetail, qualitySupplierEvaluationList,
+  qualitySupplierCriticalityDetail,
+  qualitySupplierApprovalDetail, qualitySupplierApprovalHistorical,
+  qualitySupplierReevaluationList, qualitySupplierPerformanceDetail,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

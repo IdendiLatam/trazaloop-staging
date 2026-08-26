@@ -52,6 +52,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0123_quality_people_competence_knowledge.sql",
   // QUALITY-06: el barrido de Personas también genera tareas.
   "0124_quality_people_tasks_from_sweep.sql",
+  // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
+  "0125_quality_suppliers_evaluation.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

@@ -57,6 +57,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0123_quality_people_competence_knowledge.sql",
   // QUALITY-06: el barrido de Personas también genera tareas.
   "0124_quality_people_tasks_from_sweep.sql",
+  // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
+  "0125_quality_suppliers_evaluation.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -349,6 +351,8 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0123_quality_people_competence_knowledge.sql",
     // QUALITY-06: el barrido de Personas también genera tareas.
     "0124_quality_people_tasks_from_sweep.sql",
+    // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
+    "0125_quality_suppliers_evaluation.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);
