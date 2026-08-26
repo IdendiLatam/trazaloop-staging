@@ -11,6 +11,7 @@ import {
   CANCEL_IS_NOT_DELETE, CHECK_IS_NOT_A_FINDING, CHECK_OUTCOME_LABEL,
   CHECKLIST_IS_OPTIONAL, CHECKLIST_VERSION_STATUS_LABEL,
   CLOSING_AUDIT_IS_NOT_CLOSING_ACTIONS, CONCLUSIONS_ARE_HUMAN, CONFLICT_KIND_LABEL,
+  CONFORMITY_IS_LOCAL,
   CONFLICT_STATUS_LABEL, CRITERION_IS_NOT_A_QUESTION, CRITERION_KIND_LABEL,
   describeCoverage, describeFollowUp, describeSample, EVIDENCE_IS_NOT_A_FINDING,
   EVIDENCE_IS_REFERENCED, EVIDENCE_KIND_LABEL, FINDING_CLASSIFICATION_LABEL,
@@ -999,7 +1000,7 @@ export const qualityAuditFindingDetail: ExportDefinition = {
         generatedAt: req.generatedAt, generatedByName: req.generatedByName,
         sections: [
           section(null, note(FINDING_IS_NOT_NC), note(OBSERVATION_IS_NOT_NC),
-            currentStateNote(req.generatedAt)),
+            note(CONFORMITY_IS_LOCAL), currentStateNote(req.generatedAt)),
           section("El hallazgo", fields([
             requiredField("Código", finding.code),
             requiredField("Auditoría", audit ? `${audit.code} · ${audit.title}` : "—"),

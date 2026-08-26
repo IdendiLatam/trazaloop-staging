@@ -405,6 +405,23 @@ check("E8. la clasificación FORMAL se LEE del caso, no se deriva", () => {
     "la clasificación del caso no viene de work_cases");
 });
 
+check("E10. la conformidad se declara LOCAL, no global", () => {
+  assert(/CONFORMITY_IS_LOCAL/.test(DOMAIN), "no existe la advertencia");
+  assert(/CONFORMITY_IS_LOCAL/.test(COMPONENTS),
+    "la pantalla de hallazgos no dice que la conformidad es local");
+  assert(/CONFORMITY_IS_LOCAL/.test(ADAPTERS),
+    "el papel del hallazgo no lo dice");
+});
+
+check("E11. la reunión de cierre PRESENTA; no clasifica", () => {
+  assert(/CLOSING_MEETING_PRESENTS/.test(DOMAIN), "no existe la advertencia");
+  assert(/CLOSING_MEETING_PRESENTS/.test(COMPONENTS), "la pantalla no lo dice");
+  const f = SQL.slice(SQL.indexOf("create table public.quality_audit_meetings"));
+  const hasta = f.slice(0, 4000);
+  assert(!/insert into quality_audit_findings/.test(hasta),
+    "registrar la reunión de cierre inserta hallazgos");
+});
+
 check("E9. ningún papel llama «no conformidad» a un hallazgo", () => {
   const texto = stripTs(ADAPTERS);
   assert(!/["'][^"']*[Nn]o [Cc]onformidad detectada/.test(texto),

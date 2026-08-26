@@ -8,7 +8,7 @@ import type {
   AuditRow, FindingRow, RecurringFindingRow,
 } from "@/lib/db/quality-audits";
 import {
-  ESCALATION_IS_A_DECISION, FINDING_CLASSIFICATION_LABEL,
+  CONFORMITY_IS_LOCAL, ESCALATION_IS_A_DECISION, FINDING_CLASSIFICATION_LABEL,
   FINDING_EVALUATION_STATUS_LABEL, FINDING_IS_NOT_NC, FINDING_SEVERITY_LABEL,
   formatDate, OBSERVATION_IS_NOT_NC,
 } from "@/lib/domain/quality-audits";
@@ -40,6 +40,7 @@ export function FindingsScreen({
 
       <DomainNote>{FINDING_IS_NOT_NC}</DomainNote>
       <DomainNote>{OBSERVATION_IS_NOT_NC}</DomainNote>
+      <DomainNote>{CONFORMITY_IS_LOCAL}</DomainNote>
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Counter label="Hallazgos" value={findings.length} />
