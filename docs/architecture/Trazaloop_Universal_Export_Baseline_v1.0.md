@@ -135,6 +135,34 @@ sostener en el tiempo.
 
 ---
 
+## Addendum EXPORT-01.2 · EX-31 … EX-34
+
+**EL ENCABEZADO CORPORATIVO ES OBLIGATORIO.**
+
+- **EX-31** — Todo PDF que salga de Trazaloop lleva, en **todas** sus páginas,
+  tres elementos: el LOGO de la empresa cuando existe, el NOMBRE de la empresa y
+  el NOMBRE DEL DOCUMENTO. No hay excepciones por antigüedad, por módulo ni por
+  ahorrar espacio. Una hoja suelta de la página siete tiene que decir de quién
+  es y qué es.
+
+- **EX-32** — El NOMBRE DOCUMENTAL lo declara el REGISTRO, no el adaptador, y en
+  lenguaje humano con la nomenclatura real de la plataforma. Una clave técnica
+  nunca es visible para el usuario. El adaptador entrega un documento **sin**
+  nombre —su tipo se lo impide— y quien lo completa es el endpoint desde la
+  definición: así dos exportaciones del mismo tipo no pueden llamarse distinto.
+
+- **EX-33** — Existe UNA primitiva de encabezado y todos los motores de PDF la
+  usan. `PDF_BYPASS_HEADER = 0` es una comprobación, no una aspiración: una
+  prueba recorre el código y falla si aparece un escritor de PDF fuera de ella.
+  «Es heredado» no es una razón para no llevarlo.
+
+- **EX-34** — «No hay logo» y «hay logo y no se puede usar» son estados
+  DISTINTOS. El primero es normal y el PDF sale con el nombre como identidad. El
+  segundo se dice en el papel, sin revelar nada del almacenamiento: una empresa
+  no puede arreglar un branding roto que nadie le señala.
+
+---
+
 ## Contrato para módulos futuros
 
 Toda entidad de negocio visible que se implemente a partir de ahora debe
@@ -144,6 +172,7 @@ declarar, **durante su sprint**:
 EXPORT_DETAIL     = YES | NO
 EXPORT_LIST       = YES | NO
 EXPORT_HISTORICAL = YES | NO
+DOCUMENT_NAME     = "<nombre documental humano>"   ← EXPORT-01.2, obligatorio
 ```
 
 Un `NO` exige una razón explícita y defendible en el informe del sprint. La
