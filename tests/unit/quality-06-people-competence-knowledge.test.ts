@@ -738,10 +738,6 @@ check("L2. las claves prometidas por el inventario existen en el registro", () =
   assert(nuestras.length >= 14, `Q06 promete solo ${nuestras.length} claves propias`);
   // Y cada adaptador nuevo tiene que estar ENCHUFADO al registro: una
   // definición escrita y no registrada es una descarga que responde 404.
-  for (const k of declaradas) {
-    const nombre = /quality-people|quality-development/;
-    assert(nombre.test(REGISTRY_SOURCE), "el registro no importa los adaptadores de Q06");
-  }
   for (const imp of ["adapters/quality-people", "adapters/quality-development"]) {
     assert(REGISTRY_SOURCE.includes(imp), `el registro no importa ${imp}`);
   }

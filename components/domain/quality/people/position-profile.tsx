@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import {
-  formatDate, POSITION_FUNCTION_KIND_LABEL, POSITION_FUNCTION_KINDS,
-  POSITION_VERSION_STATUS_LABEL,
+  ASSIGNMENT_TYPE_LABEL, formatDate, POSITION_FUNCTION_KIND_LABEL, POSITION_FUNCTION_KINDS,
+  POSITION_VERSION_STATUS_LABEL, type AssignmentType,
 } from "@/lib/domain/quality-people";
 import type { PositionVersionRow } from "@/lib/db/quality-people";
 import {
@@ -21,10 +21,14 @@ import { ActionForm, Card, DomainNote, Field, inputClass, Table } from "./shared
  * evaluación de 2025 se sigue leyendo contra lo que se exigía en 2025.
  */
 export function PositionProfileView({
-  position, versions, competencies, levels, processes, canManage, today,
+  position, versions, occupants, competencies, levels, processes, canManage, today,
 }: {
   position: { id: string; name: string; code: string | null };
   versions: PositionVersionRow[];
+  occupants: {
+    assignmentId: string; personId: string; personName: string;
+    assignmentType: AssignmentType; effectiveFrom: string;
+  }[];
   competencies: { id: string; name: string }[];
   levels: { value: number; label: string }[];
   processes: { id: string; name: string }[];
@@ -53,6 +57,32 @@ export function PositionProfileView({
         funciones, autoridad, requisitos— se versiona: cada versión tiene su vigencia y
         conserva lo que exigía mientras estuvo vigente.
       </DomainNote>
+
+      <Card
+        title="Quién lo ocupa hoy"
+        description="Desde aquí se abre el onboarding de cada ocupante."
+      >
+        <Table
+          headers={["Persona", "Vínculo", "Desde", "Onboarding"]}
+          empty="Este cargo no tiene ocupantes vigentes."
+          rows={occupants.map((o) => [
+            <Link
+              key="p" href={`/quality/people/${o.personId}`}
+              className="font-medium text-loop hover:underline"
+            >
+              {o.personName}
+            </Link>,
+            ASSIGNMENT_TYPE_LABEL[o.assignmentType],
+            formatDate(o.effectiveFrom),
+            <Link
+              key="o" href={`/quality/people/${o.personId}/onboarding/${o.assignmentId}`}
+              className="font-medium text-loop hover:underline"
+            >
+              Ver onboarding
+            </Link>,
+          ])}
+        />
+      </Card>
 
       {versions.map((v) => (
         <Card

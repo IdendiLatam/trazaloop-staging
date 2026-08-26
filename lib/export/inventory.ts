@@ -783,6 +783,20 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     detail: embedded("Lección aprendida"), list: embedded("Lección aprendida"),
     historical: embedded("Lección aprendida"),
   },
+  // ------------------------------------------------------------------
+  // QUALITY-06.1
+  // ------------------------------------------------------------------
+  {
+    // El nombre lleva apellido a propósito: CPR ya tiene una entidad
+    // «Onboarding» que es la ayuda de navegación de la implantación. Dos filas
+    // con el mismo nombre convierten el inventario en una trampa.
+    entity: "Onboarding del sistema de gestión", module: "quality",
+    route: "/quality/people/[id]/onboarding/[assignmentId]", klass: "A",
+    detail: has("quality.onboarding.detail"),
+    list: na(PROJECTION_NOT_ENTITY),
+    historical: noHistory(
+      "El onboarding se compone en el momento de la descarga: el perfil del cargo SÍ se lee por la fecha de la asignación, pero el desarrollo abierto, el conocimiento por recibir y las tareas pendientes solo existen en su estado de hoy. Imprimir esas tres como si fueran del pasado sería fabricarlo."),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

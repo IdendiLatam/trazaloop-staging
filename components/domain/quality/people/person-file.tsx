@@ -59,13 +59,23 @@ export function PersonFileView({
 
       <Card title="Cargos ocupados" description="La historia completa, con sus vigencias.">
         <Table
-          headers={["Cargo", "Vínculo", "Desde", "Hasta", ""]}
+          headers={["Cargo", "Vínculo", "Desde", "Hasta", "Onboarding", ""]}
           empty="Esta persona todavía no ocupa ningún cargo."
           rows={file.assignments.map((a) => [
             a.positionName,
             ASSIGNMENT_TYPE_LABEL[a.assignmentType],
             formatDate(a.effectiveFrom),
             a.effectiveTo ? formatDate(a.effectiveTo) : "Vigente",
+            // QUALITY-06.1 · Cada asignación tiene su onboarding, incluidas las
+            // cerradas: responde qué se le pidió a esta persona AL ASUMIR el
+            // cargo, y eso no deja de ser cierto cuando la vigencia termina.
+            <Link
+              key="onb"
+              href={`/quality/people/${p.id}/onboarding/${a.id}`}
+              className="font-medium text-loop hover:underline"
+            >
+              Ver onboarding
+            </Link>,
             canManage && a.effectiveTo === null ? (
               <form key="e" action={endAssignmentActionWrapper} className="inline">
                 <input type="hidden" name="assignment_id" value={a.id} />

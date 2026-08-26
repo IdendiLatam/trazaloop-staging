@@ -63,6 +63,7 @@ import {
   qualityLessonList, qualityPerformanceCycleDetail, qualityPerformanceEvaluationDetail,
   qualityTransferPlanDetail,
 } from "./adapters/quality-development";
+import { qualityOnboardingDetail } from "./adapters/quality-onboarding";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -168,6 +169,11 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualityPerformanceCycleDetail, qualityPerformanceEvaluationDetail,
   qualityKnowledgeDetail, qualityKnowledgeList, qualityTransferPlanDetail,
   qualityLessonDetail, qualityLessonList,
+
+  // ------------------------------------------------------------------
+  // QUALITY-06.1 · el onboarding, que es una VISTA derivada y no una tabla
+  // ------------------------------------------------------------------
+  qualityOnboardingDetail,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
 import type {
   ActivityKind, AssignmentType, AttendanceStatus, CompetenceMethod, Criticality,
@@ -276,9 +277,9 @@ export type PositionVersionRow = {
 };
 
 export async function listPositionVersions(
-  organizationId: string, positionId: string
+  organizationId: string, positionId: string, client?: SupabaseClient
 ): Promise<PositionVersionRow[]> {
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
   const { data, error } = await supabase
     .from("quality_position_versions")
     .select(`id, position_id, version_number, status, purpose, scope, authority,
@@ -292,8 +293,8 @@ export async function listPositionVersions(
 
   const ids = versions.map((v) => v.id as string);
   const [functions, requirements] = await Promise.all([
-    listFunctionsFor(organizationId, ids),
-    listRequirementsFor(organizationId, ids),
+    listFunctionsFor(organizationId, ids, supabase),
+    listRequirementsFor(organizationId, ids, supabase),
   ]);
 
   return versions.map((v) => ({
@@ -308,9 +309,9 @@ export async function listPositionVersions(
 }
 
 async function listFunctionsFor(
-  organizationId: string, versionIds: readonly string[]
+  organizationId: string, versionIds: readonly string[], client?: SupabaseClient
 ): Promise<Map<string, PositionFunctionRow[]>> {
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
   const { data } = await supabase
     .from("quality_position_functions")
     .select("id, position_version_id, description, function_kind, process_id, position_order")
@@ -331,16 +332,18 @@ async function listFunctionsFor(
 }
 
 async function listRequirementsFor(
-  organizationId: string, versionIds: readonly string[]
+  organizationId: string, versionIds: readonly string[], client?: SupabaseClient
 ): Promise<Map<string, PositionRequirementRow[]>> {
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
   const { data } = await supabase
     .from("quality_competency_requirements")
     .select("id, position_version_id, competency_id, required_level, is_mandatory, note")
     .eq("organization_id", organizationId)
     .in("position_version_id", [...versionIds]);
   const rows = data ?? [];
-  const names = await competencyNames(organizationId, rows.map((r) => r.competency_id as string));
+  const names = await competencyNames(
+    organizationId, rows.map((r) => r.competency_id as string), supabase
+  );
   const out = new Map<string, PositionRequirementRow[]>();
   for (const r of rows) {
     const key = r.position_version_id as string;
@@ -381,11 +384,11 @@ export async function listCompetencies(organizationId: string): Promise<Competen
 }
 
 async function competencyNames(
-  organizationId: string, ids: readonly string[]
+  organizationId: string, ids: readonly string[], client?: SupabaseClient
 ): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
   const { data } = await supabase
     .from("quality_competencies").select("id, name")
     .eq("organization_id", organizationId).in("id", unique);

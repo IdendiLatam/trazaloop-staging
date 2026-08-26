@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **126** |
-| Ejes clasificados (ficha · listado · histórico) | **378** |
-| `AVAILABLE` | **150** |
+| Entidades clasificadas | **127** |
+| Ejes clasificados (ficha · listado · histórico) | **381** |
+| `AVAILABLE` | **151** |
 | `EMBEDDED` | **143** |
-| `NOT_APPLICABLE` | **54** |
-| `HISTORICAL_NOT_SUPPORTED` | **31** |
+| `NOT_APPLICABLE` | **55** |
+| `HISTORICAL_NOT_SUPPORTED` | **32** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **109** |
+| Claves distintas en el registro | **110** |
 
 ## Quality
 
@@ -99,6 +99,7 @@ No existe `PENDING`.
 | Actividad de transferencia | — | D | EMBEDDED · dentro de *Plan de transferencia* | EMBEDDED · dentro de *Plan de transferencia* | EMBEDDED · dentro de *Plan de transferencia* |
 | Lección aprendida | `/quality/people/lessons` | C | **AVAILABLE** · `quality.lesson.detail` | **AVAILABLE** · `quality.lesson.list` | **AVAILABLE** · `quality.lesson.detail` |
 | Propuesta de lección | — | D | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* |
+| Onboarding del sistema de gestión | `/quality/people/[id]/onboarding/[assignmentId]` | A | **AVAILABLE** · `quality.onboarding.detail` | N/A | **HISTORICAL_NOT_SUPPORTED** |
 
 ## TrazaDocs
 
@@ -413,3 +414,5 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Propuesta de lección | Ficha | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Propuesta de lección | Listado | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Propuesta de lección | Histórico | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Onboarding del sistema de gestión | Listado | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Onboarding del sistema de gestión | Histórico | HISTORICAL_NOT_SUPPORTED | El onboarding se compone en el momento de la descarga: el perfil del cargo SÍ se lee por la fecha de la asignación, pero el desarrollo abierto, el conocimiento por recibir y las tareas pendientes solo existen en su estado de hoy. Imprimir esas tres como si fueran del pasado sería fabricarlo. |

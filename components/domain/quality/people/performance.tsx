@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import {
   EVALUATION_STATUS_LABEL, formatDate, PERFORMANCE_CYCLE_STATUS_LABEL,
@@ -71,7 +72,13 @@ export function PerformanceView({
             headers={["Persona", "Evaluador", "Fecha", "Estado", ""]}
             empty="Sin evaluaciones en este ciclo."
             rows={evaluations.filter((e) => e.cycleId === c.id).map((e) => [
-              e.personName, e.evaluatorName ?? "—",
+              <Link
+                key="n" href={`/quality/people/performance/${e.id}`}
+                className="font-medium text-loop hover:underline"
+              >
+                {e.personName}
+              </Link>,
+              e.evaluatorName ?? "—",
               e.evaluatedOn ? formatDate(e.evaluatedOn) : "—",
               EVALUATION_STATUS_LABEL[e.status],
               <ExportPdfButton

@@ -5,6 +5,11 @@ import {
   listDevelopmentPlans, listKnowledgeItems, listLearningActivities, listLessons,
   listPerformanceCycles,
 } from "@/lib/db/quality-people";
+import { getEvaluationContext } from "@/lib/db/quality-evaluation-context";
+import {
+  CONTEXT_ATTRIBUTION_NOTICE, CONTEXT_DISCLAIMER, CONTEXT_KIND_LABEL, CONTEXT_KINDS,
+  CONTEXT_TEMPORALITY_LABEL,
+} from "@/lib/domain/quality-onboarding";
 import {
   ACTIVITY_KIND_LABEL, ATTENDANCE_STATUS_LABEL, CRITICALITY_LABEL,
   DEVELOPMENT_KIND_LABEL, DOCUMENTATION_STATUS_LABEL, EFFECTIVENESS_METHOD_LABEL,
@@ -563,6 +568,55 @@ export const qualityPerformanceEvaluationDetail: ExportDefinition = {
     if (!ev) return null;
     const org = await organizationIdentity(req.organizationId);
 
+    // QUALITY-06.1 §28 · El contexto se arma con la MISMA sesión que descarga,
+    // así que solo entra en el papel lo que esa persona ya podía consultar. Y
+    // va en secciones propias, después del resultado y con su aviso: pegado al
+    // resultado se leería como su justificación.
+    const context = await getEvaluationContext(req.organizationId, req.id);
+    const contextSections = context && context.lines.length > 0
+      ? [
+          section("Contexto del sistema de gestión",
+            note(CONTEXT_DISCLAIMER),
+            note(CONTEXT_ATTRIBUTION_NOTICE),
+            paragraph(
+              `Periodo evaluado: ${formatDate(context.period.start)} → `
+              + `${formatDate(context.period.end)}`
+              + (context.position ? ` · Cargo: ${context.position.name}` : "")
+              + (context.processes.length > 0
+                ? ` · Procesos: ${context.processes.map((p) => p.name).join(", ")}`
+                : "")
+            )),
+          ...CONTEXT_KINDS.flatMap((kind) => {
+            const lines = context.lines.filter((l) => l.kind === kind);
+            if (lines.length === 0) return [];
+            return [section(CONTEXT_KIND_LABEL[kind], table(
+              [
+                { header: "De qué habla", width: 3 },
+                { header: "Qué", width: 4 },
+                { header: "Dato", width: 3 },
+                { header: "Cuándo", width: 2 },
+              ],
+              lines.map((l) => [
+                // El sujeto va primero SIEMPRE: es lo que impide leer la fila
+                // como una medida de la persona evaluada.
+                l.subject,
+                l.label,
+                l.detail ? `${l.value} — ${l.detail}` : l.value,
+                CONTEXT_TEMPORALITY_LABEL[l.temporality],
+              ]),
+              "—"
+            ))];
+          }),
+          ...(context.restrictedSources > 0
+            ? [section(null, note(
+                `${context.restrictedSources} fuente(s) no aparecen porque los permisos de `
+                + "quien generó este documento no alcanzaban. El papel no concede acceso a "
+                + "nada que esa persona no pudiera consultar."
+              ))]
+            : []),
+        ]
+      : [];
+
     return {
       filenameParts: {
         recordType: "Evaluación de desempeño", title: ev.personName,
@@ -609,6 +663,11 @@ export const qualityPerformanceEvaluationDetail: ExportDefinition = {
             + "pueden haber servido de contexto al evaluador, pero no calculan este resultado: "
             + "la decisión es de la persona que firma."
           )),
+          // A partir de aquí ya no se habla del resultado. Salto de página para
+          // que la separación sea física y no solo tipográfica.
+          ...(contextSections.length > 0
+            ? [section(null, { type: "pageBreak" as const }), ...contextSections]
+            : []),
         ].filter((s) => s.blocks.length > 0),
         footerNote: FOOTER,
       },
