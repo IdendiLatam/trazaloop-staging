@@ -720,12 +720,24 @@ check("O3. un requisito bloqueante no suspende por su cuenta", () => {
 // ---------------------------------------------------------------------------
 console.log("\nP · MIGRACIÓN (§80)");
 
-check("P1. 0125 es la única migración de este sprint y no edita anteriores", () => {
+check("P1. 0125 es la única migración de proveedores y nadie la reescribe después", () => {
   const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
-  const nuevas = migraciones.filter((f) => /^01(2[5-9]|[3-9])/.test(f));
-  assert(nuevas.length === 1 && nuevas[0].startsWith("0125"),
-    `este sprint dejó ${nuevas.length} migraciones nuevas: ${nuevas.join(", ")}`);
+  // La invariante REAL no es «no hay migraciones posteriores» —los sprints
+  // siguen— sino que este dominio se creó en UNA y que ninguna posterior lo
+  // reescribe. Comprobar un máximo global habría fallado en QUALITY-08 por el
+  // motivo equivocado.
+  const deProveedores = migraciones.filter((f) => /supplier/.test(f));
+  assert(deProveedores.length === 1 && deProveedores[0] === MIG.split("/").pop(),
+    `hay ${deProveedores.length} migraciones de proveedores: ${deProveedores.join(", ")}`);
+  const posteriores = migraciones.filter((f) => f > "0125_" && !/supplier/.test(f));
+  for (const f of posteriores) {
+    const sql = stripSql(read(join("supabase/migrations", f)));
+    assert(!/drop table[^;]*quality_supplier/i.test(sql),
+      `${f} destruye una tabla de proveedores`);
+    assert(!/alter table public\.quality_supplier[a-z_]*\s+drop column/i.test(sql),
+      `${f} elimina una columna de proveedores`);
+  }
   assert(migraciones.includes("0123_quality_people_competence_knowledge.sql")
     && migraciones.includes("0124_quality_people_tasks_from_sweep.sql"),
     "una migración anterior desapareció");

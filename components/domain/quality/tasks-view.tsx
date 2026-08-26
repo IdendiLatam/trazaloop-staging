@@ -88,6 +88,10 @@ const TASK_TONE: Record<TaskType, string> = {
   supplier_approval_review: "border-amber/40 bg-amber/5",
   supplier_document_renewal: "border-amber/40 bg-amber/5",
   supplier_criticality_review: "border-loop/30 bg-loop/5",
+  complaint_review: "border-amber/40 bg-amber/5",
+  campaign_closing_review: "border-loop/30 bg-loop/5",
+  customer_signal_review: "border-amber/40 bg-amber/5",
+  customer_voice_review_due: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -118,6 +122,10 @@ const TASK_CTA: Record<TaskType, string> = {
   supplier_approval_review: "Ver la ficha del proveedor",
   supplier_document_renewal: "Ver el documento",
   supplier_criticality_review: "Revisar la criticidad",
+  complaint_review: "Revisar la queja",
+  campaign_closing_review: "Ver la campaña",
+  customer_signal_review: "Ver las señales",
+  customer_voice_review_due: "Ir al cierre del periodo",
 };
 
 /**
@@ -181,6 +189,17 @@ function subjectHref(
     case "quality_supplier_scope":
     case "quality_supplier_document":
       return `/quality/suppliers`;
+    // QUALITY-08 · El cliente y la campaña tienen ficha propia. La
+    // manifestación se ve dentro del listado de retroalimentación, y el cierre
+    // del periodo vive en el resumen: se enlaza a la pantalla que existe.
+    case "quality_customer_profile":
+      return `/quality/customer-voice/customers/${subjectId}`;
+    case "quality_survey_campaign":
+      return `/quality/customer-voice/campaigns/${subjectId}`;
+    case "quality_customer_feedback":
+      return `/quality/customer-voice/feedback`;
+    case "quality_customer_voice_review":
+      return `/quality/customer-voice`;
     default:
       return null;
   }

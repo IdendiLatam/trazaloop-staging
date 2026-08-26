@@ -72,6 +72,12 @@ import {
   qualitySupplierPerformanceDetail, qualitySupplierReevaluationList,
   qualitySupplierRequirementList, qualitySupplierSiteDetail,
 } from "./adapters/quality-suppliers";
+import {
+  qualityCampaignList, qualityCampaignReport, qualityComplaintDetail, qualityComplaintList,
+  qualityCustomerDetail, qualityCustomerList, qualityFeedbackDetail, qualityFeedbackList,
+  qualityResponseDetail, qualitySatisfactionReport, qualitySurveyDetail, qualitySurveyList,
+  qualitySurveyVersionDetail, qualityVoiceReviewDetail, qualityVoiceTrend,
+} from "./adapters/quality-customer-voice";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -199,6 +205,23 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualitySupplierCriticalityDetail,
   qualitySupplierApprovalDetail, qualitySupplierApprovalHistorical,
   qualitySupplierReevaluationList, qualitySupplierPerformanceDetail,
+
+  // ------------------------------------------------------------------
+  // QUALITY-08 · voz del cliente, satisfacción, retroalimentación y quejas
+  //
+  // Dos reglas atraviesan los quince. Ninguno llama «no conformidad» a una
+  // queja: eso convertiría un hecho en una clasificación que nadie decidió. Y
+  // ninguno revela la identidad de quien respondió una campaña anónima —el
+  // documento individual de esas respuestas ni siquiera se genera—, porque un
+  // PDF no concede privilegios y tampoco rompe una promesa.
+  // ------------------------------------------------------------------
+  qualityCustomerDetail, qualityCustomerList,
+  qualitySurveyDetail, qualitySurveyList, qualitySurveyVersionDetail,
+  qualityCampaignList, qualityCampaignReport,
+  qualityResponseDetail,
+  qualityFeedbackDetail, qualityFeedbackList,
+  qualityComplaintDetail, qualityComplaintList,
+  qualitySatisfactionReport, qualityVoiceTrend, qualityVoiceReviewDetail,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

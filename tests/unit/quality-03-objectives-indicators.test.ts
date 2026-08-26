@@ -12,7 +12,7 @@
  *
  * Correr: npm run test:quality03
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DATA_STATES, DIRECTIONS, EVALUATIONS, FREQUENCIES, INDICATOR_ADMIN_STATES,
@@ -43,6 +43,28 @@ function check(name: string, fn: () => void) {
 function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m); }
 
 const SQL = stripSql(read(MIG));
+
+/**
+ * QUALITY-08 · El catálogo de fuentes automáticas se declaró en 0117 y se
+ * ENSANCHA en migraciones posteriores. Comprobarlo contra 0117 dejaría de
+ * defender nada en cuanto alguien añadiera una fuente: la invariante real es
+ * que el dominio y la definición VIGENTE de la base digan lo mismo, así que se
+ * lee la última migración que redefine esas dos funciones.
+ */
+function latestNativeSourceSql(): string {
+  const dir = join(ROOT, "supabase/migrations");
+  const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+  let latest = SQL;
+  for (const f of files) {
+    const sql = stripSql(read(join("supabase/migrations", f)));
+    if (sql.includes("function public.quality_native_source_value(")
+        && sql.includes("function public.quality_native_source_keys(")) {
+      latest = sql;
+    }
+  }
+  return latest;
+}
+const NATIVE_SQL = latestNativeSourceSql();
 
 console.log("\nQUALITY-03 · objetivos e indicadores (puras y estáticas)\n");
 
@@ -357,7 +379,7 @@ console.log("\nF · Fuentes automáticas");
 check("F1. el catálogo del dominio y el de la BASE dicen lo mismo", () => {
   // Si divergieran, se podría configurar un indicador que después no supiera
   // calcularse — o quedaría una fuente en la base que nadie puede elegir.
-  const inSql = [...SQL.matchAll(/'(quality\.[a-z_]+)'/g)].map((m) => m[1]);
+  const inSql = [...NATIVE_SQL.matchAll(/'(quality\.[a-z_]+)'/g)].map((m) => m[1]);
   const declared = [...new Set(inSql)].sort();
   const domain = [...NATIVE_SOURCE_KEYS].sort();
   assert(
@@ -368,7 +390,7 @@ check("F1. el catálogo del dominio y el de la BASE dicen lo mismo", () => {
   // CASE que la calcula. Una sola aparición delataría una fuente sin cálculo.
   for (const key of domain) {
     const times = inSql.filter((k) => k === key).length;
-    assert(times === 2, `«${key}» aparece ${times} veces en 0117; se esperaban 2`);
+    assert(times === 2, `«${key}» aparece ${times} veces en la definición vigente; se esperaban 2`);
   }
 });
 
@@ -487,10 +509,9 @@ check("M7. el motor de medición no concede escritura por política", () => {
 });
 
 check("M8. el catálogo automático está acotado por empresa", () => {
-  const block = SQL.slice(
-    SQL.indexOf("function public.quality_native_source_value"),
-    SQL.indexOf("comment on function public.quality_native_source_value")
-  );
+  const start = NATIVE_SQL.indexOf("function public.quality_native_source_value");
+  const end = NATIVE_SQL.indexOf("revoke all on function public.quality_native_source_value");
+  const block = NATIVE_SQL.slice(start, end > start ? end : undefined);
   const branches = (block.match(/when 'quality\./g) ?? []).length;
   const scoped = (block.match(/p_organization_id/g) ?? []).length;
   assert(branches === NATIVE_SOURCES.length, `${branches} ramas para ${NATIVE_SOURCES.length} fuentes`);

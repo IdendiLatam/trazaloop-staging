@@ -42,6 +42,10 @@ export const SUBJECT_TYPES = [
   // preguntas de este dominio no tienen respuesta sin decir para qué.
   "quality_supplier_profile", "quality_supplier_scope",
   "quality_supplier_evaluation", "quality_supplier_document",
+  // QUALITY-08 · Voz del cliente. El asunto de una tarea de queja es la
+  // MANIFESTACIÓN, no el cliente: es lo que hay que revisar.
+  "quality_customer_profile", "quality_survey_campaign",
+  "quality_customer_feedback", "quality_customer_voice_review",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -91,6 +95,11 @@ export const TASK_TYPES = [
   "supplier_approval_review",
   "supplier_document_renewal",
   "supplier_criticality_review",
+  // QUALITY-08
+  "complaint_review",
+  "campaign_closing_review",
+  "customer_signal_review",
+  "customer_voice_review_due",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -122,6 +131,10 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   supplier_approval_review: "Revisar la aprobación de un proveedor",
   supplier_document_renewal: "Renovar un documento de un proveedor",
   supplier_criticality_review: "Revisar la criticidad de un proveedor",
+  complaint_review: "Revisar una queja de un cliente",
+  campaign_closing_review: "Revisar una campaña que cierra",
+  customer_signal_review: "Revisar una señal de los clientes",
+  customer_voice_review_due: "Cerrar el periodo de satisfacción",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -174,6 +187,14 @@ export const ALERT_TYPES = [
   "supplier_document_expired",
   "supplier_critical_unapproved",
   "supplier_incident_streak",
+  // QUALITY-08 · Ninguno abre casos, clasifica no conformidades ni crea
+  // riesgos: dicen que hay algo que mirar.
+  "complaint_unreviewed",
+  "campaign_closing_soon",
+  "campaign_low_response",
+  "satisfaction_drop",
+  "customer_signal_raised",
+  "voice_review_due",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -210,6 +231,12 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   supplier_document_expired: "Un documento de un proveedor venció",
   supplier_critical_unapproved: "Hay un alcance crítico sin decisión de aprobación",
   supplier_incident_streak: "Un proveedor acumula incidentes",
+  complaint_unreviewed: "Una queja de un cliente lleva días sin revisar",
+  campaign_closing_soon: "Una campaña de satisfacción cierra pronto",
+  campaign_low_response: "Una campaña va a cerrar con pocas respuestas",
+  satisfaction_drop: "La satisfacción bajó respecto de la medición anterior",
+  customer_signal_raised: "Hay una señal nueva de los clientes",
+  voice_review_due: "Toca cerrar el periodo de satisfacción",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

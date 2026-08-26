@@ -919,6 +919,143 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: noHistory(
       "Reconstruir qué estaba pendiente en una fecha pasada exigiría guardar cada fecha de revisión calculada, y el dominio no la guarda: la deriva de la última evaluación y de la cadencia vigentes."),
   },
+  // ------------------------------------------------------------------
+  // QUALITY-08 · voz del cliente
+  //
+  // Los nombres llevan apellido por la misma razón que en QUALITY-07: PCR ya
+  // tiene «Requisito de cliente» y el inventario no admite dos filas con el
+  // mismo nombre.
+  // ------------------------------------------------------------------
+  {
+    entity: "Cliente del sistema de gestión", module: "quality",
+    route: "/quality/customer-voice/customers/[profileId]", klass: "C",
+    detail: has("quality.customer.detail"),
+    list: has("quality.customer.list"),
+    historical: noHistory(
+      "La ficha reúne lo que el cliente ha dicho hasta hoy. Lo fechado son sus manifestaciones y sus respuestas, y cada una lleva su propio documento con su versión."),
+  },
+  {
+    entity: "Contacto de cliente", module: "quality", route: null, klass: "D",
+    detail: embedded("Cliente del sistema de gestión"),
+    list: embedded("Cliente del sistema de gestión"),
+    historical: embedded("Cliente del sistema de gestión",
+      "El contacto puede cambiar sin que cambie nada de lo que la empresa dijo: la voz queda contra el cliente, no contra la persona."),
+  },
+  {
+    entity: "Encuesta de satisfacción", module: "quality",
+    route: "/quality/customer-voice/surveys", klass: "C",
+    detail: has("quality.survey.detail"),
+    list: has("quality.survey.list"),
+    historical: has("quality.survey-version.detail"),
+  },
+  {
+    entity: "Versión de encuesta", module: "quality", route: null, klass: "A",
+    detail: has("quality.survey-version.detail"),
+    list: embedded("Encuesta de satisfacción",
+      "Las versiones de una encuesta se listan dentro de su ficha: un listado global de versiones sin decir de qué encuesta no se consulta nunca."),
+    historical: has("quality.survey-version.detail"),
+  },
+  {
+    entity: "Pregunta de encuesta", module: "quality", route: null, klass: "D",
+    detail: embedded("Versión de encuesta",
+      "La pregunta pertenece a la versión que la congela; fuera de ella no significa nada."),
+    list: embedded("Versión de encuesta"),
+    historical: embedded("Versión de encuesta"),
+  },
+  {
+    entity: "Campaña de satisfacción", module: "quality",
+    route: "/quality/customer-voice/campaigns/[campaignId]", klass: "C",
+    detail: has("quality.survey-campaign.detail"),
+    list: has("quality.survey-campaign.list"),
+    historical: has("quality.survey-campaign.detail"),
+  },
+  {
+    entity: "Invitación a encuesta", module: "quality", route: null, klass: "D",
+    detail: embedded("Campaña de satisfacción",
+      "La invitación dice a quién se preguntó y si el enlace se usó. NO se imprime junto a las respuestas: cruzar las dos listas es exactamente lo que rompería el anonimato."),
+    list: embedded("Campaña de satisfacción"),
+    historical: embedded("Campaña de satisfacción"),
+  },
+  {
+    entity: "Respuesta identificada de encuesta", module: "quality", route: null, klass: "A",
+    detail: has("quality.survey-response.detail"),
+    list: embedded("Campaña de satisfacción",
+      "Las respuestas se leen dentro del informe de su campaña, agregadas."),
+    historical: has("quality.survey-response.detail"),
+  },
+  {
+    entity: "Respuesta anónima de encuesta", module: "quality", route: null, klass: "E",
+    detail: na(
+      "NO es documentable individualmente, y es deliberado: un papel con la fecha exacta y el contenido completo de una respuesta anónima es el primer paso para cruzarlo con la lista de invitaciones. Se publica agregada, dentro del informe de campaña."),
+    list: embedded("Campaña de satisfacción",
+      "Se publican agregadas y sin atribución, y solo cuando hay respuestas suficientes para que el desglose no reidentifique a nadie."),
+    historical: na(
+      "Reconstruir una respuesta anónima como documento del pasado tendría el mismo problema que reconstruirla hoy."),
+  },
+  {
+    entity: "Manifestación de cliente", module: "quality",
+    route: "/quality/customer-voice/feedback", klass: "C",
+    detail: has("quality.customer-feedback.detail"),
+    list: has("quality.customer-feedback.list"),
+    historical: noHistory(
+      "La manifestación conserva su fecha de recepción, pero su estado y su nota de resolución reflejan cómo está hoy la atención. Lo que sí es del pasado es el caso al que dio lugar."),
+  },
+  {
+    entity: "Queja o reclamo de cliente", module: "quality",
+    route: "/quality/customer-voice/feedback", klass: "C",
+    detail: has("quality.customer-complaint.detail"),
+    list: has("quality.customer-complaint.list"),
+    historical: noHistory(
+      "Igual que cualquier manifestación: la fecha se conserva, el tratamiento es el de hoy. Y ninguno de estos documentos es un registro de no conformidad."),
+  },
+  {
+    entity: "Tema de la voz del cliente", module: "quality",
+    route: "/quality/customer-voice/feedback", klass: "D",
+    detail: embedded("Manifestación de cliente", LIST_ONLY_NO_SHEET),
+    list: embedded("Manifestación de cliente",
+      "El catálogo temático se lee dentro de la pantalla donde se usa."),
+    historical: embedded("Manifestación de cliente"),
+  },
+  {
+    entity: "Métrica de satisfacción", module: "quality",
+    route: "/quality/customer-voice", klass: "D",
+    detail: embedded("Informe de satisfacción del cliente", LIST_ONLY_NO_SHEET),
+    list: embedded("Informe de satisfacción del cliente"),
+    historical: embedded("Tendencia de la voz del cliente",
+      "Lo fechado es cada RESULTADO, con su método congelado y su clave de comparabilidad."),
+  },
+  {
+    entity: "Informe de satisfacción del cliente", module: "quality",
+    route: "/quality/customer-voice", klass: "B",
+    detail: na(PROJECTION_NOT_ENTITY),
+    list: has("quality.customer-satisfaction.list"),
+    historical: noHistory(
+      "El informe consolida lo medido hasta hoy. El cierre formal de un periodo sí congela su retrato, y tiene su propio documento."),
+  },
+  {
+    entity: "Tendencia de la voz del cliente", module: "quality",
+    route: "/quality/customer-voice", klass: "B",
+    detail: na(PROJECTION_NOT_ENTITY),
+    list: has("quality.customer-voice-trend.list"),
+    historical: noHistory(
+      "La tendencia se compone con las mediciones que existen hoy. Cada medición, por separado, sí lleva su método y su periodo congelados."),
+  },
+  {
+    entity: "Señal de la voz del cliente", module: "quality", route: null, klass: "D",
+    detail: embedded("Informe de satisfacción del cliente",
+      "Una señal invita a mirar; su valor está en el conjunto, no en una hoja por señal."),
+    list: embedded("Informe de satisfacción del cliente"),
+    historical: embedded("Cierre del periodo de satisfacción",
+      "Cuántas señales había al cerrar el periodo queda congelado en el retrato del cierre."),
+  },
+  {
+    entity: "Cierre del periodo de satisfacción", module: "quality",
+    route: "/quality/customer-voice", klass: "A",
+    detail: has("quality.customer-voice-review.detail"),
+    list: embedded("Informe de satisfacción del cliente",
+      "Los cierres se listan dentro del resumen del dominio."),
+    historical: has("quality.customer-voice-review.detail"),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

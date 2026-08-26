@@ -112,6 +112,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0124_quality_people_tasks_from_sweep.sql",
   // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
   "0125_quality_suppliers_evaluation.sql",
+    // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
+    "0126_quality_customer_voice.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -1156,6 +1158,8 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0124_quality_people_tasks_from_sweep.sql",
     // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
     "0125_quality_suppliers_evaluation.sql",
+    // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
+    "0126_quality_customer_voice.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));

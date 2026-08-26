@@ -598,6 +598,50 @@ export const NATIVE_SOURCES: NativeSource[] = [
     suggestedUnit: "count",
     suggestedDirection: "lower_is_better",
   },
+  // -------------------------------------------------------------------
+  // QUALITY-08 · Voz del cliente.
+  //
+  // Se añaden AQUÍ y no en un catálogo propio: un indicador de satisfacción se
+  // configura como cualquier otro, con el mismo motor y la misma verdad
+  // histórica. Y ninguna de estas fuentes mide satisfacción por sí sola:
+  // contar quejas es contar quejas.
+  // -------------------------------------------------------------------
+  {
+    key: "quality.customer_complaints_count",
+    label: "Quejas y reclamos recibidos",
+    description:
+      "Cuántas quejas y reclamos de clientes se recibieron dentro del periodo. Es un recuento de lo que llegó, no una medida de satisfacción.",
+    nature: "period",
+    suggestedUnit: "count",
+    suggestedDirection: "lower_is_better",
+  },
+  {
+    key: "quality.customer_complaints_closed_ratio",
+    label: "Quejas atendidas",
+    description:
+      "Porcentaje de las quejas del periodo que ya se respondieron o cerraron. Sin quejas no hay porcentaje: un 100 % sobre cero afirmaría una gestión que no ocurrió.",
+    nature: "period",
+    suggestedUnit: "percent",
+    suggestedDirection: "higher_is_better",
+  },
+  {
+    key: "quality.customer_survey_responses_count",
+    label: "Respuestas de encuesta recibidas",
+    description:
+      "Cuántas respuestas de encuesta se enviaron dentro del periodo. Cuántas llegaron, no cómo de contentos están.",
+    nature: "period",
+    suggestedUnit: "count",
+    suggestedDirection: "higher_is_better",
+  },
+  {
+    key: "quality.customer_open_complaints_count",
+    label: "Quejas sin atender",
+    description:
+      "Cuántas quejas de clientes siguen sin revisar o en revisión hoy. Una queja abierta no es una no conformidad: es trabajo pendiente.",
+    nature: "snapshot",
+    suggestedUnit: "count",
+    suggestedDirection: "lower_is_better",
+  },
 ];
 
 export const NATIVE_SOURCE_KEYS = NATIVE_SOURCES.map((s) => s.key);

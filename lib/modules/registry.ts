@@ -328,6 +328,23 @@ export const QUALITY_PROVEEDORES_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * QUALITY-08 · Voz del cliente.
+ *
+ * Cinco entradas. Métricas, temas y cierres de periodo son configuración del
+ * dominio y viven dentro del resumen: no son destinos de primer nivel.
+ */
+export const QUALITY_VOZ_CLIENTE_GROUP: ModuleNavGroup = {
+  title: "Voz del cliente",
+  items: [
+    { label: "Resumen", href: "/quality/customer-voice", exact: true },
+    { label: "Clientes", href: "/quality/customer-voice/customers" },
+    { label: "Encuestas", href: "/quality/customer-voice/surveys" },
+    { label: "Campañas", href: "/quality/customer-voice/campaigns" },
+    { label: "Retroalimentación", href: "/quality/customer-voice/feedback" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -342,8 +359,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
   groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
-           QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP, QUALITY_CASOS_GROUP,
-           QUALITY_DOCUMENTOS_GROUP],
+           QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
+           QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

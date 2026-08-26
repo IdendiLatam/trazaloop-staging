@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **142** |
-| Ejes clasificados (ficha · listado · histórico) | **426** |
-| `AVAILABLE` | **168** |
-| `EMBEDDED` | **162** |
-| `NOT_APPLICABLE` | **59** |
-| `HISTORICAL_NOT_SUPPORTED` | **37** |
+| Entidades clasificadas | **159** |
+| Ejes clasificados (ficha · listado · histórico) | **477** |
+| `AVAILABLE` | **188** |
+| `EMBEDDED` | **184** |
+| `NOT_APPLICABLE` | **63** |
+| `HISTORICAL_NOT_SUPPORTED` | **42** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **123** |
+| Claves distintas en el registro | **138** |
 
 ## Quality
 
@@ -115,6 +115,23 @@ No existe `PENDING`.
 | Incidente de proveedor | — | D | EMBEDDED · dentro de *Proveedor evaluado* | EMBEDDED · dentro de *Desempeño de proveedor* | EMBEDDED · dentro de *Desempeño de proveedor* |
 | Desempeño de proveedor | — | A | **AVAILABLE** · `quality.supplier-performance.detail` | N/A | **HISTORICAL_NOT_SUPPORTED** |
 | Reevaluación pendiente de proveedor | `/quality/suppliers/reevaluations` | B | N/A | **AVAILABLE** · `quality.supplier-reevaluation.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Cliente del sistema de gestión | `/quality/customer-voice/customers/[profileId]` | C | **AVAILABLE** · `quality.customer.detail` | **AVAILABLE** · `quality.customer.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Contacto de cliente | — | D | EMBEDDED · dentro de *Cliente del sistema de gestión* | EMBEDDED · dentro de *Cliente del sistema de gestión* | EMBEDDED · dentro de *Cliente del sistema de gestión* |
+| Encuesta de satisfacción | `/quality/customer-voice/surveys` | C | **AVAILABLE** · `quality.survey.detail` | **AVAILABLE** · `quality.survey.list` | **AVAILABLE** · `quality.survey-version.detail` |
+| Versión de encuesta | — | A | **AVAILABLE** · `quality.survey-version.detail` | EMBEDDED · dentro de *Encuesta de satisfacción* | **AVAILABLE** · `quality.survey-version.detail` |
+| Pregunta de encuesta | — | D | EMBEDDED · dentro de *Versión de encuesta* | EMBEDDED · dentro de *Versión de encuesta* | EMBEDDED · dentro de *Versión de encuesta* |
+| Campaña de satisfacción | `/quality/customer-voice/campaigns/[campaignId]` | C | **AVAILABLE** · `quality.survey-campaign.detail` | **AVAILABLE** · `quality.survey-campaign.list` | **AVAILABLE** · `quality.survey-campaign.detail` |
+| Invitación a encuesta | — | D | EMBEDDED · dentro de *Campaña de satisfacción* | EMBEDDED · dentro de *Campaña de satisfacción* | EMBEDDED · dentro de *Campaña de satisfacción* |
+| Respuesta identificada de encuesta | — | A | **AVAILABLE** · `quality.survey-response.detail` | EMBEDDED · dentro de *Campaña de satisfacción* | **AVAILABLE** · `quality.survey-response.detail` |
+| Respuesta anónima de encuesta | — | E | N/A | EMBEDDED · dentro de *Campaña de satisfacción* | N/A |
+| Manifestación de cliente | `/quality/customer-voice/feedback` | C | **AVAILABLE** · `quality.customer-feedback.detail` | **AVAILABLE** · `quality.customer-feedback.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Queja o reclamo de cliente | `/quality/customer-voice/feedback` | C | **AVAILABLE** · `quality.customer-complaint.detail` | **AVAILABLE** · `quality.customer-complaint.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Tema de la voz del cliente | `/quality/customer-voice/feedback` | D | EMBEDDED · dentro de *Manifestación de cliente* | EMBEDDED · dentro de *Manifestación de cliente* | EMBEDDED · dentro de *Manifestación de cliente* |
+| Métrica de satisfacción | `/quality/customer-voice` | D | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Tendencia de la voz del cliente* |
+| Informe de satisfacción del cliente | `/quality/customer-voice` | B | N/A | **AVAILABLE** · `quality.customer-satisfaction.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Tendencia de la voz del cliente | `/quality/customer-voice` | B | N/A | **AVAILABLE** · `quality.customer-voice-trend.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Señal de la voz del cliente | — | D | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Cierre del periodo de satisfacción* |
+| Cierre del periodo de satisfacción | `/quality/customer-voice` | A | **AVAILABLE** · `quality.customer-voice-review.detail` | EMBEDDED · dentro de *Informe de satisfacción del cliente* | **AVAILABLE** · `quality.customer-voice-review.detail` |
 
 ## TrazaDocs
 
@@ -459,3 +476,34 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Desempeño de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | El informe reúne las evaluaciones cerradas y los incidentes hasta hoy. Cada evaluación, por separado, sí es un documento del pasado con su propia versión de plantilla. |
 | Reevaluación pendiente de proveedor | Ficha | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
 | Reevaluación pendiente de proveedor | Histórico | HISTORICAL_NOT_SUPPORTED | Reconstruir qué estaba pendiente en una fecha pasada exigiría guardar cada fecha de revisión calculada, y el dominio no la guarda: la deriva de la última evaluación y de la cadencia vigentes. |
+| Cliente del sistema de gestión | Histórico | HISTORICAL_NOT_SUPPORTED | La ficha reúne lo que el cliente ha dicho hasta hoy. Lo fechado son sus manifestaciones y sus respuestas, y cada una lleva su propio documento con su versión. |
+| Contacto de cliente | Ficha | EMBEDDED | Dentro de *Cliente del sistema de gestión*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Contacto de cliente | Listado | EMBEDDED | Dentro de *Cliente del sistema de gestión*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Contacto de cliente | Histórico | EMBEDDED | Dentro de *Cliente del sistema de gestión*. El contacto puede cambiar sin que cambie nada de lo que la empresa dijo: la voz queda contra el cliente, no contra la persona. |
+| Versión de encuesta | Listado | EMBEDDED | Dentro de *Encuesta de satisfacción*. Las versiones de una encuesta se listan dentro de su ficha: un listado global de versiones sin decir de qué encuesta no se consulta nunca. |
+| Pregunta de encuesta | Ficha | EMBEDDED | Dentro de *Versión de encuesta*. La pregunta pertenece a la versión que la congela; fuera de ella no significa nada. |
+| Pregunta de encuesta | Listado | EMBEDDED | Dentro de *Versión de encuesta*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Pregunta de encuesta | Histórico | EMBEDDED | Dentro de *Versión de encuesta*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Invitación a encuesta | Ficha | EMBEDDED | Dentro de *Campaña de satisfacción*. La invitación dice a quién se preguntó y si el enlace se usó. NO se imprime junto a las respuestas: cruzar las dos listas es exactamente lo que rompería el anonimato. |
+| Invitación a encuesta | Listado | EMBEDDED | Dentro de *Campaña de satisfacción*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Invitación a encuesta | Histórico | EMBEDDED | Dentro de *Campaña de satisfacción*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Respuesta identificada de encuesta | Listado | EMBEDDED | Dentro de *Campaña de satisfacción*. Las respuestas se leen dentro del informe de su campaña, agregadas. |
+| Respuesta anónima de encuesta | Ficha | NOT_APPLICABLE | NO es documentable individualmente, y es deliberado: un papel con la fecha exacta y el contenido completo de una respuesta anónima es el primer paso para cruzarlo con la lista de invitaciones. Se publica agregada, dentro del informe de campaña. |
+| Respuesta anónima de encuesta | Listado | EMBEDDED | Dentro de *Campaña de satisfacción*. Se publican agregadas y sin atribución, y solo cuando hay respuestas suficientes para que el desglose no reidentifique a nadie. |
+| Respuesta anónima de encuesta | Histórico | NOT_APPLICABLE | Reconstruir una respuesta anónima como documento del pasado tendría el mismo problema que reconstruirla hoy. |
+| Manifestación de cliente | Histórico | HISTORICAL_NOT_SUPPORTED | La manifestación conserva su fecha de recepción, pero su estado y su nota de resolución reflejan cómo está hoy la atención. Lo que sí es del pasado es el caso al que dio lugar. |
+| Queja o reclamo de cliente | Histórico | HISTORICAL_NOT_SUPPORTED | Igual que cualquier manifestación: la fecha se conserva, el tratamiento es el de hoy. Y ninguno de estos documentos es un registro de no conformidad. |
+| Tema de la voz del cliente | Ficha | EMBEDDED | Dentro de *Manifestación de cliente*. Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Tema de la voz del cliente | Listado | EMBEDDED | Dentro de *Manifestación de cliente*. El catálogo temático se lee dentro de la pantalla donde se usa. |
+| Tema de la voz del cliente | Histórico | EMBEDDED | Dentro de *Manifestación de cliente*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Métrica de satisfacción | Ficha | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Métrica de satisfacción | Listado | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Métrica de satisfacción | Histórico | EMBEDDED | Dentro de *Tendencia de la voz del cliente*. Lo fechado es cada RESULTADO, con su método congelado y su clave de comparabilidad. |
+| Informe de satisfacción del cliente | Ficha | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Informe de satisfacción del cliente | Histórico | HISTORICAL_NOT_SUPPORTED | El informe consolida lo medido hasta hoy. El cierre formal de un periodo sí congela su retrato, y tiene su propio documento. |
+| Tendencia de la voz del cliente | Ficha | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Tendencia de la voz del cliente | Histórico | HISTORICAL_NOT_SUPPORTED | La tendencia se compone con las mediciones que existen hoy. Cada medición, por separado, sí lleva su método y su periodo congelados. |
+| Señal de la voz del cliente | Ficha | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Una señal invita a mirar; su valor está en el conjunto, no en una hoja por señal. |
+| Señal de la voz del cliente | Listado | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Señal de la voz del cliente | Histórico | EMBEDDED | Dentro de *Cierre del periodo de satisfacción*. Cuántas señales había al cerrar el periodo queda congelado en el retrato del cierre. |
+| Cierre del periodo de satisfacción | Listado | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Los cierres se listan dentro del resumen del dominio. |

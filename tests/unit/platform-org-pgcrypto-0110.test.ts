@@ -54,6 +54,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0124_quality_people_tasks_from_sweep.sql",
   // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
   "0125_quality_suppliers_evaluation.sql",
+    // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
+    "0126_quality_customer_voice.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

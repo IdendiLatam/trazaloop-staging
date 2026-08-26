@@ -296,6 +296,8 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0124_quality_people_tasks_from_sweep.sql",
     // QUALITY-07: proveedores, criticidad, evaluación y reevaluación.
     "0125_quality_suppliers_evaluation.sql",
+    // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
+    "0126_quality_customer_voice.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

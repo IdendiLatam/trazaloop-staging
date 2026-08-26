@@ -18,6 +18,7 @@ import { getCaseSummary } from "@/lib/db/work-cases";
 import { getRiskSummary } from "@/lib/db/risks";
 import { getPeopleSignals } from "@/lib/db/quality-people";
 import { getSupplierHomeSignals } from "@/lib/db/quality-suppliers";
+import { getCustomerVoiceHomeSignals } from "@/lib/db/quality-customer-voice";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -54,8 +55,8 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks, objectives, indicators, cases, risks, people, suppliers] =
-    await Promise.all([
+  const [summary, tasks, objectives, indicators, cases, risks, people, suppliers,
+         customerVoice] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
@@ -64,6 +65,7 @@ export default async function QualityHomePage() {
     getRiskSummary(org.organizationId),
     getPeopleSignals(org.organizationId),
     getSupplierHomeSignals(org.organizationId),
+    getCustomerVoiceHomeSignals(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -189,6 +191,30 @@ export default async function QualityHomePage() {
     );
   }
 
+  // QUALITY-08 · §91 · Solo lo que pide una decisión humana sobre un cliente.
+  // Ninguna de estas líneas clasifica nada: una queja sin revisar no es una no
+  // conformidad, y una satisfacción que baja es una señal.
+  const voiceLines: string[] = [];
+  if (customerVoice.unreviewedComplaints > 0) {
+    voiceLines.push(
+      plural(customerVoice.unreviewedComplaints, "queja por revisar", "quejas por revisar")
+    );
+  }
+  if (customerVoice.campaignsClosingSoon > 0) {
+    voiceLines.push(
+      plural(customerVoice.campaignsClosingSoon, "campaña de satisfacción cerrando", "campañas de satisfacción cerrando")
+    );
+  }
+  if (customerVoice.satisfactionDrops > 0) {
+    voiceLines.push(
+      plural(customerVoice.satisfactionDrops, "métrica de satisfacción en deterioro", "métricas de satisfacción en deterioro")
+    );
+  }
+  if (customerVoice.openSignals > customerVoice.satisfactionDrops) {
+    const otras = customerVoice.openSignals - customerVoice.satisfactionDrops;
+    voiceLines.push(plural(otras, "señal de clientes abierta", "señales de clientes abiertas"));
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <header className="space-y-2">
@@ -284,6 +310,24 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/suppliers" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver proveedores →
+          </Link>
+        </section>
+      ) : null}
+
+      {voiceLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Voz del cliente</h2>
+          <ul className="mt-1 space-y-0.5">
+            {voiceLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Una queja sin revisar NO es una no conformidad, y una satisfacción que baja
+            es una señal: las dos piden que alguien mire, no que el sistema decida.
+          </p>
+          <Link href="/quality/customer-voice" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver voz del cliente →
           </Link>
         </section>
       ) : null}
