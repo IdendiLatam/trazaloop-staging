@@ -55,6 +55,8 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
   // desempeño, conocimiento y lecciones aprendidas.
   "0123_quality_people_competence_knowledge.sql",
+  // QUALITY-06: el barrido de Personas también genera tareas.
+  "0124_quality_people_tasks_from_sweep.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -494,6 +496,8 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

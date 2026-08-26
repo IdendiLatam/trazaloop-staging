@@ -356,6 +356,8 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

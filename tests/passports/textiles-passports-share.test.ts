@@ -102,6 +102,8 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

@@ -364,6 +364,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

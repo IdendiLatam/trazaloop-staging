@@ -265,6 +265,8 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

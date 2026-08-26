@@ -448,12 +448,29 @@ async function main() {
       "la alerta no aclara que vencer no es dejar de ser competente");
   });
 
+  await check("E2b. y también una TAREA con su enlace, no solo un aviso", async () => {
+    // §68 · Una alerta dice «esto merece tu atención»; una tarea dice «te toca
+    // hacer esto» y tiene un cierre. Sin tareas, la integración con «Mis
+    // tareas» no tendría nada que integrar.
+    const { data } = await Q.from("work_tasks")
+      .select("id, task_type, subject_type, due_at, status").eq("organization_id", A)
+      .like("dedupe_key", "competence_evidence_renewal:%");
+    assert((data ?? []).length === 1, `se crearon ${(data ?? []).length} tareas en vez de una`);
+    assert(data![0].task_type === "competence_evidence_renewal", "el tipo de tarea no es el correcto");
+    assert(data![0].subject_type === "quality_competency_evidence",
+      "la tarea no apunta a la evidencia");
+    assert(data![0].status === "open", "la tarea no nace pendiente");
+  });
+
   await check("E3. el segundo barrido NO duplica", async () => {
     await Q.rpc("quality_scan_people_signals", { p_organization_id: A });
     await Q.rpc("quality_scan_people_signals", { p_organization_id: A });
     const { data } = await Q.from("work_alerts")
       .select("id").eq("organization_id", A).like("dedupe_key", "competence_evidence:%");
     assert((data ?? []).length === 1, `tras tres barridos hay ${(data ?? []).length} alertas`);
+    const { data: tareas } = await Q.from("work_tasks")
+      .select("id").eq("organization_id", A).like("dedupe_key", "competence_evidence_renewal:%");
+    assert((tareas ?? []).length === 1, `tras tres barridos hay ${(tareas ?? []).length} tareas`);
   });
 
   await check("E4. al vencer, la EVIDENCIA pasa a vencida y la competencia NO cambia", async () => {
@@ -520,6 +537,16 @@ async function main() {
     const { data } = await Q.from("quality_performance_evaluations")
       .select("status, summary, evaluated_on").eq("id", EVALUACION).single();
     assert(data!.status === "closed" && data!.evaluated_on, "la evaluación no quedó cerrada");
+  });
+
+  await check("F3b. el ciclo abierto genera la tarea de evaluar, con su fecha", async () => {
+    await Q.rpc("quality_scan_people_signals", { p_organization_id: A });
+    const { data } = await Q.from("work_tasks")
+      .select("id, task_type, subject_id, due_at").eq("organization_id", A)
+      .eq("task_type", "performance_evaluation_due");
+    // Carlos ya tiene su evaluación CERRADA: la tarea que queda es la de Ana.
+    assert((data ?? []).length === 1, `se crearon ${(data ?? []).length} tareas de evaluación`);
+    assert(data![0].subject_id === ANA, "la tarea no apunta a quien falta por evaluar");
   });
 
   await check("F4. evaluar el desempeño NO tocó la competencia de la persona", async () => {
@@ -882,6 +909,18 @@ async function main() {
       p_signal_id: SENAL, p_risk_id: SENAL,
     });
     assert(e3, "se promovió una señal ajena");
+  });
+
+  await check("J8. las tareas generadas llegan a quien administra personas, no a cualquiera", async () => {
+    const { data: mias } = await Q.from("work_tasks")
+      .select("id, assignee_profile_id").eq("organization_id", A)
+      .in("task_type", ["competence_evidence_renewal", "performance_evaluation_due",
+                        "learning_effectiveness_review", "knowledge_continuity_review"]);
+    assert((mias ?? []).length >= 3, "el barrido no generó tareas de los cuatro tipos previstos");
+    for (const t of mias ?? []) {
+      assert(t.assignee_profile_id === quality.id,
+        "una tarea del dominio Personas quedó a nombre de quien no administra personas");
+    }
   });
 
   await check("K8. las funciones `security definer` no son un túnel por debajo de RLS", async () => {

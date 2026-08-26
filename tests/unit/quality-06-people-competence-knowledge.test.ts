@@ -46,7 +46,12 @@ const stripSql = (s: string) => s.replace(/^\s*--.*$/gm, "");
 const stripTs = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const MIG = "supabase/migrations/0123_quality_people_competence_knowledge.sql";
+/** 0124 reescribe el barrido para que además produzca TAREAS. Las
+ *  comprobaciones que hablan del barrido tienen que leer la versión VIGENTE,
+ *  no la primera: si no, seguirían aprobando una función que ya no corre. */
+const MIG_TAREAS = "supabase/migrations/0124_quality_people_tasks_from_sweep.sql";
 const SQL = stripSql(read(MIG));
+const SQL_SWEEP = stripSql(read(MIG_TAREAS));
 
 
 /**
@@ -405,9 +410,9 @@ check("G2. el texto dice REVISAR, nunca «incompetente»", () => {
 });
 
 check("G3. el barrido marca la EVIDENCIA vencida, no la competencia", () => {
-  const fn = SQL.slice(
-    SQL.indexOf("function public.quality_scan_people_signals"),
-    SQL.indexOf("revoke all on function public.quality_scan_people_signals")
+  const fn = SQL_SWEEP.slice(
+    SQL_SWEEP.indexOf("function public.quality_scan_people_signals"),
+    SQL_SWEEP.indexOf("revoke all on function public.quality_scan_people_signals")
   );
   assert(/update quality_competency_evidence e?\s+set status = 'expired'/.test(fn),
     "el barrido no marca la evidencia vencida");
@@ -453,9 +458,9 @@ check("H3. la señal habla del CONOCIMIENTO, nunca de la persona", () => {
 });
 
 check("H4. la señal NO crea un riesgo formal por su cuenta", () => {
-  const fn = SQL.slice(
-    SQL.indexOf("function public.quality_scan_people_signals"),
-    SQL.indexOf("revoke all on function public.quality_scan_people_signals")
+  const fn = SQL_SWEEP.slice(
+    SQL_SWEEP.indexOf("function public.quality_scan_people_signals"),
+    SQL_SWEEP.indexOf("revoke all on function public.quality_scan_people_signals")
   );
   assert(!/insert into quality_risks/.test(fn), "el barrido abre riesgos solo");
   assert(!/insert into work_cases/.test(fn), "el barrido abre no conformidades solo");
@@ -569,16 +574,26 @@ check("J5. la evidencia reutiliza el motor de referencias", () => {
     "el validador de referencias no resuelve las personas");
 });
 
-check("J6. las alertas del barrido son idempotentes", () => {
-  const fn = SQL.slice(
-    SQL.indexOf("function public.quality_scan_people_signals"),
-    SQL.indexOf("revoke all on function public.quality_scan_people_signals")
+check("J6. las alertas Y las tareas del barrido son idempotentes", () => {
+  const fn = SQL_SWEEP.slice(
+    SQL_SWEEP.indexOf("function public.quality_scan_people_signals"),
+    SQL_SWEEP.indexOf("revoke all on function public.quality_scan_people_signals")
   );
-  const inserts = [...fn.matchAll(/insert into work_alerts/g)].length;
-  const guardas = [...fn.matchAll(/not exists \(\s*\n?\s*select 1 from work_alerts/g)].length;
-  assert(inserts > 0, "el barrido no crea ninguna alerta");
-  assert(guardas === inserts,
-    `${inserts} inserciones de alerta y solo ${guardas} guardas de duplicado`);
+  const alertas = [...fn.matchAll(/insert into work_alerts/g)].length;
+  const guardasA = [...fn.matchAll(/not exists \(\s*\n?\s*select 1 from work_alerts/g)].length;
+  assert(alertas > 0, "el barrido no crea ninguna alerta");
+  assert(guardasA === alertas,
+    `${alertas} inserciones de alerta y solo ${guardasA} guardas de duplicado`);
+
+  const tareas = [...fn.matchAll(/insert into work_tasks/g)].length;
+  const guardasT = [...fn.matchAll(/not exists \(\s*\n?\s*select 1 from work_tasks/g)].length;
+  assert(tareas >= 5, `el barrido solo genera ${tareas} tipos de tarea`);
+  assert(guardasT === tareas,
+    `${tareas} inserciones de tarea y solo ${guardasT} guardas de duplicado`);
+
+  // §53 · Y ninguna de ellas es una ACCIÓN del sistema de gestión.
+  assert(!/insert into work_actions/.test(fn),
+    "el barrido convierte desarrollo en acciones del SGC por su cuenta");
 });
 
 // ---------------------------------------------------------------------------
@@ -667,6 +682,14 @@ check("K7b. toda función `security definer` que reciba una empresa comprueba qu
       `${nombre} recibe la empresa desde el cliente y no comprueba nada`);
   }
   assert(revisadas >= 5, `solo se revisaron ${revisadas} funciones: la comprobación no tiene alcance`);
+
+  // Y la versión VIGENTE del barrido, que vive en 0124.
+  const barrido = SQL_SWEEP.slice(
+    SQL_SWEEP.indexOf("function public.quality_scan_people_signals"),
+    SQL_SWEEP.indexOf("revoke all on function public.quality_scan_people_signals")
+  );
+  assert(/is_org_member\(p_organization_id\)/.test(barrido),
+    "el barrido vigente no comprueba a qué empresa pertenece quien lo dispara");
 });
 
 check("K8. ninguna capa del dominio usa la clave de servicio", () => {
@@ -800,10 +823,15 @@ check("M2. el dominio no depende de PCR ni de Textiles", () => {
 check("M3. la migración es append-only: no se tocó ninguna anterior", () => {
   const files = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
   assert(files.includes("0123_quality_people_competence_knowledge.sql"), "falta 0123");
-  const posteriores = files.filter((f) => Number(f.slice(0, 4)) > 123);
-  assert(posteriores.length === 0, `hay migraciones por encima de 0123: ${posteriores.join(", ")}`);
-  assert(!/drop table public\.(quality|work|trazadoc)_/.test(SQL),
-    "0123 destruye una tabla anterior");
+  assert(files.includes("0124_quality_people_tasks_from_sweep.sql"), "falta 0124");
+  const posteriores = files.filter((f) => Number(f.slice(0, 4)) > 124);
+  assert(posteriores.length === 0, `hay migraciones por encima de 0124: ${posteriores.join(", ")}`);
+  for (const [nombre, sql] of [[MIG, SQL], [MIG_TAREAS, SQL_SWEEP]] as const) {
+    assert(!/drop table public\.(quality|work|trazadoc)_/.test(sql),
+      `${nombre} destruye una tabla anterior`);
+  }
+  // 0124 no crea esquema: solo reescribe el cuerpo de una función.
+  assert(!/create table/.test(SQL_SWEEP), "0124 debía limitarse a reescribir el barrido");
 });
 
 check("M4. no se borra historia: no hay DELETE sobre lo que la conserva", () => {

@@ -772,6 +772,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

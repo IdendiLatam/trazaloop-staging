@@ -56,6 +56,8 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
   // desempeño, conocimiento y lecciones aprendidas.
   "0123_quality_people_competence_knowledge.sql",
+  // QUALITY-06: el barrido de Personas también genera tareas.
+  "0124_quality_people_tasks_from_sweep.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -173,6 +175,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

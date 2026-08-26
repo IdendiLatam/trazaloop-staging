@@ -480,6 +480,8 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
     // desempeño, conocimiento y lecciones aprendidas.
     "0123_quality_people_competence_knowledge.sql",
+    // QUALITY-06: el barrido de Personas también genera tareas.
+    "0124_quality_people_tasks_from_sweep.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);
