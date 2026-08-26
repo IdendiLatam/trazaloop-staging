@@ -78,6 +78,12 @@ import {
   qualityResponseDetail, qualitySatisfactionReport, qualitySurveyDetail, qualitySurveyList,
   qualitySurveyVersionDetail, qualityVoiceReviewDetail, qualityVoiceTrend,
 } from "./adapters/quality-customer-voice";
+import {
+  qualityAuditAgendaDetail, qualityAuditChecklistDetail, qualityAuditDetail,
+  qualityAuditExecutionDetail, qualityAuditFindingDetail, qualityAuditFindingList,
+  qualityAuditFollowupList, qualityAuditList, qualityAuditPlanDetail,
+  qualityAuditProgramDetail, qualityAuditProgramList, qualityAuditReportDetail,
+} from "./adapters/quality-audits";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -222,6 +228,23 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualityFeedbackDetail, qualityFeedbackList,
   qualityComplaintDetail, qualityComplaintList,
   qualitySatisfactionReport, qualityVoiceTrend, qualityVoiceReviewDetail,
+
+  // ------------------------------------------------------------------
+  // QUALITY-09 · programa, auditoría, ejecución, hallazgos e informe
+  //
+  // Tres reglas atraviesan los doce. Ninguno certifica nada: Trazaloop
+  // administra auditorías y la certificación la concede un organismo
+  // acreditado, que no es esto. Ninguno llama «no conformidad» a un hallazgo,
+  // ni siquiera al que el auditor propuso como posible. Y el INFORME se
+  // imprime desde su instantánea, no desde el estado de hoy: reimprimirlo
+  // dentro de dos años devuelve lo que decía entonces.
+  // ------------------------------------------------------------------
+  qualityAuditProgramDetail, qualityAuditProgramList,
+  qualityAuditDetail, qualityAuditList,
+  qualityAuditPlanDetail, qualityAuditAgendaDetail,
+  qualityAuditChecklistDetail, qualityAuditExecutionDetail,
+  qualityAuditFindingDetail, qualityAuditFindingList,
+  qualityAuditReportDetail, qualityAuditFollowupList,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

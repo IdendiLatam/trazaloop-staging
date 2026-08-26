@@ -19,6 +19,7 @@ import { getRiskSummary } from "@/lib/db/risks";
 import { getPeopleSignals } from "@/lib/db/quality-people";
 import { getSupplierHomeSignals } from "@/lib/db/quality-suppliers";
 import { getCustomerVoiceHomeSignals } from "@/lib/db/quality-customer-voice";
+import { getAuditHomeSignals } from "@/lib/db/quality-audits";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -56,7 +57,7 @@ export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
   const [summary, tasks, objectives, indicators, cases, risks, people, suppliers,
-         customerVoice] = await Promise.all([
+         customerVoice, audits] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
@@ -66,6 +67,7 @@ export default async function QualityHomePage() {
     getPeopleSignals(org.organizationId),
     getSupplierHomeSignals(org.organizationId),
     getCustomerVoiceHomeSignals(org.organizationId),
+    getAuditHomeSignals(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -215,6 +217,37 @@ export default async function QualityHomePage() {
     voiceLines.push(plural(otras, "señal de clientes abierta", "señales de clientes abiertas"));
   }
 
+  // QUALITY-09 · §51 · Solo lo que pide una decisión humana sobre una
+  // auditoría. Ninguna línea clasifica un hallazgo ni abre un caso: un hallazgo
+  // sin evaluar no es una no conformidad, y una auditoría vencida no se
+  // reprograma sola.
+  const auditLines: string[] = [];
+  if (audits.upcomingAudits > 0) {
+    auditLines.push(
+      plural(audits.upcomingAudits, "auditoría empieza pronto", "auditorías empiezan pronto")
+    );
+  }
+  if (audits.overdueAudits > 0) {
+    auditLines.push(
+      plural(audits.overdueAudits, "auditoría se pasó de fecha", "auditorías se pasaron de fecha")
+    );
+  }
+  if (audits.reportsPending > 0) {
+    auditLines.push(
+      plural(audits.reportsPending, "auditoría ejecutada sin informe", "auditorías ejecutadas sin informe")
+    );
+  }
+  if (audits.findingsPending > 0) {
+    auditLines.push(
+      plural(audits.findingsPending, "hallazgo sin evaluar", "hallazgos sin evaluar")
+    );
+  }
+  if (audits.openConflicts > 0) {
+    auditLines.push(
+      plural(audits.openConflicts, "conflicto de independencia sin decidir", "conflictos de independencia sin decidir")
+    );
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <header className="space-y-2">
@@ -328,6 +361,24 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/customer-voice" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver voz del cliente →
+          </Link>
+        </section>
+      ) : null}
+
+      {auditLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Auditorías</h2>
+          <ul className="mt-1 space-y-0.5">
+            {auditLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Un hallazgo sin evaluar NO es una no conformidad. Trazaloop administra
+            auditorías: no concede certificación.
+          </p>
+          <Link href="/quality/audits" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver auditorías →
           </Link>
         </section>
       ) : null}

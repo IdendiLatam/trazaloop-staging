@@ -61,6 +61,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0125_quality_suppliers_evaluation.sql",
   // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
   "0126_quality_customer_voice.sql",
+  "0127_quality_audits.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -506,6 +507,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0125_quality_suppliers_evaluation.sql",
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
+    "0127_quality_audits.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

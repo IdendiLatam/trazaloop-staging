@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **159** |
-| Ejes clasificados (ficha · listado · histórico) | **477** |
-| `AVAILABLE` | **188** |
-| `EMBEDDED` | **184** |
+| Entidades clasificadas | **178** |
+| Ejes clasificados (ficha · listado · histórico) | **534** |
+| `AVAILABLE` | **203** |
+| `EMBEDDED` | **221** |
 | `NOT_APPLICABLE` | **63** |
-| `HISTORICAL_NOT_SUPPORTED` | **42** |
+| `HISTORICAL_NOT_SUPPORTED` | **47** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **138** |
+| Claves distintas en el registro | **150** |
 
 ## Quality
 
@@ -132,6 +132,25 @@ No existe `PENDING`.
 | Tendencia de la voz del cliente | `/quality/customer-voice` | B | N/A | **AVAILABLE** · `quality.customer-voice-trend.list` | **HISTORICAL_NOT_SUPPORTED** |
 | Señal de la voz del cliente | — | D | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Informe de satisfacción del cliente* | EMBEDDED · dentro de *Cierre del periodo de satisfacción* |
 | Cierre del periodo de satisfacción | `/quality/customer-voice` | A | **AVAILABLE** · `quality.customer-voice-review.detail` | EMBEDDED · dentro de *Informe de satisfacción del cliente* | **AVAILABLE** · `quality.customer-voice-review.detail` |
+| Programa de auditorías | `/quality/audits/programs/[programId]` | C | **AVAILABLE** · `quality.audit-program.detail` | **AVAILABLE** · `quality.audit-program.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Revisión del programa de auditorías | — | D | EMBEDDED · dentro de *Programa de auditorías* | EMBEDDED · dentro de *Programa de auditorías* | EMBEDDED · dentro de *Programa de auditorías* |
+| Auditoría | `/quality/audits/[auditId]` | C | **AVAILABLE** · `quality.audit.detail` | **AVAILABLE** · `quality.audit.list` | **AVAILABLE** · `quality.audit-report.detail` |
+| Reprogramación de auditoría | — | D | EMBEDDED · dentro de *Auditoría* | EMBEDDED · dentro de *Auditoría* | EMBEDDED · dentro de *Auditoría* |
+| Plan de auditoría | `/quality/audits/[auditId]` | A | **AVAILABLE** · `quality.audit-plan.detail` | EMBEDDED · dentro de *Auditoría* | **HISTORICAL_NOT_SUPPORTED** |
+| Elemento del alcance de auditoría | — | D | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Informe de auditoría* |
+| Criterio de auditoría | — | D | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Informe de auditoría* |
+| Agenda de auditoría | `/quality/audits/[auditId]` | A | **AVAILABLE** · `quality.audit-agenda.detail` | EMBEDDED · dentro de *Agenda de auditoría* | **HISTORICAL_NOT_SUPPORTED** |
+| Equipo auditor | — | D | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Informe de auditoría* |
+| Comprobación de independencia | — | D | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Plan de auditoría* | EMBEDDED · dentro de *Plan de auditoría* |
+| Checklist de auditoría | `/quality/audits/checklists` | A | **AVAILABLE** · `quality.audit-checklist.detail` | EMBEDDED · dentro de *Checklist de auditoría* | **AVAILABLE** · `quality.audit-checklist.detail` |
+| Pregunta de checklist de auditoría | — | D | EMBEDDED · dentro de *Checklist de auditoría* | EMBEDDED · dentro de *Checklist de auditoría* | EMBEDDED · dentro de *Checklist de auditoría* |
+| Registro de ejecución de auditoría | `/quality/audits/[auditId]` | A | **AVAILABLE** · `quality.audit-execution.detail` | EMBEDDED · dentro de *Auditoría* | **HISTORICAL_NOT_SUPPORTED** |
+| Nota de auditoría | — | D | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Registro de ejecución de auditoría* |
+| Muestra de auditoría | — | D | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Informe de auditoría* |
+| Evidencia de auditoría | — | D | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Registro de ejecución de auditoría* | EMBEDDED · dentro de *Registro de ejecución de auditoría* |
+| Hallazgo de auditoría | `/quality/audits/findings` | C | **AVAILABLE** · `quality.audit-finding.detail` | **AVAILABLE** · `quality.audit-finding.list` | EMBEDDED · dentro de *Informe de auditoría* |
+| Informe de auditoría | `/quality/audits/[auditId]` | A | **AVAILABLE** · `quality.audit-report.detail` | EMBEDDED · dentro de *Auditoría* | **AVAILABLE** · `quality.audit-report.detail` |
+| Seguimiento de auditorías | `/quality/audits` | B | EMBEDDED · dentro de *Seguimiento de auditorías* | **AVAILABLE** · `quality.audit-followup.list` | **HISTORICAL_NOT_SUPPORTED** |
 
 ## TrazaDocs
 
@@ -507,3 +526,45 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Señal de la voz del cliente | Listado | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Señal de la voz del cliente | Histórico | EMBEDDED | Dentro de *Cierre del periodo de satisfacción*. Cuántas señales había al cerrar el periodo queda congelado en el retrato del cierre. |
 | Cierre del periodo de satisfacción | Listado | EMBEDDED | Dentro de *Informe de satisfacción del cliente*. Los cierres se listan dentro del resumen del dominio. |
+| Programa de auditorías | Histórico | HISTORICAL_NOT_SUPPORTED | El programa se imprime como está hoy con sus revisiones listadas. Cada revisión guarda su propia foto, y es ahí donde se lee qué decía el programa antes. |
+| Revisión del programa de auditorías | Ficha | EMBEDDED | Dentro de *Programa de auditorías*. Una revisión sola no se consulta: lo que se mira es cómo cambió el programa, y eso solo se ve en la lista completa. |
+| Revisión del programa de auditorías | Listado | EMBEDDED | Dentro de *Programa de auditorías*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Revisión del programa de auditorías | Histórico | EMBEDDED | Dentro de *Programa de auditorías*. Cada revisión ES el documento del pasado del programa, y se imprime dentro de él. |
+| Reprogramación de auditoría | Ficha | EMBEDDED | Dentro de *Auditoría*. Una reprogramación fuera de su auditoría no dice nada: su valor es que la fecha original se conserva al lado de la vigente. |
+| Reprogramación de auditoría | Listado | EMBEDDED | Dentro de *Auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Reprogramación de auditoría | Histórico | EMBEDDED | Dentro de *Auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Plan de auditoría | Listado | EMBEDDED | Dentro de *Auditoría*. Un listado de planes sin decir de qué auditorías no se consulta nunca: el listado que la gente pide es el de auditorías, y desde ahí se abre el plan de cada una. |
+| Plan de auditoría | Histórico | HISTORICAL_NOT_SUPPORTED | El plan se imprime como está hoy. Lo que se planificó originalmente se lee en la fecha original y en las reprogramaciones, que sí se conservan. |
+| Elemento del alcance de auditoría | Ficha | EMBEDDED | Dentro de *Plan de auditoría*. El alcance es una lista: cada elemento suelto no es un documento. |
+| Elemento del alcance de auditoría | Listado | EMBEDDED | Dentro de *Plan de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Elemento del alcance de auditoría | Histórico | EMBEDDED | Dentro de *Informe de auditoría*. El alcance auditado queda congelado en la instantánea del informe. |
+| Criterio de auditoría | Ficha | EMBEDDED | Dentro de *Plan de auditoría*. El criterio dice contra qué se audita; fuera del plan no significa nada. |
+| Criterio de auditoría | Listado | EMBEDDED | Dentro de *Plan de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Criterio de auditoría | Histórico | EMBEDDED | Dentro de *Informe de auditoría*. El informe guarda la REVISIÓN del documento que se auditó, no la de hoy. |
+| Agenda de auditoría | Listado | EMBEDDED | Dentro de *Agenda de auditoría*. Las actividades se listan dentro de la agenda de su auditoría. |
+| Agenda de auditoría | Histórico | HISTORICAL_NOT_SUPPORTED | La agenda es la intención. Lo que ocurrió de verdad está en el registro de ejecución, que es otra capa y se conserva aparte. |
+| Equipo auditor | Ficha | EMBEDDED | Dentro de *Plan de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Equipo auditor | Listado | EMBEDDED | Dentro de *Plan de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Equipo auditor | Histórico | EMBEDDED | Dentro de *Informe de auditoría*. El informe congela el equipo de ENTONCES. Si alguien cambia de puesto después, el informe sigue diciendo quién auditó. |
+| Comprobación de independencia | Ficha | EMBEDDED | Dentro de *Plan de auditoría*. Lo que importa no es cada conflicto por separado, sino el conjunto y qué se decidió sobre cada uno. |
+| Comprobación de independencia | Listado | EMBEDDED | Dentro de *Plan de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Comprobación de independencia | Histórico | EMBEDDED | Dentro de *Plan de auditoría*. La comprobación ya se resuelve con los cargos de la FECHA de la auditoría: es histórica por construcción. |
+| Checklist de auditoría | Listado | EMBEDDED | Dentro de *Checklist de auditoría*. El documento del checklist imprime TODAS sus versiones: un listado aparte diría menos y se desactualizaría igual. |
+| Pregunta de checklist de auditoría | Ficha | EMBEDDED | Dentro de *Checklist de auditoría*. La pregunta pertenece a la versión que la congela; fuera de ella no significa nada. |
+| Pregunta de checklist de auditoría | Listado | EMBEDDED | Dentro de *Checklist de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Pregunta de checklist de auditoría | Histórico | EMBEDDED | Dentro de *Checklist de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Registro de ejecución de auditoría | Listado | EMBEDDED | Dentro de *Auditoría*. Lo que la gente lista son auditorías; el registro se abre por auditoría. |
+| Registro de ejecución de auditoría | Histórico | HISTORICAL_NOT_SUPPORTED | El registro se imprime como está hoy. El documento congelado de la auditoría es su informe, que sí guarda su instantánea. |
+| Nota de auditoría | Ficha | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Una nota de trabajo suelta no es un documento, y sacarla del registro invitaría a tratarla como si fuera evidencia. |
+| Nota de auditoría | Listado | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Nota de auditoría | Histórico | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Muestra de auditoría | Ficha | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. La muestra dice qué se revisó y de cuánto; su sentido está junto a lo que se encontró. |
+| Muestra de auditoría | Listado | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Muestra de auditoría | Histórico | EMBEDDED | Dentro de *Informe de auditoría*. Las muestras quedan congeladas en la instantánea del informe. |
+| Evidencia de auditoría | Ficha | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. La evidencia de auditoría es una REFERENCIA a algo que ya existe y ya tiene su propio documento. Un PDF por referencia sería una copia de una copia. |
+| Evidencia de auditoría | Listado | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Evidencia de auditoría | Histórico | EMBEDDED | Dentro de *Registro de ejecución de auditoría*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Hallazgo de auditoría | Histórico | EMBEDDED | Dentro de *Informe de auditoría*. El informe congela los hallazgos tal como estaban al emitirlo, con la clasificación que se les había propuesto entonces. |
+| Informe de auditoría | Listado | EMBEDDED | Dentro de *Auditoría*. Los informes de una auditoría se listan dentro de ella: un listado global de informes sin decir de qué auditoría no se consulta. |
+| Seguimiento de auditorías | Ficha | EMBEDDED | Dentro de *Seguimiento de auditorías*. El seguimiento es, por naturaleza, un listado: qué quedó abierto en TODAS las auditorías. |
+| Seguimiento de auditorías | Histórico | HISTORICAL_NOT_SUPPORTED | El seguimiento es la situación de hoy. Lo que quedaba abierto en un momento dado se lee en el informe de esa fecha, que lo guarda. |

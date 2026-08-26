@@ -172,7 +172,7 @@ escribir) · `N/A`.
 | Filas de entidad clasificadas | **94** |
 | Clasificadas como no documentables (`E` / backoffice) | **14**, cada una con motivo |
 | Filas con exportación disponible hoy | **49** |
-| Exportadores en el registro | **138** |
+| Exportadores en el registro | **150** |
 | Clasificadas y pendientes de adaptador | **0** · cerradas en EXPORT-01.1 |
 
 Las 94 filas no son 94 tablas: incluyen las entidades de clase `D`, que se

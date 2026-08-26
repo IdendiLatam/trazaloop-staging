@@ -8,15 +8,27 @@
 
 EXPORT-01 entregó 32 exportaciones y dejó 31 filas clasificadas como
 pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
-**138 exportaciones**, con **0 pendientes**.
+**150 exportaciones**, con **0 pendientes**.
 
 ## Todas las claves del registro
 
-### Quality (83)
+### Quality (95)
 
 - `quality.action.detail`
 - `quality.action.list`
 - `quality.approved-supplier.list`
+- `quality.audit-agenda.detail`
+- `quality.audit-checklist.detail`
+- `quality.audit-execution.detail`
+- `quality.audit-finding.detail`
+- `quality.audit-finding.list`
+- `quality.audit-followup.list`
+- `quality.audit-plan.detail`
+- `quality.audit-program.detail`
+- `quality.audit-program.list`
+- `quality.audit-report.detail`
+- `quality.audit.detail`
+- `quality.audit.list`
 - `quality.case.detail`
 - `quality.case.list`
 - `quality.competence-matrix.detail`

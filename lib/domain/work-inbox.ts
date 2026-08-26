@@ -46,6 +46,10 @@ export const SUBJECT_TYPES = [
   // MANIFESTACIÓN, no el cliente: es lo que hay que revisar.
   "quality_customer_profile", "quality_survey_campaign",
   "quality_customer_feedback", "quality_customer_voice_review",
+  // QUALITY-09 · Auditorías. El asunto de una tarea de hallazgo es el HALLAZGO,
+  // no la auditoría: es lo que hay que evaluar, y evaluarlo no lo convierte en
+  // no conformidad.
+  "quality_audit_program", "quality_audit", "quality_audit_finding",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -100,6 +104,13 @@ export const TASK_TYPES = [
   "campaign_closing_review",
   "customer_signal_review",
   "customer_voice_review_due",
+  // QUALITY-09
+  "audit_preparation",
+  "audit_plan_review",
+  "audit_execution",
+  "audit_report_issue",
+  "audit_finding_evaluation",
+  "audit_followup",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -135,6 +146,12 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   campaign_closing_review: "Revisar una campaña que cierra",
   customer_signal_review: "Revisar una señal de los clientes",
   customer_voice_review_due: "Cerrar el periodo de satisfacción",
+  audit_preparation: "Preparar una auditoría",
+  audit_plan_review: "Revisar el plan de una auditoría",
+  audit_execution: "Ejecutar una auditoría",
+  audit_report_issue: "Emitir el informe de una auditoría",
+  audit_finding_evaluation: "Evaluar un hallazgo de auditoría",
+  audit_followup: "Seguir lo que dejó abierto una auditoría",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -195,6 +212,14 @@ export const ALERT_TYPES = [
   "satisfaction_drop",
   "customer_signal_raised",
   "voice_review_due",
+  // QUALITY-09 · Ninguno clasifica un hallazgo, abre un caso ni cambia el
+  // estado de una auditoría: dicen que hay algo que mirar.
+  "audit_upcoming",
+  "audit_overdue",
+  "audit_report_pending",
+  "audit_finding_unevaluated",
+  "audit_independence_conflict",
+  "audit_program_coverage_gap",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -237,6 +262,12 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   satisfaction_drop: "La satisfacción bajó respecto de la medición anterior",
   customer_signal_raised: "Hay una señal nueva de los clientes",
   voice_review_due: "Toca cerrar el periodo de satisfacción",
+  audit_upcoming: "Una auditoría empieza pronto",
+  audit_overdue: "Una auditoría se pasó de su fecha",
+  audit_report_pending: "Una auditoría ejecutada sigue sin informe",
+  audit_finding_unevaluated: "Un hallazgo lleva días sin evaluar",
+  audit_independence_conflict: "Hay un conflicto de independencia sin decidir",
+  audit_program_coverage_gap: "El programa va corto de cobertura",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

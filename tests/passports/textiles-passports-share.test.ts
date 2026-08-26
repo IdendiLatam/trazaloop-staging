@@ -108,6 +108,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0125_quality_suppliers_evaluation.sql",
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
+    "0127_quality_audits.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

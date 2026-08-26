@@ -1056,6 +1056,162 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
       "Los cierres se listan dentro del resumen del dominio."),
     historical: has("quality.customer-voice-review.detail"),
   },
+  // ------------------------------------------------------------------
+  // QUALITY-09 · auditorías
+  //
+  // «Auditoría» a secas no colisiona con nada, pero «Hallazgo» sí: QUALITY-04
+  // ya tiene el hallazgo de un caso, que es otra cosa. Por eso todo lo que
+  // pertenece a este dominio lleva apellido.
+  // ------------------------------------------------------------------
+  {
+    entity: "Programa de auditorías", module: "quality",
+    route: "/quality/audits/programs/[programId]", klass: "C",
+    detail: has("quality.audit-program.detail"),
+    list: has("quality.audit-program.list"),
+    historical: noHistory(
+      "El programa se imprime como está hoy con sus revisiones listadas. Cada revisión guarda su propia foto, y es ahí donde se lee qué decía el programa antes."),
+  },
+  {
+    entity: "Revisión del programa de auditorías", module: "quality", route: null, klass: "D",
+    detail: embedded("Programa de auditorías",
+      "Una revisión sola no se consulta: lo que se mira es cómo cambió el programa, y eso solo se ve en la lista completa."),
+    list: embedded("Programa de auditorías"),
+    historical: embedded("Programa de auditorías",
+      "Cada revisión ES el documento del pasado del programa, y se imprime dentro de él."),
+  },
+  {
+    entity: "Auditoría", module: "quality", route: "/quality/audits/[auditId]", klass: "C",
+    detail: has("quality.audit.detail"),
+    list: has("quality.audit.list"),
+    historical: has("quality.audit-report.detail"),
+  },
+  {
+    entity: "Reprogramación de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Auditoría",
+      "Una reprogramación fuera de su auditoría no dice nada: su valor es que la fecha original se conserva al lado de la vigente."),
+    list: embedded("Auditoría"),
+    historical: embedded("Auditoría"),
+  },
+  {
+    entity: "Plan de auditoría", module: "quality",
+    route: "/quality/audits/[auditId]", klass: "A",
+    detail: has("quality.audit-plan.detail"),
+    list: embedded("Auditoría",
+      "Un listado de planes sin decir de qué auditorías no se consulta nunca: el listado que la gente pide es el de auditorías, y desde ahí se abre el plan de cada una."),
+    historical: noHistory(
+      "El plan se imprime como está hoy. Lo que se planificó originalmente se lee en la fecha original y en las reprogramaciones, que sí se conservan."),
+  },
+  {
+    entity: "Elemento del alcance de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de auditoría",
+      "El alcance es una lista: cada elemento suelto no es un documento."),
+    list: embedded("Plan de auditoría"),
+    historical: embedded("Informe de auditoría",
+      "El alcance auditado queda congelado en la instantánea del informe."),
+  },
+  {
+    entity: "Criterio de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de auditoría",
+      "El criterio dice contra qué se audita; fuera del plan no significa nada."),
+    list: embedded("Plan de auditoría"),
+    historical: embedded("Informe de auditoría",
+      "El informe guarda la REVISIÓN del documento que se auditó, no la de hoy."),
+  },
+  {
+    entity: "Agenda de auditoría", module: "quality",
+    route: "/quality/audits/[auditId]", klass: "A",
+    detail: has("quality.audit-agenda.detail"),
+    list: embedded("Agenda de auditoría",
+      "Las actividades se listan dentro de la agenda de su auditoría."),
+    historical: noHistory(
+      "La agenda es la intención. Lo que ocurrió de verdad está en el registro de ejecución, que es otra capa y se conserva aparte."),
+  },
+  {
+    entity: "Equipo auditor", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de auditoría"),
+    list: embedded("Plan de auditoría"),
+    historical: embedded("Informe de auditoría",
+      "El informe congela el equipo de ENTONCES. Si alguien cambia de puesto después, el informe sigue diciendo quién auditó."),
+  },
+  {
+    entity: "Comprobación de independencia", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de auditoría",
+      "Lo que importa no es cada conflicto por separado, sino el conjunto y qué se decidió sobre cada uno."),
+    list: embedded("Plan de auditoría"),
+    historical: embedded("Plan de auditoría",
+      "La comprobación ya se resuelve con los cargos de la FECHA de la auditoría: es histórica por construcción."),
+  },
+  {
+    entity: "Checklist de auditoría", module: "quality",
+    route: "/quality/audits/checklists", klass: "A",
+    detail: has("quality.audit-checklist.detail"),
+    list: embedded("Checklist de auditoría",
+      "El documento del checklist imprime TODAS sus versiones: un listado aparte diría menos y se desactualizaría igual."),
+    historical: has("quality.audit-checklist.detail"),
+  },
+  {
+    entity: "Pregunta de checklist de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Checklist de auditoría",
+      "La pregunta pertenece a la versión que la congela; fuera de ella no significa nada."),
+    list: embedded("Checklist de auditoría"),
+    historical: embedded("Checklist de auditoría"),
+  },
+  {
+    entity: "Registro de ejecución de auditoría", module: "quality",
+    route: "/quality/audits/[auditId]", klass: "A",
+    detail: has("quality.audit-execution.detail"),
+    list: embedded("Auditoría",
+      "Lo que la gente lista son auditorías; el registro se abre por auditoría."),
+    historical: noHistory(
+      "El registro se imprime como está hoy. El documento congelado de la auditoría es su informe, que sí guarda su instantánea."),
+  },
+  {
+    entity: "Nota de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Registro de ejecución de auditoría",
+      "Una nota de trabajo suelta no es un documento, y sacarla del registro invitaría a tratarla como si fuera evidencia."),
+    list: embedded("Registro de ejecución de auditoría"),
+    historical: embedded("Registro de ejecución de auditoría"),
+  },
+  {
+    entity: "Muestra de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Registro de ejecución de auditoría",
+      "La muestra dice qué se revisó y de cuánto; su sentido está junto a lo que se encontró."),
+    list: embedded("Registro de ejecución de auditoría"),
+    historical: embedded("Informe de auditoría",
+      "Las muestras quedan congeladas en la instantánea del informe."),
+  },
+  {
+    entity: "Evidencia de auditoría", module: "quality", route: null, klass: "D",
+    detail: embedded("Registro de ejecución de auditoría",
+      "La evidencia de auditoría es una REFERENCIA a algo que ya existe y ya tiene su propio documento. Un PDF por referencia sería una copia de una copia."),
+    list: embedded("Registro de ejecución de auditoría"),
+    historical: embedded("Registro de ejecución de auditoría"),
+  },
+  {
+    entity: "Hallazgo de auditoría", module: "quality",
+    route: "/quality/audits/findings", klass: "C",
+    detail: has("quality.audit-finding.detail"),
+    list: has("quality.audit-finding.list"),
+    historical: embedded("Informe de auditoría",
+      "El informe congela los hallazgos tal como estaban al emitirlo, con la clasificación que se les había propuesto entonces."),
+  },
+  {
+    entity: "Informe de auditoría", module: "quality",
+    route: "/quality/audits/[auditId]", klass: "A",
+    detail: has("quality.audit-report.detail"),
+    list: embedded("Auditoría",
+      "Los informes de una auditoría se listan dentro de ella: un listado global de informes sin decir de qué auditoría no se consulta."),
+    historical: has("quality.audit-report.detail"),
+  },
+  {
+    entity: "Seguimiento de auditorías", module: "quality",
+    route: "/quality/audits", klass: "B",
+    detail: embedded("Seguimiento de auditorías",
+      "El seguimiento es, por naturaleza, un listado: qué quedó abierto en TODAS las auditorías."),
+    list: has("quality.audit-followup.list"),
+    historical: noHistory(
+      "El seguimiento es la situación de hoy. Lo que quedaba abierto en un momento dado se lee en el informe de esa fecha, que lo guarda."),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

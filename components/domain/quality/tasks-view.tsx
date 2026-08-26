@@ -92,6 +92,12 @@ const TASK_TONE: Record<TaskType, string> = {
   campaign_closing_review: "border-loop/30 bg-loop/5",
   customer_signal_review: "border-amber/40 bg-amber/5",
   customer_voice_review_due: "border-loop/30 bg-loop/5",
+  audit_preparation: "border-loop/30 bg-loop/5",
+  audit_plan_review: "border-loop/30 bg-loop/5",
+  audit_execution: "border-amber/40 bg-amber/5",
+  audit_report_issue: "border-amber/40 bg-amber/5",
+  audit_finding_evaluation: "border-amber/40 bg-amber/5",
+  audit_followup: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -126,6 +132,12 @@ const TASK_CTA: Record<TaskType, string> = {
   campaign_closing_review: "Ver la campaña",
   customer_signal_review: "Ver las señales",
   customer_voice_review_due: "Ir al cierre del periodo",
+  audit_preparation: "Preparar la auditoría",
+  audit_plan_review: "Revisar el plan",
+  audit_execution: "Ir a la auditoría",
+  audit_report_issue: "Emitir el informe",
+  audit_finding_evaluation: "Ver los hallazgos",
+  audit_followup: "Ver el seguimiento",
 };
 
 /**
@@ -200,6 +212,15 @@ function subjectHref(
       return `/quality/customer-voice/feedback`;
     case "quality_customer_voice_review":
       return `/quality/customer-voice`;
+    // QUALITY-09 · El programa y la auditoría tienen ficha propia. El hallazgo
+    // se ve DENTRO de su auditoría y la tarea no guarda a cuál pertenece, así
+    // que lleva a la pantalla de hallazgos, que existe.
+    case "quality_audit_program":
+      return `/quality/audits/programs/${subjectId}`;
+    case "quality_audit":
+      return `/quality/audits/${subjectId}`;
+    case "quality_audit_finding":
+      return `/quality/audits/findings`;
     default:
       return null;
   }

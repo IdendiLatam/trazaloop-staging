@@ -570,6 +570,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0125_quality_suppliers_evaluation.sql",
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
+    "0127_quality_audits.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

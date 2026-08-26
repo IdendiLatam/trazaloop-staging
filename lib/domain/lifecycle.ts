@@ -40,6 +40,8 @@ export const LIFECYCLE_ENTITIES = [
   "supplier",
   // QUALITY-08 · Y con el mismo criterio, el cliente y la encuesta.
   "customer", "survey",
+  // QUALITY-09 · Y con el mismo criterio, la auditoría y su programa.
+  "audit", "audit_program",
 ] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
@@ -180,6 +182,10 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar este cliente mientras no haya dicho nada ni se le haya invitado a ninguna encuesta. Después se retira, no se borra: lo que dijo un cliente es de las pocas cosas que un sistema de gestión no puede permitirse perder.",
   survey:
     "Podrás eliminar esta encuesta mientras siga siendo un borrador sin campañas ni respuestas. En cuanto alguien haya respondido, se retira: sus respuestas solo se interpretan con las preguntas que tenía entonces.",
+  audit:
+    "Podrás eliminar esta auditoría mientras siga en borrador, sin hallazgos, sin evidencia y sin informe. En cuanto se ejecuta se cancela, no se borra: una auditoría cancelada sigue contando como planificada no ejecutada, y borrarla mejoraría la cobertura del programa sin que nadie hubiera auditado nada.",
+  audit_program:
+    "Podrás eliminar este programa mientras no tenga auditorías ni más de una revisión. Después se cierra, no se borra: su cobertura es la prueba de qué se planificó auditar y qué se auditó de verdad.",
   methodology_version:
     "Podrás eliminar esta versión mientras siga en borrador y no se haya usado para evaluar. Una vez publicada, se sustituye por una versión nueva en lugar de reescribirla.",
 };
@@ -200,6 +206,8 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   supplier: "proveedor",
   customer: "cliente",
   survey: "encuesta",
+  audit: "auditoría",
+  audit_program: "programa de auditorías",
 };
 
 /**
@@ -208,7 +216,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
  * parezca traducido a máquina.
  */
 const FEMININE_ENTITIES: ReadonlySet<LifecycleEntity> = new Set([
-  "action", "opportunity", "methodology_version", "survey",
+  "action", "opportunity", "methodology_version", "survey", "audit",
 ]);
 
 /** «Este proceso» / «Esta acción», según toque. */

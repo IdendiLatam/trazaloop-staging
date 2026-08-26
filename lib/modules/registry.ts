@@ -345,6 +345,17 @@ export const QUALITY_VOZ_CLIENTE_GROUP: ModuleNavGroup = {
   ],
 };
 
+export const QUALITY_AUDITORIAS_GROUP: ModuleNavGroup = {
+  title: "Auditorías",
+  items: [
+    { label: "Resumen", href: "/quality/audits", exact: true },
+    { label: "Programa", href: "/quality/audits/programs" },
+    { label: "Auditorías", href: "/quality/audits/list" },
+    { label: "Hallazgos", href: "/quality/audits/findings" },
+    { label: "Checklists", href: "/quality/audits/checklists" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -360,7 +371,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   ],
   groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
            QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
-           QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
+           QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------
