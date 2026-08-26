@@ -52,6 +52,9 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
   // metodología configurable y versionada.
   "0122_quality_risks_and_opportunities.sql",
+  // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+  // desempeño, conocimiento y lecciones aprendidas.
+  "0123_quality_people_competence_knowledge.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -339,6 +342,9 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

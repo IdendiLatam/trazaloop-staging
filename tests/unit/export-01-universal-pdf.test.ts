@@ -525,10 +525,33 @@ check("G3. el botón se llama igual en toda la plataforma", () => {
   }
 });
 
-check("G4. EXPORT-01 no añadió ninguna migración", () => {
+check("G4. exportar sigue siendo LECTURA: el motor no tiene esquema propio", () => {
+  // La comprobación original congelaba el número de la última migración
+  // («ninguna por encima de 0122»). Eso decía la verdad el día que se
+  // escribió y dejaba de decirla en cuanto CUALQUIER otro sprint añadiera
+  // esquema, que es exactamente lo que pasa en un producto vivo: la prueba
+  // habría fallado por algo que no tiene nada que ver con exportar.
+  //
+  // Lo que de verdad importa es la invariante: el motor de exportación no
+  // guarda nada. No hay tabla de exportaciones, ni cola, ni caché de PDF, ni
+  // registro de descargas. Si alguien intenta darle estado, esto lo dice.
   const migrations = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
-  const beyond = migrations.filter((f) => Number(f.slice(0, 4)) > 122);
-  assert(beyond.length === 0, `exportar es lectura: no necesita esquema (${beyond.join(", ")})`);
+  const conEsquema: string[] = [];
+  for (const f of migrations) {
+    const sql = read(join("supabase/migrations", f));
+    if (/create table (?:if not exists )?public\.export_/i.test(sql)) conEsquema.push(f);
+  }
+  assert(
+    conEsquema.length === 0,
+    `exportar es lectura: no necesita esquema (${conEsquema.join(", ")})`
+  );
+
+  // Y el registro tampoco puede leer de una tabla que sea suya.
+  const registro = read("lib/export/registry.ts") + read("lib/export/registry-types.ts");
+  assert(
+    !/from\("export_/.test(registro),
+    "el registro de exportaciones consulta una tabla propia"
+  );
 });
 
 // ---------------------------------------------------------------------------

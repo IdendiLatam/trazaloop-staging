@@ -99,6 +99,9 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

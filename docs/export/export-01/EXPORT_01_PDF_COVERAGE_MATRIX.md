@@ -8,22 +8,36 @@
 
 EXPORT-01 entregó 32 exportaciones y dejó 31 filas clasificadas como
 pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
-**85 exportaciones**, con **0 pendientes**.
+**109 exportaciones**, con **0 pendientes**.
 
 ## Todas las claves del registro
 
-### Quality (30)
+### Quality (54)
 
 - `quality.action.detail`
 - `quality.action.list`
 - `quality.case.detail`
 - `quality.case.list`
+- `quality.competence-matrix.detail`
+- `quality.competence-matrix.historical`
+- `quality.competency.detail`
+- `quality.competency.list`
 - `quality.control.detail`
 - `quality.control.list`
+- `quality.development-need.list`
+- `quality.development-plan.detail`
+- `quality.development-plan.list`
 - `quality.document-revision.detail`
 - `quality.document.detail`
+- `quality.effectiveness.detail`
 - `quality.indicator.detail`
 - `quality.indicator.list`
+- `quality.knowledge.detail`
+- `quality.knowledge.list`
+- `quality.learning-activity.detail`
+- `quality.learning-activity.list`
+- `quality.lesson.detail`
+- `quality.lesson.list`
 - `quality.map-version.detail`
 - `quality.map.detail`
 - `quality.master-list.list`
@@ -34,7 +48,16 @@ pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
 - `quality.objective.list`
 - `quality.opportunity.detail`
 - `quality.opportunity.list`
+- `quality.org-unit.list`
+- `quality.orgchart.detail`
+- `quality.performance-cycle.detail`
+- `quality.performance-evaluation.detail`
 - `quality.period-closure.list`
+- `quality.person-competence.detail`
+- `quality.person.detail`
+- `quality.person.list`
+- `quality.position-holders.historical`
+- `quality.position-profile.detail`
 - `quality.position.detail`
 - `quality.position.list`
 - `quality.process-revision.detail`
@@ -44,6 +67,7 @@ pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
 - `quality.risk.detail`
 - `quality.risk.list`
 - `quality.task.list`
+- `quality.transfer-plan.detail`
 
 ### TrazaDocs (2)
 

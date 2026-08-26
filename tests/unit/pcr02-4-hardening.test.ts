@@ -262,6 +262,9 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

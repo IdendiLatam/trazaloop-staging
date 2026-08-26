@@ -16,6 +16,7 @@ import { listMyTasks } from "@/lib/db/document-control";
 import { listObjectives, listIndicators } from "@/lib/db/quality-indicators";
 import { getCaseSummary } from "@/lib/db/work-cases";
 import { getRiskSummary } from "@/lib/db/risks";
+import { getPeopleSignals } from "@/lib/db/quality-people";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -52,13 +53,14 @@ function Card({
 export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
-  const [summary, tasks, objectives, indicators, cases, risks] = await Promise.all([
+  const [summary, tasks, objectives, indicators, cases, risks, people] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
     listIndicators(org.organizationId),
     getCaseSummary(org.organizationId),
     getRiskSummary(org.organizationId),
+    getPeopleSignals(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -110,6 +112,36 @@ export default async function QualityHomePage() {
   if (risks.overdueActions > 0) {
     riskLines.push(
       plural(risks.overdueActions, "acción de tratamiento vencida", "acciones de tratamiento vencidas")
+    );
+  }
+
+  // QUALITY-06 · Señales de Personas. Cinco números como mucho, y ninguno es
+  // un dato personal: «2 evaluaciones pendientes» sirve en una portada,
+  // «Ana no ha sido evaluada» no —quien pueda saberlo entra a la pantalla.
+  const peopleLines: string[] = [];
+  if (people.pendingEvaluations > 0) {
+    peopleLines.push(
+      plural(people.pendingEvaluations, "evaluación de desempeño pendiente", "evaluaciones de desempeño pendientes")
+    );
+  }
+  if (people.expiringEvidence > 0) {
+    peopleLines.push(
+      plural(people.expiringEvidence, "evidencia de competencia por vencer", "evidencias de competencia por vencer")
+    );
+  }
+  if (people.concentratedKnowledge > 0) {
+    peopleLines.push(
+      plural(people.concentratedKnowledge, "conocimiento crítico concentrado", "conocimientos críticos concentrados")
+    );
+  }
+  if (people.criticalPositionsVacant > 0) {
+    peopleLines.push(
+      plural(people.criticalPositionsVacant, "cargo crítico sin titular", "cargos críticos sin titular")
+    );
+  }
+  if (people.openTransfers > 0) {
+    peopleLines.push(
+      plural(people.openTransfers, "transferencia de conocimiento en curso", "transferencias de conocimiento en curso")
     );
   }
 
@@ -181,6 +213,25 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/risks" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver riesgos →
+          </Link>
+        </section>
+      ) : null}
+
+      {peopleLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Personas</h2>
+          <ul className="mt-1 space-y-0.5">
+            {peopleLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Una evidencia vencida pide revisarla, no declara incompetente a nadie. Y un
+            conocimiento concentrado es un problema de la organización, no de la persona
+            que lo sostiene.
+          </p>
+          <Link href="/quality/people" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver personas →
           </Link>
         </section>
       ) : null}

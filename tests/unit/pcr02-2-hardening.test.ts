@@ -289,6 +289,9 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

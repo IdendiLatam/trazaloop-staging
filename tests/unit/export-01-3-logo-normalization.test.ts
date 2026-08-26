@@ -329,11 +329,21 @@ await check("F3. el original NO se toca", async () => {
   assert(!/writeFile|upload/.test(normalize), "la normalización debe ser en memoria");
 });
 
-await check("F4. no se creó caché persistente ni migración", async () => {
+await check("F4. el logo no tiene esquema propio ni caché persistente", async () => {
+  // La comprobación original congelaba el número de la última migración
+  // («ninguna por encima de 0122»). Eso decía la verdad el día que se escribió
+  // y dejaba de decirla en cuanto cualquier OTRO sprint añadiera esquema, que
+  // es lo que pasa en un producto vivo.
+  //
+  // Lo que de verdad importa es la invariante: normalizar un logo es una
+  // operación de lectura y no guarda nada. No hay tabla de logos
+  // normalizados, ni cola, ni caché en base de datos.
   const { readdirSync } = await import("node:fs");
-  const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
-    .filter((f) => f.endsWith(".sql") && Number(f.slice(0, 4)) > 122);
-  assert(migraciones.length === 0, `apareció una migración: ${migraciones.join(", ")}`);
+  const migraciones = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+  const conEsquema = migraciones.filter((f) =>
+    /create table (?:if not exists )?public\.\w*(logo|normalized_image)\w*/i
+      .test(read(join("supabase/migrations", f))));
+  assert(conEsquema.length === 0, `apareció esquema de logos: ${conEsquema.join(", ")}`);
   const loader = read("lib/db/company-logo.ts");
   assert(!/logo_normalized|normalized_logos|cache/i.test(loader),
     "no debe existir caché persistente de logos normalizados");

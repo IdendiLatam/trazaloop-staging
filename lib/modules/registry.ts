@@ -285,6 +285,32 @@ export const QUALITY_DOCUMENTOS_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * QUALITY-06 · Personas. Grupo propio, y con esa palabra.
+ *
+ * No se llama «Recursos humanos» porque esto no es un HRIS: no hay nómina, ni
+ * salarios, ni salud ocupacional, ni expediente disciplinario. Y no se llama
+ * «Capacitación» porque la formación es UNA de las formas de desarrollar a
+ * alguien, no el dominio entero (PC-08).
+ *
+ * El orden de dentro es el del trabajo real: primero cómo está organizada la
+ * empresa, después quién trabaja en ella, después qué tiene que saber saber
+ * hacer, después cómo se desarrolla, y por último qué sabe la organización y
+ * qué ha aprendido.
+ */
+export const QUALITY_PERSONAS_GROUP: ModuleNavGroup = {
+  title: "Personas",
+  items: [
+    { label: "Estructura de la empresa", href: "/quality/people/structure" },
+    { label: "Personas", href: "/quality/people", exact: true },
+    { label: "Competencias", href: "/quality/people/competencies" },
+    { label: "Desarrollo", href: "/quality/people/development" },
+    { label: "Desempeño", href: "/quality/people/performance" },
+    { label: "Conocimiento", href: "/quality/people/knowledge" },
+    { label: "Lecciones aprendidas", href: "/quality/people/lessons" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -298,8 +324,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
-           QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
+  groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_DESEMPENO_GROUP,
+           QUALITY_RIESGOS_GROUP, QUALITY_CASOS_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

@@ -105,6 +105,9 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
   // metodología configurable y versionada.
   "0122_quality_risks_and_opportunities.sql",
+  // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+  // desempeño, conocimiento y lecciones aprendidas.
+  "0123_quality_people_competence_knowledge.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -1142,6 +1145,9 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));

@@ -52,6 +52,9 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
   // metodología configurable y versionada.
   "0122_quality_risks_and_opportunities.sql",
+  // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+  // desempeño, conocimiento y lecciones aprendidas.
+  "0123_quality_people_competence_knowledge.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -488,6 +491,9 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

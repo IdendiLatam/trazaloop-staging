@@ -29,6 +29,14 @@ export const SUBJECT_TYPES = [
   // entra aqui, no en un enumerado paralelo, para que la tarea sepa a donde
   // lleva.
   "quality_risk", "quality_opportunity", "quality_control",
+  // QUALITY-06 · Personas. Mismo criterio de siempre: el tipo entra AQUÍ para
+  // que la bandeja sepa a dónde lleva. Un aviso de certificación por vencer
+  // que enlazara a Documentos sería peor que uno sin enlace.
+  "quality_person", "quality_position", "quality_person_competency",
+  "quality_competency_evidence", "quality_development_plan_item",
+  "quality_learning_activity", "quality_performance_evaluation",
+  "quality_knowledge_item", "quality_knowledge_transfer_plan",
+  "quality_lesson_learned",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -63,6 +71,15 @@ export const TASK_TYPES = [
   "risk_treatment_approval",
   "control_verification",
   "opportunity_review",
+  // QUALITY-06
+  "competence_evidence_renewal",
+  "competence_assessment_due",
+  "performance_evaluation_due",
+  "development_item_execution",
+  "learning_effectiveness_review",
+  "knowledge_transfer_execution",
+  "knowledge_continuity_review",
+  "lesson_proposal_decision",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -81,6 +98,14 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   risk_treatment_approval: "Aprobar la aceptación de un riesgo",
   control_verification: "Comprobar si un control funciona",
   opportunity_review: "Revisar una oportunidad",
+  competence_evidence_renewal: "Renovar una evidencia de competencia",
+  competence_assessment_due: "Evaluar una competencia",
+  performance_evaluation_due: "Evaluar el desempeño de alguien",
+  development_item_execution: "Ejecutar una acción de desarrollo",
+  learning_effectiveness_review: "Evaluar si una acción de desarrollo sirvió",
+  knowledge_transfer_execution: "Transferir conocimiento",
+  knowledge_continuity_review: "Revisar un conocimiento concentrado",
+  lesson_proposal_decision: "Decidir sobre una propuesta de una lección",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -114,6 +139,16 @@ export const ALERT_TYPES = [
   "risk_materialized",
   "control_ineffective",
   "opportunity_assigned",
+  // QUALITY-06 · Ninguno de estos avisos declara a nadie incompetente ni abre
+  // un riesgo: dicen que hay algo que revisar.
+  "competence_evidence_expiring",
+  "competence_evidence_expired",
+  "performance_evaluation_pending",
+  "development_plan_overdue",
+  "learning_effectiveness_pending",
+  "knowledge_single_holder",
+  "knowledge_transfer_overdue",
+  "critical_position_vacant",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -135,6 +170,14 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   risk_materialized: "Un riesgo se materializó",
   control_ineffective: "Un control resultó no eficaz",
   opportunity_assigned: "Te asignaron una oportunidad",
+  competence_evidence_expiring: "Una evidencia de competencia está por vencer",
+  competence_evidence_expired: "Una evidencia de competencia venció",
+  performance_evaluation_pending: "Falta una evaluación de desempeño",
+  development_plan_overdue: "Un plan de desarrollo se pasó de fecha",
+  learning_effectiveness_pending: "Falta evaluar si una acción de desarrollo sirvió",
+  knowledge_single_holder: "Un conocimiento crítico depende de una sola persona",
+  knowledge_transfer_overdue: "Una transferencia de conocimiento venció",
+  critical_position_vacant: "Un cargo crítico se quedó sin titular",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

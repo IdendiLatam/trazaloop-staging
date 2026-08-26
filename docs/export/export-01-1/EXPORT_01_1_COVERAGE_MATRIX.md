@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **97** |
-| Ejes clasificados (ficha · listado · histórico) | **291** |
-| `AVAILABLE` | **118** |
-| `EMBEDDED` | **95** |
-| `NOT_APPLICABLE` | **50** |
-| `HISTORICAL_NOT_SUPPORTED` | **28** |
+| Entidades clasificadas | **126** |
+| Ejes clasificados (ficha · listado · histórico) | **378** |
+| `AVAILABLE` | **150** |
+| `EMBEDDED` | **143** |
+| `NOT_APPLICABLE` | **54** |
+| `HISTORICAL_NOT_SUPPORTED` | **31** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **85** |
+| Claves distintas en el registro | **109** |
 
 ## Quality
 
@@ -36,8 +36,8 @@ No existe `PENDING`.
 | Revisión de proceso | — | A | **AVAILABLE** · `quality.process-revision.detail` | EMBEDDED · dentro de *Proceso* | **AVAILABLE** · `quality.process-revision.detail` |
 | Mapa de procesos | `/quality/map` | A | **AVAILABLE** · `quality.map.detail` | N/A | **AVAILABLE** · `quality.map-version.detail` |
 | Versión del mapa | `/quality/map` | A | **AVAILABLE** · `quality.map-version.detail` | EMBEDDED · dentro de *Mapa de procesos* | **AVAILABLE** · `quality.map-version.detail` |
-| Cargo | `/quality/positions` | C | **AVAILABLE** · `quality.position.detail` | **AVAILABLE** · `quality.position.list` | EMBEDDED · dentro de *Cargo* |
-| Titular de cargo | — | D | EMBEDDED · dentro de *Cargo* | EMBEDDED · dentro de *Cargo* | EMBEDDED · dentro de *Cargo* |
+| Cargo | `/quality/positions` | C | **AVAILABLE** · `quality.position.detail` | **AVAILABLE** · `quality.position.list` | **AVAILABLE** · `quality.position-profile.detail` |
+| Titular de cargo | — | D | EMBEDDED · dentro de *Cargo* | EMBEDDED · dentro de *Cargo* | **AVAILABLE** · `quality.position-holders.historical` |
 | Documento controlado | `/quality/documents/[id]` | C | **AVAILABLE** · `quality.document.detail` | **AVAILABLE** · `quality.master-list.list` | **AVAILABLE** · `quality.document-revision.detail` |
 | Lista Maestra | `/quality/documents/master` | B | N/A | **AVAILABLE** · `quality.master-list.list` | **HISTORICAL_NOT_SUPPORTED** |
 | Revisión documental | — | A | **AVAILABLE** · `quality.document-revision.detail` | EMBEDDED · dentro de *Documento controlado* | **AVAILABLE** · `quality.document-revision.detail` |
@@ -70,6 +70,35 @@ No existe `PENDING`.
 | Plan de tratamiento | — | D | EMBEDDED · dentro de *Riesgo* | EMBEDDED · dentro de *Riesgo* | EMBEDDED · dentro de *Riesgo* |
 | Materialización | — | D | EMBEDDED · dentro de *Riesgo* | EMBEDDED · dentro de *Riesgo* | EMBEDDED · dentro de *Riesgo* |
 | Señal de riesgo | — | E | N/A | N/A | N/A |
+| Unidad de la empresa | `/quality/people/structure` | B | N/A | **AVAILABLE** · `quality.org-unit.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Organigrama | `/quality/people/structure` | A | **AVAILABLE** · `quality.orgchart.detail` | N/A | **HISTORICAL_NOT_SUPPORTED** |
+| Perfil de cargo | `/quality/people/positions/[id]` | A | **AVAILABLE** · `quality.position-profile.detail` | EMBEDDED · dentro de *Cargo* | **AVAILABLE** · `quality.position-profile.detail` |
+| Función del cargo | — | D | EMBEDDED · dentro de *Perfil de cargo* | EMBEDDED · dentro de *Perfil de cargo* | EMBEDDED · dentro de *Perfil de cargo* |
+| Persona | `/quality/people/[id]` | C | **AVAILABLE** · `quality.person.detail` | **AVAILABLE** · `quality.person.list` | EMBEDDED · dentro de *Persona* |
+| Asignación persona–cargo | — | D | EMBEDDED · dentro de *Persona* | EMBEDDED · dentro de *Persona* | **AVAILABLE** · `quality.position-holders.historical` |
+| Competencia | `/quality/people/competencies` | C | **AVAILABLE** · `quality.competency.detail` | **AVAILABLE** · `quality.competency.list` | EMBEDDED · dentro de *Perfil de cargo* |
+| Nivel de competencia | `/quality/people/competencies` | D | EMBEDDED · dentro de *Competencia* | EMBEDDED · dentro de *Competencia* | EMBEDDED · dentro de *Competencia* |
+| Requisito de competencia | — | D | EMBEDDED · dentro de *Perfil de cargo* | EMBEDDED · dentro de *Perfil de cargo* | EMBEDDED · dentro de *Perfil de cargo* |
+| Matriz de competencias | `/quality/people/competencies/matrix` | A | **AVAILABLE** · `quality.competence-matrix.detail` | N/A | **AVAILABLE** · `quality.competence-matrix.historical` |
+| Competencia demostrada | `/quality/people/[id]` | A | **AVAILABLE** · `quality.person-competence.detail` | EMBEDDED · dentro de *Persona* | **AVAILABLE** · `quality.person-competence.detail` |
+| Evidencia de competencia | — | D | EMBEDDED · dentro de *Competencia demostrada* | EMBEDDED · dentro de *Persona* | EMBEDDED · dentro de *Competencia demostrada* |
+| Necesidad de desarrollo | `/quality/people/development` | B | N/A | **AVAILABLE** · `quality.development-need.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Plan de desarrollo | `/quality/people/development` | C | **AVAILABLE** · `quality.development-plan.detail` | **AVAILABLE** · `quality.development-plan.list` | EMBEDDED · dentro de *Plan de desarrollo* |
+| Item del plan de desarrollo | — | D | EMBEDDED · dentro de *Plan de desarrollo* | EMBEDDED · dentro de *Plan de desarrollo* | EMBEDDED · dentro de *Plan de desarrollo* |
+| Actividad de aprendizaje | `/quality/people/development` | C | **AVAILABLE** · `quality.learning-activity.detail` | **AVAILABLE** · `quality.learning-activity.list` | EMBEDDED · dentro de *Actividad de aprendizaje* |
+| Participante de actividad | — | D | EMBEDDED · dentro de *Actividad de aprendizaje* | EMBEDDED · dentro de *Actividad de aprendizaje* | EMBEDDED · dentro de *Actividad de aprendizaje* |
+| Evaluación de eficacia | `/quality/people/development` | A | **AVAILABLE** · `quality.effectiveness.detail` | EMBEDDED · dentro de *Actividad de aprendizaje* | **AVAILABLE** · `quality.effectiveness.detail` |
+| Ciclo de evaluación de desempeño | `/quality/people/performance` | A | **AVAILABLE** · `quality.performance-cycle.detail` | EMBEDDED · dentro de *Ciclo de evaluación de desempeño* | EMBEDDED · dentro de *Evaluación de desempeño* |
+| Población del ciclo | — | D | EMBEDDED · dentro de *Ciclo de evaluación de desempeño* | EMBEDDED · dentro de *Ciclo de evaluación de desempeño* | EMBEDDED · dentro de *Ciclo de evaluación de desempeño* |
+| Evaluación de desempeño | `/quality/people/performance` | A | **AVAILABLE** · `quality.performance-evaluation.detail` | EMBEDDED · dentro de *Persona* | **AVAILABLE** · `quality.performance-evaluation.detail` |
+| Línea de evaluación | — | D | EMBEDDED · dentro de *Evaluación de desempeño* | EMBEDDED · dentro de *Evaluación de desempeño* | EMBEDDED · dentro de *Evaluación de desempeño* |
+| Elemento de conocimiento | `/quality/people/knowledge` | C | **AVAILABLE** · `quality.knowledge.detail` | **AVAILABLE** · `quality.knowledge.list` | EMBEDDED · dentro de *Elemento de conocimiento* |
+| Holder de conocimiento | — | D | EMBEDDED · dentro de *Elemento de conocimiento* | EMBEDDED · dentro de *Elemento de conocimiento* | EMBEDDED · dentro de *Elemento de conocimiento* |
+| Señal de continuidad | `/quality/people/knowledge` | D | EMBEDDED · dentro de *Elemento de conocimiento* | EMBEDDED · dentro de *Elemento de conocimiento* | EMBEDDED · dentro de *Elemento de conocimiento* |
+| Plan de transferencia | `/quality/people/knowledge` | A | **AVAILABLE** · `quality.transfer-plan.detail` | EMBEDDED · dentro de *Elemento de conocimiento* | **AVAILABLE** · `quality.transfer-plan.detail` |
+| Actividad de transferencia | — | D | EMBEDDED · dentro de *Plan de transferencia* | EMBEDDED · dentro de *Plan de transferencia* | EMBEDDED · dentro de *Plan de transferencia* |
+| Lección aprendida | `/quality/people/lessons` | C | **AVAILABLE** · `quality.lesson.detail` | **AVAILABLE** · `quality.lesson.list` | **AVAILABLE** · `quality.lesson.detail` |
+| Propuesta de lección | — | D | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* | EMBEDDED · dentro de *Lección aprendida* |
 
 ## TrazaDocs
 
@@ -165,10 +194,8 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Revisión de proceso | Listado | EMBEDDED | Dentro de *Proceso*. El historial de revisiones se imprime en la ficha del proceso. |
 | Mapa de procesos | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. |
 | Versión del mapa | Listado | EMBEDDED | Dentro de *Mapa de procesos*. Las versiones se enumeran en la pantalla del mapa. |
-| Cargo | Histórico | EMBEDDED | Dentro de *Cargo*. Las titularidades se imprimen con sus vigencias dentro de la ficha del cargo: el cargo responde, la persona lo ocupó entre fechas. |
 | Titular de cargo | Ficha | EMBEDDED | Dentro de *Cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Titular de cargo | Listado | EMBEDDED | Dentro de *Cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
-| Titular de cargo | Histórico | EMBEDDED | Dentro de *Cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Datos de la empresa | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. |
 | Datos de la empresa | Histórico | HISTORICAL_NOT_SUPPORTED | La ficha de empresa guarda el valor VIGENTE de cada campo: el dominio no conserva la serie de valores anteriores, así que no se puede reconstruir cómo se llamaba o dónde estaba en una fecha pasada. |
 | Equipo / miembros | Ficha | NOT_APPLICABLE | Una persona no es un registro de la empresa: sus datos son del perfil, no del sistema de gestión. |
@@ -329,3 +356,60 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Implementación / feedback | Ficha | NOT_APPLICABLE | Herramienta interna de seguimiento del acompañamiento, no un objeto del sistema de gestión. |
 | Implementación / feedback | Listado | NOT_APPLICABLE | Herramienta interna de seguimiento. |
 | Implementación / feedback | Histórico | NOT_APPLICABLE | Herramienta interna de seguimiento. |
+| Unidad de la empresa | Ficha | NOT_APPLICABLE | Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Unidad de la empresa | Histórico | HISTORICAL_NOT_SUPPORTED | Las unidades no conservan versión temporal: se puede decir cómo está organizada la empresa hoy, no cómo lo estaba en una fecha pasada. |
+| Organigrama | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. |
+| Organigrama | Histórico | HISTORICAL_NOT_SUPPORTED | El organigrama se deriva de unidades, jerarquía de cargos y asignaciones. Las asignaciones sí llevan fechas —y por eso existe «Titulares de cargos en una fecha»— pero las unidades y la jerarquía no se versionan, así que la ESTRUCTURA de un día pasado no se puede reconstruir con verdad. |
+| Perfil de cargo | Listado | EMBEDDED | Dentro de *Cargo*. Las versiones del perfil se enumeran dentro del propio documento del cargo. |
+| Función del cargo | Ficha | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Función del cargo | Listado | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Función del cargo | Histórico | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Persona | Histórico | EMBEDDED | Dentro de *Persona*. La ficha imprime cargos ocupados, competencia declarada y evaluaciones CON sus fechas: la historia de una persona vive dentro de su ficha, no en un documento aparte. |
+| Asignación persona–cargo | Ficha | EMBEDDED | Dentro de *Persona*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Asignación persona–cargo | Listado | EMBEDDED | Dentro de *Persona*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Competencia | Histórico | EMBEDDED | Dentro de *Perfil de cargo*. Lo que conserva historia no es la competencia sino el REQUISITO, y el requisito vive en la versión del perfil de cargo que lo exigía. |
+| Nivel de competencia | Ficha | EMBEDDED | Dentro de *Competencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Nivel de competencia | Listado | EMBEDDED | Dentro de *Competencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Nivel de competencia | Histórico | EMBEDDED | Dentro de *Competencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Requisito de competencia | Ficha | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Requisito de competencia | Listado | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Requisito de competencia | Histórico | EMBEDDED | Dentro de *Perfil de cargo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Matriz de competencias | Listado | NOT_APPLICABLE | Es una proyección de otros registros, no una entidad con identidad propia. |
+| Competencia demostrada | Listado | EMBEDDED | Dentro de *Persona*. Las decisiones de competencia de cada persona se enumeran en su ficha. |
+| Evidencia de competencia | Ficha | EMBEDDED | Dentro de *Competencia demostrada*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Evidencia de competencia | Listado | EMBEDDED | Dentro de *Persona*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Evidencia de competencia | Histórico | EMBEDDED | Dentro de *Competencia demostrada*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Necesidad de desarrollo | Ficha | NOT_APPLICABLE | Es un elemento de catálogo: su información completa cabe en la fila del listado, y una hoja por elemento no añadiría nada que el listado no diga. |
+| Necesidad de desarrollo | Histórico | HISTORICAL_NOT_SUPPORTED | La necesidad conserva su origen y su fecha, pero no versiones de sí misma: no hay un estado anterior que reconstruir. |
+| Plan de desarrollo | Histórico | EMBEDDED | Dentro de *Plan de desarrollo*. Cada item lleva la fecha en que entró y por qué, así que la ficha del plan ya distingue lo previsto de lo incorporado durante el año. |
+| Item del plan de desarrollo | Ficha | EMBEDDED | Dentro de *Plan de desarrollo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Item del plan de desarrollo | Listado | EMBEDDED | Dentro de *Plan de desarrollo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Item del plan de desarrollo | Histórico | EMBEDDED | Dentro de *Plan de desarrollo*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Actividad de aprendizaje | Histórico | EMBEDDED | Dentro de *Actividad de aprendizaje*. La actividad se registra con sus fechas reales de ejecución: lo que se imprime YA es el hecho ocurrido. |
+| Participante de actividad | Ficha | EMBEDDED | Dentro de *Actividad de aprendizaje*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Participante de actividad | Listado | EMBEDDED | Dentro de *Actividad de aprendizaje*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Participante de actividad | Histórico | EMBEDDED | Dentro de *Actividad de aprendizaje*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Evaluación de eficacia | Listado | EMBEDDED | Dentro de *Actividad de aprendizaje*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Ciclo de evaluación de desempeño | Listado | EMBEDDED | Dentro de *Ciclo de evaluación de desempeño*. Los ciclos se enumeran en la pantalla de desempeño; cada uno tiene su propio documento. |
+| Ciclo de evaluación de desempeño | Histórico | EMBEDDED | Dentro de *Evaluación de desempeño*. El documento del pasado es cada evaluación cerrada, que conserva lo que se firmó. |
+| Población del ciclo | Ficha | EMBEDDED | Dentro de *Ciclo de evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Población del ciclo | Listado | EMBEDDED | Dentro de *Ciclo de evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Población del ciclo | Histórico | EMBEDDED | Dentro de *Ciclo de evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Evaluación de desempeño | Listado | EMBEDDED | Dentro de *Persona*. Las evaluaciones de una persona se enumeran en su ficha, sujetas al permiso de desempeño. |
+| Línea de evaluación | Ficha | EMBEDDED | Dentro de *Evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Línea de evaluación | Listado | EMBEDDED | Dentro de *Evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Línea de evaluación | Histórico | EMBEDDED | Dentro de *Evaluación de desempeño*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Elemento de conocimiento | Histórico | EMBEDDED | Dentro de *Elemento de conocimiento*. Los registros de holders llevan fecha de inicio y fin dentro de la ficha; el elemento en sí no tiene versiones. |
+| Holder de conocimiento | Ficha | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Holder de conocimiento | Listado | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Holder de conocimiento | Histórico | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Señal de continuidad | Ficha | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Señal de continuidad | Listado | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Señal de continuidad | Histórico | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Plan de transferencia | Listado | EMBEDDED | Dentro de *Elemento de conocimiento*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Actividad de transferencia | Ficha | EMBEDDED | Dentro de *Plan de transferencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Actividad de transferencia | Listado | EMBEDDED | Dentro de *Plan de transferencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Actividad de transferencia | Histórico | EMBEDDED | Dentro de *Plan de transferencia*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Propuesta de lección | Ficha | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Propuesta de lección | Listado | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Propuesta de lección | Histórico | EMBEDDED | Dentro de *Lección aprendida*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |

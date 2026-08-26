@@ -75,6 +75,14 @@ const TASK_TONE: Record<TaskType, string> = {
   risk_treatment_approval: "border-loop/30 bg-loop/5",
   control_verification: "border-loop/30 bg-loop/5",
   opportunity_review: "border-loop/30 bg-loop/5",
+  competence_evidence_renewal: "border-amber/40 bg-amber/5",
+  competence_assessment_due: "border-amber/40 bg-amber/5",
+  performance_evaluation_due: "border-loop/30 bg-loop/5",
+  development_item_execution: "border-loop/30 bg-loop/5",
+  learning_effectiveness_review: "border-loop/30 bg-loop/5",
+  knowledge_transfer_execution: "border-amber/40 bg-amber/5",
+  knowledge_continuity_review: "border-amber/40 bg-amber/5",
+  lesson_proposal_decision: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -92,6 +100,14 @@ const TASK_CTA: Record<TaskType, string> = {
   risk_treatment_approval: "Ver la aceptación pendiente",
   control_verification: "Comprobar el control",
   opportunity_review: "Ver la oportunidad",
+  competence_evidence_renewal: "Ver la ficha de la persona",
+  competence_assessment_due: "Evaluar la competencia",
+  performance_evaluation_due: "Ir a desempeño",
+  development_item_execution: "Ver el plan de desarrollo",
+  learning_effectiveness_review: "Evaluar la eficacia",
+  knowledge_transfer_execution: "Ver la transferencia",
+  knowledge_continuity_review: "Ver el conocimiento",
+  lesson_proposal_decision: "Ver la lección",
 };
 
 /**
@@ -125,6 +141,25 @@ function subjectHref(
       return `/quality/risks/opportunities/${subjectId}`;
     case "quality_control":
       return `/quality/risks`;
+    // QUALITY-06 · La persona y el cargo tienen ficha propia. Lo demás vive
+    // dentro de su pantalla: se enlaza a la pantalla, no a una ruta inventada.
+    case "quality_person":
+      return `/quality/people/${subjectId}`;
+    case "quality_position":
+      return `/quality/people/positions/${subjectId}`;
+    case "quality_person_competency":
+    case "quality_competency_evidence":
+      return `/quality/people`;
+    case "quality_development_plan_item":
+    case "quality_learning_activity":
+      return `/quality/people/development`;
+    case "quality_performance_evaluation":
+      return `/quality/people/performance`;
+    case "quality_knowledge_item":
+    case "quality_knowledge_transfer_plan":
+      return `/quality/people/knowledge`;
+    case "quality_lesson_learned":
+      return `/quality/people/lessons`;
     default:
       return null;
   }

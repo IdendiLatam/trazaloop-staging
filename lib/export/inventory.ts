@@ -107,12 +107,15 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
   {
     entity: "Cargo", module: "quality", route: "/quality/positions", klass: "C",
     detail: has("quality.position.detail"), list: has("quality.position.list"),
-    historical: embedded("Cargo",
-      "Las titularidades se imprimen con sus vigencias dentro de la ficha del cargo: el cargo responde, la persona lo ocupó entre fechas."),
+    // QUALITY-06 · Hasta 0122 el cargo no tenía versión: su historia se
+    // imprimía embebida. Ahora el perfil SÍ se versiona y tiene su propio
+    // documento, así que este eje deja de ser un embebido y pasa a existir.
+    historical: has("quality.position-profile.detail"),
   },
   {
     entity: "Titular de cargo", module: "quality", route: null, klass: "D",
-    detail: embedded("Cargo"), list: embedded("Cargo"), historical: embedded("Cargo"),
+    detail: embedded("Cargo"), list: embedded("Cargo"),
+    historical: has("quality.position-holders.historical"),
   },
   {
     entity: "Datos de la empresa", module: "core", route: "/settings/company", klass: "A",
@@ -607,6 +610,178 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     detail: na("Herramienta interna de seguimiento del acompañamiento, no un objeto del sistema de gestión."),
     list: na("Herramienta interna de seguimiento."),
     historical: na("Herramienta interna de seguimiento."),
+  },
+
+  // ------------------------------------------------------------------
+  // QUALITY-06 · personas, competencia, desarrollo y conocimiento
+  // ------------------------------------------------------------------
+  {
+    entity: "Unidad de la empresa", module: "quality", route: "/quality/people/structure", klass: "B",
+    detail: na(LIST_ONLY_NO_SHEET),
+    list: has("quality.org-unit.list"),
+    historical: noHistory(
+      "Las unidades no conservan versión temporal: se puede decir cómo está organizada la empresa hoy, no cómo lo estaba en una fecha pasada."),
+  },
+  {
+    entity: "Organigrama", module: "quality", route: "/quality/people/structure", klass: "A",
+    detail: has("quality.orgchart.detail"),
+    list: na(NO_LIST_SINGLETON),
+    historical: noHistory(
+      "El organigrama se deriva de unidades, jerarquía de cargos y asignaciones. Las asignaciones sí llevan fechas —y por eso existe «Titulares de cargos en una fecha»— pero las unidades y la jerarquía no se versionan, así que la ESTRUCTURA de un día pasado no se puede reconstruir con verdad."),
+  },
+  {
+    entity: "Perfil de cargo", module: "quality", route: "/quality/people/positions/[id]", klass: "A",
+    detail: has("quality.position-profile.detail"),
+    list: embedded("Cargo", "Las versiones del perfil se enumeran dentro del propio documento del cargo."),
+    historical: has("quality.position-profile.detail"),
+  },
+  {
+    entity: "Función del cargo", module: "quality", route: null, klass: "D",
+    detail: embedded("Perfil de cargo"), list: embedded("Perfil de cargo"),
+    historical: embedded("Perfil de cargo"),
+  },
+  {
+    entity: "Persona", module: "quality", route: "/quality/people/[id]", klass: "C",
+    detail: has("quality.person.detail"), list: has("quality.person.list"),
+    historical: embedded("Persona",
+      "La ficha imprime cargos ocupados, competencia declarada y evaluaciones CON sus fechas: la historia de una persona vive dentro de su ficha, no en un documento aparte."),
+  },
+  {
+    entity: "Asignación persona–cargo", module: "quality", route: null, klass: "D",
+    detail: embedded("Persona"), list: embedded("Persona"),
+    historical: has("quality.position-holders.historical"),
+  },
+  {
+    entity: "Competencia", module: "quality", route: "/quality/people/competencies", klass: "C",
+    detail: has("quality.competency.detail"), list: has("quality.competency.list"),
+    historical: embedded("Perfil de cargo",
+      "Lo que conserva historia no es la competencia sino el REQUISITO, y el requisito vive en la versión del perfil de cargo que lo exigía."),
+  },
+  {
+    entity: "Nivel de competencia", module: "quality", route: "/quality/people/competencies", klass: "D",
+    detail: embedded("Competencia"), list: embedded("Competencia"),
+    historical: embedded("Competencia"),
+  },
+  {
+    entity: "Requisito de competencia", module: "quality", route: null, klass: "D",
+    detail: embedded("Perfil de cargo"), list: embedded("Perfil de cargo"),
+    historical: embedded("Perfil de cargo"),
+  },
+  {
+    entity: "Matriz de competencias", module: "quality", route: "/quality/people/competencies/matrix", klass: "A",
+    detail: has("quality.competence-matrix.detail"),
+    list: na(PROJECTION_NOT_ENTITY),
+    historical: has("quality.competence-matrix.historical"),
+  },
+  {
+    entity: "Competencia demostrada", module: "quality", route: "/quality/people/[id]", klass: "A",
+    detail: has("quality.person-competence.detail"),
+    list: embedded("Persona", "Las decisiones de competencia de cada persona se enumeran en su ficha."),
+    historical: has("quality.person-competence.detail"),
+  },
+  {
+    entity: "Evidencia de competencia", module: "quality", route: null, klass: "D",
+    detail: embedded("Competencia demostrada"), list: embedded("Persona"),
+    historical: embedded("Competencia demostrada"),
+  },
+  {
+    entity: "Necesidad de desarrollo", module: "quality", route: "/quality/people/development", klass: "B",
+    detail: na(LIST_ONLY_NO_SHEET),
+    list: has("quality.development-need.list"),
+    historical: noHistory(
+      "La necesidad conserva su origen y su fecha, pero no versiones de sí misma: no hay un estado anterior que reconstruir."),
+  },
+  {
+    entity: "Plan de desarrollo", module: "quality", route: "/quality/people/development", klass: "C",
+    detail: has("quality.development-plan.detail"),
+    list: has("quality.development-plan.list"),
+    historical: embedded("Plan de desarrollo",
+      "Cada item lleva la fecha en que entró y por qué, así que la ficha del plan ya distingue lo previsto de lo incorporado durante el año."),
+  },
+  {
+    entity: "Item del plan de desarrollo", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de desarrollo"), list: embedded("Plan de desarrollo"),
+    historical: embedded("Plan de desarrollo"),
+  },
+  {
+    entity: "Actividad de aprendizaje", module: "quality", route: "/quality/people/development", klass: "C",
+    detail: has("quality.learning-activity.detail"),
+    list: has("quality.learning-activity.list"),
+    historical: embedded("Actividad de aprendizaje",
+      "La actividad se registra con sus fechas reales de ejecución: lo que se imprime YA es el hecho ocurrido."),
+  },
+  {
+    entity: "Participante de actividad", module: "quality", route: null, klass: "D",
+    detail: embedded("Actividad de aprendizaje"), list: embedded("Actividad de aprendizaje"),
+    historical: embedded("Actividad de aprendizaje"),
+  },
+  {
+    entity: "Evaluación de eficacia", module: "quality", route: "/quality/people/development", klass: "A",
+    detail: has("quality.effectiveness.detail"),
+    list: embedded("Actividad de aprendizaje"),
+    historical: has("quality.effectiveness.detail"),
+  },
+  {
+    entity: "Ciclo de evaluación de desempeño", module: "quality", route: "/quality/people/performance", klass: "A",
+    detail: has("quality.performance-cycle.detail"),
+    list: embedded("Ciclo de evaluación de desempeño",
+      "Los ciclos se enumeran en la pantalla de desempeño; cada uno tiene su propio documento."),
+    historical: embedded("Evaluación de desempeño",
+      "El documento del pasado es cada evaluación cerrada, que conserva lo que se firmó."),
+  },
+  {
+    entity: "Población del ciclo", module: "quality", route: null, klass: "D",
+    detail: embedded("Ciclo de evaluación de desempeño"),
+    list: embedded("Ciclo de evaluación de desempeño"),
+    historical: embedded("Ciclo de evaluación de desempeño"),
+  },
+  {
+    entity: "Evaluación de desempeño", module: "quality", route: "/quality/people/performance", klass: "A",
+    detail: has("quality.performance-evaluation.detail"),
+    list: embedded("Persona", "Las evaluaciones de una persona se enumeran en su ficha, sujetas al permiso de desempeño."),
+    historical: has("quality.performance-evaluation.detail"),
+  },
+  {
+    entity: "Línea de evaluación", module: "quality", route: null, klass: "D",
+    detail: embedded("Evaluación de desempeño"), list: embedded("Evaluación de desempeño"),
+    historical: embedded("Evaluación de desempeño"),
+  },
+  {
+    entity: "Elemento de conocimiento", module: "quality", route: "/quality/people/knowledge", klass: "C",
+    detail: has("quality.knowledge.detail"), list: has("quality.knowledge.list"),
+    historical: embedded("Elemento de conocimiento",
+      "Los registros de holders llevan fecha de inicio y fin dentro de la ficha; el elemento en sí no tiene versiones."),
+  },
+  {
+    entity: "Holder de conocimiento", module: "quality", route: null, klass: "D",
+    detail: embedded("Elemento de conocimiento"), list: embedded("Elemento de conocimiento"),
+    historical: embedded("Elemento de conocimiento"),
+  },
+  {
+    entity: "Señal de continuidad", module: "quality", route: "/quality/people/knowledge", klass: "D",
+    detail: embedded("Elemento de conocimiento"), list: embedded("Elemento de conocimiento"),
+    historical: embedded("Elemento de conocimiento"),
+  },
+  {
+    entity: "Plan de transferencia", module: "quality", route: "/quality/people/knowledge", klass: "A",
+    detail: has("quality.transfer-plan.detail"),
+    list: embedded("Elemento de conocimiento"),
+    historical: has("quality.transfer-plan.detail"),
+  },
+  {
+    entity: "Actividad de transferencia", module: "quality", route: null, klass: "D",
+    detail: embedded("Plan de transferencia"), list: embedded("Plan de transferencia"),
+    historical: embedded("Plan de transferencia"),
+  },
+  {
+    entity: "Lección aprendida", module: "quality", route: "/quality/people/lessons", klass: "C",
+    detail: has("quality.lesson.detail"), list: has("quality.lesson.list"),
+    historical: has("quality.lesson.detail"),
+  },
+  {
+    entity: "Propuesta de lección", module: "quality", route: null, klass: "D",
+    detail: embedded("Lección aprendida"), list: embedded("Lección aprendida"),
+    historical: embedded("Lección aprendida"),
   },
 ];
 

@@ -309,6 +309,12 @@ export const REFERENCE_KINDS = [
   // una hipótesis, es lo que se vio en pantalla antes de añadirlos aquí.
   "quality_objective", "quality_risk", "quality_opportunity", "quality_control",
   "quality_risk_assessment", "quality_risk_materialization",
+  // QUALITY-06 · La evidencia de competencia y las lecciones REUTILIZAN este
+  // motor de referencias en vez de crear un segundo almacén de archivos para
+  // Personas (§23).
+  "quality_person", "quality_position", "quality_competency",
+  "quality_person_competency", "quality_knowledge_item",
+  "quality_lesson_learned", "quality_learning_activity",
 ] as const;
 export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
 
@@ -328,6 +334,13 @@ export const REFERENCE_KIND_LABEL: Record<ReferenceKind, string> = {
   quality_control: "Control",
   quality_risk_assessment: "Evaluación del riesgo",
   quality_risk_materialization: "El riesgo se materializó",
+  quality_person: "Persona",
+  quality_position: "Cargo",
+  quality_competency: "Competencia",
+  quality_person_competency: "Competencia demostrada",
+  quality_knowledge_item: "Conocimiento",
+  quality_lesson_learned: "Lección aprendida",
+  quality_learning_activity: "Actividad de aprendizaje",
 };
 
 /** A dónde lleva una referencia. Que un enlace apunte al sitio correcto suena
@@ -341,6 +354,11 @@ export function referenceHref(kind: ReferenceKind, id: string): string | null {
     case "quality_objective": return `/quality/objectives/${id}`;
     case "quality_risk": return `/quality/risks/${id}`;
     case "quality_opportunity": return `/quality/risks/opportunities/${id}`;
+    case "quality_person": return `/quality/people/${id}`;
+    case "quality_position": return `/quality/people/positions/${id}`;
+    case "quality_knowledge_item": return `/quality/people/knowledge`;
+    case "quality_lesson_learned": return `/quality/people/lessons`;
+    case "quality_learning_activity": return `/quality/people/development`;
     // Medición, revisiones, entradas/salidas, controles, evaluaciones y
     // materializaciones no tienen página propia: se ven dentro de su padre, y
     // enlazar a una ruta inventada sería peor que no enlazar.

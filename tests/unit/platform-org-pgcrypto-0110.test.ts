@@ -47,6 +47,9 @@ const QUALITY_01_ALLOWED = new Set([
   // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
   // metodología configurable y versionada.
   "0122_quality_risks_and_opportunities.sql",
+  // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+  // desempeño, conocimiento y lecciones aprendidas.
+  "0123_quality_people_competence_knowledge.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

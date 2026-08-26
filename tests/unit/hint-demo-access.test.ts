@@ -361,6 +361,9 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     // QUALITY-05: riesgos, oportunidades, controles y tratamiento, con
     // metodología configurable y versionada.
     "0122_quality_risks_and_opportunities.sql",
+    // QUALITY-06: personas, cargos versionados, competencia, desarrollo,
+    // desempeño, conocimiento y lecciones aprendidas.
+    "0123_quality_people_competence_knowledge.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

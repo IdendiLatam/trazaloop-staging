@@ -50,6 +50,19 @@ import {
   textilesProductionOrderList,
   textilesReferenceDetail,
 } from "./adapters/textiles-extended";
+import {
+  qualityCompetenceMatrixDetail, qualityCompetenceMatrixHistorical,
+  qualityCompetencyDetail, qualityCompetencyList, qualityOrgChartDetail,
+  qualityOrgUnitList, qualityPersonCompetenceDetail, qualityPersonDetail,
+  qualityPersonList, qualityPositionHoldersHistorical, qualityPositionProfileDetail,
+} from "./adapters/quality-people";
+import {
+  qualityDevelopmentNeedList, qualityDevelopmentPlanDetail, qualityDevelopmentPlanList,
+  qualityEffectivenessDetail, qualityKnowledgeDetail, qualityKnowledgeList,
+  qualityLearningActivityDetail, qualityLearningActivityList, qualityLessonDetail,
+  qualityLessonList, qualityPerformanceCycleDetail, qualityPerformanceEvaluationDetail,
+  qualityTransferPlanDetail,
+} from "./adapters/quality-development";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -134,6 +147,27 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   textilesEvidenceDetail,
   textilesCircularityDetail, textilesCircularityList,
   textilesPassportDetail, textilesPassportList, textilesDiagnosticDetail,
+
+  // ------------------------------------------------------------------
+  // QUALITY-06 · personas, competencia, desarrollo y conocimiento
+  //
+  // Entran con el resto y por la misma puerta: una clave del registro, un
+  // nombre documental fijado aquí y el encabezado corporativo de EXPORT-01.2.
+  // Ninguna de estas exportaciones tiene endpoint propio.
+  // ------------------------------------------------------------------
+  qualityOrgUnitList, qualityOrgChartDetail,
+  qualityPositionProfileDetail, qualityPositionHoldersHistorical,
+  qualityPersonDetail, qualityPersonList,
+  qualityCompetencyDetail, qualityCompetencyList,
+  qualityCompetenceMatrixDetail, qualityCompetenceMatrixHistorical,
+  qualityPersonCompetenceDetail,
+  qualityDevelopmentNeedList,
+  qualityDevelopmentPlanDetail, qualityDevelopmentPlanList,
+  qualityLearningActivityDetail, qualityLearningActivityList,
+  qualityEffectivenessDetail,
+  qualityPerformanceCycleDetail, qualityPerformanceEvaluationDetail,
+  qualityKnowledgeDetail, qualityKnowledgeList, qualityTransferPlanDetail,
+  qualityLessonDetail, qualityLessonList,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));
