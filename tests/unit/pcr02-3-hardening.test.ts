@@ -301,6 +301,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
+    "0134_quality_ai_provider_call_truth.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

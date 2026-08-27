@@ -82,6 +82,8 @@ export type AiRunRow = {
   /** §12 · Solo si el proveedor los informa; si no, quedan en null. */
   cachedInputTokens: number | null; reasoningTokens: number | null;
   totalTokens: number | null;
+  /** QUALITY-12.1 · Si se llegó a llamar al proveedor en esa consulta. */
+  providerCalled: boolean;
   contextItems: number; evidenceLevel: string | null; errorMessage: string | null;
   actorName: string | null; isMine: boolean;
   question: string | null; answer: Record<string, unknown> | null;
@@ -111,6 +113,7 @@ function mapRun(r: Record<string, unknown>): AiRunRow {
     cachedInputTokens: numeroOpcional(r.cached_input_tokens),
     reasoningTokens: numeroOpcional(r.reasoning_tokens),
     totalTokens: numeroOpcional(r.total_tokens),
+    providerCalled: r.provider_called !== false,
     contextItems: Number(r.context_items ?? 0),
     evidenceLevel: (r.evidence_level as string | null) ?? null,
     errorMessage: (r.error_message as string | null) ?? null,

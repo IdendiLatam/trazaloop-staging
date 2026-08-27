@@ -97,6 +97,43 @@ export class ContextWriter {
     if (!this.conflicts.includes(text)) this.conflicts.push(text);
   }
 
+  /** Se acabó el presupuesto y quedaban fuentes por volcar. Se dice. */
+  markTruncated(): void { this.truncated = true; }
+
+  /**
+   * QUALITY-12.1 · Vuelca en este acumulador lo que otro recogió.
+   *
+   * POR QUÉ HACE FALTA
+   *
+   * Los adaptadores dejaron de ejecutarse en fila india: son lecturas
+   * independientes y esperarlas una a una costaba casi veinte segundos contra
+   * una base remota. Ahora corren a la vez, cada uno sobre su propio
+   * acumulador, y se vuelcan aquí EN EL ORDEN EN QUE ESTÁN DECLARADOS.
+   *
+   * Ese orden es lo que mantiene los números de cita estables: el paquete que
+   * sale de aquí es exactamente el mismo que salía antes, referencia por
+   * referencia. Lo único que cambia es cuánto se tarda en construirlo.
+   *
+   * Las citas se REMAPEAN: dentro del acumulador de origen una referencia era
+   * la 2, y aquí puede ser la 14. Un hecho que apuntara al número viejo estaría
+   * citando otra cosa, que es peor que no citar nada.
+   */
+  absorb(other: ContextWriter): void {
+    const mapa = new Map<number, number>();
+    for (const r of other.refs) {
+      const { ordinal, ...resto } = r;
+      mapa.set(ordinal, this.ref(resto));
+    }
+    const traducir = (ns: number[]) =>
+      ns.map((n) => mapa.get(n) ?? 0).filter((n) => n > 0);
+
+    for (const f of other.facts) this.fact(f.statement, traducir(f.refs));
+    for (const n of other.notes) this.note(n.title, n.body, traducir(n.refs));
+    for (const l of other.limitations) this.limitation(l);
+    for (const c of other.conflicts) this.conflict(c);
+    if (other.truncated) this.truncated = true;
+  }
+
   pack(temporal: TemporalScope): ContextPack {
     return {
       refs: this.refs, facts: this.facts, notes: this.notes,
@@ -137,7 +174,6 @@ export async function buildContext(
 ): Promise<ContextPack> {
   const db = client ?? await createServerClient();
   const cfg = aiConfig();
-  const w = new ContextWriter(cfg.contextBudgetChars);
 
   const aplicables = ADAPTERS.filter((a) => {
     if (a.feature === "people" && !req.allow.people) return false;
@@ -145,24 +181,68 @@ export async function buildContext(
     return a.useCases.includes("*") || a.useCases.includes(req.useCase);
   });
 
-  for (const a of aplicables) {
-    if (w.full) break;
+  // QUALITY-12.1 · Las fuentes se leen A LA VEZ.
+  //
+  // Antes se leían en fila india, y cada una espera a una base que está en otra
+  // máquina: diecinueve fuentes × varias consultas cada una son decenas de
+  // idas y vueltas encadenadas. Medido contra Staging desde una función de
+  // Vercel: entre diecisiete y veinte segundos para una empresa VACÍA, sin
+  // llamar a ningún modelo. Ese tiempo no lo notaba nadie en local —cinco
+  // segundos— y hacía creer que el modelo estaba pensando cuando ni siquiera
+  // se le había preguntado.
+  //
+  // Son lecturas independientes: ninguna necesita el resultado de otra. Lo
+  // único que compartían era el acumulador, y por eso ahora cada una tiene el
+  // suyo y se vuelcan después, en el orden declarado.
+  const recogidas = await enTandas(aplicables, LECTURAS_A_LA_VEZ, async (a) => {
+    const propio = new ContextWriter(cfg.contextBudgetChars);
     // §22 · Una fuente que no sabe reconstruir el pasado NO se inventa: se
     // declara la limitación y se sigue.
     if (req.temporal.mode === "as_of" && a.temporal !== "as_of") {
-      w.limitation(
+      propio.limitation(
         `«${a.code}» no reconstruye su estado en una fecha pasada: lo que se muestra de esa fuente es su estado actual.`);
     }
     try {
-      await a.load(db, req, w);
+      await a.load(db, req, propio);
     } catch {
       // Una fuente que falla no tumba la consulta: se responde con lo que hay
       // y el nivel de evidencia lo refleja.
-      w.limitation(`No se pudo leer «${a.code}» en esta consulta.`);
+      propio.limitation(`No se pudo leer «${a.code}» en esta consulta.`);
     }
+    return propio;
+  });
+
+  // El presupuesto se aplica AQUÍ, al volcar, y en el orden declarado: el
+  // paquete resultante es idéntico al que producía el bucle secuencial.
+  const w = new ContextWriter(cfg.contextBudgetChars);
+  for (const propio of recogidas) {
+    if (w.full) { w.markTruncated(); break; }
+    w.absorb(propio);
   }
 
   return w.pack(req.temporal);
+}
+
+/** Cuántas fuentes se leen a la vez. Suficiente para que no duela la espera,
+ *  poco para no abrir de golpe una conexión por adaptador. */
+const LECTURAS_A_LA_VEZ = 6;
+
+async function enTandas<T, R>(
+  items: T[], tamano: number, fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const salida: R[] = new Array(items.length);
+  let siguiente = 0;
+  const obrero = async () => {
+    for (;;) {
+      const i = siguiente;
+      siguiente += 1;
+      if (i >= items.length) return;
+      salida[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(tamano, items.length) }, () => obrero()));
+  return salida;
 }
 
 /** Vacío, para cuando ni siquiera hay que preguntar. */

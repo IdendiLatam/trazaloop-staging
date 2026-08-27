@@ -35,6 +35,8 @@ const COPILOT = read("lib/ai/copilot.ts");
 const ADAPTERS = read("lib/ai/context/adapters.ts");
 const SCHEMAS = read("lib/ai/schemas.ts");
 const MIG133 = read("supabase/migrations/0133_quality_ai_copilot_completion.sql");
+const MIG134 = read("supabase/migrations/0134_quality_ai_provider_call_truth.sql");
+const BUILDER = read("lib/ai/context/builder.ts");
 const MIG132 = read("supabase/migrations/0132_quality_ai_copilot.sql");
 
 /** Quita comentarios: lo que se prohíbe es el CÓDIGO, no hablar de ello. */
@@ -304,13 +306,16 @@ check("F1. la 0132 no se ha tocado (§65)", () => {
     "la 0132 fue editada para meter lo nuevo");
 });
 
-check("F2. la 0133 es la última y va detrás de la 0132", () => {
+check("F2. la 0133 y la 0134 van detrás de la 0132, en orden", () => {
   const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
   const i = migraciones.indexOf("0133_quality_ai_copilot_completion.sql");
-  assert(i === migraciones.length - 1, "la 0133 no es la última");
+  assert(i > 0, "la 0133 no está");
   assert(migraciones[i - 1] === "0132_quality_ai_copilot.sql",
     "algo se coló entre la 0132 y la 0133");
+  assert(migraciones[i + 1] === "0134_quality_ai_provider_call_truth.sql",
+    "algo se coló entre la 0133 y la 0134");
+  assert(i + 1 === migraciones.length - 1, "la 0134 no es la última");
 });
 
 check("F3. las tablas nuevas tienen RLS y nada se abre a anon", () => {
@@ -358,6 +363,69 @@ check("F7. la vista de la serie no expone identidad", () => {
     assert(!new RegExp(prohibido).test(vista), `la serie expone ${prohibido}`);
   }
   assert(/lag\(/.test(vista), "la serie no compara con el periodo anterior");
+});
+
+
+
+// ===========================================================================
+console.log("\nG · LO QUE ENSEÑÓ LA PRUEBA HUMANA");
+// ===========================================================================
+
+check("G1. la 0133 no se editó para arreglar la 0134 (§append-only)", () => {
+  assert(!/provider_called/.test(MIG133),
+    "la 0133 fue editada con contenido de la 0134");
+  assert(!/provider_called/.test(MIG132), "la 0132 fue editada");
+});
+
+check("G2. una consulta sin contexto NO se registra como llamada", () => {
+  assert(/p_provider_called: false/.test(stripTs(COPILOT)),
+    "el atajo sin contexto no marca que no se llamó");
+  assert(/p_provider_called: true/.test(stripTs(COPILOT)),
+    "la llamada real no se marca");
+  assert(/provider_called boolean not null default true/.test(MIG134),
+    "la columna no existe");
+});
+
+check("G3. la pantalla distingue «no se llamó» de «no hay proveedor»", () => {
+  const ui = read("components/domain/quality/copilot/copilot.tsx");
+  assert(/providerCalled === false/.test(ui),
+    "la pantalla no distingue la consulta sin llamada");
+  assert(/Sin proveedor de IA configurado/.test(ui),
+    "se perdió el aviso de proveedor no configurado");
+  assert(/answered_without_calling/.test(ui),
+    "el consumo no separa lo que no costó nada");
+});
+
+check("G4. el consumo separa las llamadas reales de las que no lo fueron", () => {
+  assert(/'provider_calls_this_month'/.test(MIG134), "no se cuentan las llamadas reales");
+  assert(/'answered_without_calling'/.test(MIG134), "no se cuentan las que no llamaron");
+});
+
+check("G5. las fuentes se leen a la vez, no en fila india", () => {
+  const b = stripTs(BUILDER);
+  assert(/enTandas\(/.test(b), "no hay lectura concurrente");
+  assert(/Promise\.all/.test(b), "no se espera en paralelo");
+  assert(/LECTURAS_A_LA_VEZ = \d+/.test(b), "no hay tope de concurrencia");
+});
+
+check("G6. la numeración de las citas sigue siendo determinista", () => {
+  const b = stripTs(BUILDER);
+  // El volcado tiene que ir en el orden declarado y REMAPEAR las citas: si un
+  // hecho conserva el número que tenía en su acumulador de origen, estaría
+  // citando otra fuente.
+  assert(/absorb\(propio\)/.test(b), "no se vuelca en orden");
+  assert(/mapa\.set\(ordinal, this\.ref\(resto\)\)/.test(b),
+    "no se remapean los números de cita al volcar");
+  assert(/traducir\(f\.refs\)/.test(b) && /traducir\(n\.refs\)/.test(b),
+    "hechos o notas conservan números de cita del acumulador de origen");
+});
+
+check("G7. leer en paralelo no relajó ningún permiso", () => {
+  const b = stripTs(BUILDER);
+  assert(!/service_role|SERVICE_ROLE/.test(b), "el constructor usa la clave de servicio");
+  assert(/client \?\? await createServerClient\(\)/.test(b),
+    "dejó de construirse con la sesión de quien pregunta");
+  assert(!/security definer/i.test(b), "el constructor invoca algo definer");
 });
 
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);

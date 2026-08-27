@@ -119,7 +119,11 @@ export function CopilotAdmin({
                     <td className="py-1 pr-3">
                       {RUN_STATUS_LABEL[r.status as AiRunStatus] ?? r.status}
                     </td>
-                    <td className="py-1 pr-3">{r.provider} · {r.model}</td>
+                    <td className="py-1 pr-3">
+                      {r.providerCalled
+                        ? `${r.provider} · ${r.model}`
+                        : `${r.provider} · ${r.model} · sin llamada`}
+                    </td>
                     <td className="py-1 pr-3">{r.promptTemplate} v{r.promptVersion}</td>
                     <td className="py-1 pr-3">{r.contextItems}</td>
                     <td className="py-1 pr-3">{r.latencyMs !== null ? `${r.latencyMs} ms` : "—"}</td>

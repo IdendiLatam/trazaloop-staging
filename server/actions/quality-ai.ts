@@ -46,6 +46,8 @@ export type AiActionState = {
     droppedCitations: number;
     /** QUALITY-12.1 · Cuántos temas de clientes quedaron guardados. */
     themesRecorded?: number;
+    /** QUALITY-12.1 · Si se llegó a llamar al proveedor. */
+    providerCalled?: boolean;
   };
 };
 
@@ -173,6 +175,7 @@ export async function askCopilotAction(
         conflicts: r.context.conflicts, truncated: r.context.truncated,
         droppedCitations: r.droppedCitations,
         themesRecorded: r.themesRecorded,
+        providerCalled: r.providerCalled,
       },
     };
   } catch (e) {

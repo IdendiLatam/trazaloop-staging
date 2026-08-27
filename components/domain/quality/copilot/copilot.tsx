@@ -171,7 +171,14 @@ function Answer({ state }: { state: AiActionState }) {
           </span>
           {meta ? (
             <span className="text-xs text-ink-soft">
-              {meta.live ? `${meta.provider} · ${meta.model}` : "Sin proveedor de IA configurado"}
+              {/* QUALITY-12.1 · Tres estados, no dos. Decir «openai · gpt-5.4-mini»
+                  en una consulta que nunca salió de Trazaloop hace leer justo lo
+                  contrario de lo que pasó. */}
+              {meta.providerCalled === false
+                ? "Respondido sin llamar al modelo: no había datos autorizados que consultar"
+                : meta.live
+                  ? `${meta.provider} · ${meta.model}`
+                  : "Sin proveedor de IA configurado"}
             </span>
           ) : null}
         </div>
@@ -353,7 +360,9 @@ function Usage({ usage, live }: { usage: Record<string, unknown>; live: boolean 
     <section className="rounded-lg border border-hairline bg-surface p-4 space-y-2">
       <h2 className="text-sm font-semibold text-ink">Consumo</h2>
       <div className="grid gap-2 text-xs sm:grid-cols-4">
-        <Dato label="Consultas este mes" valor={`${n("runs_this_month")} / ${n("monthly_run_limit")}`} />
+        <Dato
+          label="Consultas este mes"
+          valor={`${n("runs_this_month")} / ${n("monthly_run_limit")}`} />
         <Dato label="Tuyas hoy" valor={`${n("runs_today")} / ${n("daily_user_limit")}`} />
         <Dato
           label="Tokens de entrada"
@@ -362,6 +371,13 @@ function Usage({ usage, live }: { usage: Record<string, unknown>; live: boolean 
             : String(n("input_tokens_this_month"))} />
         <Dato label="Fallos del mes" valor={String(n("failed_this_month"))} />
       </div>
+      {n("answered_without_calling") > 0 ? (
+        <p className="text-xs text-ink-soft">
+          De ellas, {n("answered_without_calling")} se respondieron sin llamar al
+          modelo, porque no había datos autorizados que consultar: esas no
+          gastaron nada.
+        </p>
+      ) : null}
       {total > 0 || razonamiento > 0 ? (
         <div className="grid gap-2 text-xs sm:grid-cols-4">
           <Dato label="Tokens de salida" valor={String(n("output_tokens_this_month"))} />

@@ -310,6 +310,62 @@ async function main() {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // QUALITY-12.1 · Regresión de la prueba humana
+  // ---------------------------------------------------------------------------
+  // El defecto que motivó estas dos pruebas NO fue de recuperación: la prueba
+  // humana se hizo en otra empresa, vacía, y «sin evidencia» era la respuesta
+  // correcta. Pero las pruebas anteriores tenían un punto ciego real: todas
+  // pasaban el documento FIJADO (`pinned`), que es el camino fácil. Una
+  // pregunta abierta —sin fijar nada, como la escribe una persona— no estaba
+  // cubierta, y es justo la que se probó a mano.
+  //
+  // Estas dos la cubren: pregunta abierta, sin fijar, con la sesión real.
+  // ---------------------------------------------------------------------------
+
+  const abierta = async (temporal: Record<string, unknown>) => {
+    const pack = await buildContext({
+      organizationId: A, useCase: "ask",
+      question: "¿Cuál es el plazo de expedición comprometido?",
+      temporal, pinned: null, allow: { people: false, customer: true },
+    } as Parameters<typeof buildContext>[0], Q as never);
+    return { pack, texto: renderContext(pack) };
+  };
+
+  await check("B4. pregunta ABIERTA, sin fijar nada: hay contexto y trae hoy", async () => {
+    const { pack, texto } = await abierta({ mode: "current" });
+    assert(pack.refs.length > 0, "una pregunta abierta no recuperó ninguna fuente");
+    assert(pack.sourcesUsed.includes("document_revision"),
+      `el documento no entró · fuentes: ${pack.sourcesUsed.join(", ")}`);
+    assert(/TRES días/.test(texto), "no trajo la revisión vigente");
+    assert(!/CINCO días/.test(texto), "trajo también la revisión antigua");
+  });
+
+  await check("B5. pregunta ABIERTA a fecha pasada: trae la revisión de entonces", async () => {
+    const { pack, texto } = await abierta({ mode: "as_of", asOf: day(-200) });
+    assert(pack.refs.length > 0, "una pregunta abierta histórica no recuperó nada");
+    assert(/CINCO días/.test(texto), "no trajo la revisión de entonces");
+    assert(!/TRES días/.test(texto), "coló la revisión de hoy en una pregunta histórica");
+    assert(pack.refs.some((r) => r.sourceCode === "document_revision"
+      && r.asOf === day(-200) && r.revisionLabel !== null),
+      "la cita no dice a qué fecha y a qué revisión mira");
+  });
+
+  await check("B6. las fuentes se leen a la vez, y el paquete no cambia por ello", async () => {
+    // Dos construcciones seguidas de la misma pregunta tienen que dar
+    // EXACTAMENTE las mismas citas, con los mismos números. La lectura en
+    // paralelo no puede introducir azar en la numeración: un hecho que cita
+    // «[11]» tiene que seguir citando lo mismo mañana.
+    const a1 = await abierta({ mode: "current" });
+    const a2 = await abierta({ mode: "current" });
+    const huella = (p: { refs: { ordinal: number; label: string }[] }) =>
+      p.refs.map((r) => `${r.ordinal}:${r.label}`).join("|");
+    assert(huella(a1.pack) === huella(a2.pack),
+      "dos construcciones iguales dieron numeraciones distintas");
+    assert(a1.pack.sourcesUsed.length >= 6,
+      `se esperaban varias fuentes, llegaron ${a1.pack.sourcesUsed.length}`);
+  });
+
   await check("B3. la cita del documento dice a qué fecha y a qué revisión mira", async () => {
     const r = await runCopilot({
       organizationId: A, useCase: "ask", feature: "general", prompt: PROMPT_ASK,
@@ -563,6 +619,42 @@ async function main() {
     assert(f.cached_input_tokens === null, "se inventó un valor de caché");
     assert(f.reasoning_tokens === null, "se inventó un valor de razonamiento");
     assert(f.total_tokens === null, "se inventó un total");
+  });
+
+  await check("D1b. una consulta sin contexto dice que NO se llamó al modelo", async () => {
+    // La empresa ajena no tiene nada de Calidad: su contexto sale vacío y el
+    // Copilot responde sin preguntar a nadie. Lo que no puede pasar es que
+    // quede registrada como si el proveedor hubiera contestado.
+    await O.from("quality_ai_settings").insert({
+      organization_id: B, is_enabled: true, allow_people: false,
+      allow_customer: true, allow_drafts: false,
+      monthly_run_limit: 50, daily_user_limit: 50,
+    });
+    const r = await preguntar(O, B, "¿Qué requiere atención esta semana?");
+    assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
+    if (!r.ok) return;
+    assert(r.references.length === 0, "la empresa vacía trajo fuentes");
+    assert(r.providerCalled === false, "dice haber llamado al proveedor sin contexto");
+
+    const { data } = await O.from("v_quality_ai_run_overview")
+      .select("provider_called, input_tokens, output_tokens, evidence_level")
+      .eq("organization_id", B).eq("run_id", r.runId).single();
+    const f = data as Record<string, unknown>;
+    assert(f.provider_called === false, "la consulta quedó marcada como llamada");
+    assert(Number(f.input_tokens) === 0 && Number(f.output_tokens) === 0,
+      "una consulta sin llamada registró consumo");
+    assert(f.evidence_level === "missing", "no dijo que no había evidencia");
+  });
+
+  await check("D1c. una consulta CON contexto sí queda marcada como llamada", async () => {
+    const r = await preguntar(Q, A, "¿Qué requiere atención esta semana?");
+    assert(r.ok && r.references.length > 0, "no hubo contexto con el que probar");
+    assert(r.ok && r.providerCalled === true, "no marcó la llamada");
+    const runId = await ultimaEjecucion(Q, A);
+    const { data } = await Q.from("v_quality_ai_run_overview")
+      .select("provider_called").eq("organization_id", A).eq("run_id", runId).single();
+    assert((data as Record<string, unknown>).provider_called === true,
+      "la consulta con llamada quedó marcada como sin llamada");
   });
 
   await check("D2. un proveedor desconocido NO acaba llamando a OpenAI (§61)", async () => {

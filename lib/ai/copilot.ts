@@ -56,6 +56,12 @@ export type CopilotOutcome =
       droppedCitations: number;
       /** Cuántos temas de clientes se persistieron; cero en el resto de casos. */
       themesRecorded: number;
+      /**
+       * QUALITY-12.1 · Si se llegó a preguntar al proveedor. Falso cuando el
+       * contexto salió vacío: entonces `provider` y `model` dicen con qué se
+       * HABRÍA respondido, y los ceros de consumo significan que no se gastó.
+       */
+      providerCalled: boolean;
     }
   | { ok: false; runId: string | null; reason: string; message: string };
 
@@ -153,16 +159,20 @@ export async function runCopilot(
       evidence: "missing",
       themes: [],
     };
+    // QUALITY-12.1 · Aquí NO se ha llamado a nadie, y la consulta tiene que
+    // decirlo. Guardarla con el proveedor configurado y cero tokens hacía leer
+    // lo contrario de lo que pasó: que se preguntó y no contestó nada.
     await db.rpc("quality_ai_complete_run", {
       p_run_id: runId, p_answer: respuesta as unknown as Record<string, unknown>,
       p_evidence_level: "missing", p_input_tokens: 0, p_output_tokens: 0, p_tool_calls: 0,
+      p_provider_called: false,
     });
     return {
       ok: true, runId, answer: respuesta, references: [],
       context: { sources: [], limitations: pack.temporalLimitations,
                  conflicts: pack.conflicts, truncated: false, items: 0 },
       provider: provider.name, model: cfg.model, live, droppedCitations: 0,
-      themesRecorded: 0,
+      themesRecorded: 0, providerCalled: false,
     };
   }
 
@@ -224,6 +234,7 @@ export async function runCopilot(
     p_cached_input_tokens: resultado.usage.cachedInputTokens ?? null,
     p_reasoning_tokens: resultado.usage.reasoningTokens ?? null,
     p_total_tokens: resultado.usage.totalTokens ?? null,
+    p_provider_called: true,
   });
 
   // ---- 6 · Los temas de clientes, si los hay ------------------------------
@@ -262,6 +273,7 @@ export async function runCopilot(
     provider: provider.name, model: cfg.model, live,
     droppedCitations: validado.droppedCitations,
     themesRecorded: temasGuardados,
+    providerCalled: true,
   };
 }
 

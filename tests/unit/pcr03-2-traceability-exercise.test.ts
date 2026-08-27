@@ -72,6 +72,7 @@ const QUALITY_01_ALLOWED = new Set([
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
+    "0134_quality_ai_provider_call_truth.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -379,6 +380,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
+    "0134_quality_ai_provider_call_truth.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

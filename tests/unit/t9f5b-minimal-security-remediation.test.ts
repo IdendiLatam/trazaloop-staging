@@ -581,6 +581,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
+    "0134_quality_ai_provider_call_truth.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);
