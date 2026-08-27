@@ -497,3 +497,33 @@ opcional (§88). No hay una decisión comercial sobre si la IA se cobra aparte, 
 
 **168 PASS · 2 GAP (#122, #162 · los dos son GAP-01) · 2 PARCIAL/DIFERIDO
 (#74, #76) · 1 DIFERIDO (#79, #88 · GAP-02) · 0 FAIL.**
+
+
+---
+
+# Addendum · QUALITY-12.1 cerró los tres huecos
+
+Este informe se emitió con veredicto **READY WITH GAPS** y tres huecos
+declarados. El sprint QUALITY-12.1 los cerró. Lo que sigue **no reescribe** lo
+de arriba —que era cierto cuando se escribió— sino que dice qué pasó después.
+
+| Hueco | Estado | Dónde está contado |
+|---|---|---|
+| **GAP-01** · sin proveedor en vivo | **CERRADO** | `../quality-12-1/QUALITY_12_1_PROVIDER_OPENAI.md` |
+| **GAP-02** · siete fuentes sin adaptador | **CERRADO** | `../quality-12-1/QUALITY_12_1_SOURCE_ADAPTERS.md` |
+| **GAP-03** · temas sin persistir | **CERRADO** | `../quality-12-1/QUALITY_12_1_CUSTOMER_THEMES.md` |
+
+Tres precisiones sobre el texto de arriba, para que no despiste a quien lo lea
+dentro de un año:
+
+* Donde el GAP-02 dice «ocho fuentes declaradas sin adaptador» y luego enumera
+  seis, el número real era **siete**: `document_revision`, `objective`,
+  `action`, `control`, `knowledge_item`, `customer_feedback` y
+  `automation_rule`. Las diecinueve tienen adaptador desde QUALITY-12.1.
+* Donde el criterio 74 dice que los temas «se proponen; no se persisten con
+  serie», ahora **sí** se persisten, con periodo, procedencia y serie.
+* Donde el criterio 76 dice que el sentimiento etiquetado está diferido, ahora
+  se etiqueta —negativo, mixto, neutro, positivo o sin determinar— y va con el
+  tema. Sigue sin ser una puntuación numérica, y sigue siendo deliberado.
+
+La migración **0132 no se editó**: QUALITY-12.1 añadió la 0133 detrás.
