@@ -17,11 +17,11 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **201** |
-| Ejes clasificados (ficha · listado · histórico) | **603** |
+| Entidades clasificadas | **204** |
+| Ejes clasificados (ficha · listado · histórico) | **612** |
 | `AVAILABLE` | **224** |
-| `EMBEDDED` | **256** |
-| `NOT_APPLICABLE` | **75** |
+| `EMBEDDED` | **259** |
+| `NOT_APPLICABLE` | **81** |
 | `HISTORICAL_NOT_SUPPORTED` | **48** |
 | **`PENDING`** | **0** |
 | Claves distintas en el registro | **164** |
@@ -173,6 +173,9 @@ No existe `PENDING`.
 | Fuente observable | — | E | N/A | N/A | N/A |
 | Campo observable | — | E | N/A | N/A | N/A |
 | Plantilla de regla de automatización | — | E | N/A | N/A | N/A |
+| Hecho observable | — | E | N/A | N/A | N/A |
+| Contrato de sujeto | — | E | N/A | N/A | N/A |
+| Acuse de entrega de un hecho | — | D | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* |
 | Ajustes de la automatización | `/quality/automation` | E | N/A | N/A | N/A |
 
 ## TrazaDocs
@@ -636,6 +639,15 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Plantilla de regla de automatización | Ficha | NOT_APPLICABLE | Es catálogo de plataforma: una plantilla no observa nada hasta que la empresa la instancia, y lo que se instancia es una regla, que sí tiene ficha. |
 | Plantilla de regla de automatización | Listado | NOT_APPLICABLE | Es catálogo de plataforma: el listado de plantillas se ofrece dentro de la pantalla de reglas y es idéntico para todas las empresas. |
 | Plantilla de regla de automatización | Histórico | NOT_APPLICABLE | Una plantilla no tiene historia empresarial: la historia empieza en la regla que la empresa creó a partir de ella. |
+| Hecho observable | Ficha | NOT_APPLICABLE | Es catálogo de plataforma: declara a qué hechos de negocio puede reaccionar una regla, y es idéntico para todas las empresas. |
+| Hecho observable | Listado | NOT_APPLICABLE | Es catálogo de plataforma: la lista se ofrece dentro del constructor de la regla, que es donde sirve para algo. |
+| Hecho observable | Histórico | NOT_APPLICABLE | El catálogo de hechos cambia con las versiones del producto, no con la vida de una empresa. |
+| Contrato de sujeto | Ficha | NOT_APPLICABLE | Es catálogo de plataforma: dice de qué sujeto de un hecho se llega a qué fuente observable, y ninguna empresa lo edita. |
+| Contrato de sujeto | Listado | NOT_APPLICABLE | Es catálogo de plataforma: quien necesita saberlo lo ve en la validación de la regla, en castellano. |
+| Contrato de sujeto | Histórico | NOT_APPLICABLE | Un contrato de sujeto pertenece al producto, no a la historia de ninguna empresa. |
+| Acuse de entrega de un hecho | Ficha | EMBEDDED | Dentro de *Ejecución de la automatización*. El acuse dice qué regla vio qué hecho dentro de una ejecución concreta: fuera de ella no significa nada. |
+| Acuse de entrega de un hecho | Listado | EMBEDDED | Dentro de *Ejecución de la automatización*. Los acuses de una ejecución son las filas de su informe: por regla, cuántos hechos miró y cuántos coincidieron. |
+| Acuse de entrega de un hecho | Histórico | EMBEDDED | Dentro de *Ejecución de la automatización*. La ejecución es inmutable, así que sus acuses ya son historia dentro de ella. |
 | Ajustes de la automatización | Ficha | NOT_APPLICABLE | Es configuración operativa —si el motor está encendido y en qué huso horario cierra el día—, no un objeto de negocio documentable. |
 | Ajustes de la automatización | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. La automatización se configura una vez por empresa. |
 | Ajustes de la automatización | Histórico | NOT_APPLICABLE | La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia. |

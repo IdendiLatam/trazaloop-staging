@@ -447,3 +447,46 @@ encargada.
 | 167 | matriz AT completa | **PASS** | 45/45 |
 
 **166 PASS · 1 PARCIAL (#11, GAP-02) · 0 FAIL.**
+
+---
+
+# Adenda · QUALITY-11.1 (cierre de los dos huecos)
+
+Este informe se mantiene tal como se emitió: es lo que era cierto al cerrar
+QUALITY-11. Lo que sigue dice qué cambió después, sin reescribir nada de arriba.
+
+## Los dos huecos, cerrados
+
+**GAP-01 · CERRADO.** `quality_scan_pending_measurements` y
+`work_scan_pending_actions` ya no dependen de una sesión humana: con sesión
+mantienen exactamente los mismos permisos, y sin ella se ejecutan como proceso
+del sistema, igual que los otros seis barridos desde 0117. Además **ceden** ante
+la regla equivalente de QUALITY-11 si la empresa la adopta, de modo que la misma
+condición nunca produce dos avisos.
+
+**GAP-02 · CERRADO.** Existe el puente real: hecho de negocio → enrutador →
+regla por evento activa → **el mismo** evaluador → **el mismo** ejecutor de
+salidas → señal, con linaje hasta el hecho e idempotencia por acuse de entrega.
+Probado de punta a punta en cuatro dominios con las RPC de dominio reales, en
+local y contra Staging.
+
+## El criterio que cambia de veredicto
+
+| # | Criterio | En QUALITY-11 | Ahora |
+|---|---|---|---|
+| 11 | camino por evento | **PARCIAL** | **PASS** |
+
+**El recuento consolidado pasa a 167 PASS · 0 PARCIAL · 0 GAP · 0 FAIL.**
+
+## Lo que cambió del código de QUALITY-11
+
+Una sola cosa estructural: el bloque que emitía las salidas dentro del barrido
+salió a su propia función, `quality_automation_emit`, para que el puente use
+literalmente la misma y no una parecida. Las 68 comprobaciones de QUALITY-11
+contra base real siguen verdes después de la extracción.
+
+Y tres afirmaciones de sus suites se actualizaron porque dejaron de ser ciertas
+al cerrarse el hueco: los ocho observadores ya no se omiten, las plantillas son
+21 en vez de 14, y hay un cuarto tipo de ejecución —«por un hecho ocurrido»—.
+
+Todo lo demás sigue igual. Detalle en `docs/quality/quality-11-1/`.

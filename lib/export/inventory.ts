@@ -1397,6 +1397,27 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: na("Una plantilla no tiene historia empresarial: la historia empieza en la regla que la empresa creó a partir de ella."),
   },
   {
+    entity: "Hecho observable", module: "quality", route: null, klass: "E",
+    detail: na("Es catálogo de plataforma: declara a qué hechos de negocio puede reaccionar una regla, y es idéntico para todas las empresas."),
+    list: na("Es catálogo de plataforma: la lista se ofrece dentro del constructor de la regla, que es donde sirve para algo."),
+    historical: na("El catálogo de hechos cambia con las versiones del producto, no con la vida de una empresa."),
+  },
+  {
+    entity: "Contrato de sujeto", module: "quality", route: null, klass: "E",
+    detail: na("Es catálogo de plataforma: dice de qué sujeto de un hecho se llega a qué fuente observable, y ninguna empresa lo edita."),
+    list: na("Es catálogo de plataforma: quien necesita saberlo lo ve en la validación de la regla, en castellano."),
+    historical: na("Un contrato de sujeto pertenece al producto, no a la historia de ninguna empresa."),
+  },
+  {
+    entity: "Acuse de entrega de un hecho", module: "quality", route: null, klass: "D",
+    detail: embedded("Ejecución de la automatización",
+      "El acuse dice qué regla vio qué hecho dentro de una ejecución concreta: fuera de ella no significa nada."),
+    list: embedded("Ejecución de la automatización",
+      "Los acuses de una ejecución son las filas de su informe: por regla, cuántos hechos miró y cuántos coincidieron."),
+    historical: embedded("Ejecución de la automatización",
+      "La ejecución es inmutable, así que sus acuses ya son historia dentro de ella."),
+  },
+  {
     entity: "Ajustes de la automatización", module: "quality",
     route: "/quality/automation", klass: "E",
     detail: na("Es configuración operativa —si el motor está encendido y en qué huso horario cierra el día—, no un objeto de negocio documentable."),
