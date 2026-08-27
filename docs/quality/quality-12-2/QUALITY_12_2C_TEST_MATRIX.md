@@ -237,3 +237,33 @@ de fallo son los mismos para los dos, y comprobarlos hace falta en ambos.
 `F5` exigía que la 0137 fuera la última. Dejó de serlo con la 0138. Se cambió
 por la adyacencia, que es lo que de verdad prueba que nadie metió nada por en
 medio.
+
+
+---
+
+## Estado final, tras la validación humana
+
+| Suite | |
+|---|---|
+| `test:quality122c` | **39 ✔** |
+| `test:quality122c-ui` | **13 ✔** |
+| `test:quality122c-budget` | **14 ✔** |
+| `test:quality122c-rls` | **24 ✔** |
+| `test:quality122c-safety` | **14 ✔** |
+| `test:quality12` · `-rls` · `-safety` | 70 · 31 · 25 |
+| `test:quality121` · `-rls` | 56 · 31 |
+| `test:quality122a` · `-rls` | 30 · 24 |
+| `test:quality122b` · `-rls` | 28 · 29 |
+| TrazaDocs · Textiles · T9G · hints · secciones · lista maestra | verdes |
+| **`npm run test:all`** | **EXIT 0** |
+
+**Réplica limpia 0001…0138 desde cero**, con las siete suites de base real
+repetidas contra esa base recién construida: todas verdes.
+
+### Verificación contra Staging tras la validación
+
+28 comprobaciones sobre los cuatro runs reales: procedencia, guía canónica
+vigente, que lo señalado como ausente procede de la guía y no del modelo, que
+ningún documento cambió de estado, que no se creó ninguna revisión ni versión,
+que las cuatro secciones siguen sin tocar, y que el consumo queda separado del
+Copilot. **Cero fallos.**

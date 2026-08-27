@@ -142,3 +142,64 @@ ya no es una mejora, y reemplazar con ella sorprendería a quien pulse el botón
 
 Si alguien engorda la política mañana, la prueba lo dice antes de que llegue a
 la factura.
+
+
+---
+
+# Lo REAL, medido con OpenAI
+
+La validación humana produjo cuatro llamadas reales. Esto es lo que costaron,
+frente a lo que este documento estimaba.
+
+| # | módulo · acción | entrada | salida | razonando | total | latencia |
+|---|---|---|---|---|---|---|
+| 1 | cpr · improve_writing | **724** | 155 | 58 | 879 | 3 398 ms |
+| 2 | textiles · clarify | **784** | 111 | 18 | 895 | 1 600 ms |
+| 3 | quality · review_against_guidance | **754** | 316 | 224 | 1 070 | 3 875 ms |
+| 4 | quality · formalize | **645** | 103 | 22 | 748 | 2 325 ms |
+
+Entrada: media **727** · mediana **739** · mín **645** · máx **784**.
+
+## El coste fijo real
+
+| # | Texto | Entrada | Fijo deducido |
+|---|---|---|---|
+| 1 | 40 palabras | 724 | **656** |
+| 2 | 29 palabras | 784 | **734** |
+| 3 | 9 palabras | 754 | **736** |
+| 4 | 24 palabras | 645 | **607** |
+
+**607 – 736 tokens**, frente a los **1 664** del Copilot: **−56 % a −64 %**.
+
+## La estimación iba del lado seguro
+
+Este documento estimaba **801** de coste fijo y el real quedó entre **607 y
+736**. La regla de 3,6 caracteres por token es conservadora frente al
+tokenizador real de OpenAI para castellano.
+
+**Eso es lo correcto para un presupuesto**: una estimación que se queda corta
+avisa tarde. No se ajusta la regla — que las medidas reales caigan por debajo
+del presupuesto es la señal de que el presupuesto sirve.
+
+## Frente al Copilot, con datos reales
+
+| | vs 2 514 | vs 2 886 |
+|---|---|---|
+| Media de entrada (727) | **−71 %** | **−75 %** |
+| Peor caso (784) | −69 % | −73 % |
+| Mejor caso (645) | −74 % | −78 % |
+
+Y en tiempo: **1,6 – 3,9 s** frente a los **17–20 s** que costaba construir el
+Context Pack global.
+
+## Sobre el caché de entrada
+
+Los cuatro runs traen `cached_input_tokens = 0`. Es esperable y no es un
+defecto: cada uno usó una **acción distinta**, y la acción va dentro de las
+instrucciones, así que el prefijo nunca se repitió.
+
+En uso real —alguien mejorando varias secciones seguidas con la misma acción—
+el prefijo sí se repite y el proveedor lo sirve desde caché, como se vio en
+QUALITY-12.1 (2 304 de 2 519 tokens cacheados a partir de la segunda consulta).
+Es una mejora que llegará sola; medirla exige un uso continuado, no cuatro
+pruebas deliberadamente distintas entre sí.

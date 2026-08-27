@@ -251,8 +251,23 @@ donde las dos etiquetas se vean juntas contradiciéndose.
 
 ## AA · Gaps
 
-Ninguno del alcance implementable sin credencial. Queda la **validación en
-vivo**, que exige sesión en el Preview: ver `QUALITY_12_2C_LIVE_VALIDATION.md`.
+**Blóqueres: ninguno.** El único que hubo —el botón que no respondía— quedó
+cerrado con su causa raíz, su arreglo y dos regresiones.
+
+**Gaps del alcance de 12.2C: ninguno.**
+
+**Diferido por decisión, no por olvido:**
+
+| Qué | A dónde |
+|---|---|
+| Revisión contextual con fuentes del sistema de gestión | **12.2D** |
+| Renombrado global Copilot → Trazaloop Intelligence | **12.2E** |
+| Cuotas y precio comercial | **12.2F** |
+
+Y una observación que no es un gap: los cuatro runs no aprovecharon el caché de
+entrada porque cada uno usó una acción distinta. En uso continuado el prefijo
+se repite y el proveedor lo sirve desde caché. No hay nada que arreglar; hay
+algo que medir cuando haya uso real.
 
 
 ---
@@ -347,14 +362,16 @@ documentos reales de cada uno (`rls`), y el cableado de cada editor y cada
 página (`L3`, que comprueba que cada una resuelve la asistencia con **su**
 módulo y no con Quality).
 
-## M · La llamada real
+## M · La llamada real · HECHA
 
-Sigue pendiente: la asistencia se invoca desde el editor con sesión, y la
-credencial vive solo en el Preview. Es la primera de las cuatro pruebas
-humanas.
+Cuatro llamadas reales contra `gpt-5.4-mini`, las cuatro aceptadas
+humanamente. Entrada media **727 tokens** —un **71 % menos** que el Copilot—,
+latencia **1,6 a 3,9 s**, y ninguna escribió nada en la base.
 
-Durante todo el diagnóstico y el arreglo **no se gastó ni una llamada al
-proveedor**.
+Durante el diagnóstico y el arreglo del blóquer **no se gastó ni una llamada al
+proveedor**: se reprodujo con el doble determinístico y un DOM en memoria.
+
+Detalle completo en `QUALITY_12_2C_LIVE_VALIDATION.md`.
 
 ## N · Sin migración
 
