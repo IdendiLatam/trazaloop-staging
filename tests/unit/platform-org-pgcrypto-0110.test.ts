@@ -68,6 +68,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
+    "0135_quality_ai_theme_evidence_scope.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

@@ -36,6 +36,8 @@ const ADAPTERS = read("lib/ai/context/adapters.ts");
 const SCHEMAS = read("lib/ai/schemas.ts");
 const MIG133 = read("supabase/migrations/0133_quality_ai_copilot_completion.sql");
 const MIG134 = read("supabase/migrations/0134_quality_ai_provider_call_truth.sql");
+const MIG135 = read("supabase/migrations/0135_quality_ai_theme_evidence_scope.sql");
+const PROMPTS = read("lib/ai/prompts.ts");
 const BUILDER = read("lib/ai/context/builder.ts");
 const MIG132 = read("supabase/migrations/0132_quality_ai_copilot.sql");
 
@@ -315,7 +317,9 @@ check("F2. la 0133 y la 0134 van detrás de la 0132, en orden", () => {
     "algo se coló entre la 0132 y la 0133");
   assert(migraciones[i + 1] === "0134_quality_ai_provider_call_truth.sql",
     "algo se coló entre la 0133 y la 0134");
-  assert(i + 1 === migraciones.length - 1, "la 0134 no es la última");
+  assert(migraciones[i + 2] === "0135_quality_ai_theme_evidence_scope.sql",
+    "algo se coló entre la 0134 y la 0135");
+  assert(i + 2 === migraciones.length - 1, "la 0135 no es la última");
 });
 
 check("F3. las tablas nuevas tienen RLS y nada se abre a anon", () => {
@@ -530,6 +534,52 @@ check("I4. la respuesta separa lo citado de lo solo consultado", () => {
   assert(/Fuentes citadas/.test(UI), "no se destacan las citadas");
   assert(/no se\n\s*citaron en la respuesta|no se citaron/.test(UI),
     "no se dice cuántas se consultaron sin citar");
+});
+
+// ===========================================================================
+console.log("\nJ · LO QUE ENSEÑÓ LA TERCERA PRUEBA HUMANA");
+// ===========================================================================
+
+check("J1. el número de una cita no es el número de la entidad", () => {
+  assert(/EL NÚMERO DE UNA FUENTE NO ES EL NÚMERO DE LA COSA/.test(PROMPTS),
+    "la política no distingue el número de cita del de la entidad");
+  assert(/usa SIEMPRE el nombre que aparece en su etiqueta/.test(PROMPTS),
+    "no se dice cómo nombrar la entidad");
+  // Y la etiqueta que se envía tiene que llevar ese nombre.
+  const b = ADAPTERS.split("registerAdapter({")
+    .find((x) => /code: "customer_comment"/.test(x))!;
+  assert(/Comentario anónimo #\$\{i\}/.test(b),
+    "la etiqueta del comentario no lleva su propio número");
+});
+
+check("J2. lo que no es voz de cliente no se convierte en tema", () => {
+  assert(/QUÉ NO ES UN TEMA DE CLIENTE/.test(PROMPTS),
+    "no se dice qué queda fuera de un tema");
+  assert(/instrucciones dirigidas a un sistema/.test(PROMPTS),
+    "no se contempla el comentario con órdenes dentro");
+  assert(/déjalo fuera y explica en una frase por qué/.test(PROMPTS),
+    "excluir en silencio es indistinguible de no haberlo visto");
+});
+
+check("J3. un tema solo cuenta respaldo de voz del cliente", () => {
+  assert(/source_code in \('customer_comment', 'customer_feedback'\)/.test(MIG135),
+    "un caso interno seguiría contando como comentario de cliente");
+  assert(/QUALITY-12\.1/.test(MIG135), "la migración no dice de dónde viene");
+});
+
+check("J4. las plantillas suben de versión al cambiar lo que piden", () => {
+  const versiones = [...PROMPTS.matchAll(/name: "copilot\.[a-z_]+",[\s\S]{0,300}?version: (\d+)/g)]
+    .map((m) => Number(m[1]));
+  assert(versiones.length === 7, `se encontraron ${versiones.length} plantillas`);
+  assert(versiones.every((v) => v >= 2),
+    "alguna plantilla cambió de contenido sin subir de versión");
+});
+
+check("J5. ninguna migración anterior se editó", () => {
+  for (const [nombre, sql] of [["0132", MIG132], ["0133", MIG133], ["0134", MIG134]] as const) {
+    assert(!/customer_comment', 'customer_feedback/.test(sql),
+      `la ${nombre} fue editada con contenido de la 0135`);
+  }
 });
 
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);

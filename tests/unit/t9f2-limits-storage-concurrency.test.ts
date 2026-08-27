@@ -500,6 +500,7 @@ check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA post
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
+    "0135_quality_ai_theme_evidence_scope.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

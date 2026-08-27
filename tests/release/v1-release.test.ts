@@ -126,6 +126,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
+    "0135_quality_ai_theme_evidence_scope.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -1184,6 +1185,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0132_quality_ai_copilot.sql",
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
+    "0135_quality_ai_theme_evidence_scope.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));

@@ -620,6 +620,47 @@ async function main() {
       `contó ${comprobar!.evidence_count} evidencias que no eran suyas`);
   });
 
+  await check("C4b. un caso interno NO cuenta como respaldo de un tema", async () => {
+    // Lo vio la tercera prueba humana: el modelo agrupó «retraso de entrega»
+    // citando tres comentarios anónimos y UN CASO. El caso habla del mismo
+    // asunto y es legítimo leerlo, pero no es voz del cliente: si contara, el
+    // tema diría que lo sostienen cuatro clientes cuando fueron tres.
+    const { data: tema } = await Q.from("quality_ai_customer_themes")
+      .select("run_id").eq("id", TEMA).single();
+    const { data: refs } = await Q.from("quality_ai_run_references")
+      .select("id, source_code").eq("organization_id", A)
+      .eq("run_id", tema!.run_id as string);
+    const filas = (refs ?? []) as Record<string, unknown>[];
+    const comentarios = filas.filter((r) => r.source_code === "customer_comment");
+    const internas = filas.filter(
+      (r) => r.source_code !== "customer_comment" && r.source_code !== "customer_feedback");
+    assert(comentarios.length > 0 && internas.length > 0,
+      "la consulta no trae las dos clases de fuente con las que probar");
+
+    const { data: nuevo, error } = await Q.rpc("quality_ai_record_customer_theme", {
+      p_run_id: tema!.run_id, p_theme_key: `mezcla-${stamp}`.slice(0, 60),
+      p_label: "Tema apoyado en clientes y en un caso interno", p_summary: null,
+      p_sentiment: "negative", p_period_start: HACE_MUCHO, p_period_end: HOY,
+      p_reference_ids: [...comentarios.map((r) => String(r.id)),
+                        ...internas.map((r) => String(r.id))],
+    });
+    assert(!error, `escribir el tema: ${error?.message}`);
+
+    const { data: guardado } = await Q.from("quality_ai_customer_themes")
+      .select("evidence_count").eq("id", nuevo as string).single();
+    assert(Number(guardado!.evidence_count) === comentarios.length,
+      `contó ${guardado!.evidence_count} respaldos y solo ${comentarios.length} `
+      + `son de clientes`);
+
+    const { data: ev } = await Q.from("quality_ai_customer_theme_evidence")
+      .select("reference_id").eq("organization_id", A).eq("theme_id", nuevo as string);
+    const ids = new Set((ev ?? []).map((x) => String((x as Record<string, unknown>).reference_id)));
+    for (const r of internas) {
+      assert(!ids.has(String(r.id)),
+        `una fuente ${r.source_code} quedó como evidencia de un tema de clientes`);
+    }
+  });
+
   await check("C5. la serie compara con el periodo anterior del mismo tema", async () => {
     // Un segundo periodo, con la misma campaña detrás: lo que interesa no es el
     // dato, es que la serie sepa emparejarlos por tema.
