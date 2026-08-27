@@ -1,16 +1,61 @@
 # QUALITY-12.2C · Qué se comprueba, dónde y con qué
 
-## Las cuatro suites
+## Las cinco suites
 
 | Suite | Cómo se ejecuta | Resultado |
 |---|---|---|
-| `test:quality122c` | estática, sin base | **36 ✔ · 0 ✘** |
+| `test:quality122c` | estática, sin base | **39 ✔ · 0 ✘** |
+| `test:quality122c-ui` | **DOM real, pulsando el botón** | **13 ✔ · 0 ✘** |
 | `test:quality122c-budget` | estática, mide tokens | **14 ✔ · 0 ✘** |
 | `test:quality122c-rls` | base real, sesiones reales | **24 ✔ · 0 ✘** |
 | `test:quality122c-safety` | base real, barreras | **14 ✔ · 0 ✘** |
 
-Las dos estáticas están en `test:all`. Las de base real se ejecutan aparte,
+Las tres primeras están en `test:all`. Las de base real se ejecutan aparte,
 como el resto de suites de RLS.
+
+---
+
+## La suite que faltaba, y por qué
+
+La primera versión de QUALITY-12.2C tenía 52 comprobaciones en verde y **el
+botón no hacía nada**. El panel metía un `<form>` dentro del formulario de
+guardado de la sección; el navegador descarta la etiqueta interna y el botón
+pierde su acción. React no lo valida, así que el árbol se ve perfecto en el
+código y en el servidor.
+
+Todas las pruebas llamaban a la acción de servidor **por su nombre**, y esa
+parte funcionaba. Una prueba que invoca la función de servidor comprueba que la
+función existe; no comprueba que alguien pueda llegar a ella.
+
+`test:quality122c-ui` monta el panel en un DOM real —**dentro de un
+formulario**, como en producción—, pulsa el botón y mira qué pasa. La acción se
+inyecta como propiedad, así que no hace falta ni servidor ni proveedor.
+
+| | Qué comprueba |
+|---|---|
+| `A1` | el panel **no** mete un formulario dentro del de guardado |
+| `A2` | ningún botón del panel puede enviar el formulario de guardado |
+| `B1` | al pulsar Proponer **se ve** el estado «pensando» |
+| `B2` | no se puede enviar dos veces |
+| `B3` | la propuesta se pinta, con el texto original al lado |
+| `B4` | se dice qué contexto se usó, sin lista de citas |
+| `C1` | Reemplazar entrega el texto al editor, y solo eso |
+| `C2` | hasta pulsar Reemplazar, el editor conserva su texto |
+| `D1` | un error del servidor **se ve** |
+| `D2` | tras un error el texto sigue intacto y se puede reintentar |
+| `E1` | con el editor vacío el botón está apagado y dice por qué |
+| `F1` | qué se envía exactamente, y que el cliente no declara módulo ni empresa |
+| `F2` | cambiar la acción cambia lo que se envía |
+
+Y en la suite estática, el guarda general —`L2`— recorre el grafo de
+composición **a nivel de componente y de forma transitiva**, y falla si algo
+colgado de una región `<form>…</form>` acaba pintando otro form a la
+profundidad que sea. El defecto real era una cadena de tres —editor →
+`SectionEditor` → panel—, así que un guarda que mirase solo al hijo directo no
+habría visto nada.
+
+**Comprobado que funciona:** reintroduciendo el `<form>` en el panel, `L2` lo
+caza en los tres módulos y la suite falla.
 
 ---
 

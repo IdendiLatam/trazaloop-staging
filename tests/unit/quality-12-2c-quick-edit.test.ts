@@ -507,5 +507,37 @@ check("L2. nadie renderiza dentro de un form algo que pinte otro form", () => {
   assert(problemas.length === 0, problemas.join(" · "));
 });
 
+check("L3. los tres editores le pasan al panel lo que necesita", () => {
+  // El panel es transversal, pero cada editor tiene que darle el documento y
+  // decirle si la asistencia está permitida. Sin `documentId` no aparece, y sin
+  // `assistedWriting` aparecería también donde el plan no lo permite.
+  const cpr = read("components/domain/trazadocs/document-editor.tsx");
+  const quality = read("components/domain/quality/document-control-detail.tsx");
+  const textiles = read("components/domain/textiles/trazadoc-editor.tsx");
+  const campo = read("components/domain/textiles/trazadoc-section-field.tsx");
+
+  for (const [nombre, src] of [["CPR", cpr], ["Quality", quality]] as const) {
+    assert(/documentId=\{/.test(src), `${nombre} no le pasa el documento al editor de sección`);
+    assert(/assistedWriting=\{/.test(src), `${nombre} no le pasa si la asistencia está permitida`);
+  }
+  assert(/assistedWriting=\{assistedWriting\}/.test(textiles),
+    "Textiles no le pasa si la asistencia está permitida");
+  assert(/<QuickEditPanel/.test(campo), "el campo textil no monta el panel");
+  assert(/<QuickEditPanel/.test(read("components/domain/trazadocs/section-editor.tsx")),
+    "el editor de sección compartido no monta el panel");
+
+  // Y cada página lo resuelve con SU módulo, no con el de Quality.
+  const paginas: [string, string][] = [
+    ["app/(app)/(shell)/(cpr)/trazadocs/[id]/edit/page.tsx", "CPR_MODULE_CODE"],
+    ["app/(app)/(shell)/textiles/trazadocs/[documentId]/page.tsx", "TEXTILES_MODULE_CODE"],
+    ["app/(app)/(shell)/quality/documents/[documentId]/page.tsx", "QUALITY_MODULE_CODE"],
+  ];
+  for (const [ruta, constante] of paginas) {
+    const src = read(ruta);
+    assert(new RegExp(`canUseAssistedWriting\\(org\\.organizationId, ${constante}\\)`).test(src),
+      `${ruta} no resuelve la asistencia con su propio módulo`);
+  }
+});
+
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);
 process.exit(failed === 0 ? 0 : 1);

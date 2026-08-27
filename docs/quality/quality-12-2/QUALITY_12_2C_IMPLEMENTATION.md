@@ -253,3 +253,109 @@ donde las dos etiquetas se vean juntas contradiciéndose.
 
 Ninguno del alcance implementable sin credencial. Queda la **validación en
 vivo**, que exige sesión en el Preview: ver `QUALITY_12_2C_LIVE_VALIDATION.md`.
+
+
+---
+
+# Addendum · El botón que no hacía nada
+
+La primera validación humana encontró un blóquer: al pulsar **Proponer** no
+ocurría absolutamente nada. Ni carga, ni propuesta, ni error.
+
+## A · Causa raíz
+
+**Un `<form>` dentro de otro `<form>`.**
+
+El panel tenía su propio formulario, y vive dentro del formulario de guardado
+de la sección. Es HTML inválido: el analizador del navegador **descarta la
+etiqueta interna** y sus hijos pasan al formulario de fuera, con lo que el
+botón pierde la acción a la que estaba atado.
+
+## B · Por qué no lo detectó nada
+
+React **no valida** el anidamiento al renderizar. El árbol se ve correcto en el
+código, compila, pasa el linter y se sirve igual desde el servidor. El defecto
+solo existe cuando un navegador analiza ese HTML.
+
+Y las 52 comprobaciones que estaban en verde llamaban todas a la acción de
+servidor **por su nombre**, que funcionaba. Ninguna montaba el componente.
+
+> Una prueba que invoca la función de servidor comprueba que la función
+> existe. No comprueba que alguien pueda llegar a ella.
+
+## C · Componente afectado
+
+`components/domain/documents/quick-edit.tsx`, y por tanto **los tres módulos**:
+CPR, Textiles y Quality ponen sus secciones dentro de un formulario de
+guardado. Un solo defecto, un solo arreglo.
+
+## D · ¿Salía petición del navegador?
+
+**No.** El defecto está antes del servidor: el botón nunca llegaba a disparar
+la acción. Por eso no había ni petición, ni error de consola, ni estado.
+
+## E · ¿Llegaba al server action?
+
+**No.**
+
+## F · ¿Se llamaba al proveedor?
+
+**No.** Cero llamadas gastadas durante el diagnóstico: se reprodujo con el
+doble determinístico y con un DOM en memoria.
+
+## G · El arreglo
+
+El panel deja de tener formulario. El `FormData` se construye en el manejador y
+la acción se despacha dentro de una transición. El botón es `type="button"`, de
+modo que no puede enviar el formulario de guardado ni por accidente — que era
+el otro riesgo latente del diseño anterior.
+
+## H · Estados que faltaban
+
+Pase lo que pase, ahora hay tres:
+
+```
+IDLE → «Pensando…» (botón deshabilitado) → propuesta
+IDLE → «Pensando…» (botón deshabilitado) → error visible
+```
+
+Un botón que no responde es peor que uno que falla: con el primero nadie sabe
+si llegó a pulsar. El texto del editor queda intacto en los tres estados.
+
+## I · Regresión añadida
+
+Dos cosas, y la segunda es la que importa a largo plazo:
+
+1. **`test:quality122c-ui`** — 13 comprobaciones que montan el panel en un DOM
+   real dentro de un formulario, pulsan el botón y miran el resultado. La
+   acción se inyecta: sin servidor y sin proveedor.
+2. **`L2`, el guarda transitivo** — recorre el grafo de composición a nivel de
+   componente y falla si algo colgado de una región `<form>…</form>` acaba
+   pintando otro form a cualquier profundidad. Comprobado reintroduciendo el
+   defecto: lo caza en los tres módulos.
+
+Para lo primero se añadió `jsdom` como dependencia de desarrollo, y el panel
+acepta la acción como propiedad. Esa inyección no es un adorno para la prueba:
+es la misma razón por la que las capas de datos aceptan un cliente de Supabase
+—si la única forma de probar algo es en producción, no se prueba—.
+
+## J–L · Los tres módulos
+
+El arreglo es del componente compartido, así que cubre los tres. Verificado en
+tres niveles: el panel a nivel de DOM (`ui`), el servidor por módulo con
+documentos reales de cada uno (`rls`), y el cableado de cada editor y cada
+página (`L3`, que comprueba que cada una resuelve la asistencia con **su**
+módulo y no con Quality).
+
+## M · La llamada real
+
+Sigue pendiente: la asistencia se invoca desde el editor con sesión, y la
+credencial vive solo en el Preview. Es la primera de las cuatro pruebas
+humanas.
+
+Durante todo el diagnóstico y el arreglo **no se gastó ni una llamada al
+proveedor**.
+
+## N · Sin migración
+
+No era un problema de base de datos. Staging sigue en **0138**.
