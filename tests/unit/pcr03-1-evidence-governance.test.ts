@@ -76,6 +76,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
+    "0137_organization_profile_and_quality_guidance.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -213,6 +214,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
+    "0137_organization_profile_and_quality_guidance.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

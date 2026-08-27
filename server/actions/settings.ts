@@ -5,6 +5,12 @@ import {
   extensionForKind, isSupportedLogoKind, mimeForKind, sniffImageKind,
 } from "@/lib/pdf/image-kind";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import {
+  getOrganizationProfile, listSectors, updateOrganizationProfile,
+} from "@/lib/db/organization-profile";
+import {
+  buildOrganizationProfilePayload, validateOrganizationProfileInput,
+} from "@/lib/domain/organization-profile";
 import { checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
 import { requireSession } from "@/lib/auth/require-session";
 import { assertMyLegalAcceptance } from "@/server/actions/legal";
@@ -55,6 +61,28 @@ export async function getCompanySettingsAction(): Promise<{
   return { data, canManage: canEditCompany(org.roleCode) };
 }
 
+/** El perfil de autoría y el catálogo de sectores, para pintar la pantalla. */
+export async function getOrganizationProfileAction(): Promise<{
+  profile: import("@/lib/db/organization-profile").ProfileRow;
+  sectors: import("@/lib/db/organization-profile").SectorOption[];
+  canManage: boolean;
+}> {
+  const org = await requireActiveOrg();
+  const [profile, sectors] = await Promise.all([
+    getOrganizationProfile(org.organizationId),
+    listSectors(),
+  ]);
+  return {
+    // Una empresa antigua no tiene perfil, y eso no es un error: es un perfil
+    // vacío. Devolver null obligaría a cada pantalla a inventarse el caso.
+    profile: profile ?? {
+      sectorCode: null, primaryActivity: null, productsServices: [], description: null,
+    },
+    sectors,
+    canManage: canEditCompany(org.roleCode),
+  };
+}
+
 export async function updateCompanySettingsAction(
   _prev: SettingsActionState,
   formData: FormData
@@ -95,6 +123,51 @@ export async function updateCompanySettingsAction(
   revalidatePath("/settings/company");
   revalidatePath("/implementation");
   revalidatePath("/team");
+  return okState;
+}
+
+// ---------------------------------------------------------------------------
+// QUALITY-12.2B · El perfil de autoría: a qué se dedica la empresa.
+// ---------------------------------------------------------------------------
+// Mismo guarda que el resto de «Datos de empresa»: lo consulta cualquier
+// miembro y lo edita quien administra. Y las mismas dos comprobaciones de
+// siempre —rol y estado de la suscripción— antes de tocar nada.
+//
+// Lo que este perfil NO es: evidencia. Describe a qué se dedica la empresa,
+// no cómo trabaja. Nada de lo que se escribe aquí se convierte en un registro
+// del sistema de gestión.
+// ---------------------------------------------------------------------------
+
+export async function updateOrganizationProfileAction(
+  _prev: SettingsActionState,
+  formData: FormData
+): Promise<SettingsActionState> {
+  const org = await requireActiveOrg();
+
+  if (!canEditCompany(org.roleCode)) {
+    return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
+  }
+  const mutateCheck = await checkOrganizationCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
+  const input = {
+    sectorCode: String(formData.get("sector_code") ?? "") || null,
+    primaryActivity: String(formData.get("primary_activity") ?? ""),
+    productsServices: String(formData.get("products_services") ?? ""),
+    description: String(formData.get("organization_description") ?? ""),
+  };
+
+  const sectores = await listSectors();
+  const validation = validateOrganizationProfileInput(input, sectores.map((s) => s.code));
+  if (validation.error) return { error: validation.error };
+
+  // El identificador SIEMPRE de la empresa activa validada en servidor: el
+  // payload ni siquiera declara un campo de organización.
+  const { error } = await updateOrganizationProfile(
+    org.organizationId, buildOrganizationProfilePayload(input));
+  if (error) return { error };
+
+  revalidatePath("/settings/company");
   return okState;
 }
 

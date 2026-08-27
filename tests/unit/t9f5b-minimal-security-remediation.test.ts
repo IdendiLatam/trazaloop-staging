@@ -584,6 +584,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
+    "0137_organization_profile_and_quality_guidance.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

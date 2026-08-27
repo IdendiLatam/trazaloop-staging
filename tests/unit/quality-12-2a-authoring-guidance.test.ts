@@ -274,11 +274,13 @@ check("F2. el módulo quality está admitido, y sin textos inventados", () => {
 console.log("\nG · LA MIGRACIÓN");
 // ===========================================================================
 
-check("G1. la 0136 es la última y va detrás de la 0135", () => {
+check("G1. la 0136 va justo detrás de la 0135", () => {
   const m = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
   const i = m.indexOf("0136_trazadoc_canonical_authoring_guidance.sql");
-  assert(i === m.length - 1, "la 0136 no es la última");
+  // Ya no se exige que sea la última —QUALITY-12.2B añadió la 0137 detrás—,
+  // sino que nadie haya metido nada entre la 0135 y ella.
+  assert(i > 0, "la 0136 no está");
   assert(m[i - 1] === "0135_quality_ai_theme_evidence_scope.sql",
     "algo se coló entre la 0135 y la 0136");
 });

@@ -75,6 +75,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0134_quality_ai_provider_call_truth.sql",
   "0135_quality_ai_theme_evidence_scope.sql",
   "0136_trazadoc_canonical_authoring_guidance.sql",
+  "0137_organization_profile_and_quality_guidance.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -534,6 +535,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
+    "0137_organization_profile_and_quality_guidance.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

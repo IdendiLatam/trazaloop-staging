@@ -11,6 +11,8 @@ import { notFound } from "next/navigation";
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { requireSession } from "@/lib/auth/require-session";
 import { getDocumentControlDetail } from "@/lib/db/document-control";
+import { resolveSectionRoleHintMap } from "@/lib/db/authoring-guidance";
+import { QUALITY_MODULE_CODE } from "@/lib/modules/catalog";
 import { QUALITY_DOC_MODULE } from "@/lib/db/quality-documents";
 import {
   listQualityProcessesUsingDocument,
@@ -109,6 +111,16 @@ export default async function QualityDocumentPage({
     })),
   ];
 
+  // QUALITY-12.2B · La guía de autoría por PAPEL de sección, resuelta en
+  // servidor con el plan de Quality: en Demo llega solo el aviso fijo, igual
+  // que en CPR y Textiles. Es la misma fuente canónica y el mismo componente.
+  const sectionHints = await resolveSectionRoleHintMap({
+    organizationId: org.organizationId,
+    moduleCode: QUALITY_MODULE_CODE,
+    guidanceModule: "quality",
+    sections: detail.sections.map((s) => ({ id: s.id, sectionKey: s.sectionKey })),
+  });
+
   return (
     <QualityDocumentControlDetail
       model={{
@@ -187,6 +199,7 @@ export default async function QualityDocumentPage({
           .map((p) => ({ id: p.id, name: p.name, holderName: p.holderName })),
         responsibleOptions,
         canEdit: canEditRevisionContent(role, detail.lifecycle),
+        sectionHints,
         canSubmit: canSubmitRevision(role, detail.lifecycle) && detail.currentRevision !== null,
         canDecide,
         myPendingRole,

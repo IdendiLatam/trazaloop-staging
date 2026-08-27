@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
 import { LifecycleBadge } from "@/components/domain/quality/lifecycle-badge";
 import { SectionEditor } from "@/components/domain/trazadocs/section-editor";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 import {
   DECISION_TYPE_LABEL,
   LIFECYCLE_HELP,
@@ -141,6 +142,8 @@ export type DocumentControlViewModel = {
   routeMode: RouteMode;
   currentRound: number;
   sections: ControlSection[];
+  /** QUALITY-12.2B · Guía YA AUTORIZADA por sección, resuelta en servidor. */
+  sectionHints?: Record<string, ResolvedHint>;
   participants: ControlParticipant[];
   revisions: ControlRevision[];
   decisions: ControlDecision[];
@@ -454,9 +457,16 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
           {sectionState.success ? (
             <SuccessAlert message={sectionState.message ?? "Contenido guardado."} />
           ) : null}
-          {/* Quality no tiene pistas comerciales, así que el hint va en null. */}
+          {/* QUALITY-12.2B · La guía llega resuelta desde el servidor, igual
+              que en CPR y Textiles, pero por el PAPEL de la sección: estos
+              documentos no nacen de una estructura. Las secciones que la
+              empresa añadió a mano no tienen papel conocido y no traen guía,
+              que es la respuesta correcta y no un hueco. */}
           {ordered.map((s) => (
-            <SectionEditor key={s.id} section={s} hint={null} readOnly={!model.canEdit} />
+            <SectionEditor
+              key={s.id} section={s}
+              hint={model.sectionHints?.[s.id] ?? null}
+              readOnly={!model.canEdit} />
           ))}
           {model.canEdit ? (
             <Button type="submit" disabled={sectionPending} className="w-auto px-4 py-2 text-sm">

@@ -8,6 +8,8 @@ import {
   getRoleInOrganization,
 } from "@/lib/db/organizations";
 import { toSafeOrgCreationError } from "@/lib/domain/platform";
+import { listSectors, updateOrganizationProfile } from "@/lib/db/organization-profile";
+import { validateOrganizationProfileInput } from "@/lib/domain/organization-profile";
 import { MODULE_SELECTOR_PATH } from "@/lib/domain/team";
 import { assertMyLegalAcceptance } from "@/server/actions/legal";
 import { LEGAL_ACCEPTANCE_REQUIRED_MESSAGE } from "@/lib/domain/legal";
@@ -34,6 +36,10 @@ export async function createOrganizationAction(
   const name = String(formData.get("name") ?? "").trim();
   const taxId = String(formData.get("tax_id") ?? "").trim();
   const country = String(formData.get("country") ?? "").trim();
+  // QUALITY-12.2B · El perfil de autoría, si se quiso dar en el alta. Los dos
+  // son opcionales: quien crea su empresa quiere entrar, no redactar.
+  const sectorCode = String(formData.get("sector_code") ?? "").trim();
+  const primaryActivity = String(formData.get("primary_activity") ?? "").trim();
 
   if (!name) {
     return { error: "El nombre de la empresa no puede estar vacío." };
@@ -57,7 +63,31 @@ export async function createOrganizationAction(
     return { error: toSafeOrgCreationError(error?.message) };
   }
 
-  await writeActiveOrgCookie(data as string);
+  // El perfil se escribe DESPUÉS de crear la empresa, y su fallo no tumba el
+  // alta: quedar sin sector es un perfil incompleto, no una empresa rota. La
+  // RPC de creación no se toca —su firma es la de 0042 y tiene sus propias
+  // reglas de negocio—, así que esto va como una actualización aparte, con la
+  // sesión de quien acaba de quedar como administrador.
+  const organizationId = data as string;
+  if (sectorCode || primaryActivity) {
+    const validation = validateOrganizationProfileInput(
+      {
+        sectorCode: sectorCode || null,
+        primaryActivity,
+        productsServices: "",
+        description: "",
+      },
+      (await listSectors()).map((s) => s.code)
+    );
+    if (!validation.error) {
+      await updateOrganizationProfile(organizationId, {
+        sector_code: sectorCode || null,
+        primary_activity: primaryActivity || null,
+      });
+    }
+  }
+
+  await writeActiveOrgCookie(organizationId);
   // Sprint 10D (Parte 4/7): una empresa RECIÉN CREADA va a onboarding,
   // nunca directo al dashboard — nadie empieza confundido sin saber qué
   // hacer primero. Seleccionar una empresa YA EXISTENTE (abajo) sigue

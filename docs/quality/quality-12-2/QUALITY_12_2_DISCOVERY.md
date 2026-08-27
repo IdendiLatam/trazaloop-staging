@@ -588,7 +588,7 @@ Ninguna toca 0132–0135. Production sigue en 0111.
 | Fase | Qué | Migración | Depende de |
 |---|---|---|---|
 | **12.2A** · Guía canónica ✅ **HECHA** | enriquecer y **versionar** la guía; poblar `description`; revisar los 250 hints por lenguaje de conformidad (R-3); un único `resolveAuthoringGuidance` para botón «i» e Intelligence | `0136` | — |
-| **12.2B** · Perfil e identidad | los cuatro campos de perfil; catálogo de roles de sección; guía de respaldo para Quality | `0137` | A |
+| **12.2B** · Perfil e identidad ✅ **HECHA** | los cuatro campos de perfil; catálogo de roles de sección; guía de respaldo para Quality | `0137` | A |
 | **12.2C** · Quick Edit | política documental corta, esquema pequeño, orquestador de autoría, un solo punto de entrada, botón en los editores, comparación y reemplazo en borrador | ninguna | A, B |
 | **12.2D** · Revisión contextual | nivel 4 dirigido por `related_context_types`, citas visibles, reutilización de los adaptadores de Quality | ninguna | C |
 | **12.2E** · Renombrado | Copilot → Trazaloop Intelligence en interfaz, menú, textos de producto e inventario de exportación; sin tocar `quality_ai_*` | ninguna | independiente |
@@ -603,7 +603,11 @@ estaba previsto.
 
 ## `READY FOR QUALITY-12.2 IMPLEMENTATION`
 
-> **Nota posterior · QUALITY-12.2A cerró las tres condiciones de abajo.**
+> **Nota posterior · QUALITY-12.2A y 12.2B están hechas.**
+> 12.2A cerró las tres condiciones de abajo; 12.2B añadió el perfil de empresa
+> y la guía de autoría de Quality. Ver `QUALITY_12_2B_IMPLEMENTATION.md`.
+>
+> **QUALITY-12.2A cerró las tres condiciones de abajo.**
 > La guía está versionada, los 250 textos revisados y la puerta de Demo
 > decidida y reforzada. El detalle está en `QUALITY_12_2A_IMPLEMENTATION.md` y
 > en `QUALITY_12_2A_GUIDANCE_NORMATIVE_REVIEW.md`. Lo que sigue es el

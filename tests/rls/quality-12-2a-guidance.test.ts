@@ -114,10 +114,18 @@ async function main() {
       else corregidos += 1;
     }
     assert(identicos + corregidos === 250, `${identicos + corregidos} guías comparadas`);
-    // Las corregidas son las normativas, y son revisión 2.
-    const rev2 = guias.filter((g) => Number(g.revision_number) === 2).length;
-    assert(rev2 === corregidos,
-      `${corregidos} textos distintos del original pero ${rev2} en revisión 2`);
+    // Todo texto distinto del original tiene que venir de una revisión POSTERIOR
+    // a la primera: una guía cambiada sin revisión sería exactamente la
+    // sobrescritura en sitio que este sprint vino a eliminar.
+    //
+    // Al revés NO se cumple, y es correcto: QUALITY-12.2B publicó revisiones
+    // para añadir barreras y contexto relacionado sin tocar una coma del texto.
+    // Una revisión nueva significa «algo cambió», no «el texto cambió».
+    const cambiadosEnRevision1 = guias.filter(
+      (g) => Number(g.revision_number) === 1
+        && String(g.guidance) !== String(porSec.get(String(g.blueprint_section_id))!.hint).trim());
+    assert(cambiadosEnRevision1.length === 0,
+      `${cambiadosEnRevision1.length} guías cambiaron sin publicar revisión`);
     console.log(`      ${identicos} idénticos · ${corregidos} corregidos por normativa`);
   });
 

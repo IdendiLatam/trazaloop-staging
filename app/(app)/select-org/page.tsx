@@ -14,6 +14,7 @@ import {
 import { listMyPendingInvitationsAction } from "@/server/actions/team";
 import { signOutAction } from "@/server/actions/auth";
 import { CreateOrgForm } from "@/components/layout/create-org-form";
+import { listSectors } from "@/lib/db/organization-profile";
 import { AcceptInviteForm } from "@/components/domain/team/accept-invite-form";
 import { Wordmark } from "@/components/layout/logo";
 import { RoleBadge } from "@/components/ui/badge";
@@ -28,10 +29,13 @@ export default async function SelectOrgPage({
 }) {
   await requireSession();
   await requireLegalAcceptance("/select-org");
-  const [organizations, pendingInvitations, platformStatus] = await Promise.all([
+  const [organizations, pendingInvitations, platformStatus, sectores] = await Promise.all([
     getUserOrganizations(),
     listMyPendingInvitationsAction(),
     checkPlatformStatus(),
+    // QUALITY-12.2B · El catálogo de sectores, para que el alta pueda
+    // preguntarlo con una lista en vez de con un campo libre.
+    listSectors(),
   ]);
   const { error, notice } = await searchParams;
 
@@ -155,7 +159,7 @@ export default async function SelectOrgPage({
       {display.showCreateForm ? (
         <section className="rounded-lg border border-hairline bg-surface p-5">
           <h2 className="mb-4 text-sm font-semibold">Nueva empresa</h2>
-          <CreateOrgForm />
+          <CreateOrgForm sectors={sectores} />
         </section>
       ) : null}
 

@@ -792,6 +792,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
+    "0137_organization_profile_and_quality_guidance.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

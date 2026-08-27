@@ -4,13 +4,19 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCompanySettingsAction } from "@/server/actions/settings";
+import {
+  getCompanySettingsAction, getOrganizationProfileAction,
+} from "@/server/actions/settings";
 import { CompanySettingsForm } from "@/components/domain/settings/company-settings-form";
+import { OrganizationProfileForm } from "@/components/domain/settings/organization-profile-form";
 import { LogoUploadForm } from "@/components/domain/settings/logo-upload-form";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CompanySettingsPage() {
-  const { data: company, canManage } = await getCompanySettingsAction();
+  const [{ data: company, canManage }, perfil] = await Promise.all([
+    getCompanySettingsAction(),
+    getOrganizationProfileAction(),
+  ]);
   if (!company) notFound();
 
   return (
@@ -50,6 +56,17 @@ export default async function CompanySettingsPage() {
 
       <section className="rounded-lg border border-hairline bg-surface p-5">
         <CompanySettingsForm company={company} canManage={canManage} />
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-hairline bg-surface p-5">
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold text-ink">A qué se dedica la empresa</h2>
+          <p className="text-xs text-ink-soft">
+            Opcional, y se puede completar en cualquier momento.
+          </p>
+        </div>
+        <OrganizationProfileForm
+          profile={perfil.profile} sectors={perfil.sectors} canManage={perfil.canManage} />
       </section>
     </div>
   );

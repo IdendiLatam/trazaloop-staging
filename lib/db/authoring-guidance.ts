@@ -128,6 +128,42 @@ async function guidanceAsOf(params: {
  * Quality —cuyos documentos son a medida— pueda recibir guía el día que se
  * escriba, sin duplicar el motor ni convertir sus documentos en estructuras.
  */
+/**
+ * Lo que pinta el botón «i» en un documento SIN estructura —los de Quality—.
+ *
+ * Se resuelve por el PAPEL de cada sección, y devuelve el mapa indexado por el
+ * identificador de la sección del documento, que es lo que el editor conoce.
+ * Las secciones que la empresa añadió a mano no tienen papel conocido y no
+ * aparecen en el mapa: no hay guía genérica que pueda ayudar a redactar una
+ * sección cuyo tema solo conoce quien la creó, y no tenerla es la respuesta
+ * correcta —no un hueco—.
+ */
+export async function resolveSectionRoleHintMap(params: {
+  organizationId: string;
+  moduleCode: string;
+  guidanceModule: string;
+  sections: readonly { id: string; sectionKey: string }[];
+}): Promise<Record<string, ResolvedHint>> {
+  const claves = [...new Set(params.sections.map((s) => s.sectionKey))];
+  const guias = await getSectionRoleGuidance({
+    organizationId: params.organizationId,
+    moduleCode: params.moduleCode,
+    guidanceModule: params.guidanceModule,
+    sectionKeys: claves,
+  });
+  const porClave = new Map(guias.map((g) => [g.sectionKey, g]));
+
+  const mapa: Record<string, ResolvedHint> = {};
+  for (const s of params.sections) {
+    const g = porClave.get(s.sectionKey);
+    if (!g || !g.hasGuidance) continue;
+    if (g.restricted) { mapa[s.id] = demoHint(); continue; }
+    if (!hasHintContent(g.guidance)) continue;
+    mapa[s.id] = { restricted: false, title: null, text: g.guidance! };
+  }
+  return mapa;
+}
+
 export async function getSectionRoleGuidance(params: {
   organizationId: string;
   /** El código COMERCIAL, para comprobar el plan. */
