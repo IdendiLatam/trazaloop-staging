@@ -78,6 +78,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -217,6 +218,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

@@ -77,6 +77,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -389,6 +390,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

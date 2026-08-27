@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { QuickEditPanel } from "@/components/domain/documents/quick-edit";
+import { ContextualReviewPanel } from "@/components/domain/documents/contextual-review";
 
 /**
- * Trazaloop · QUALITY-12.2C · El campo de una sección textil, con asistencia.
+ * Trazaloop · QUALITY-12.2C/D · El campo de una sección textil, con las dos ayudas.
  *
  * Existe porque el editor textil no usa el `SectionEditor` compartido: tiene su
  * propio `textarea` con las transiciones de estado alrededor. En vez de
@@ -35,13 +36,22 @@ export function TextileSectionField({
         className="w-full rounded-md border border-hairline bg-paper p-2 text-sm"
       />
       {assistedWriting ? (
-        <QuickEditPanel
-          documentId={documentId}
-          sectionId={sectionId}
-          currentText={value}
-          onReplace={setValue}
-          disabled={false}
-        />
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <QuickEditPanel
+            documentId={documentId}
+            sectionId={sectionId}
+            currentText={value}
+            onReplace={setValue}
+            disabled={false}
+          />
+          <ContextualReviewPanel
+            documentId={documentId}
+            sectionId={sectionId}
+            currentText={value}
+            onApply={setValue}
+            disabled={false}
+          />
+        </div>
       ) : null}
     </div>
   );

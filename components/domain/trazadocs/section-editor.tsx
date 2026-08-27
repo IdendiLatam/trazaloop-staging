@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SectionHint } from "@/components/ui/section-hint";
 import { QuickEditPanel } from "@/components/domain/documents/quick-edit";
+import { ContextualReviewPanel } from "@/components/domain/documents/contextual-review";
 import type { DocumentSectionRow } from "@/lib/db/trazadocs";
 import type { ResolvedHint } from "@/lib/domain/hint-access";
 
@@ -64,13 +65,26 @@ export function SectionEditor({
           una revisión aprobada en modo lectura no se ofrece un botón que
           insinúe que se puede cambiar algo. */}
       {assistedWriting && documentId && !readOnly ? (
-        <QuickEditPanel
-          documentId={documentId}
-          sectionId={section.id}
-          currentText={value}
-          onReplace={setValue}
-          disabled={readOnly}
-        />
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <QuickEditPanel
+            documentId={documentId}
+            sectionId={section.id}
+            currentText={value}
+            onReplace={setValue}
+            disabled={readOnly}
+          />
+          {/* QUALITY-12.2D · La otra pregunta. Va al lado y no dentro: mejorar
+              la redacción y contrastar con lo registrado son dos cosas
+              distintas, y mezclar sus respuestas haría leer un hallazgo como
+              si fuera una propuesta de texto. */}
+          <ContextualReviewPanel
+            documentId={documentId}
+            sectionId={section.id}
+            currentText={value}
+            onApply={setValue}
+            disabled={readOnly}
+          />
+        </div>
       ) : null}
     </div>
   );

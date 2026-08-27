@@ -410,12 +410,14 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
     // QUALITY-12.2A: la guía de autoría canónica, con historia. No toca el
     // aviso Demo: lo refuerza — el texto administrado deja de ser legible
     // directamente y la regla comercial pasa a vivir dentro de la base.
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
+    "0139_document_contextual_review.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

@@ -339,17 +339,30 @@ check("I3. la vista de consumo no expone el texto", () => {
 console.log("\nJ · LA MIGRACIÓN");
 // ===========================================================================
 
-check("J1. la 0138 es la última y no edita ninguna anterior", () => {
+check("J1. la 0138 va justo detrás de la 0137, y nadie la ha reescrito", () => {
+  // Decía «la 0138 es la última». Era cierto el día que se escribió y dejó de
+  // serlo en cuanto llegó la 0139, que es lo que se supone que pasa con las
+  // migraciones. Lo que de verdad protege el append-only son otras dos cosas:
+  // que nada se colara ANTES, y que nada de lo que vino DESPUÉS reescribiera
+  // esto. Eso sí se puede comprobar siempre.
   const m = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
   const i = m.indexOf("0138_document_authoring_runs.sql");
-  assert(i === m.length - 1, "la 0138 no es la última");
+  assert(i > 0, "la 0138 no está");
   assert(m[i - 1] === "0137_organization_profile_and_quality_guidance.sql",
     "algo se coló entre la 0137 y la 0138");
   for (const f of ["0132_quality_ai_copilot.sql", "0136_trazadoc_canonical_authoring_guidance.sql",
                    "0137_organization_profile_and_quality_guidance.sql"]) {
     assert(!/document_authoring_start_run/.test(read(`supabase/migrations/${f}`)),
       `${f} fue editada con contenido de QUALITY-12.2C`);
+  }
+  // Y las posteriores no tocan lo que 12.2C dejó funcionando.
+  for (const f of m.slice(i + 1)) {
+    const sql = read(`supabase/migrations/${f}`);
+    assert(!/create or replace function public\.document_authoring_start_run/.test(sql),
+      `${f} reescribe la puerta de QUALITY-12.2C`);
+    assert(!/drop (view|function)[^;]*document_authoring/i.test(sql),
+      `${f} borra algo de QUALITY-12.2C`);
   }
 });
 

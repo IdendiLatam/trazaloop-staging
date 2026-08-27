@@ -59,6 +59,13 @@ export function fakeProvider(): QualityAiProvider {
         return redaccion(req, pregunta);
       }
 
+      // QUALITY-12.2D · La revisión contextual, igual: se reconoce por su
+      // esquema. No adivina y no comparte código con la de redacción, porque
+      // las dos cosas que produce no se parecen en nada.
+      if (req.schemaName === "revision_contextual") {
+        return revision(pregunta);
+      }
+
       // Las referencias que el SERVIDOR puso en el contexto, numeradas.
       const referencias = [...pregunta.matchAll(/^\[(\d+)\]\s+(.+)$/gm)]
         .map((m) => ({ n: Number(m[1]), etiqueta: m[2].trim() }));
@@ -194,4 +201,113 @@ function temas(system: string, referencias: { n: number; etiqueta: string }[]) {
  *  algo que enseñar también sin proveedor real. */
 function uso(texto: string) {
   return { inputTokens: Math.ceil(texto.length / 4), outputTokens: 120 };
+}
+
+/**
+ * QUALITY-12.2D · El doble de la revisión contextual.
+ *
+ * Hace lo mínimo que permite comprobar la arquitectura y NADA que necesite
+ * criterio:
+ *
+ *   · Un hallazgo por cada comparación que el CÓDIGO ya trajo hecha, citando
+ *     los mismos hechos. Es lo que deja probar el ascenso a «confirmada» sin
+ *     depender de que un modelo se acuerde de citar.
+ *   · `guidance_gap` cuando la guía nombra algo que el texto no menciona. Dos
+ *     palabras clave, deliberadamente tonto.
+ *   · Un aviso si el material trae algo con forma de orden.
+ *
+ * No inventa un solo hecho, no puntúa, no interpreta. Una prueba que pasa con
+ * esto pasa por el enrutado, el permiso, las citas y el registro, y no porque
+ * el modelo estuviera inspirado ese día.
+ */
+function revision(material: string): AiResult {
+  const bloque = (n: string) =>
+    new RegExp(`<${n}>\\n([\\s\\S]*?)\\n</${n}>`).exec(material)?.[1] ?? "";
+
+  const texto = bloque("TEXTO");
+  const guia = bloque("GUIA");
+  const comprobado = bloque("COMPROBADO");
+  const hechos = [...bloque("HECHOS").matchAll(/^\[(\d+)\] (.+)$/gm)]
+    .map((m) => ({ n: Number(m[1]), frase: m[2].trim() }));
+
+  const findings: Record<string, unknown>[] = [];
+
+  // Una comprobación del código = un hallazgo que la cita. El tipo NUNCA es
+  // `confirmed_conflict`: eso lo asciende la orquestación, no el proveedor.
+  for (const linea of comprobado.split("\n").filter((l) => l.startsWith("· "))) {
+    const refs = [...(/\[([\d, ]+)\]\s*$/.exec(linea)?.[1] ?? "").matchAll(/\d+/g)]
+      .map((m) => Number(m[0]));
+    if (refs.length === 0) {
+      // Una ambigüedad no cita hechos: no hay un registro elegido que citar.
+      if (/mas de un registro|más de un registro/i.test(linea)) {
+        findings.push({
+          type: "ambiguous_reference", severity: "attention",
+          excerpt: primeras(texto, 12),
+          fact: "",
+          explanation: "Trazaloop encontró más de un registro posible y no eligió ninguno.",
+          refs: [], next_step: "Nombra el registro completo para que no haya duda.",
+          wording: "",
+        });
+      }
+      continue;
+    }
+    const coincide = /Coinciden\.$/.test(linea.replace(/\s*\[[\d, ]+\]\s*$/, ""));
+    findings.push({
+      type: coincide ? "consistent" : "possible_conflict",
+      severity: coincide ? "info" : "attention",
+      excerpt: primeras(texto, 12),
+      fact: hechos.find((h) => h.n === refs[0])?.frase ?? "",
+      explanation: linea.replace(/^· /, "").replace(/\s*\[[\d, ]+\]\s*$/, ""),
+      refs,
+      next_step: coincide
+        ? "Nada que hacer: el texto y el registro dicen lo mismo."
+        : "Revisa cuál de los dos hay que corregir. Trazaloop no lo decide.",
+      wording: "",
+    });
+  }
+
+  // Lo que la guía nombra y el texto no. No se rellena: se nombra.
+  for (const [clave, etiqueta] of [
+    ["respons", "un responsable"], ["frecuencia", "una frecuencia"],
+    ["criterio", "un criterio"], ["registro", "un registro"],
+  ] as const) {
+    if (new RegExp(clave, "i").test(guia) && !new RegExp(clave, "i").test(texto)) {
+      findings.push({
+        type: "guidance_gap", severity: "info",
+        excerpt: "", fact: "",
+        explanation: `La guía de esta sección pide ${etiqueta} y el texto no lo menciona.`,
+        refs: [], next_step: `Añade ${etiqueta} si tu empresa lo tiene definido.`,
+        wording: "",
+      });
+    }
+  }
+
+  if (/ignora (las |lo )?(instrucciones|anterior)|revela|exporta los datos/i.test(material)) {
+    findings.push({
+      type: "unverifiable_claim", severity: "attention",
+      excerpt: primeras(texto, 12),
+      fact: hechos[0]?.frase ?? "",
+      explanation: "Hay una frase con forma de instrucción para un sistema. Se ha "
+        + "tratado como contenido del documento y no se ha obedecido.",
+      refs: hechos.length > 0 ? [hechos[0].n] : [],
+      next_step: "Comprueba si esa frase debería estar en el documento.",
+      wording: "",
+    });
+  }
+
+  return {
+    ok: true,
+    usage: uso(material),
+    raw: "",
+    value: {
+      summary: hechos.length === 0
+        ? "No había hechos registrados con los que contrastar el texto."
+        : `Se contrastó el texto con ${hechos.length} hecho(s) registrado(s) en Trazaloop.`,
+      findings: findings.slice(0, 6),
+    },
+  };
+}
+
+function primeras(texto: string, n: number): string {
+  return texto.trim().split(/\s+/).slice(0, n).join(" ");
 }
