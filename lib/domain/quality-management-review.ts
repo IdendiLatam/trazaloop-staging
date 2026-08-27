@@ -437,6 +437,49 @@ export function snapshotIsAvailable(snapshot: unknown): boolean {
   return (snapshot as Record<string, unknown>).available === true;
 }
 
+/**
+ * §60 · A dónde lleva cada entrada cuando alguien quiere ver el detalle.
+ *
+ * Son las pantallas de los dominios de origen, no copias. Y llegar hasta ellas
+ * no concede nada: allí decide la política de ese dominio, así que quien no
+ * podía ver una ficha antes sigue sin poder verla.
+ */
+export const INPUT_DRILL_DOWN: Record<InputCode, { href: string; label: string }[]> = {
+  previous_actions: [{ href: "/quality/cases", label: "Casos y acciones" }],
+  changes: [
+    { href: "/quality/documents", label: "Documentos" },
+    { href: "/quality/processes", label: "Procesos" },
+  ],
+  system_performance: [
+    { href: "/quality/indicators", label: "Indicadores" },
+    { href: "/quality/cases", label: "Casos" },
+  ],
+  customer_voice: [
+    { href: "/quality/customer-voice", label: "Voz del cliente" },
+    { href: "/quality/customer-voice/campaigns", label: "Campañas" },
+    { href: "/quality/customer-voice/feedback", label: "Quejas y sugerencias" },
+  ],
+  objectives: [{ href: "/quality/objectives", label: "Objetivos" }],
+  process_performance: [{ href: "/quality/processes", label: "Procesos" }],
+  product_conformity: [{ href: "/quality/cases", label: "Casos" }],
+  nonconformities_actions: [{ href: "/quality/cases", label: "Casos y acciones" }],
+  monitoring_results: [{ href: "/quality/indicators", label: "Indicadores" }],
+  audits: [
+    { href: "/quality/audits", label: "Auditorías" },
+    { href: "/quality/audits/findings", label: "Hallazgos" },
+  ],
+  supplier_performance: [{ href: "/quality/suppliers", label: "Proveedores" }],
+  resources_adequacy: [
+    { href: "/quality/people", label: "Personas" },
+    { href: "/quality/people/positions", label: "Cargos" },
+  ],
+  risk_action_effectiveness: [{ href: "/quality/risks", label: "Riesgos y oportunidades" }],
+  improvement_opportunities: [
+    { href: "/quality/risks", label: "Oportunidades" },
+    { href: "/quality/audits/findings", label: "Hallazgos" },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Privacidad (§61, §62, §63, §64)
 // ---------------------------------------------------------------------------

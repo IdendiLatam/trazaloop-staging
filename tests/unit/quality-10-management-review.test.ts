@@ -778,9 +778,28 @@ check("M4. los datos de personas son AGREGADOS", () => {
   assert(/PEOPLE_DATA_IS_AGGREGATED/.test(COMPONENTS), "la pantalla no lo dice");
 });
 
+check("M4b. §60 · desde cada entrada se puede ir a su dominio de origen", () => {
+  assert(/INPUT_DRILL_DOWN/.test(DOMAIN), "no hay destinos de profundización");
+  assert(/INPUT_DRILL_DOWN/.test(COMPONENTS), "la pantalla no ofrece profundizar");
+  // Las catorce entradas tienen a dónde llevar, y ninguna inventa una ruta.
+  const bloque = DOMAIN.slice(DOMAIN.indexOf("INPUT_DRILL_DOWN"));
+  const cierre = bloque.indexOf("\n};");
+  const rutas = [...bloque.slice(0, cierre).matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert(rutas.length >= 14, `solo ${rutas.length} destinos`);
+  for (const r of [...new Set(rutas)]) {
+    assert(r.startsWith("/quality/"), `${r} sale del módulo`);
+  }
+  for (const c of INPUT_CODES) {
+    assert(bloque.slice(0, cierre).includes(`${c}:`), `la entrada ${c} no tiene destino`);
+  }
+});
+
 check("M5. agregado ≠ acceso al detalle", () => {
   assert(/SUMMARY_IS_NOT_RAW_ACCESS/.test(DOMAIN), "no se dice");
   assert(/SUMMARY_IS_NOT_RAW_ACCESS/.test(COMPONENTS), "la pantalla no lo dice");
+  // Y la profundización no copia la ficha: manda a la pantalla del dominio.
+  assert(!/quality_person_competencies|quality_survey_answers/.test(stripTs(DB)),
+    "la capa de datos copia detalle de otro dominio en vez de enlazar a él");
 });
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,8 @@ import {
   CLOSED_REVIEW_IS_IMMUTABLE, CLOSING_DOES_NOT_CLOSE_ACTIONS,
   CUSTOMER_ANONYMITY_HOLDS, DECISION_IS_NOT_AN_ACTION, DECISION_KIND_LABEL,
   DECISION_KINDS, DECISION_MAY_HAVE_NO_ACTIONS, describeDecisionOutcome,
-  describeFollowUp, describeLineage, describeReadiness, formatDate, INPUT_MODE_LABEL,
+  describeFollowUp, describeLineage, describeReadiness, formatDate,
+  INPUT_DRILL_DOWN, INPUT_MODE_LABEL,
   INPUT_SOURCE_DOMAIN, INPUT_STATE_LABEL, MANUAL_ENTRY_KIND_LABEL,
   MANUAL_ENTRY_KINDS, MANUAL_INPUT_IS_DECLARED,
   MINUTES_ARE_FROZEN_FOLLOWUP_IS_LIVE, MISSING_IS_NOT_ZERO, NO_MAGIC_NUMBERS,
@@ -492,6 +493,19 @@ function InputCard({ input, reviewId, sourceUpdated, canManage }: {
               ))}
             </ul>
           </details>
+        ) : null}
+        {/* §60 · Ir al detalle, en su propio dominio. Llegar no concede nada:
+            allí decide la política de ese dominio. */}
+        {(INPUT_DRILL_DOWN[input.catalogCode as InputCode] ?? []).length > 0 ? (
+          <p className="text-xs text-ink-soft">
+            Ver el detalle en:{" "}
+            {(INPUT_DRILL_DOWN[input.catalogCode as InputCode] ?? []).map((d, i) => (
+              <span key={d.href}>
+                {i > 0 ? " · " : ""}
+                <a className="underline" href={d.href}>{d.label}</a>
+              </span>
+            ))}
+          </p>
         ) : null}
       </div>
 
