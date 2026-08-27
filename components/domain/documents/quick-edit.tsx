@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { quickEditAction, type QuickEditState } from "@/server/actions/document-authoring";
 import {
   QUICK_EDIT_ACTIONS, QUICK_EDIT_LABEL, type QuickEditAction,
@@ -12,6 +12,22 @@ const initial: QuickEditState = { error: null };
 
 /**
  * Trazaloop · QUALITY-12.2C · «Mejorar con Intelligence», junto a la sección.
+ *
+ * POR QUÉ ESTE PANEL NO TIENE FORMULARIO PROPIO
+ *
+ * Porque vive DENTRO del formulario de guardado de la sección, y un `<form>`
+ * dentro de otro `<form>` es HTML inválido: el analizador del navegador
+ * descarta la etiqueta interna y sus hijos pasan al formulario de fuera. React
+ * no lo valida al renderizar, así que el árbol se ve perfecto en el código y en
+ * el servidor, y en el navegador el botón simplemente no hace nada.
+ *
+ * La primera versión de QUALITY-12.2C tenía ese error en los tres módulos. Lo
+ * encontró una persona pulsando un botón, no las pruebas: todas llamaban a la
+ * acción de servidor por su nombre, y esa parte funcionaba.
+ *
+ * Ahora la acción se despacha desde un manejador, con el `FormData` construido
+ * a mano, y el botón es `type="button"`: no puede enviar el formulario de
+ * guardado ni por accidente.
  *
  * LO QUE ESTE COMPONENTE NO HACE, Y ES LO MÁS IMPORTANTE
  *
@@ -28,6 +44,7 @@ const initial: QuickEditState = { error: null };
  */
 export function QuickEditPanel({
   documentId, sectionId, currentText, onReplace, disabled,
+  action = quickEditAction,
 }: {
   documentId: string;
   sectionId: string;
@@ -36,13 +53,33 @@ export function QuickEditPanel({
   currentText: string;
   onReplace: (text: string) => void;
   disabled: boolean;
+  /**
+   * La acción, inyectable. Existe por lo que enseñó el fallo de este panel: si
+   * la única forma de probarlo es llamando a la acción de servidor por su
+   * nombre, el cableado del componente no se prueba nunca. Con esto, una
+   * prueba puede pulsar el botón de verdad.
+   */
+  action?: (prev: QuickEditState, form: FormData) => Promise<QuickEditState>;
 }) {
-  const [state, formAction, pending] = useActionState(quickEditAction, initial);
+  const [state, dispatch, pending] = useActionState(action, initial);
+  const [enviando, startTransition] = useTransition();
   const [abierto, setAbierto] = useState(false);
   const [accion, setAccion] = useState<QuickEditAction>("improve_writing");
 
   const hayTexto = currentText.trim().length >= 20;
+  const trabajando = pending || enviando;
   if (disabled) return null;
+
+  function proponer() {
+    if (!hayTexto || trabajando) return;
+    const form = new FormData();
+    form.set("document_id", documentId);
+    form.set("section_id", sectionId);
+    // El texto vivo del editor, no el de la propuesta anterior.
+    form.set("user_text", currentText);
+    form.set("action", accion);
+    startTransition(() => dispatch(form));
+  }
 
   if (!abierto) {
     return (
@@ -68,15 +105,8 @@ export function QuickEditPanel({
     <div className="space-y-3 rounded-md border border-loop/25 bg-loop/5 p-3">
       <ErrorAlert message={state.error} />
 
-      {/* Un formulario propio, ANIDADO NO: el editor de secciones ya vive
-          dentro de un `form` de guardado, así que este se envía con su propia
-          acción desde un botón y nunca arrastra al de arriba. */}
-      <form action={formAction} className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="document_id" value={documentId} />
-        <input type="hidden" name="section_id" value={sectionId} />
-        <input type="hidden" name="user_text" value={currentText} />
-        <input type="hidden" name="action" value={accion} />
-
+      {/* Sin `<form>`: ver arriba. Los campos se construyen en el manejador. */}
+      <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1">
           <span className="block text-[11px] font-medium text-ink">Qué quieres</span>
           <select
@@ -90,8 +120,13 @@ export function QuickEditPanel({
           </select>
         </label>
 
-        <Button type="submit" disabled={pending || !hayTexto} className="!w-auto px-3 py-1.5 text-xs">
-          {pending ? "Pensando…" : state.suggestion ? "Intentar otra redacción" : "Proponer"}
+        <Button
+          type="button"
+          onClick={proponer}
+          disabled={trabajando || !hayTexto}
+          className="!w-auto px-3 py-1.5 text-xs"
+        >
+          {trabajando ? "Pensando…" : state.suggestion ? "Intentar otra redacción" : "Proponer"}
         </Button>
         <button
           type="button"
@@ -100,9 +135,17 @@ export function QuickEditPanel({
         >
           Cerrar
         </button>
-      </form>
+      </div>
 
-      {state.suggestion ? (
+      {/* El estado de trabajo se ve. Un botón que no responde es peor que uno
+          que falla: con el primero nadie sabe si pulsó. */}
+      {trabajando ? (
+        <p role="status" className="text-xs text-ink-soft" data-testid="quick-edit-pending">
+          Pensando en una propuesta… tu texto no se toca hasta que decidas.
+        </p>
+      ) : null}
+
+      {state.suggestion && !trabajando ? (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">

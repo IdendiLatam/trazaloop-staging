@@ -234,7 +234,7 @@ check("F3. sobre una revisión en solo lectura no se ofrece", () => {
 
 check("F4. cada intento parte del texto humano vigente", () => {
   assert(/currentText: string;/.test(UI), "el panel no recibe el texto vivo");
-  assert(/value=\{currentText\}/.test(UI),
+  assert(/form\.set\("user_text", currentText\)/.test(UI),
     "el reintento no envía el texto humano vigente");
   assert(/encadenar salidas desvía el significado/.test(UI),
     "no consta por qué no se encadena la salida anterior");
@@ -381,6 +381,130 @@ check("K2. NO se hizo el renombrado global", () => {
   const registry = read("lib/modules/registry.ts");
   assert(/label: "Copilot"/.test(registry),
     "se renombró el menú del Copilot, que es trabajo de 12.2E");
+});
+
+// ===========================================================================
+console.log("\nL · FORMULARIOS ANIDADOS · el defecto de la primera versión");
+// ===========================================================================
+
+check("L1. el panel no tiene formulario propio", () => {
+  const code = stripTs(UI);
+  assert(!/<form[\s>]/.test(code),
+    "el panel vuelve a meter un <form>, y vive dentro del de guardado");
+  assert(/startTransition\(\(\) => dispatch\(form\)\)/.test(code),
+    "la acción no se despacha desde un manejador");
+  assert(/type="button"\s*\n?\s*onClick=\{proponer\}/.test(UI)
+    || /onClick=\{proponer\}/.test(UI),
+    "el botón de proponer no tiene manejador propio");
+});
+
+check("L2. nadie renderiza dentro de un form algo que pinte otro form", () => {
+  // EL GUARDA GENERAL, Y TIENE QUE SER TRANSITIVO.
+  //
+  // El defecto real no era «un componente con form renderiza a otro con form».
+  // Era una cadena de tres: el editor pinta el formulario de guardado, dentro
+  // pone <SectionEditor> —que no pinta ninguno— y ese pone <QuickEditPanel>,
+  // que sí. Un guarda que solo mire al hijo directo no ve nada.
+  //
+  // Así que se construye el grafo de composición a nivel de COMPONENTE y se
+  // pregunta si algo de lo que cuelga de una región <form>…</form> acaba
+  // pintando otro <form>, a la profundidad que sea.
+  const archivos: string[] = [];
+  const recorrer = (d: string) => {
+    for (const e of readdirSync(join(ROOT, d), { withFileTypes: true })) {
+      if (e.isDirectory()) recorrer(`${d}/${e.name}`);
+      else if (e.name.endsWith(".tsx")) archivos.push(`${d}/${e.name}`);
+    }
+  };
+  recorrer("components");
+
+  type Comp = { nombre: string; archivo: string; cuerpo: string; propio: boolean };
+  const comps = new Map<string, Comp>();          // "archivo::Nombre"
+  const porNombre = new Map<string, string[]>();  // Nombre → claves
+  const importes = new Map<string, Map<string, string>>(); // archivo → Nombre → archivo
+
+  for (const f of archivos) {
+    const src = stripTs(read(f));
+
+    const mapa = new Map<string, string>();
+    for (const m of src.matchAll(/import \{([^}]+)\} from "(@\/components\/[^"]+|\.[^"]+)"/g)) {
+      const ruta = m[2].startsWith("@/")
+        ? `${m[2].slice(2)}.tsx`
+        : `${f.split("/").slice(0, -1).join("/")}/${m[2].replace(/^\.\//, "")}.tsx`;
+      for (const n of m[1].split(",").map((x) => x.trim().replace(/^type /, ""))) {
+        if (n.length > 0) mapa.set(n, ruta);
+      }
+    }
+    importes.set(f, mapa);
+
+    // Los componentes del archivo, y su cuerpo: de su `function` a la
+    // siguiente declaración de nivel superior.
+    const decls = [...src.matchAll(/^(?:export )?function ([A-Z][A-Za-z0-9_]*)\s*\(/gm)];
+    for (let i = 0; i < decls.length; i += 1) {
+      const desde = decls[i].index!;
+      const hasta = i + 1 < decls.length ? decls[i + 1].index! : src.length;
+      const cuerpo = src.slice(desde, hasta);
+      const clave = `${f}::${decls[i][1]}`;
+      comps.set(clave, {
+        nombre: decls[i][1], archivo: f, cuerpo, propio: /<form[\s>]/.test(cuerpo),
+      });
+      porNombre.set(decls[i][1], [...(porNombre.get(decls[i][1]) ?? []), clave]);
+    }
+  }
+
+  /** Qué componentes renderiza un trozo de JSX, resueltos a su archivo. */
+  function hijos(archivo: string, jsx: string): string[] {
+    const mapa = importes.get(archivo) ?? new Map();
+    const out: string[] = [];
+    for (const m of jsx.matchAll(/<([A-Z][A-Za-z0-9_]*)[\s/>]/g)) {
+      const n = m[1];
+      const destino = mapa.get(n) ?? archivo;
+      const clave = `${destino}::${n}`;
+      if (comps.has(clave)) out.push(clave);
+    }
+    return [...new Set(out)];
+  }
+
+  /** ¿Este componente acaba pintando un form, a la profundidad que sea? */
+  const memo = new Map<string, boolean>();
+  function pintaFormHondo(clave: string, visto = new Set<string>()): boolean {
+    if (memo.has(clave)) return memo.get(clave)!;
+    if (visto.has(clave)) return false;
+    visto.add(clave);
+    const c = comps.get(clave);
+    if (!c) return false;
+    const r = c.propio
+      || hijos(c.archivo, c.cuerpo).some((h) => pintaFormHondo(h, visto));
+    memo.set(clave, r);
+    return r;
+  }
+
+  function regionesDeForm(src: string): string[] {
+    const out: string[] = [];
+    let i = src.indexOf("<form");
+    while (i !== -1) {
+      const fin = src.indexOf("</form>", i);
+      if (fin === -1) break;
+      out.push(src.slice(i, fin));
+      i = src.indexOf("<form", fin);
+    }
+    return out;
+  }
+
+  const problemas: string[] = [];
+  for (const [clave, c] of comps) {
+    if (!c.propio) continue;
+    const dentro = regionesDeForm(c.cuerpo).join("\n");
+    if (dentro.length === 0) continue;
+    for (const h of hijos(c.archivo, dentro)) {
+      if (h === clave) continue;
+      if (pintaFormHondo(h)) {
+        problemas.push(`${c.archivo} · <${c.nombre}> pone dentro de su form a `
+          + `<${comps.get(h)!.nombre}>, que acaba pintando otro`);
+      }
+    }
+  }
+  assert(problemas.length === 0, problemas.join(" · "));
 });
 
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);
