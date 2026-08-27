@@ -6,14 +6,16 @@
 
 ## B · HEAD
 
-`eacaa0d` — más el commit de entregables de este mismo informe.
+`43433d4` en el momento de cerrar los entregables, más este último commit de
+sellado.
 
 ## C · Commits
 
 | Commit | Qué |
 |---|---|
 | `eacaa0d` | QUALITY-11 · automatización determinística, señales y observación transversal |
-| *(este)* | entregables de QUALITY-11 |
+| `43433d4` | entregables de QUALITY-11 |
+| *(este)* | sellado: HEAD, URL de Preview y veredicto |
 
 ## D · Baseline
 
