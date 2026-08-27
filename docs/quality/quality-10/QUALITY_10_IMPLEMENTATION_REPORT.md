@@ -216,7 +216,7 @@ debilitar ninguna guarda.
 
 ## AH · URL de Preview
 
-`https://trazaloop-production-fd0n60ly8-idendi-latam-s-projects.vercel.app`
+`https://trazaloop-production-h7gvvmu2i-idendi-latam-s-projects.vercel.app`
 ● READY · SSO 302 en las seis rutas comprobadas.
 
 ## AI · Production intacta

@@ -179,7 +179,7 @@ vercel env ls preview feature/quality-10-management-review
 ```
 
 **URL de Preview:**
-`https://trazaloop-production-fd0n60ly8-idendi-latam-s-projects.vercel.app`
+`https://trazaloop-production-h7gvvmu2i-idendi-latam-s-projects.vercel.app`
 
 ```
 /                                     → 302
