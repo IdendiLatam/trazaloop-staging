@@ -179,7 +179,10 @@ consecutivos sin duplicados y reproducción de hechos sin duplicados.
 
 ## Y · URL de Preview
 
-Ver §9 de `QUALITY_11_1_STAGING_VALIDATION.md`.
+`https://trazaloop-production-pwwr6k17w-idendi-latam-s-projects.vercel.app`
+
+● Ready · SSO activo (302 en las seis rutas y en el endpoint del planificador) ·
+cuatro variables solo en esta rama · Production Environment sin tocar.
 
 ## Z · Production intacta
 

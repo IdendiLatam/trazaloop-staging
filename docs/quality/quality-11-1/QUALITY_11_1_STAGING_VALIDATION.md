@@ -136,3 +136,46 @@ supabase migration list --project-ref mvmpadeixomwkpxbnhky
 
 Sin migración, cron, planificador, variables, datos, usuarios, despliegue,
 promoción ni alias.
+
+## 9 · §65 · Despliegue Preview
+
+| | |
+|---|---|
+| Target | `preview` — nunca `--prod`, sin promoción, sin alias |
+| Rama | `fix/quality-11-1-event-scheduled-parity` |
+| Variables | cuatro, solo scope Preview y solo esta rama, apuntando a Staging |
+| Estado | ● READY |
+| SSO | Sigue activo |
+| Production Environment / Development | **Sin tocar** |
+
+```
+TARGET=PREVIEW
+SUPABASE=STAGING
+PRODUCTION_ENV_CHANGED=NO
+```
+
+```
+vercel env ls preview fix/quality-11-1-event-scheduled-parity
+  AUTOMATION_RUNNER_SECRET       Preview (fix/quality-11-1-event-scheduled-parity)
+  SUPABASE_SERVICE_ROLE_KEY      Preview (fix/quality-11-1-event-scheduled-parity)
+  NEXT_PUBLIC_SUPABASE_ANON_KEY  Preview (fix/quality-11-1-event-scheduled-parity)
+  NEXT_PUBLIC_SUPABASE_URL       Preview (fix/quality-11-1-event-scheduled-parity)
+```
+
+**URL de Preview:**
+`https://trazaloop-production-pwwr6k17w-idendi-latam-s-projects.vercel.app`
+
+```
+/                                 → 302
+/quality                          → 302
+/quality/automation               → 302
+/quality/automation/rules         → 302
+/quality/automation/signals       → 302
+/quality/automation/runs          → 302
+POST /api/automation/run          → 302  (la protección de despliegue va delante)
+```
+
+La protección intercepta todas las rutas, incluida la del planificador. **No se
+desactivó.** La verificación equivalente se hizo donde sí se puede: la suite
+completa contra Staging con sesiones reales, y el endpoint contra Staging desde
+un servidor de producción local (§6).
