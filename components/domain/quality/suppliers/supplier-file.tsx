@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import {
   APPROVAL_DECISION_LABEL, APPROVAL_DECISIONS, describeScope, describeTrend,
@@ -92,6 +93,8 @@ export function SupplierFileView({
         </p>
         <span className="flex flex-wrap gap-2">
           <ExportPdfButton exportKey="quality.supplier.detail" id={o.profileId} label="Descargar PDF" />
+          <AskCopilotButton type="quality_supplier_scope" id={o.profileId}
+            label={`Proveedor: ${o.legalName}`} />
           <ExportPdfButton
             exportKey="quality.supplier-performance.detail" id={o.profileId}
             label="Descargar PDF"

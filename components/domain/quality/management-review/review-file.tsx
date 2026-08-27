@@ -1,6 +1,7 @@
 "use client";
 
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import {
   ActionForm, Card, Counter, DomainNote, Field, inputClass, Pill,
   StageTrail, Table,
@@ -156,6 +157,11 @@ function Header({ data, options, canManage }: {
           </Pill>
           <ExportPdfButton
             exportKey="quality.management-review.detail" id={r.id} label="Descargar PDF"
+          />
+          <AskCopilotButton
+            type="quality_management_review" id={r.id}
+            label={`Revisión: ${r.title}`}
+            text="Preparar resumen con el asistente"
           />
         </span>
       }

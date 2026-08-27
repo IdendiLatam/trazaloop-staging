@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
@@ -159,6 +160,8 @@ export function QualityIndicatorDetail({ model }: { model: IndicatorDetailModel 
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{model.name}</h1>
           <ExportPdfButton exportKey="quality.indicator.detail" id={model.indicatorId} />
+          <AskCopilotButton type="quality_indicator" id={model.indicatorId}
+            label={`Indicador: ${model.name}`} />
           <IndicatorStateBadge state={model.adminState} />
           {model.lastEvaluation ? <EvaluationBadge evaluation={model.lastEvaluation} /> : null}
         </div>

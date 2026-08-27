@@ -378,6 +378,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0130_quality_automation_scheduled_observers.sql",
     // QUALITY-11.1: puente de eventos y paridad del barrido programado.
     "0131_quality_automation_event_bridge.sql",
+    // QUALITY-12: el Copilot, sus consultas y sus borradores.
+    "0132_quality_ai_copilot.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

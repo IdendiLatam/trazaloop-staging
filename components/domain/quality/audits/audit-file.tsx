@@ -1,6 +1,7 @@
 "use client";
 
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import {
   ActionForm, Card, DomainNote, Field, inputClass, Pill, Table,
 } from "@/components/domain/quality/audits/shared";
@@ -159,6 +160,8 @@ function Header({ audit, detail, program, reschedules }: {
           <ExportPdfButton
             exportKey="quality.audit-plan.detail" id={audit.id} label="Descargar PDF"
           />
+          <AskCopilotButton type="quality_audit" id={audit.id}
+            label={`Auditoría: ${audit.title}`} text="Preparar con Copilot" />
         </span>
       }
     >

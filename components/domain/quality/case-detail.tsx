@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
@@ -119,6 +120,8 @@ export function QualityCaseDetail({ model }: { model: CaseDetailModel }) {
           <span className="font-mono text-xs text-ink-soft">{model.code}</span>
           <h1 className="text-2xl font-semibold tracking-tight">{model.title}</h1>
           <ExportPdfButton exportKey="quality.case.detail" id={model.caseId} />
+          <AskCopilotButton type="work_case" id={model.caseId}
+            label={`Caso: ${model.title}`} text="Hipótesis con Copilot" />
           <ClassificationBadge value={model.classification} />
           <CaseStatusBadge value={model.status} />
         </div>

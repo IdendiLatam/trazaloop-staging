@@ -70,6 +70,8 @@ const QUALITY_01_ALLOWED = new Set([
     "0130_quality_automation_scheduled_observers.sql",
     // QUALITY-11.1: puente de eventos y paridad del barrido programado.
     "0131_quality_automation_event_bridge.sql",
+    // QUALITY-12: el Copilot, sus consultas y sus borradores.
+    "0132_quality_ai_copilot.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -201,6 +203,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0130_quality_automation_scheduled_observers.sql",
     // QUALITY-11.1: puente de eventos y paridad del barrido programado.
     "0131_quality_automation_event_bridge.sql",
+    // QUALITY-12: el Copilot, sus consultas y sus borradores.
+    "0132_quality_ai_copilot.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

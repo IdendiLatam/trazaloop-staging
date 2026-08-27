@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
@@ -524,6 +525,8 @@ export function QualityProcessDetailView({
               {QUALITY_PROCESS_STATUS_LABEL[process.status as QualityProcessStatus] ?? process.status}
             </span>
             <ExportPdfButton exportKey="quality.process.detail" id={process.id} />
+            <AskCopilotButton type="quality_process" id={process.id}
+              label={`Proceso: ${process.name}`} />
           </div>
         </div>
       </header>

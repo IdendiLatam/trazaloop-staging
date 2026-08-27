@@ -364,6 +364,13 @@ export const QUALITY_REVISION_DIRECCION_GROUP: ModuleNavGroup = {
   ],
 };
 
+export const QUALITY_COPILOT_GROUP: ModuleNavGroup = {
+  title: "Copilot",
+  items: [
+    { label: "Copilot", href: "/quality/copilot", exact: true },
+  ],
+};
+
 export const QUALITY_AUTOMATIZACION_GROUP: ModuleNavGroup = {
   title: "Automatización",
   items: [
@@ -391,6 +398,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
            QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
            QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP,
            QUALITY_REVISION_DIRECCION_GROUP, QUALITY_AUTOMATIZACION_GROUP,
+           QUALITY_COPILOT_GROUP,
            QUALITY_DOCUMENTOS_GROUP],
 };
 

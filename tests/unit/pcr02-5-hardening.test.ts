@@ -69,6 +69,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0130_quality_automation_scheduled_observers.sql",
   // QUALITY-11.1: puente de eventos y paridad del barrido programado.
   "0131_quality_automation_event_bridge.sql",
+  // QUALITY-12: el Copilot, sus consultas y sus borradores.
+  "0132_quality_ai_copilot.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -522,6 +524,8 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0130_quality_automation_scheduled_observers.sql",
     // QUALITY-11.1: puente de eventos y paridad del barrido programado.
     "0131_quality_automation_event_bridge.sql",
+    // QUALITY-12: el Copilot, sus consultas y sus borradores.
+    "0132_quality_ai_copilot.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

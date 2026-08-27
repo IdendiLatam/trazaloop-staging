@@ -1,6 +1,7 @@
 "use client";
 
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import {
   ActionForm, AutomationSubnav, Card, Counter, DomainNote, Field, inputClass,
   Pill, Table,
@@ -156,6 +157,12 @@ export function SignalFile({
             <ExportPdfButton
               exportKey="quality.automation-signal.detail" id={signal.id}
               label="Descargar PDF"
+            />
+            {/* §106 · La señal ya trae su regla, su versión y su explicación:
+                el Copilot solo la traduce a por qué le importa a esta empresa. */}
+            <AskCopilotButton
+              type="quality_signal" id={signal.id} label={`Señal: ${signal.title}`}
+              text="Explicar con Copilot"
             />
           </span>
         }

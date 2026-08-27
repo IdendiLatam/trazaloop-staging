@@ -95,6 +95,9 @@ import {
   qualityAutomationRunDetail, qualityAutomationRunList,
   qualityAutomationSignalDetail, qualityAutomationSignalList,
 } from "./adapters/quality-automation";
+import {
+  qualityAiRunList, qualityAiSuggestionDetail, qualityAiSuggestionList,
+} from "./adapters/quality-ai";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -287,6 +290,17 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualityAutomationRuleList, qualityAutomationRuleDetail,
   qualityAutomationSignalList, qualityAutomationSignalDetail,
   qualityAutomationRunList, qualityAutomationRunDetail,
+
+  // ------------------------------------------------------------------
+  // QUALITY-12 · el Copilot
+  //
+  // Dos reglas atraviesan los tres. Un borrador se imprime COMO borrador y lo
+  // dice en la primera línea, no en una nota al pie: un papel con el logotipo
+  // de la empresa que no aclara de dónde sale acaba archivado como si fuera un
+  // documento aprobado. Y ninguno lleva el texto de las preguntas de otras
+  // personas: ver el consumo y ver el contenido son permisos distintos.
+  // ------------------------------------------------------------------
+  qualityAiSuggestionDetail, qualityAiSuggestionList, qualityAiRunList,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

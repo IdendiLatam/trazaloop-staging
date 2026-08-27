@@ -975,10 +975,25 @@ check("P3. QUALITY-11 tiene con qué trabajar", () => {
 console.log("\nQ · NADA DE IA (§93, RD-10)");
 
 check("Q1. no hay ninguna llamada a un modelo", () => {
+  // QUALITY-12 añadió a la pantalla un enlace al Copilot —«Resumen con
+  // Copilot»—, que abre OTRA pantalla. Eso no es una llamada a un modelo desde
+  // este dominio: la revisión por la dirección sigue sin invocar nada. Lo que
+  // se comprueba es justo eso, así que el enlace se descuenta antes de mirar.
+  const sinEnlace = (s: string) =>
+    s.replace(/.*AskCopilotButton.*/g, "").replace(/.*copilot\/ask-button.*/g, "");
   const todo = stripTs(DOMAIN) + stripTs(DB) + stripTs(ACTIONS) + stripTs(ADAPTERS)
-    + stripTs(COMPONENTS) + stripSql(SQL);
+    + sinEnlace(stripTs(COMPONENTS)) + stripSql(SQL);
   assert(!/openai|anthropic|gpt-|claude-|embedding|llm|copilot/i.test(todo),
     "se coló una llamada a un modelo");
+});
+
+check("Q1b. y el enlace al Copilot es solo eso: un enlace", () => {
+  // Abre `/quality/copilot` con el contexto fijado. No hay prompt, ni
+  // proveedor, ni respuesta dentro de este dominio.
+  const boton = read("components/domain/quality/copilot/ask-button.tsx");
+  assert(/href=\{href\}/.test(boton), "el botón no es un enlace");
+  assert(!/fetch\(|provider|prompt/i.test(stripTs(boton)),
+    "el botón hace algo más que enlazar");
 });
 
 check("Q2. y se dice explícitamente que la IA no decide", () => {

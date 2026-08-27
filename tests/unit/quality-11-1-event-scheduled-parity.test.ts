@@ -476,8 +476,10 @@ check("H1. QUALITY-11.1 es UNA migración, la 0131, y es la última", () => {
   const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
   assert(migraciones.includes("0131_quality_automation_event_bridge.sql"), "falta la 0131");
-  assert(migraciones[migraciones.length - 1] === "0131_quality_automation_event_bridge.sql",
-    "la 0131 no es la última");
+  // QUALITY-12 añadió la 0132 POR ENCIMA, sin tocar la 0131.
+  const i131 = migraciones.indexOf("0131_quality_automation_event_bridge.sql");
+  const i130 = migraciones.indexOf("0130_quality_automation_scheduled_observers.sql");
+  assert(i131 === i130 + 1, "alguien metió una migración entre la 0130 y la 0131");
 });
 
 check("H2. NO se editaron la 0129 ni la 0130", () => {

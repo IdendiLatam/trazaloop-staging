@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **204** |
-| Ejes clasificados (ficha · listado · histórico) | **612** |
-| `AVAILABLE` | **224** |
-| `EMBEDDED` | **259** |
-| `NOT_APPLICABLE` | **81** |
-| `HISTORICAL_NOT_SUPPORTED` | **48** |
+| Entidades clasificadas | **209** |
+| Ejes clasificados (ficha · listado · histórico) | **627** |
+| `AVAILABLE` | **228** |
+| `EMBEDDED` | **263** |
+| `NOT_APPLICABLE` | **87** |
+| `HISTORICAL_NOT_SUPPORTED` | **49** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **164** |
+| Claves distintas en el registro | **167** |
 
 ## Quality
 
@@ -177,6 +177,11 @@ No existe `PENDING`.
 | Contrato de sujeto | — | E | N/A | N/A | N/A |
 | Acuse de entrega de un hecho | — | D | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* |
 | Ajustes de la automatización | `/quality/automation` | E | N/A | N/A | N/A |
+| Consulta al Copilot | `/quality/copilot` | B | EMBEDDED · dentro de *Borrador del Copilot* | **AVAILABLE** · `quality.ai-run.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Borrador del Copilot | `/quality/copilot` | C | **AVAILABLE** · `quality.ai-suggestion.detail` | **AVAILABLE** · `quality.ai-suggestion.list` | **AVAILABLE** · `quality.ai-suggestion.detail` |
+| Fuente citada por el Copilot | — | D | EMBEDDED · dentro de *Borrador del Copilot* | EMBEDDED · dentro de *Borrador del Copilot* | EMBEDDED · dentro de *Borrador del Copilot* |
+| Conversación con el Copilot | `/quality/copilot` | E | N/A | N/A | N/A |
+| Valoración de una respuesta | — | E | N/A | N/A | N/A |
 
 ## TrazaDocs
 
@@ -651,3 +656,14 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Ajustes de la automatización | Ficha | NOT_APPLICABLE | Es configuración operativa —si el motor está encendido y en qué huso horario cierra el día—, no un objeto de negocio documentable. |
 | Ajustes de la automatización | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. La automatización se configura una vez por empresa. |
 | Ajustes de la automatización | Histórico | NOT_APPLICABLE | La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia. |
+| Consulta al Copilot | Ficha | EMBEDDED | Dentro de *Borrador del Copilot*. Una consulta suelta no es un documento de la empresa: lo que se archiva es el borrador que salió de ella, si es que salió alguno. |
+| Consulta al Copilot | Histórico | HISTORICAL_NOT_SUPPORTED | El reporte retrata las consultas que existen hoy. Cada una conserva con qué modelo y con qué instrucciones se respondió, y eso se lee en el propio reporte. |
+| Fuente citada por el Copilot | Ficha | EMBEDDED | Dentro de *Borrador del Copilot*. Una fuente citada solo significa algo dentro de la respuesta que la citó; suelta es un enlace sin pregunta. |
+| Fuente citada por el Copilot | Listado | EMBEDDED | Dentro de *Borrador del Copilot*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Fuente citada por el Copilot | Histórico | EMBEDDED | Dentro de *Borrador del Copilot*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Conversación con el Copilot | Ficha | NOT_APPLICABLE | Una conversación es un hilo de trabajo, no un registro del sistema de gestión. Lo que alguien quiera conservar lo registra en su dominio, a mano. |
+| Conversación con el Copilot | Listado | NOT_APPLICABLE | Las conversaciones son privadas de cada persona: un listado de las conversaciones de la empresa no es un documento que nadie deba poder descargar. |
+| Conversación con el Copilot | Histórico | NOT_APPLICABLE | Lo que hay que poder reconstruir es qué se respondió y con qué fuentes, y eso vive en la consulta y en el borrador. |
+| Valoración de una respuesta | Ficha | NOT_APPLICABLE | Un pulgar arriba o abajo es telemetría de producto, no información de la empresa: no documenta nada del sistema de gestión. |
+| Valoración de una respuesta | Listado | NOT_APPLICABLE | Idem: se agrega para saber si el Copilot sirve, no para archivarlo. |
+| Valoración de una respuesta | Histórico | NOT_APPLICABLE | No hay historia empresarial que reconstruir en una valoración de utilidad. |
