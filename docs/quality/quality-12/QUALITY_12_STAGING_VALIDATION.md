@@ -136,4 +136,17 @@ AI_PROVIDER=NONE (doble determinístico declarado)
 PRODUCTION_ENV_CHANGED=NO
 ```
 
-**URL de Preview:** ver §AR del informe consolidado.
+**URL de Preview:**
+`https://trazaloop-production-4ijd61tok-idendi-latam-s-projects.vercel.app`
+
+```
+/                             → 302
+/quality                      → 302
+/quality/copilot              → 302
+/quality/automation/signals   → 302
+/quality/processes            → 302
+```
+
+La protección de despliegue intercepta todas las rutas. **No se desactivó**: la
+verificación equivalente se hizo donde sí se puede —las dos suites completas
+contra Staging con sesiones reales, y la compilación de producción—.

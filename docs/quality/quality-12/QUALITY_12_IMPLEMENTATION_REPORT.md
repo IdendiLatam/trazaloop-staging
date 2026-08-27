@@ -259,7 +259,11 @@ QUALITY-11.1, verdes.
 
 ## AR · URL de Preview
 
-Ver §9 de `QUALITY_12_STAGING_VALIDATION.md` y el commit de sellado.
+`https://trazaloop-production-4ijd61tok-idendi-latam-s-projects.vercel.app`
+
+● Ready · SSO activo (302 en las cinco rutas comprobadas) · seis variables solo
+en esta rama · `QUALITY_AI_PROVIDER = fake`, declarado a propósito porque no hay
+credencial · Production Environment sin tocar.
 
 ## AS · Production intacta
 
