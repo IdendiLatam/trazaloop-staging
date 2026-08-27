@@ -71,6 +71,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
+    "0138_document_authoring_runs.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

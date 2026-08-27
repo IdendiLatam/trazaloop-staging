@@ -12,6 +12,8 @@ import type { OrganizationAuthoringContext } from "@/lib/domain/organization-pro
  * fechas técnicas, ni facturación, ni almacenamiento, ni miembros, ni planes.
  */
 
+type Db = Awaited<ReturnType<typeof createServerClient>>;
+
 export type SectorOption = { code: string; name: string; description: string | null };
 
 /** El catálogo de sectores, para pintar la lista. */
@@ -38,9 +40,9 @@ export async function listSectors(): Promise<SectorOption[]> {
  * utilizable.
  */
 export async function getOrganizationAuthoringContext(
-  organizationId: string
+  organizationId: string, client?: Db
 ): Promise<OrganizationAuthoringContext | null> {
-  const supabase = await createServerClient();
+  const supabase = client ?? await createServerClient();
   const { data, error } = await supabase.rpc("organization_authoring_context", {
     p_organization_id: organizationId,
   });

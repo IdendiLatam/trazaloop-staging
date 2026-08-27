@@ -12,6 +12,7 @@ import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { requireSession } from "@/lib/auth/require-session";
 import { getDocumentControlDetail } from "@/lib/db/document-control";
 import { resolveSectionRoleHintMap } from "@/lib/db/authoring-guidance";
+import { canUseAssistedWriting } from "@/lib/db/assisted-writing";
 import { QUALITY_MODULE_CODE } from "@/lib/modules/catalog";
 import { QUALITY_DOC_MODULE } from "@/lib/db/quality-documents";
 import {
@@ -121,6 +122,8 @@ export default async function QualityDocumentPage({
     sections: detail.sections.map((s) => ({ id: s.id, sectionKey: s.sectionKey })),
   });
 
+  const assistedWriting = await canUseAssistedWriting(org.organizationId, QUALITY_MODULE_CODE);
+
   return (
     <QualityDocumentControlDetail
       model={{
@@ -200,6 +203,7 @@ export default async function QualityDocumentPage({
         responsibleOptions,
         canEdit: canEditRevisionContent(role, detail.lifecycle),
         sectionHints,
+        assistedWriting,
         canSubmit: canSubmitRevision(role, detail.lifecycle) && detail.currentRevision !== null,
         canDecide,
         myPendingRole,

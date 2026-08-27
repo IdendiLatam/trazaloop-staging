@@ -313,6 +313,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0135_quality_ai_theme_evidence_scope.sql",
     "0136_trazadoc_canonical_authoring_guidance.sql",
     "0137_organization_profile_and_quality_guidance.sql",
+    "0138_document_authoring_runs.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

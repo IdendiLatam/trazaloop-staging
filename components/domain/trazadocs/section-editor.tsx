@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SectionHint } from "@/components/ui/section-hint";
+import { QuickEditPanel } from "@/components/domain/documents/quick-edit";
 import type { DocumentSectionRow } from "@/lib/db/trazadocs";
 import type { ResolvedHint } from "@/lib/domain/hint-access";
 
@@ -12,11 +13,18 @@ export function SectionEditor({
   section,
   hint,
   readOnly,
+  documentId,
+  assistedWriting = false,
 }: {
   section: DocumentSectionRow;
   /** Hint YA AUTORIZADO en servidor (Demo recibe solo el aviso fijo). */
   hint: ResolvedHint | null;
   readOnly: boolean;
+  /** QUALITY-12.2C · Hace falta para pedir asistencia de redacción. */
+  documentId?: string;
+  /** ¿Se ofrece «Mejorar con Intelligence»? Lo decide el servidor: depende del
+   *  plan del módulo del documento, y aquí no se resuelve nada. */
+  assistedWriting?: boolean;
 }) {
   const [value, setValue] = useState(section.content);
   const isEmpty = value.trim().length === 0;
@@ -43,7 +51,7 @@ export function SectionEditor({
       </div>
       <textarea
         name={`section:${section.id}`}
-        defaultValue={section.content}
+        value={value}
         onChange={(e) => setValue(e.target.value)}
         readOnly={readOnly}
         rows={5}
@@ -51,6 +59,19 @@ export function SectionEditor({
         disabled={readOnly}
         placeholder={readOnly ? "" : "Escribe el contenido de esta sección…"}
       />
+
+      {/* QUALITY-12.2C · La asistencia solo aparece si se puede editar: sobre
+          una revisión aprobada en modo lectura no se ofrece un botón que
+          insinúe que se puede cambiar algo. */}
+      {assistedWriting && documentId && !readOnly ? (
+        <QuickEditPanel
+          documentId={documentId}
+          sectionId={section.id}
+          currentText={value}
+          onReplace={setValue}
+          disabled={readOnly}
+        />
+      ) : null}
     </div>
   );
 }

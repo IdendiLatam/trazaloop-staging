@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { SectionHint } from "@/components/ui/section-hint";
+import { TextileSectionField } from "@/components/domain/textiles/trazadoc-section-field";
 import {
   updateTextileTrazadocSectionsAction,
   submitTextileTrazadocForReviewAction,
@@ -42,11 +43,14 @@ export function TextileTrazadocEditor({
   canApprove,
   canObsolete,
   canNewVersion,
+  assistedWriting = false,
 }: {
   documentId: string;
   status: string;
   sections: SectionView[];
   canEdit: boolean;
+  /** QUALITY-12.2C · Lo decide el servidor con el plan de Textiles. */
+  assistedWriting?: boolean;
   canSubmit: boolean;
   canApprove: boolean;
   canObsolete: boolean;
@@ -81,12 +85,11 @@ export function TextileTrazadocEditor({
               <SectionHint hint={s.hint} />
             </div>
             {canEdit ? (
-              <textarea
-                id={`section-${s.id}`}
-                name={`section:${s.id}`}
-                defaultValue={s.content}
-                rows={4}
-                className="w-full rounded-md border border-hairline bg-paper p-2 text-sm"
+              <TextileSectionField
+                sectionId={s.id}
+                documentId={documentId}
+                content={s.content}
+                assistedWriting={assistedWriting}
               />
             ) : (
               <p className="whitespace-pre-wrap rounded-md border border-hairline bg-paper p-2 text-sm text-ink-soft">

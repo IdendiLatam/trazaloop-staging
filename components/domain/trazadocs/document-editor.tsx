@@ -23,10 +23,13 @@ export function DocumentEditor({
   document,
   hints,
   readOnly,
+  assistedWriting = false,
 }: {
   document: DocumentDetail;
   hints: Record<string, ResolvedHint>;
   readOnly: boolean;
+  /** QUALITY-12.2C · Lo decide el servidor según el plan del módulo. */
+  assistedWriting?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(updateDocumentSectionsAction, initial);
   const [sectionState, sectionFormAction, sectionPending] = useActionState(addCustomSectionAction, initial);
@@ -45,6 +48,8 @@ export function DocumentEditor({
               section={s}
               hint={s.blueprintSectionId ? hints[s.blueprintSectionId] ?? null : null}
               readOnly={readOnly}
+              documentId={document.id}
+              assistedWriting={assistedWriting}
             />
           ))}
         </div>

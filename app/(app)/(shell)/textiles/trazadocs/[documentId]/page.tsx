@@ -14,6 +14,7 @@ import {
   listTextileTrazadocsTemplates,
 } from "@/lib/db/textiles-trazadocs";
 import { resolveGuidanceHintMap } from "@/lib/db/authoring-guidance";
+import { canUseAssistedWriting } from "@/lib/db/assisted-writing";
 import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { TEXTILES_MODULE_CODE } from "@/lib/modules/catalog";
 import {
@@ -56,6 +57,10 @@ export default async function TextileTrazadocDetailPage({
     listTextileTrazadocVersions(org.organizationId, doc.id),
     listTextileTrazadocsTemplates(),
   ]);
+  // QUALITY-12.2C · La asistencia se resuelve con el plan de TEXTILES: este
+  // documento es de Textiles y no debe depender de Quality.
+  const assistedWriting = await canUseAssistedWriting(org.organizationId, TEXTILES_MODULE_CODE);
+
   const blueprint = templates.find((t) => t.blueprintId === doc.blueprintId) ?? null;
   const moduleLinks = blueprint ? TEXTILE_TRAZADOCS_MODULE_LINKS[blueprint.code] ?? [] : [];
 
@@ -117,6 +122,7 @@ export default async function TextileTrazadocDetailPage({
           hint: s.blueprintSectionId ? hintBySectionId[s.blueprintSectionId] ?? null : null,
         }))}
         canEdit={canEditDocument(role, status)}
+        assistedWriting={assistedWriting}
         canSubmit={canSubmitForReview(role, status)}
         canApprove={canApproveDocument(role)}
         canObsolete={canMarkObsolete(role)}

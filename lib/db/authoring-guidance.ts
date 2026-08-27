@@ -1,6 +1,14 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+
+/**
+ * `client` existe para poder comprobar esto contra una base real sin montar un
+ * servidor: se le pasa la sesión de un usuario de prueba y la resolución hace
+ * exactamente lo mismo que en producción, con su RLS puesta. Es el mismo patrón
+ * que usan las capas de QUALITY-12.
+ */
+type Db = Awaited<ReturnType<typeof createServerClient>>;
 import { demoHint, type ResolvedHint } from "@/lib/domain/hint-access";
 import { hasHintContent } from "@/lib/domain/hint-links";
 
@@ -37,6 +45,8 @@ export type AuthoringGuidance = {
   hasGuidance: boolean;
   /** El contenido no se entrega: el plan del módulo no lo permite. */
   restricted: boolean;
+  /** Con qué revisión de la guía se está trabajando. Es procedencia. */
+  revisionId: string | null;
   revisionNumber: number | null;
   guidance: string | null;
   purpose: string | null;
@@ -54,6 +64,7 @@ function fila(r: Record<string, unknown>): AuthoringGuidance {
     sectionKey: String(r.section_key),
     hasGuidance: r.has_guidance !== false,
     restricted: r.restricted === true,
+    revisionId: (r.revision_id as string | null) ?? null,
     revisionNumber: r.revision_number === null || r.revision_number === undefined
       ? null : Number(r.revision_number),
     guidance: (r.guidance as string | null) ?? null,
@@ -80,8 +91,8 @@ export async function getCurrentAuthoringGuidance(params: {
   organizationId: string;
   moduleCode: string;
   blueprintId: string;
-}): Promise<AuthoringGuidance[]> {
-  return guidanceAsOf({ ...params, asOf: null });
+}, client?: Db): Promise<AuthoringGuidance[]> {
+  return guidanceAsOf({ ...params, asOf: null }, client);
 }
 
 /**
@@ -96,9 +107,9 @@ export async function getAuthoringGuidanceAsOf(params: {
   moduleCode: string;
   blueprintId: string;
   asOf: Date | string;
-}): Promise<AuthoringGuidance[]> {
+}, client?: Db): Promise<AuthoringGuidance[]> {
   const asOf = typeof params.asOf === "string" ? params.asOf : params.asOf.toISOString();
-  return guidanceAsOf({ ...params, asOf });
+  return guidanceAsOf({ ...params, asOf }, client);
 }
 
 async function guidanceAsOf(params: {
@@ -106,8 +117,8 @@ async function guidanceAsOf(params: {
   moduleCode: string;
   blueprintId: string;
   asOf: string | null;
-}): Promise<AuthoringGuidance[]> {
-  const supabase = await createServerClient();
+}, client?: Db): Promise<AuthoringGuidance[]> {
+  const supabase = client ?? await createServerClient();
   const { data, error } = await supabase.rpc("trazadoc_guidance_as_of", {
     p_organization_id: params.organizationId,
     p_module_code: params.moduleCode,
@@ -143,14 +154,14 @@ export async function resolveSectionRoleHintMap(params: {
   moduleCode: string;
   guidanceModule: string;
   sections: readonly { id: string; sectionKey: string }[];
-}): Promise<Record<string, ResolvedHint>> {
+}, client?: Db): Promise<Record<string, ResolvedHint>> {
   const claves = [...new Set(params.sections.map((s) => s.sectionKey))];
   const guias = await getSectionRoleGuidance({
     organizationId: params.organizationId,
     moduleCode: params.moduleCode,
     guidanceModule: params.guidanceModule,
     sectionKeys: claves,
-  });
+  }, client);
   const porClave = new Map(guias.map((g) => [g.sectionKey, g]));
 
   const mapa: Record<string, ResolvedHint> = {};
@@ -172,9 +183,9 @@ export async function getSectionRoleGuidance(params: {
   guidanceModule: string;
   sectionKeys: string[];
   asOf?: Date | string | null;
-}): Promise<AuthoringGuidance[]> {
+}, client?: Db): Promise<AuthoringGuidance[]> {
   if (params.sectionKeys.length === 0) return [];
-  const supabase = await createServerClient();
+  const supabase = client ?? await createServerClient();
   const asOf = params.asOf
     ? (typeof params.asOf === "string" ? params.asOf : params.asOf.toISOString())
     : null;
@@ -207,8 +218,8 @@ export async function resolveGuidanceHintMap(params: {
   organizationId: string;
   moduleCode: string;
   blueprintId: string;
-}): Promise<Record<string, ResolvedHint>> {
-  const guias = await getCurrentAuthoringGuidance(params);
+}, client?: Db): Promise<Record<string, ResolvedHint>> {
+  const guias = await getCurrentAuthoringGuidance(params, client);
   const mapa: Record<string, ResolvedHint> = {};
   for (const g of guias) {
     if (!g.hasGuidance || g.blueprintSectionId === null) continue;

@@ -144,6 +144,8 @@ export type DocumentControlViewModel = {
   sections: ControlSection[];
   /** QUALITY-12.2B · Guía YA AUTORIZADA por sección, resuelta en servidor. */
   sectionHints?: Record<string, ResolvedHint>;
+  /** QUALITY-12.2C · ¿Se ofrece asistencia de redacción? Lo decide el plan. */
+  assistedWriting?: boolean;
   participants: ControlParticipant[];
   revisions: ControlRevision[];
   decisions: ControlDecision[];
@@ -466,7 +468,9 @@ export function QualityDocumentControlDetail({ model }: { model: DocumentControl
             <SectionEditor
               key={s.id} section={s}
               hint={model.sectionHints?.[s.id] ?? null}
-              readOnly={!model.canEdit} />
+              readOnly={!model.canEdit}
+              documentId={model.documentId}
+              assistedWriting={model.assistedWriting ?? false} />
           ))}
           {model.canEdit ? (
             <Button type="submit" disabled={sectionPending} className="w-auto px-4 py-2 text-sm">

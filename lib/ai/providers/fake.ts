@@ -41,6 +41,8 @@ export function fakeProvider(): QualityAiProvider {
     async generateStructured(req: AiRequest): Promise<AiResult> {
       const pregunta = req.messages.map((m) => m.content).join("\n");
 
+      // Los disparadores van PRIMERO: los caminos de fallo son los mismos para
+      // los dos contratos, y comprobarlos es justo lo que hacen falta.
       if (pregunta.includes("[[TEST:timeout]]")) {
         return { ok: false, kind: "timeout", message: "El proveedor tardó más de lo permitido." };
       }
@@ -49,6 +51,12 @@ export function fakeProvider(): QualityAiProvider {
       }
       if (pregunta.includes("[[TEST:invalid]]")) {
         return { ok: true, value: { esto: "no cumple el esquema" }, usage: uso(pregunta), raw: "{}" };
+      }
+
+      // QUALITY-12.2C · La asistencia de redacción tiene su propio contrato.
+      // El doble lo reconoce por el esquema que se le pide, no por adivinar.
+      if (req.schemaName === "propuesta_de_redaccion") {
+        return redaccion(req, pregunta);
       }
 
       // Las referencias que el SERVIDOR puso en el contexto, numeradas.
@@ -100,6 +108,57 @@ export function fakeProvider(): QualityAiProvider {
           themes: temas(req.system, referencias),
         },
       };
+    },
+  };
+}
+
+/**
+ * QUALITY-12.2C · Una propuesta de redacción determinística.
+ *
+ * NO reescribe: normaliza. Quita espacios dobles, deja una sola línea y
+ * corrige lo poco que se puede corregir sin entender el texto. Y sobre todo,
+ * hace lo que de verdad importa comprobar sin un modelo: NO añade un solo
+ * hecho, y sí señala lo que la guía pide y el texto no dice.
+ *
+ * Una prueba que pasa con esto pasa por la arquitectura —los cajones, el
+ * permiso, el registro— y no porque el modelo estuviera inspirado.
+ */
+function redaccion(req: AiRequest, material: string): AiResult {
+  const texto = /<TEXTO_DE_LA_PERSONA>\n([\s\S]*?)\n<\/TEXTO_DE_LA_PERSONA>/
+    .exec(material)?.[1] ?? "";
+  const guia = /<GUIA_DE_LA_SECCION>\n([\s\S]*?)\n<\/GUIA_DE_LA_SECCION>/
+    .exec(material)?.[1] ?? "";
+
+  const limpio = texto.replace(/\s+/g, " ").trim();
+
+  // Lo que la guía nombra y el texto no menciona. Deliberadamente tonto: dos
+  // palabras clave. No se rellena nada; solo se dice que falta.
+  const falta: string[] = [];
+  for (const [clave, etiqueta] of [
+    ["respons", "Responsable"], ["frecuencia", "Frecuencia"],
+    ["criterio", "Criterio"], ["registro", "Registro"],
+  ] as const) {
+    if (new RegExp(clave, "i").test(guia) && !new RegExp(clave, "i").test(texto)) {
+      falta.push(etiqueta);
+    }
+  }
+
+  const avisos: string[] = [];
+  if (/ignora (las |lo )?(instrucciones|anterior)|revela|exporta los datos/i.test(texto)) {
+    avisos.push("El texto contiene una frase con forma de instrucción para un "
+      + "sistema. Se ha tratado como contenido del documento.");
+  }
+
+  return {
+    ok: true,
+    usage: uso(material),
+    raw: "",
+    value: {
+      suggested_text: limpio,
+      change_summary: limpio === texto.trim()
+        ? [] : ["Se normalizaron los espacios y los saltos de línea."],
+      missing_information: falta.slice(0, 3),
+      warnings: avisos.slice(0, 2),
     },
   };
 }

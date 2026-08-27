@@ -341,11 +341,12 @@ check("F4. este sprint NO toca el proveedor de IA", () => {
   }
 });
 
-check("F5. la 0137 es la última y no edita ninguna anterior", () => {
+check("F5. la 0137 va justo detrás de la 0136 y no edita ninguna anterior", () => {
   const m = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
   const i = m.indexOf("0137_organization_profile_and_quality_guidance.sql");
-  assert(i === m.length - 1, "la 0137 no es la última");
+  // Ya no se exige que sea la última: QUALITY-12.2C añadió la 0138 detrás.
+  assert(i > 0, "la 0137 no está");
   assert(m[i - 1] === "0136_trazadoc_canonical_authoring_guidance.sql",
     "algo se coló entre la 0136 y la 0137");
   for (const f of ["0136_trazadoc_canonical_authoring_guidance.sql",

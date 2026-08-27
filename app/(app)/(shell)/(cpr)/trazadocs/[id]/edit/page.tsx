@@ -8,6 +8,7 @@ import { requireSession } from "@/lib/auth/require-session";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTrazadocDocumentAction } from "@/server/actions/trazadocs";
 import { resolveGuidanceHintMap } from "@/lib/db/authoring-guidance";
+import { canUseAssistedWriting } from "@/lib/db/assisted-writing";
 import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
 import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { canDeleteDraftDocument } from "@/lib/domain/trazadocs";
@@ -48,6 +49,10 @@ export default async function TrazaDocEditPage({
   // en Demo el mapa que se serializa al cliente contiene únicamente el
   // aviso fijo — el texto administrado y sus enlaces nunca salen del
   // servidor (lib/db/authoring-guidance.ts).
+  // QUALITY-12.2C · La asistencia de redacción se resuelve con el plan de CPR,
+  // no con el de Quality: este documento es de CPR.
+  const assistedWriting = await canUseAssistedWriting(org.organizationId, CPR_MODULE_CODE);
+
   let hints: Record<string, ResolvedHint> = {};
   if (doc.blueprintId) {
     // QUALITY-12.2A · La guía sale de la fuente canónica, que aplica la regla
@@ -101,7 +106,9 @@ export default async function TrazaDocEditPage({
         />
       ) : null}
 
-      <DocumentEditor document={doc} hints={hints} readOnly={!canEdit} />
+      <DocumentEditor
+        document={doc} hints={hints} readOnly={!canEdit}
+        assistedWriting={assistedWriting} />
 
       {/* Sprint 10B (Parte 17): categoría en el Maestro de documentos —
           misma regla de estado que el resto del documento. */}
