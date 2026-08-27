@@ -2,8 +2,9 @@
 
 **Rama** `fix/quality-12-1-openai-live-provider` · sobre `383124d` (cierre de
 QUALITY-12)
-**Migración** `0133_quality_ai_copilot_completion.sql` · Staging al **0133**
-**Preview** `https://trazaloop-production-k3yy1hfq8-idendi-latam-s-projects.vercel.app`
+**Migraciones** `0133_quality_ai_copilot_completion.sql` ·
+`0134_quality_ai_provider_call_truth.sql` — Staging al **0134**
+**Preview** `https://trazaloop-production-224ns1yr8-idendi-latam-s-projects.vercel.app`
 **Production** intacta, en **0111**
 
 ---
@@ -147,13 +148,96 @@ de paso.
 | 77 | Staging aplicada y alineada | **PASS** | 125 migraciones, sin desalineadas |
 | 78 | Preview construido y accesible | **PASS** | `k3yy1hfq8` · Ready |
 | 79 | entregables completos | **PASS** | once documentos |
-| 80 | validación real contra OpenAI | **PENDIENTE** | requiere la credencial |
+| 80 | validación real contra OpenAI | **EN CURSO** | primera prueba hecha · dos defectos corregidos |
 | 81 | veredicto final | **PENDIENTE** | depende del 80 |
+| 82 | una consulta sin llamada se declara como tal | **PASS** | pruebas G2, G3, D1b, D1c |
+| 83 | el consumo separa lo que costó de lo que no | **PASS** | prueba G4 |
+| 84 | las fuentes se leen a la vez | **PASS** | prueba G5 · 4972 → 1095 ms |
+| 85 | la numeración de citas sigue siendo determinista | **PASS** | pruebas G6, B6 |
+| 86 | leer en paralelo no relajó permisos | **PASS** | prueba G7 |
+| 87 | pregunta ABIERTA recupera contexto | **PASS** | prueba B4 |
+| 88 | pregunta ABIERTA histórica trae la revisión de entonces | **PASS** | prueba B5 |
+| 89 | la 0133 no se editó para corregir esto | **PASS** | prueba G1 |
 
-**79 PASS · 2 PENDIENTES · 0 FALLOS**
+**87 PASS · 1 EN CURSO · 1 PENDIENTE · 0 FALLOS**
 
-Los dos pendientes son el mismo hecho: **falta la credencial**, y es la única
-intervención humana que este sprint necesita.
+---
+
+# La prueba humana, y lo que enseñó
+
+## Lo que se creyó que era, y lo que era
+
+La primera prueba con credencial devolvió «sin evidencia · 0 fuentes» a dos
+preguntas, una de ellas sobre el documento sembrado. Leído desde la pantalla,
+parecía que el constructor de contexto no recuperaba nada.
+
+**No era eso.** Las dos consultas se hicieron en **«Trazaloop QA Permanente ·
+Quality»**, con la cuenta `quality.admin@trazaloop-staging.local`. Esa empresa
+está vacía —cero procesos, cero documentos, cero casos, cero acciones— y la
+empresa sembrada para la validación no registró ni una sola consulta.
+
+En una empresa sin datos, «no encontré información suficiente» **es la respuesta
+correcta**, y es la que §19 y §67 exigen.
+
+La demostración está en `QUALITY_12_1_LIVE_VALIDATION.md`: con la sesión real
+del usuario de la empresa sembrada, sin clave de servicio y sin fijar el
+documento, la pregunta abierta recupera **17 referencias de 10 fuentes** y trae
+«TRES días»; la misma pregunta a seis meses trae «CINCO días» y ninguna
+mención a tres.
+
+## Pero la prueba encontró dos defectos, y eran reales
+
+### Defecto 1 · la consulta mentía sobre sí misma
+
+Con el contexto vacío el Copilot no llama al proveedor. Es deliberado y es
+correcto. Pero la consulta quedaba guardada con `provider = 'openai'` y
+`model = 'gpt-5.4-mini'`, y la pantalla mostraba «openai · gpt-5.4-mini» con
+cero tokens.
+
+Un lector concluye lo contrario de lo que pasó: que se preguntó a OpenAI y
+devolvió una respuesta vacía. **Que hiciera falta abrir la base de datos para
+averiguar si hubo llamada es, en sí mismo, el defecto.**
+
+Corregido en la **0134**: `quality_ai_runs.provider_called`, escrito por el
+cierre, expuesto en la vista, mostrado en pantalla —«Respondido sin llamar al
+modelo: no había datos autorizados que consultar»— y separado en el panel de
+consumo, que ahora distingue las consultas que costaron algo de las que no.
+
+El proveedor y el modelo se siguen registrando: son procedencia, y responden a
+«¿con qué habría respondido?». Lo que se añade es si se llegó a preguntar.
+
+### Defecto 2 · diecinueve segundos sin hablar con nadie
+
+Las diecinueve fuentes se leían **en fila india**, y cada una espera a una base
+que está en otra máquina. Contra Staging desde una función de Vercel eso eran
+17–20 s **para una empresa vacía**. En local no se notaba —cinco segundos— y
+por eso no había salido antes.
+
+Ese tiempo era además lo que hacía creer que el modelo estaba pensando.
+
+Corregido en `lib/ai/context/builder.ts`: las fuentes se leen **a la vez, de
+seis en seis**. Son lecturas independientes; lo único que compartían era el
+acumulador. Ahora cada una tiene el suyo y se vuelcan después **en el orden
+declarado**, remapeando los números de cita.
+
+Eso último no es un detalle: dentro de su propio acumulador una referencia era
+la 2, y al volcarla puede ser la 14. Un hecho que conservara el número viejo
+estaría citando otra fuente, que es peor que no citar nada. La prueba **B6**
+comprueba que dos construcciones idénticas dan la misma numeración, y la **G6**
+que el remapeo está en el código.
+
+**Medido con sesión real contra Staging: 4972 ms → 1095 ms**, con un paquete
+idéntico referencia por referencia.
+
+## Lo que NO se hizo para arreglarlo
+
+No se relajó un solo permiso. El contexto se sigue construyendo con la sesión
+de quien pregunta: sin clave de servicio, sin `security definer`, sin saltarse
+una política y sin leer nada de otra empresa. La prueba **G7** lo vigila.
+
+No se añadió ninguna palabra clave, ni ninguna ruta especial para «plazo de
+expedición» ni para esa pregunta. Lo que se arregló es general: la lectura de
+todas las fuentes y la verdad sobre todas las consultas.
 
 ---
 

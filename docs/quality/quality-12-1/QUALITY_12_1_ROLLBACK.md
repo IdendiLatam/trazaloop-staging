@@ -24,7 +24,12 @@ pantalla lo explica.
 También se puede apagar solo un uso sensible: `allow_customer` deja de permitir
 la voz del cliente, y con ella los temas.
 
-## Nivel 3 · Retirar la migración 0133
+## Nivel 3 · Retirar las migraciones 0134 y 0133
+
+En ese orden: la 0134 primero, porque rehace objetos que la 0133 creó. La
+operativa de la 0134 está en `QUALITY_12_1_MIGRATION_0134.md`.
+
+### La 0133
 
 Solo si hubiera que volver el esquema al estado de QUALITY-12. **No se puede
 retirar la 0132**: está aplicada en Staging y la 0133 depende de ella.

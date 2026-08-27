@@ -5,7 +5,17 @@ activo. Cada paso dice **qué mirar**, no solo qué pulsar.
 
 ## Antes de empezar
 
-**0.** Entra a **Calidad → Copilot**. Si está apagado, enciéndelo desde Ajustes
+**0a. LA EMPRESA IMPORTA.** Esta es la lección de la primera prueba: se hizo en
+«Trazaloop QA Permanente · Quality», que está vacía, y «sin evidencia» era la
+respuesta correcta. Antes de nada, mira arriba a la izquierda **en qué empresa
+estás**. Para la validación tiene que ser la que trae el documento con dos
+revisiones.
+
+Si el Copilot responde «sin evidencia» a todo, la primera pregunta no es «¿está
+roto?» sino «¿hay algo en esta empresa?». Un vistazo a **Calidad → Documentos**
+o **Casos** lo resuelve en cinco segundos.
+
+**0b.** Entra a **Calidad → Copilot**. Si está apagado, enciéndelo desde Ajustes
 y deja **Voz del cliente** permitida.
 
 ## A · Que el proveedor real está funcionando
@@ -16,6 +26,14 @@ clave no llegó a este despliegue.
 
 **2.** Pregunta algo abierto: *«¿Qué requiere atención esta semana?»*. Al pie de
 la respuesta tiene que aparecer **`openai · gpt-5.4-mini`**.
+
+**2b. La consulta que NO llama.** Cambia a una empresa sin datos de Calidad y
+pregunta cualquier cosa. Al pie debe decir **«Respondido sin llamar al modelo:
+no había datos autorizados que consultar»** — no «openai · gpt-5.4-mini». Y en
+Consumo debe aparecer cuántas se respondieron así, sin gastar nada.
+
+Si ahí dijera «openai · gpt-5.4-mini» con cero tokens, es el defecto de la
+primera prueba y habría vuelto.
 
 **3.** Vuelve al bloque **Consumo**. Ahora debe haber tokens de entrada y de
 salida. Si el modelo razonó, aparece también una segunda fila con «De ellos,
