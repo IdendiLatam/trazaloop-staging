@@ -428,5 +428,109 @@ check("G7. leer en paralelo no relajó ningún permiso", () => {
   assert(!/security definer/i.test(b), "el constructor invoca algo definer");
 });
 
+// ===========================================================================
+console.log("\nH · LA CADENA TEMPORAL, DE LA PANTALLA AL SERVIDOR");
+// ---------------------------------------------------------------------------
+// El defecto que encontró la segunda prueba humana: el servidor leía cuatro
+// campos del formulario —`temporal_mode`, `as_of`, `period_start`,
+// `period_end`— y la pantalla NO PINTABA NINGUNO. Toda consulta llegaba como
+// «ahora», y una pregunta histórica respondía con el documento de hoy.
+//
+// Ninguna prueba lo vio porque todas montaban el alcance a mano y llamaban al
+// constructor de contexto. Estas comprueban la costura.
+// ===========================================================================
+
+const UI = read("components/domain/quality/copilot/copilot.tsx");
+const ACCIONES = read("server/actions/quality-ai.ts");
+const PETICION = read("lib/domain/quality-ai-request.ts");
+
+check("H1. la pantalla pinta los cuatro campos que el servidor lee", () => {
+  // Los nombres viven en un único sitio; que la pantalla y el servidor los
+  // compartan es lo que impide que vuelvan a divergir en silencio.
+  for (const campo of ["temporal_mode", "as_of", "period_start", "period_end"]) {
+    assert(new RegExp(`name="${campo}"`).test(UI),
+      `la pantalla no pinta ningún control llamado ${campo}`);
+    assert(new RegExp(`"${campo}"`).test(PETICION),
+      `el servidor no lee ${campo}`);
+  }
+  assert(/AI_FORM_FIELDS/.test(PETICION), "los nombres de campo no están en un único sitio");
+});
+
+check("H2. el caso de uso se ELIGE, no viene fijado a la fuerza", () => {
+  assert(/<select[\s\S]{0,200}name="use_case"/.test(UI),
+    "el caso de uso no es un selector");
+  assert(!/type="hidden" name="use_case"/.test(UI),
+    "el caso de uso sigue siendo un campo oculto que nadie puede cambiar");
+  assert(/USE_CASES\.map/.test(UI), "las opciones no salen de la lista cerrada");
+});
+
+check("H3. los tres modos temporales están ofrecidos", () => {
+  for (const modo of ["current", "as_of", "period"]) {
+    assert(new RegExp(`value="${modo}"`).test(UI), `falta el modo ${modo}`);
+  }
+});
+
+check("H4. la lectura del alcance es una función aparte y comprobable", () => {
+  assert(/export function readTemporal\(/.test(PETICION),
+    "no se puede probar la lectura del alcance sin montar un servidor");
+  assert(!/^import .*next/m.test(PETICION),
+    "el módulo arrastra Next.js y volvería a no poder probarse");
+  assert(/const temporal = readTemporal\(formData\)/.test(ACCIONES),
+    "la acción no usa la función que se prueba");
+  assert(/const useCase = readUseCase\(formData\)/.test(ACCIONES),
+    "la acción no usa la lectura del caso de uso que se prueba");
+});
+
+check("H5. una fecha ausente NO se inventa", () => {
+  // El tipo de retorno de la función también acaba en `}` a principio de línea,
+  // así que se corta desde el cuerpo real: la primera llave de apertura.
+  const cuerpo = PETICION.slice(PETICION.indexOf("export function readTemporal("));
+  assert(/return fecha\s*\?[\s\S]{0,80}mode: "current"/.test(cuerpo),
+    "sin fecha, el modo histórico sigue adelante con una fecha inventada");
+  assert(/if \(!inicio && !fin\) return \{ mode: "current" \};/.test(cuerpo),
+    "un periodo sin fechas no cae en «ahora»");
+});
+
+// ===========================================================================
+console.log("\nI · LO QUE ENSEÑÓ LA SEGUNDA PRUEBA HUMANA");
+// ===========================================================================
+
+check("I1. un objetivo sin indicadores NO se presenta como objetivo cumplido", () => {
+  const b = ADAPTERS.split("registerAdapter({").find((x) => /code: "objective"/.test(x))!;
+  assert(/sinIndicadores/.test(b), "no se distingue el objetivo que no se mide");
+  assert(/NO se[\s\S]{0,40}puede medir con datos/.test(b),
+    "no se dice que su cumplimiento no se puede medir");
+  assert(/w\.conflict\(/.test(b),
+    "no se avisa de que sus ceros no son comparables con los indicadores sueltos");
+  assert(/performance_explanation/.test(b),
+    "se ignora el veredicto que la vista ya calcula");
+});
+
+check("I2. cero titulares se distingue de uno solo", () => {
+  const b = ADAPTERS.split("registerAdapter({").find((x) => /code: "knowledge_item"/.test(x))!;
+  assert(/titulares === 0/.test(b) && /titulares === 1/.test(b),
+    "cero y uno se cuentan con la misma frase");
+  assert(/peor que depender de una sola persona/.test(b),
+    "no se dice que ningún titular es peor que uno solo");
+});
+
+check("I3. los marcadores de cita tienen UNA sola autoridad", () => {
+  assert(/function sinMarcadores/.test(SCHEMAS),
+    "el texto del modelo conserva sus propios marcadores de cita");
+  for (const campo of ["summary", "statement", "detail"]) {
+    assert(new RegExp(`sinMarcadores\\(fila\\.${campo}\\)|sinMarcadores\\(v\\.${campo}\\)`)
+      .test(SCHEMAS), `${campo} no se limpia`);
+  }
+  assert(/references\.map\(\(n\) => \(/.test(UI),
+    "la interfaz dejó de pintar las citas desde las referencias validadas");
+});
+
+check("I4. la respuesta separa lo citado de lo solo consultado", () => {
+  assert(/function Fuentes\(/.test(UI), "no hay separación de fuentes");
+  assert(/Fuentes citadas/.test(UI), "no se destacan las citadas");
+  assert(/no se\n\s*citaron en la respuesta|no se citaron/.test(UI),
+    "no se dice cuántas se consultaron sin citar");
+});
+
 console.log(`\nResultado: ${passed} conformes, ${failed} fallos\n`);
 process.exit(failed === 0 ? 0 : 1);

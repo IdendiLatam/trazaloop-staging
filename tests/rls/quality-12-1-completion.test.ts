@@ -64,6 +64,9 @@ type Cliente = SupabaseClient;
 
 async function main() {
   const { runCopilot, renderContext } = await import("../../lib/ai/copilot");
+  // Del dominio, no de la acción: la acción arrastra Next.js y no carga aquí.
+  // Es exactamente la misma función que usa el servidor.
+  const { readTemporal, readUseCase } = await import("../../lib/domain/quality-ai-request");
   const { buildContext } = await import("../../lib/ai/context/builder");
   await import("../../lib/ai/context/adapters");
   const { PROMPT_ASK, PROMPT_CUSTOMER_THEMES } = await import("../../lib/ai/prompts");
@@ -366,6 +369,72 @@ async function main() {
       `se esperaban varias fuentes, llegaron ${a1.pack.sourcesUsed.length}`);
   });
 
+  // ---------------------------------------------------------------------------
+  // La cadena completa: FORMULARIO → servidor → contexto → respuesta
+  // ---------------------------------------------------------------------------
+  // B4 y B5 comprobaban el constructor de contexto con el alcance ya montado a
+  // mano. Eso dejaba fuera precisamente la capa que falló en la prueba humana:
+  // la pantalla no pintaba los campos del alcance, así que el servidor recibía
+  // siempre «ahora» y una pregunta histórica respondía con el documento de hoy.
+  //
+  // Estas dos parten de un FormData idéntico al que envía el navegador —los
+  // mismos nombres de campo que pinta el formulario— y lo pasan por las mismas
+  // funciones que usa la acción de servidor.
+  // ---------------------------------------------------------------------------
+
+  const desdeFormulario = async (campos: Record<string, string>) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(campos)) form.set(k, v);
+    const temporal = readTemporal(form);
+    const useCase = readUseCase(form);
+    const r = await runCopilot({
+      organizationId: A, useCase, feature: useCase === "customer_themes" ? "customer" : "general",
+      prompt: useCase === "customer_themes" ? PROMPT_CUSTOMER_THEMES : PROMPT_ASK,
+      question: String(form.get("question")),
+      temporal, pinned: null, allow: { people: false, customer: true },
+    } as Parameters<typeof runCopilot>[0], Q as never);
+    return { temporal, useCase, r };
+  };
+
+  await check("B7. formulario «Ahora» → el servidor pregunta por hoy", async () => {
+    const { temporal, r } = await desdeFormulario({
+      use_case: "ask", temporal_mode: "current",
+      question: "¿Cuál es el plazo de expedición comprometido?",
+    });
+    assert(temporal.mode === "current", `el alcance llegó como ${temporal.mode}`);
+    assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
+    if (!r.ok) return;
+    const doc = r.references.find((x) => /PR-|Procedimiento/.test(x.label));
+    assert(doc && /Revisión 2/.test(doc.label),
+      `citó ${doc?.label ?? "ninguna revisión"}`);
+  });
+
+  await check("B8. formulario «A fecha» → el servidor pregunta por ENTONCES", async () => {
+    // Éste es el defecto, tal cual: el usuario elige la fecha en la pantalla y
+    // lo que tiene que llegar al servidor es esa fecha, no «ahora».
+    const { temporal, r } = await desdeFormulario({
+      use_case: "ask", temporal_mode: "as_of", as_of: day(-180),
+      question: "¿Cuál era el plazo de expedición comprometido entonces?",
+    });
+    assert(temporal.mode === "as_of", `el alcance llegó como ${temporal.mode}`);
+    assert(temporal.asOf === day(-180), `la fecha llegó como ${temporal.asOf}`);
+    assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
+    if (!r.ok) return;
+
+    const doc = r.references.find((x) => /Procedimiento/.test(x.label));
+    assert(doc && /Revisión 1/.test(doc.label),
+      `citó «${doc?.label}» cuando debía citar la Revisión 1`);
+    assert(doc && doc.deepLink !== null, "la cita histórica no lleva a ningún sitio");
+
+    // Y en la base tiene que quedar constancia del alcance histórico: si el run
+    // dice «current», el defecto ha vuelto aunque la respuesta acierte.
+    const { data } = await Q.from("quality_ai_runs")
+      .select("temporal_mode, as_of").eq("organization_id", A).eq("id", r.runId).single();
+    const f = data as Record<string, unknown>;
+    assert(f.temporal_mode === "as_of", `la consulta quedó registrada como ${f.temporal_mode}`);
+    assert(f.as_of === day(-180), `la consulta registró as_of=${f.as_of}`);
+  });
+
   await check("B3. la cita del documento dice a qué fecha y a qué revisión mira", async () => {
     const r = await runCopilot({
       organizationId: A, useCase: "ask", feature: "general", prompt: PROMPT_ASK,
@@ -461,6 +530,31 @@ async function main() {
         `procedencia con la plantilla equivocada: ${t.prompt_template}`);
       assert(t.status === "proposed", "un tema nació ya confirmado");
     }
+  });
+
+  await check("C1b. formulario «Temas de clientes» → ese uso, y con su periodo", async () => {
+    const { useCase, temporal, r } = await desdeFormulario({
+      use_case: "customer_themes", temporal_mode: "period",
+      period_start: day(-180), period_end: day(0),
+      question: "¿Qué temas plantean los clientes?",
+    });
+    assert(useCase === "customer_themes", `el uso llegó como ${useCase}`);
+    assert(temporal.mode === "period", `el alcance llegó como ${temporal.mode}`);
+    assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
+    if (!r.ok) return;
+
+    const { data } = await Q.from("quality_ai_runs")
+      .select("use_case, prompt_template, temporal_mode, period_start, period_end")
+      .eq("organization_id", A).eq("id", r.runId).single();
+    const f = data as Record<string, unknown>;
+    assert(f.use_case === "customer_themes",
+      `la consulta quedó registrada como uso ${f.use_case}`);
+    assert(f.prompt_template === "copilot.customer_themes",
+      `se usaron las instrucciones ${f.prompt_template}`);
+    assert(f.period_start === day(-180) && f.period_end === day(0),
+      `el periodo quedó ${f.period_start}…${f.period_end}`);
+    // Y con ese uso —y solo con ése— los temas se persisten.
+    assert(r.themesRecorded > 0, "no se guardó ningún tema con el uso correcto");
   });
 
   await check("C2. el recuento sale de la evidencia REAL, no de lo que diga nadie", async () => {

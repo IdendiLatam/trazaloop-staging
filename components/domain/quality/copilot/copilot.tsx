@@ -12,6 +12,7 @@ import {
   AI_DISCLAIMER, AI_INFERENCE_IS_NOT_EVIDENCE, AI_IS_NOT_A_DECISION,
   AI_IS_NOT_AUTOMATION, DATA_HANDLING_NOTE, EVIDENCE_LABEL, EVIDENCE_MEANING,
   HUMAN_IN_THE_LOOP, NO_LEARNING_CLAIM, plainText, starterFor,
+  USE_CASES, USE_CASE_LABEL, type AiUseCase,
 } from "@/lib/domain/quality-ai";
 
 /**
@@ -35,6 +36,11 @@ import {
 
 const initial: AiActionState = { error: null };
 
+/** Una fecha de hace N días, en el formato que espera un campo de fecha. */
+function hace(dias: number): string {
+  return new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
+}
+
 const inputClass =
   "block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink "
   + "placeholder:text-ink-soft/60 focus:border-loop";
@@ -54,6 +60,16 @@ export function CopilotPanel({
 }: CopilotProps) {
   const [state, action, pending] = useActionState(askCopilotAction, initial);
   const [pregunta, setPregunta] = useState("");
+  // §21/§22 · Sobre qué momento se pregunta. Es una lista cerrada, no una fecha
+  // suelta: de ella depende qué revisión de un documento se lee y qué periodo
+  // se mide. El servidor la vuelve a validar, pero si aquí no hay control, el
+  // servidor recibe siempre «ahora» — que es lo que pasaba hasta QUALITY-12.1.
+  const [modo, setModo] = useState<"current" | "as_of" | "period">("current");
+  const [asOf, setAsOf] = useState(hace(180));
+  const [desde, setDesde] = useState(hace(180));
+  const [hasta, setHasta] = useState(hace(0));
+  // §29 · El caso de uso tampoco lo escribe nadie: se elige de una lista.
+  const [useCase, setUseCase] = useState<string>(defaultUseCase);
   const starters = starterFor(pinned?.type ?? null);
 
   if (!enabled) {
@@ -93,7 +109,6 @@ export function CopilotPanel({
       ) : null}
 
       <form action={action} className="space-y-3">
-        <input type="hidden" name="use_case" value={defaultUseCase} />
         {pinned ? (
           <>
             <input type="hidden" name="pinned_type" value={pinned.type} />
@@ -112,6 +127,71 @@ export function CopilotPanel({
             </button>
           ))}
         </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-ink">Para qué preguntas</span>
+            <select
+              name="use_case" value={useCase} className={inputClass}
+              onChange={(e) => setUseCase(e.target.value)}
+            >
+              {USE_CASES.map((u) => (
+                <option key={u} value={u}>{USE_CASE_LABEL[u as AiUseCase]}</option>
+              ))}
+            </select>
+            <span className="block text-xs text-ink-soft">
+              De esto dependen las instrucciones y qué fuentes se consultan.
+            </span>
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-ink">Sobre qué momento</span>
+            <select
+              name="temporal_mode" value={modo} className={inputClass}
+              onChange={(e) => setModo(e.target.value as typeof modo)}
+            >
+              <option value="current">Ahora</option>
+              <option value="as_of">A una fecha pasada</option>
+              <option value="period">Un periodo</option>
+            </select>
+            <span className="block text-xs text-ink-soft">
+              {modo === "as_of"
+                ? "Se leerá lo que estaba vigente ese día, no lo de hoy."
+                : modo === "period"
+                  ? "Se medirá lo ocurrido dentro de esas fechas."
+                  : "Se leerá la situación de hoy."}
+            </span>
+          </label>
+        </div>
+
+        {/* Los campos de fecha solo existen cuando hacen falta: un `as_of`
+            colgando en una pregunta de «ahora» sería ruido que el servidor
+            tendría que ignorar, y lo ignorado acaba usándose por error. */}
+        {modo === "as_of" ? (
+          <label className="block space-y-1 sm:max-w-xs">
+            <span className="text-xs font-medium text-ink">Fecha</span>
+            <input
+              type="date" name="as_of" value={asOf} required max={hace(0)}
+              onChange={(e) => setAsOf(e.target.value)} className={inputClass} />
+          </label>
+        ) : null}
+
+        {modo === "period" ? (
+          <div className="grid gap-3 sm:max-w-md sm:grid-cols-2">
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink">Desde</span>
+              <input
+                type="date" name="period_start" value={desde} required
+                onChange={(e) => setDesde(e.target.value)} className={inputClass} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-ink">Hasta</span>
+              <input
+                type="date" name="period_end" value={hasta} required
+                onChange={(e) => setHasta(e.target.value)} className={inputClass} />
+            </label>
+          </div>
+        ) : null}
 
         <label className="block space-y-1">
           <span className="text-xs font-medium text-ink">Tu pregunta</span>
@@ -243,21 +323,7 @@ function Answer({ state }: { state: AiActionState }) {
         </section>
       ) : null}
 
-      {refs.length > 0 ? (
-        <section className="space-y-1">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink">Fuentes</h3>
-          <ul className="space-y-1">
-            {refs.map((r) => (
-              <li key={r.ordinal} className="text-xs text-ink-soft">
-                <span className="text-ink">[{r.ordinal}]</span>{" "}
-                {r.deepLink
-                  ? <Link className="underline" href={r.deepLink}>{r.label}</Link>
-                  : r.label}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {refs.length > 0 ? <Fuentes answer={a} refs={refs} /> : null}
 
       {meta && meta.limitations.length > 0 ? (
         <p className="text-xs text-ink-soft">
@@ -292,6 +358,55 @@ function Answer({ state }: { state: AiActionState }) {
 
       <Feedback runId={state.runId!} />
     </article>
+  );
+}
+
+/**
+ * QUALITY-12.1 · Las fuentes CITADAS delante; las consultadas, detrás.
+ *
+ * El paquete de contexto puede traer diecisiete fuentes y la respuesta apoyarse
+ * en una. Enseñar las diecisiete con el mismo peso hace difícil comprobar lo
+ * que de verdad sostiene la respuesta, que es justo para lo que están.
+ *
+ * Las otras NO se esconden: siguen ahí, desplegables, porque saber qué se miró
+ * —y no se usó— es parte de poder auditar la respuesta.
+ */
+function Fuentes({
+  answer, refs,
+}: {
+  answer: NonNullable<AiActionState["answer"]>;
+  refs: NonNullable<AiActionState["references"]>;
+}) {
+  const citadas = new Set(answer.facts.flatMap((f) => f.references));
+  const usadas = refs.filter((r) => citadas.has(r.ordinal));
+  const resto = refs.filter((r) => !citadas.has(r.ordinal));
+
+  const fila = (r: (typeof refs)[number]) => (
+    <li key={r.ordinal} className="text-xs text-ink-soft">
+      <span className="text-ink">[{r.ordinal}]</span>{" "}
+      {r.deepLink
+        ? <Link className="underline" href={r.deepLink}>{r.label}</Link>
+        : r.label}
+    </li>
+  );
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-ink">
+        {usadas.length > 0 ? "Fuentes citadas" : "Fuentes consultadas"}
+      </h3>
+      <ul className="space-y-1">{(usadas.length > 0 ? usadas : refs).map(fila)}</ul>
+
+      {usadas.length > 0 && resto.length > 0 ? (
+        <details>
+          <summary className="cursor-pointer text-xs text-ink-soft">
+            Se consultaron {refs.length} fuentes en total; {resto.length} no se
+            citaron en la respuesta
+          </summary>
+          <ul className="mt-1 space-y-1">{resto.map(fila)}</ul>
+        </details>
+      ) : null}
+    </section>
   );
 }
 

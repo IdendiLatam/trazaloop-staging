@@ -14,7 +14,8 @@ import {
   PROMPT_REVIEW_SUMMARY, PROMPT_RISK_CANDIDATES, PROMPT_ROOT_CAUSE,
   type PromptTemplate,
 } from "@/lib/ai/prompts";
-import { SUGGESTION_KINDS, USE_CASES } from "@/lib/domain/quality-ai";
+import { SUGGESTION_KINDS } from "@/lib/domain/quality-ai";
+import { readTemporal, readUseCase } from "@/lib/domain/quality-ai-request";
 import type { AiAnswer } from "@/lib/ai/schemas";
 
 /**
@@ -86,15 +87,6 @@ const PROMPTS: Record<string, PromptTemplate> = {
   customer_themes: PROMPT_CUSTOMER_THEMES,
 };
 
-/** §29 · La pregunta de la persona es MATERIAL de la consulta, nunca una
- *  instrucción del sistema. Y el caso de uso NO lo elige ella libremente: se
- *  escoge de una lista cerrada, porque de él dependen la política y el
- *  contexto. */
-function readUseCase(form: FormData): string {
-  const v = text(form, "use_case");
-  return (USE_CASES as readonly string[]).includes(v) ? v : "ask";
-}
-
 function featureFor(useCase: string): "general" | "people" | "customer" | "drafts" {
   if (useCase === "customer_themes") return "customer";
   return "general";
@@ -131,16 +123,7 @@ export async function askCopilotAction(
 
   // §21/§22 · Sobre qué momento se pregunta. Lo elige la pantalla con una lista
   // cerrada, no una fecha suelta escrita a mano.
-  const modo = text(formData, "temporal_mode");
-  const temporal = modo === "as_of" && optional(formData, "as_of")
-    ? { mode: "as_of" as const, asOf: optional(formData, "as_of") }
-    : modo === "period" && optional(formData, "period_start")
-      ? {
-          mode: "period" as const,
-          periodStart: optional(formData, "period_start"),
-          periodEnd: optional(formData, "period_end"),
-        }
-      : { mode: "current" as const };
+  const temporal = readTemporal(formData);
 
   try {
     const r = await runCopilot({

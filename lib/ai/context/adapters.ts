@@ -667,7 +667,8 @@ registerAdapter({
   async load(db: Db, req: ContextRequest, w: ContextWriter) {
     let q = db.from("v_quality_objective_performance")
       .select("objective_id, code, name, period_start, period_end, admin_state, "
-        + "indicator_count, indicators_not_met, indicators_without_data")
+        + "indicator_count, indicators_not_met, indicators_without_data, "
+        + "performance, performance_explanation")
       .eq("organization_id", req.organizationId)
       .limit(LIMITE);
     if (req.pinned?.type === "quality_objective") q = q.eq("objective_id", req.pinned.id);
@@ -686,12 +687,41 @@ registerAdapter({
         deepLink: `/quality/objectives/${o.objective_id}`,
       });
       nums.push(n);
+
+      // Un objetivo SIN indicadores no es un objetivo que va bien: es un
+      // objetivo que no se está midiendo. Decir «0 no cumplen la meta» era
+      // técnicamente cierto y se leía como lo contrario de lo que pasa —y
+      // chocaba de frente con el indicador que sí está fuera de meta y que
+      // otra fuente trae en el mismo paquete—. La vista ya calcula el
+      // veredicto y su explicación: se usan esos, no los contadores en crudo.
+      const sinIndicadores = Number(o.indicator_count ?? 0) === 0;
       w.fact(
         `El objetivo «${o.name}» (${o.code}) del periodo ${o.period_start} — `
-        + `${o.period_end} está ${o.admin_state} y se mide con `
-        + `${o.indicator_count ?? 0} indicador(es): ${o.indicators_not_met ?? 0} `
-        + `no cumple(n) la meta y ${o.indicators_without_data ?? 0} no tiene(n) dato.`,
+        + `${o.period_end} está ${o.admin_state}. `
+        + (sinIndicadores
+          ? "No tiene ningún indicador asociado, así que su cumplimiento NO se "
+            + "puede medir con datos: que no haya indicadores fuera de meta no "
+            + "significa que el objetivo se esté cumpliendo."
+          : `Se mide con ${o.indicator_count} indicador(es): `
+            + `${o.indicators_not_met ?? 0} no cumple(n) la meta y `
+            + `${o.indicators_without_data ?? 0} no tiene(n) dato.`),
         [n]);
+
+      if (typeof o.performance_explanation === "string"
+        && o.performance_explanation.length > 0) {
+        w.fact(`Trazaloop resume su desempeño así: ${o.performance_explanation}`, [n]);
+      }
+
+      // §68 · Si el objetivo no se mide y en la empresa hay indicadores fuera
+      // de meta, las dos cosas juntas se leen mal. No se elige entre ellas: se
+      // dice que conviven.
+      if (sinIndicadores) {
+        w.conflict(
+          `El objetivo «${o.code}» no tiene indicadores asociados, de modo que `
+          + `sus recuentos de cumplimiento son cero por falta de medición, no `
+          + `por buen desempeño. No los compares con los indicadores sueltos `
+          + `que aparezcan en esta misma respuesta.`);
+      }
     }
     w.fact(`Hay ${filas.length} objetivo(s) en el alcance consultado.`, nums);
   },
@@ -814,15 +844,31 @@ registerAdapter({
         deepLink: `/quality/people/knowledge`,
       });
       nums.push(n);
+
+      // Cero titulares NO es una versión suave de «uno»: es peor. Un
+      // conocimiento crítico que no domina nadie ya se perdió, y decirlo con
+      // la misma frase que «lo domina una sola persona» borra la diferencia
+      // justo en la pregunta donde importa.
+      const titulares = Number(k.holder_count ?? 0);
+      const quienes = titulares === 0
+        ? "no consta que lo domine NADIE en plantilla, que es una situación "
+          + "peor que depender de una sola persona"
+        : titulares === 1
+          ? "lo domina UNA SOLA persona, de modo que depende enteramente de ella"
+          : `lo dominan ${titulares} personas`;
       w.fact(
-        `El conocimiento «${k.title}» es de criticidad ${k.criticality}, lo `
-        + `dominan ${k.holder_count ?? 0} persona(s)`
-        + (k.continuity_attention ? " y su continuidad requiere atención" : "")
+        `El conocimiento «${k.title}» es de criticidad ${k.criticality} y `
+        + `${quienes}`
+        + (k.continuity_attention ? "; su continuidad requiere atención" : "")
         + `; su documentación está ${k.documentation_status}.`, [n]);
     }
     const enRiesgo = filas.filter((k) => k.continuity_attention === true).length;
+    const sinNadie = filas.filter((k) => Number(k.holder_count ?? 0) === 0).length;
+    const unoSolo = filas.filter((k) => Number(k.holder_count ?? 0) === 1).length;
     w.fact(
-      `De los conocimientos consultados, ${enRiesgo} requiere(n) atención por continuidad.`,
+      `De los ${filas.length} conocimiento(s) consultado(s), ${enRiesgo} `
+      + `requiere(n) atención por continuidad: ${unoSolo} depende(n) de una sola `
+      + `persona y ${sinNadie} no tiene(n) ningún titular registrado.`,
       nums);
   },
 });
