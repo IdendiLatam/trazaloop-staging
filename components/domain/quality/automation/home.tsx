@@ -12,7 +12,7 @@ import {
   SEVERITY_LABEL, SIGNAL_STATUS_LABEL, type AutomationDomain,
 } from "@/lib/domain/quality-automation";
 import {
-  runAutomationAction, updateSettingsAction,
+  processEventsAction, runAutomationAction, updateSettingsAction,
 } from "@/server/actions/quality-automation";
 
 /**
@@ -181,11 +181,21 @@ export function AutomationHome({
         />
 
         {canManage ? (
-          <ActionForm action={runAutomationAction} submitLabel="Ejecutar ahora">
-            <p className="text-xs text-ink-soft">
-              El barrido manual usa exactamente el mismo motor que el programado.
-            </p>
-          </ActionForm>
+          <div className="space-y-2">
+            <ActionForm action={runAutomationAction} submitLabel="Ejecutar ahora">
+              <p className="text-xs text-ink-soft">
+                El barrido manual usa exactamente el mismo motor que el programado.
+              </p>
+            </ActionForm>
+            {/* QUALITY-11.1 · §29 · La misma puerta, para lo que ya ocurrió. */}
+            <ActionForm action={processEventsAction} submitLabel="Procesar hechos pendientes">
+              <p className="text-xs text-ink-soft">
+                Enruta los hechos que han ocurrido desde la última pasada a las
+                reglas que los escuchan. Procesar dos veces el mismo hecho no
+                emite dos veces.
+              </p>
+            </ActionForm>
+          </div>
         ) : null}
       </Card>
 

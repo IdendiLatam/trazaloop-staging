@@ -90,12 +90,44 @@ export async function listSources(client?: Db): Promise<SourceRow[]> {
   }));
 }
 
+/** §11 · Los hechos de negocio a los que una regla puede reaccionar. */
+export type EventCatalogRow = {
+  eventType: string; label: string; domain: AutomationDomain;
+  subjectType: string; description: string | null; sourceCode: string | null;
+  order: number;
+};
+
+export async function listEventCatalog(client?: Db): Promise<EventCatalogRow[]> {
+  const supabase = await db(client);
+  const [eventos, contratos] = await Promise.all([
+    supabase.from("quality_automation_event_catalog").select("*").order("position_order"),
+    supabase.from("quality_automation_event_contracts").select("subject_type, source_code"),
+  ]);
+  if (eventos.error) {
+    throw new Error(fail(eventos.error, "No se pudo leer el catálogo de hechos."));
+  }
+  const porSujeto = new Map<string, string>();
+  for (const c of contratos.data ?? []) {
+    porSujeto.set(c.subject_type as string, c.source_code as string);
+  }
+  return (eventos.data ?? []).map((e) => ({
+    eventType: e.event_type as string,
+    label: e.label as string,
+    domain: e.domain as AutomationDomain,
+    subjectType: e.subject_type as string,
+    description: (e.description as string | null) ?? null,
+    sourceCode: porSujeto.get(e.subject_type as string) ?? null,
+    order: Number(e.position_order ?? 1),
+  }));
+}
+
 export type TemplateRow = {
   code: string; name: string; description: string;
   category: AutomationDomain; sourceCode: string;
   autonomyLevel: AutonomyLevel; severity: Severity; signalTitle: string;
   conditions: Condition[]; outputs: Output[];
   tunable: Record<string, unknown>[]; rationale: string; order: number;
+  triggerKind: string; eventTypes: string[] | null; supersedesObserver: string | null;
 };
 
 export async function listTemplates(client?: Db): Promise<TemplateRow[]> {
@@ -116,6 +148,9 @@ export async function listTemplates(client?: Db): Promise<TemplateRow[]> {
     tunable: (t.tunable ?? []) as Record<string, unknown>[],
     rationale: t.rationale as string,
     order: Number(t.position_order ?? 1),
+    triggerKind: (t.trigger_kind as string | null) ?? "schedule",
+    eventTypes: (t.event_types as string[] | null) ?? null,
+    supersedesObserver: (t.supersedes_observer as string | null) ?? null,
   }));
 }
 
@@ -305,6 +340,9 @@ export type SignalRow = {
   ruleId: string | null; ruleCode: string | null; ruleName: string | null;
   ruleVersionId: string | null; ruleVersionNumber: number | null;
   runId: string | null;
+  fromEvent: boolean; sourceEventId: string | null;
+  sourceEventType: string | null; sourceEventLabel: string | null;
+  sourceEventAt: string | null;
   alertCount: number; taskCount: number; openTaskCount: number;
 };
 
@@ -337,6 +375,12 @@ function mapSignal(s: Record<string, unknown>): SignalRow {
     ruleVersionId: (s.rule_version_id as string | null) ?? null,
     ruleVersionNumber: s.rule_version_number ? Number(s.rule_version_number) : null,
     runId: (s.run_id as string | null) ?? null,
+    // §38 · De dónde vino: del hecho que ocurrió, o del barrido de la noche.
+    fromEvent: s.from_event === true,
+    sourceEventId: (s.source_event_id as string | null) ?? null,
+    sourceEventType: (s.source_event_type as string | null) ?? null,
+    sourceEventLabel: (s.source_event_label as string | null) ?? null,
+    sourceEventAt: (s.source_event_at as string | null) ?? null,
     alertCount: Number(s.alert_count ?? 0),
     taskCount: Number(s.task_count ?? 0),
     openTaskCount: Number(s.open_task_count ?? 0),
@@ -553,6 +597,7 @@ export async function createRule(
     ownerPositionId: string | null; autonomyLevel: AutonomyLevel;
     severity: Severity; signalTitle: string;
     conditions: Condition[]; outputs: Output[];
+    triggerKind?: string; eventTypes?: string[] | null;
   },
   client?: Db
 ): Promise<string> {
@@ -567,7 +612,9 @@ export async function createRule(
 
   const { error: ev } = await supabase.from("quality_automation_rule_versions").insert({
     organization_id: organizationId, rule_id: data!.id, version_number: 1,
-    status: "draft", trigger_kind: "schedule", schedule_frequency: "daily",
+    status: "draft", trigger_kind: input.triggerKind ?? "schedule",
+    schedule_frequency: "daily",
+    event_types: input.triggerKind === "event" ? (input.eventTypes ?? []) : null,
     conditions: JSON.parse(JSON.stringify(input.conditions)),
     outputs: outputsToDb(input.outputs),
     severity: input.severity, signal_title: input.signalTitle,
@@ -619,6 +666,7 @@ export async function createVersion(
     conditions: Condition[]; outputs: Output[];
     severity: Severity; signalTitle: string;
     triggerKind: string; scheduleFrequency: string; changeNote: string | null;
+    eventTypes?: string[] | null;
   },
   client?: Db
 ): Promise<string> {
@@ -632,6 +680,7 @@ export async function createVersion(
     organization_id: organizationId, rule_id: ruleId, version_number: siguiente,
     status: "draft", trigger_kind: input.triggerKind,
     schedule_frequency: input.scheduleFrequency,
+    event_types: input.triggerKind === "event" ? (input.eventTypes ?? []) : null,
     conditions: JSON.parse(JSON.stringify(input.conditions)),
     outputs: outputsToDb(input.outputs),
     severity: input.severity, signal_title: input.signalTitle,
@@ -696,6 +745,72 @@ export async function runAutomation(
   });
   if (error) throw new Error(fail(error, "No se pudo ejecutar la automatización."));
   return data as string;
+}
+
+/** §10/§29 · Drenar los hechos pendientes. Es el MISMO motor: esta función no
+ *  evalúa nada por su cuenta, solo abre la puerta. */
+export async function processEvents(
+  organizationId: string, limit = 500, today: string | null = null, client?: Db
+): Promise<string> {
+  const supabase = await db(client);
+  const { data, error } = await supabase.rpc("quality_automation_process_events", {
+    p_organization_id: organizationId, p_limit: limit, p_today: today,
+  });
+  if (error) throw new Error(fail(error, "No se pudieron procesar los hechos pendientes."));
+  return data as string;
+}
+
+/** §21 · Los acuses de un hecho: qué regla lo vio y en qué acabó. */
+export type EventDeliveryRow = {
+  id: string; eventId: string; eventType: string | null; eventLabel: string | null;
+  ruleId: string; ruleName: string | null; status: string; attempts: number;
+  signalId: string | null; signalCreated: boolean; errorMessage: string | null;
+  processedAt: string;
+};
+
+export async function listEventDeliveries(
+  organizationId: string, runId: string, client?: Db
+): Promise<EventDeliveryRow[]> {
+  const supabase = await db(client);
+  const { data, error } = await supabase
+    .from("quality_automation_event_deliveries")
+    .select("id, event_id, rule_id, status, attempts, signal_id, signal_created, "
+      + "error_message, processed_at")
+    .eq("organization_id", organizationId).eq("run_id", runId)
+    .order("processed_at", { ascending: true });
+  if (error) throw new Error(fail(error, "No se pudieron leer los acuses."));
+  const filas = (data ?? []) as unknown as {
+    id: string; event_id: string; rule_id: string; status: string; attempts: number;
+    signal_id: string | null; signal_created: boolean; error_message: string | null;
+    processed_at: string;
+  }[];
+  if (filas.length === 0) return [];
+
+  const [eventos, reglas, catalogo] = await Promise.all([
+    supabase.from("work_events").select("id, event_type")
+      .in("id", filas.map((f) => f.event_id)),
+    supabase.from("quality_automation_rules").select("id, name")
+      .eq("organization_id", organizationId)
+      .in("id", [...new Set(filas.map((f) => f.rule_id))]),
+    supabase.from("quality_automation_event_catalog").select("event_type, label"),
+  ]);
+  const tipoDe = new Map((eventos.data ?? []).map((e) => [e.id as string, e.event_type as string]));
+  const nombreDe = new Map((reglas.data ?? []).map((r) => [r.id as string, r.name as string]));
+  const etiqueta = new Map((catalogo.data ?? []).map((c) => [c.event_type as string, c.label as string]));
+
+  return filas.map((f) => {
+    const tipo = tipoDe.get(f.event_id) ?? null;
+    return {
+      id: f.id, eventId: f.event_id, eventType: tipo,
+      eventLabel: tipo ? etiqueta.get(tipo) ?? tipo : null,
+      ruleId: f.rule_id, ruleName: nombreDe.get(f.rule_id) ?? null,
+      status: f.status, attempts: Number(f.attempts ?? 1),
+      signalId: f.signal_id ?? null,
+      signalCreated: Boolean(f.signal_created),
+      errorMessage: f.error_message ?? null,
+      processedAt: f.processed_at,
+    };
+  });
 }
 
 export async function acknowledgeSignal(

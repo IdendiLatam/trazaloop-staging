@@ -120,6 +120,8 @@ const QUALITY_01_ALLOWED = new Set([
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
 ]);
 const MAX_DECLARED_MIGRATION = Math.max(...[...QUALITY_01_ALLOWED].map((f) => Number(f.slice(0, 4))));
 
@@ -1172,6 +1174,8 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ]);
   const later = files.filter((f) => Number(f.slice(0, 4)) >= 106);
   const intruders = later.filter((f) => !allowed.has(f));

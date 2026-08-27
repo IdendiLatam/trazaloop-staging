@@ -368,6 +368,8 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

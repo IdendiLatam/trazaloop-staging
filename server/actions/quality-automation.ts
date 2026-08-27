@@ -6,14 +6,15 @@ import { requireSession } from "@/lib/auth/require-session";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
 import {
   acknowledgeSignal, createRule, createVersion, deleteRule, instantiateTemplate,
-  publishVersion, resolveSignal, runAutomation, setRuleStatus, simulateVersion,
-  suppress, updateDraftVersion, updateRule, updateSettings, validateVersion,
+  processEvents, publishVersion, resolveSignal, runAutomation, setRuleStatus,
+  simulateVersion, suppress, updateDraftVersion, updateRule, updateSettings,
+  validateVersion,
 } from "@/lib/db/quality-automation";
 import {
   AUTOMATION_DOMAINS, AUTONOMY_LEVELS, canManageAutomation,
   canPublishAutomation, OPERATORS, OUTPUT_KINDS, RECIPIENT_KINDS, RULE_STATUSES,
-  SEVERITIES, validateConditions, validateOutputs,
-  type Condition, type Operator, type Output,
+  SEVERITIES, TRIGGER_KINDS, validateConditions, validateOutputs,
+  type Condition, type Operator, type Output, type TriggerKind,
 } from "@/lib/domain/quality-automation";
 
 /**
@@ -199,6 +200,22 @@ export async function instantiateTemplateAction(
   );
 }
 
+/** §35/§16 · Los hechos que la regla escucha se rearman en el SERVIDOR desde
+ *  las casillas marcadas, y la base comprueba que existan en el catálogo. El
+ *  navegador no manda un tipo de evento inventado; manda cuáles de la lista
+ *  marcó. */
+function readEventTypes(form: FormData): string[] {
+  const marcados = form.getAll("event_type")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0 && /^[a-z_]+\.[a-z_]+$/.test(v));
+  return [...new Set(marcados)];
+}
+
+function readTriggerKind(form: FormData): TriggerKind {
+  const v = String(form.get("trigger_kind") ?? "schedule");
+  return (TRIGGER_KINDS as readonly string[]).includes(v) ? (v as TriggerKind) : "schedule";
+}
+
 export async function createRuleAction(
   _prev: AutomationActionState, formData: FormData
 ): Promise<AutomationActionState> {
@@ -218,6 +235,11 @@ export async function createRuleAction(
 
   const conditions = readConditions(formData);
   const outputs = readOutputs(formData);
+  const disparo = readTriggerKind(formData);
+  const eventTypes = readEventTypes(formData);
+  if (disparo === "event" && eventTypes.length === 0) {
+    return { error: "Elige a qué hecho reacciona la regla." };
+  }
   const errores = [...validateConditions(conditions, {}), ...validateOutputs(outputs)]
     // La validación de campos y operadores contra el catálogo la hace la base:
     // aquí solo se comprueba la forma, para no viajar en balde.
@@ -235,6 +257,7 @@ export async function createRuleAction(
       autonomyLevel: pick(formData, "autonomy_level", AUTONOMY_LEVELS, "A")!,
       severity: pick(formData, "severity", SEVERITIES, "warning")!,
       signalTitle, conditions, outputs,
+      triggerKind: disparo, eventTypes,
     }),
     () => revalidateAutomation(),
     "Regla creada como borrador. Todavía no observa nada: simúlala primero y "
@@ -339,7 +362,8 @@ export async function createVersionAction(
       conditions, outputs,
       severity: pick(formData, "severity", SEVERITIES, "warning")!,
       signalTitle,
-      triggerKind: "schedule",
+      triggerKind: readTriggerKind(formData),
+      eventTypes: readEventTypes(formData),
       scheduleFrequency: text(formData, "schedule_frequency") || "daily",
       changeNote: optional(formData, "change_note"),
     }),
@@ -464,6 +488,25 @@ export async function runAutomationAction(
     () => revalidateAutomation(),
     "Barrido ejecutado. Abre «Ejecuciones» para ver qué evaluó y qué creó: lo "
       + "que informa es lo NUEVO de esta pasada, no cuántas señales existen."
+  );
+}
+
+/** QUALITY-11.1 · §29 · Drenar los hechos pendientes a mano. Es el mismo motor
+ *  y la misma puerta: aquí no se evalúa nada por separado. */
+export async function processEventsAction(
+  _prev: AutomationActionState, _formData: FormData
+): Promise<AutomationActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  if (!canManageAutomation(g.ok.roleCode)) {
+    return { error: "Tu rol no permite procesar la automatización." };
+  }
+
+  return run(
+    () => processEvents(g.ok!.organizationId),
+    () => revalidateAutomation(),
+    "Hechos pendientes procesados. Abre «Ejecuciones» para ver cuáles se "
+      + "enrutaron y qué reglas reaccionaron."
   );
 }
 

@@ -50,3 +50,33 @@ Algunos barridos heredados devuelven el **total** de la condición y no las fila
 nuevas. Contarlos tal cual habría hecho que la ejecución mintiera sobre lo que
 creó. El motor mide el **delta real** de avisos alrededor de cada llamada, lo que
 respeta el contrato de todos y dice la verdad (§44).
+
+---
+
+# Adenda · QUALITY-11.1 (§40)
+
+El estado final de los dos que quedaban en `SKIPPED UNDER SCHEDULER` ya no es
+ese. La tabla de arriba se mantiene como quedó al cerrar QUALITY-11 —es lo que
+era cierto entonces— y esta adenda dice lo que es cierto ahora:
+
+| Mecanismo anterior | Dominio | Estado en QUALITY-11 | Estado en QUALITY-11.1 |
+|---|---|---|---|
+| `quality_scan_pending_measurements` | indicadores | integrado · **omitido bajo el planificador** | **ADAPTED** · corre sin sesión con los mismos permisos cuando la hay, y **cede** ante la regla `indicator_measurement_due` si la empresa la adopta |
+| `work_scan_pending_actions` | acciones | integrado · **omitido bajo el planificador** | **ADAPTED** · igual, y cede ante `action_overdue` |
+| los otros seis | varios | integrados | **sin cambios** |
+
+## Qué significa ADAPTED aquí
+
+1. **Su lógica de negocio no se tocó.** Las mismas consultas, las mismas claves
+   de dedupe, los mismos tipos de aviso y de tarea. Las suites de QUALITY-03 y
+   QUALITY-04 pasan sin modificar una línea.
+
+2. **Su guarda de sesión se alineó con la de los otros seis.** Con sesión, los
+   mismos permisos de siempre; sin sesión, proceso del sistema. No se usa
+   `service_role` para saltarse nada.
+
+3. **Aprendieron a callar.** Si la empresa adopta la regla equivalente de
+   QUALITY-11, el barrido heredado devuelve 0 sin emitir. La comprobación vive
+   dentro de la función, así que vale igual la llame quien la llame.
+
+**No hay motor duplicado, y ahora tampoco hay condición sin observar.**

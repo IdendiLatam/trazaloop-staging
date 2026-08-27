@@ -250,10 +250,12 @@ async function main() {
       "no se resuelve el día de negocio");
   });
 
-  await check("A4. las catorce plantillas están disponibles y NINGUNA activa", async () => {
+  await check("A4. las plantillas están disponibles y NINGUNA activa", async () => {
+    // QUALITY-11.1 subió la biblioteca de 14 a 21: tres de paridad con los
+    // barridos heredados y cuatro por evento.
     const { data, error } = await Q.from("quality_automation_rule_templates")
       .select("code, source_code, severity");
-    assert(!error && (data?.length ?? 0) === 14,
+    assert(!error && (data?.length ?? 0) === 21,
       `hay ${data?.length} plantillas: ${error?.message}`);
     const { count } = await Q.from("quality_automation_rules")
       .select("id", { count: "exact", head: true }).eq("organization_id", A);
@@ -1477,11 +1479,10 @@ async function main() {
       "el barrido programado no vio ningún sujeto: sin sesión se quedaría ciego");
   });
 
-  await check("V1b. un barrido heredado que exige sesión se OMITE, no falla (0130)", async () => {
-    // Dos de los ocho —mediciones pendientes y acciones vencidas— se
-    // escribieron como acciones de pantalla. Sin sesión no pueden ejecutarse,
-    // y eso es una precondición conocida, no una avería: contarlo como fallo
-    // pintaría de rojo todas las noches.
+  await check("V1b. los OCHO barridos heredados corren sin sesión (0131)", async () => {
+    // La 0130 los anotaba como omitidos porque exigían sesión. QUALITY-11.1
+    // cerró ese hueco: ahora los ocho se ejecutan también de noche, con los
+    // mismos permisos de siempre cuando SÍ hay sesión.
     const { data: runId } = await admin.rpc("quality_automation_run", {
       p_organization_id: A, p_mode: "live", p_rule_id: null, p_today: null,
     });
@@ -1493,10 +1494,11 @@ async function main() {
     assert(fallidos.length === 0,
       `el barrido programado dejó ${fallidos.length} observadores en fallo: `
       + JSON.stringify(fallidos));
-    assert(omitidos.length === 2,
-      `se omitieron ${omitidos.length} observadores en vez de los dos que exigen sesión`);
-    assert(omitidos.every((x) => String(x.error_message).includes("exige una sesión")),
-      "la omisión no explica por qué");
+    assert(omitidos.length === 0,
+      `todavía se omiten ${omitidos.length} observadores sin sesión: `
+      + JSON.stringify(omitidos));
+    assert((filas ?? []).length === 8,
+      `corrieron ${filas?.length} observadores de plataforma en vez de 8`);
     const r = await resumenEjecucion(Q, runId as string);
     assert(r.status === "success", `la ejecución quedó en «${r.status}» por una omisión conocida`);
     assert(Number(r.failures) === 0, `la ejecución contó ${r.failures} fallos`);

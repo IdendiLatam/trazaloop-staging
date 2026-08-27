@@ -494,6 +494,8 @@ check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA post
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

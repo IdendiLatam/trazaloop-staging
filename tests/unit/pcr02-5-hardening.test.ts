@@ -67,6 +67,8 @@ const QUALITY_01_ALLOWED = new Set([
   "0129_quality_automation_observation.sql",
   // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
   "0130_quality_automation_scheduled_observers.sql",
+  // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+  "0131_quality_automation_event_bridge.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -518,6 +520,8 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

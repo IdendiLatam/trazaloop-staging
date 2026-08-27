@@ -23,8 +23,15 @@ export const runtime = "nodejs";
  *
  * QUÉ NO HACE
  *
- * · No evalúa nada por su cuenta: llama a `quality_automation_run`, que es la
- *   MISMA función que usan el botón «Ejecutar ahora» y la simulación.
+ * · No evalúa nada por su cuenta: llama a `quality_automation_process_events` y
+ *   a `quality_automation_run`, que son las MISMAS funciones que usan el botón
+ *   «Ejecutar ahora», el botón «Procesar hechos» y la simulación.
+ *
+ * QUALITY-11.1 · Cada pasada hace las dos cosas y en este orden: primero drena
+ * los hechos pendientes —para que lo ocurrido durante el día llegue a quien
+ * corresponde— y después barre el estado. El orden importa poco para el
+ * resultado, porque la clave de dedupe es la misma en los dos caminos, pero
+ * mucho para la lectura del informe: primero lo que pasó, luego lo que hay.
  * · No acepta reglas, condiciones ni sujetos desde la petición. Solo la empresa
  *   —y opcionalmente el día de negocio, para las pruebas—.
  * · No devuelve nada que no sea el recuento de lo que hizo.
@@ -78,20 +85,32 @@ export async function POST(request: Request) {
     for (const row of data ?? []) orgs.push(row.organization_id as string);
   }
 
-  const resultados: { organization_id: string; run_id?: string; error?: string }[] = [];
+  const resultados: {
+    organization_id: string; event_run_id?: string; run_id?: string; error?: string;
+  }[] = [];
   for (const org of orgs) {
     // §45 · Una empresa que falla no arrastra a las demás.
-    const { data, error } = await supabase.rpc("quality_automation_run", {
+    const fila: (typeof resultados)[number] = { organization_id: org };
+
+    const eventos = await supabase.rpc("quality_automation_process_events", {
+      p_organization_id: org, p_limit: 500, p_today: dia,
+    });
+    if (eventos.error) fila.error = eventos.error.message;
+    else fila.event_run_id = eventos.data as string;
+
+    const barrido = await supabase.rpc("quality_automation_run", {
       p_organization_id: org, p_mode: "live", p_rule_id: null, p_today: dia,
     });
-    resultados.push(error
-      ? { organization_id: org, error: error.message }
-      : { organization_id: org, run_id: data as string });
+    if (barrido.error) fila.error = barrido.error.message;
+    else fila.run_id = barrido.data as string;
+
+    resultados.push(fila);
   }
 
   return NextResponse.json({
     organizations: orgs.length,
     runs: resultados.filter((r) => r.run_id).length,
+    event_runs: resultados.filter((r) => r.event_run_id).length,
     failures: resultados.filter((r) => r.error).length,
     results: resultados,
   });

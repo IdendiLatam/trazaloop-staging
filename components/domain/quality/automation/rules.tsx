@@ -4,12 +4,15 @@ import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import {
   ActionForm, AutomationSubnav, Card, DomainNote, Field, inputClass, Pill, Table,
 } from "@/components/domain/quality/automation/shared";
-import type { RuleRow, SourceRow, TemplateRow } from "@/lib/db/quality-automation";
+import type {
+  EventCatalogRow, RuleRow, SourceRow, TemplateRow,
+} from "@/lib/db/quality-automation";
 import {
   AUTOMATION_DOMAIN_LABEL, AUTONOMY_LEVEL_LABEL, AUTONOMY_LEVEL_MEANING,
   AUTONOMY_LEVELS, CONDITION_IS_NOT_A_DECISION, describeRule, formatDate,
   NO_LEVEL_DECIDES, OPERATOR_LABEL, OPERATOR_SEMANTICS, RULE_STATUS_LABEL,
-  SEVERITIES, SEVERITY_IS_DECLARED, SEVERITY_LABEL, VERSION_IS_FROZEN,
+  SEVERITIES, SEVERITY_IS_DECLARED, SEVERITY_LABEL, TRIGGER_KIND_LABEL,
+  TRIGGER_KIND_MEANING, VERSION_IS_FROZEN,
   type AutomationDomain, type Operator,
 } from "@/lib/domain/quality-automation";
 import {
@@ -26,13 +29,14 @@ export type Option = { id: string; label: string };
  * el motor está encendido y apagado a la vez.
  */
 export function RulesScreen({
-  rules, templates, sources, positions, canManage,
+  rules, templates, sources, positions, canManage, eventCatalog = [],
 }: {
   rules: RuleRow[];
   templates: TemplateRow[];
   sources: SourceRow[];
   positions: Option[];
   canManage: boolean;
+  eventCatalog?: EventCatalogRow[];
 }) {
   const porCategoria = new Map<string, RuleRow[]>();
   for (const r of rules) {
@@ -126,12 +130,29 @@ export function RulesScreen({
             día llena la bandeja de ruido, y a partir de ahí nadie la mira.
           </DomainNote>
           <Table
-            headers={["Plantilla", "Observa", "Por qué existe", "Gravedad", ""]}
+            headers={["Plantilla", "Cuándo mira", "Observa", "Por qué existe",
+                      "Gravedad", ""]}
             empty="—"
             rows={templates.map((t) => [
               <span key="n">
                 {t.name}
                 <span className="block text-ink-soft">{t.description}</span>
+                {t.supersedesObserver ? (
+                  <span className="block text-ink-soft">
+                    Al adoptarla, el aviso antiguo de este mismo asunto deja de
+                    emitirse: una condición, un aviso.
+                  </span>
+                ) : null}
+              </span>,
+              <span key="t">
+                {TRIGGER_KIND_LABEL[(t.triggerKind === "event" ? "event" : "schedule")]}
+                {t.triggerKind === "event" && (t.eventTypes ?? []).length > 0 ? (
+                  <span className="block text-ink-soft">
+                    {(t.eventTypes ?? [])
+                      .map((e) => eventCatalog.find((c) => c.eventType === e)?.label ?? e)
+                      .join(" · ")}
+                  </span>
+                ) : null}
               </span>,
               sources.find((s) => s.code === t.sourceCode)?.label ?? t.sourceCode,
               t.rationale,
@@ -152,7 +173,8 @@ export function RulesScreen({
         >
           <DomainNote>{NO_LEVEL_DECIDES}</DomainNote>
           <DomainNote>{SEVERITY_IS_DECLARED}</DomainNote>
-          <RuleForm sources={sources} positions={positions} />
+          <RuleForm sources={sources} positions={positions}
+            eventCatalog={eventCatalog} />
         </Card>
       ) : null}
 
@@ -183,11 +205,59 @@ export function RulesScreen({
  * Operador · Valor · Entonces». Nada de nodos ni de JSON.
  */
 export function RuleForm({
-  sources, positions, defaultSourceCode,
-}: { sources: SourceRow[]; positions: Option[]; defaultSourceCode?: string }) {
+  sources, positions, defaultSourceCode, eventCatalog = [],
+}: {
+  sources: SourceRow[]; positions: Option[]; defaultSourceCode?: string;
+  eventCatalog?: EventCatalogRow[];
+}) {
   const fuente = sources.find((s) => s.code === defaultSourceCode) ?? sources[0];
   return (
     <ActionForm action={createRuleAction} submitLabel="Crear regla (borrador)">
+      {/* QUALITY-11.1 · §35 · CUANDO OCURRE · SI · ENTONCES. Las dos formas de
+          mirar, dichas como se dicen, sin una palabra técnica. */}
+      <div className="space-y-2 rounded-md border border-hairline bg-canvas px-3 py-2">
+        <p className="text-xs font-medium text-ink">CUÁNDO MIRA</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(["schedule", "event"] as const).map((k) => (
+            <label key={k} className="flex items-start gap-2 text-sm">
+              <input type="radio" name="trigger_kind" value={k}
+                defaultChecked={k === "schedule"} className="mt-1" />
+              <span>
+                {TRIGGER_KIND_LABEL[k]}
+                <span className="block text-xs text-ink-soft">
+                  {TRIGGER_KIND_MEANING[k]}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {eventCatalog.length > 0 ? (
+          <div className="space-y-1 pt-1">
+            <p className="text-xs font-medium text-ink">
+              CUANDO OCURRE · marca los hechos a los que reacciona
+            </p>
+            <div className="grid gap-1 sm:grid-cols-2">
+              {eventCatalog.map((e) => (
+                <label key={e.eventType} className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="event_type" value={e.eventType}
+                    className="mt-1" />
+                  <span>
+                    {e.label}
+                    <span className="block text-xs text-ink-soft">
+                      {AUTOMATION_DOMAIN_LABEL[e.domain]}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-ink-soft">
+              Solo cuentan si eliges «Cuando ocurre un hecho», y solo se puede
+              publicar si el hecho habla del mismo objeto que la regla observa.
+            </p>
+          </div>
+        ) : null}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Código">
           <input name="code" required className={inputClass} placeholder="AUT-001" />

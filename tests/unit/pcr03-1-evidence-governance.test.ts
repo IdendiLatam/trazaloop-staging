@@ -68,6 +68,8 @@ const QUALITY_01_ALLOWED = new Set([
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -197,6 +199,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

@@ -8,7 +8,8 @@ import {
   ACKNOWLEDGE_IS_NOT_RESOLVE, ALERT_IS_NOT_A_TASK, AUTOMATION_DOMAIN_LABEL,
   AUTOMATION_IS_NOT_AI, AUTONOMY_LEVEL_LABEL, AUTONOMY_LEVEL_MEANING,
   AUTO_RESOLUTION_LIMITS, CONDITION_IS_NOT_A_DECISION, CUSTOMER_ANONYMITY_HOLDS,
-  describeCondition, describeRun, explanationLines, FAILURE_IS_ISOLATED,
+  describeCondition, describeRun, describeSignalOrigin, explanationLines,
+  FAILURE_IS_ISOLATED,
   formatDate, formatDateTime, IDEMPOTENT_AND_REARMS, NO_EMPLOYEE_SURVEILLANCE,
   NO_LEVEL_DECIDES, OUTPUT_KIND_LABEL, RECIPIENT_KIND_LABEL,
   RUN_COUNTS_WHAT_IT_CREATED, RUN_KIND_LABEL, RUN_STATUS_LABEL,
@@ -418,6 +419,11 @@ export const qualityAutomationSignalDetail: ExportDefinition = {
             field("Código", signal.ruleCode),
             requiredField("Versión de la regla",
               signal.ruleVersionNumber !== null ? `v${signal.ruleVersionNumber}` : "—"),
+            // QUALITY-11.1 · §38 · Y por qué camino se detectó.
+            requiredField("Origen",
+              describeSignalOrigin(signal.fromEvent, signal.sourceEventLabel)),
+            field("El hecho ocurrió",
+              signal.sourceEventAt ? formatDateTime(signal.sourceEventAt) : null),
           ]), note(
             "Esta señal se explica con la versión que la emitió. Si la regla "
             + "cambió después, este papel sigue diciendo lo que decía entonces."

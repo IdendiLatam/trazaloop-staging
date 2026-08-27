@@ -9,7 +9,7 @@ import type { SignalRow } from "@/lib/db/quality-automation";
 import {
   ACKNOWLEDGE_IS_NOT_RESOLVE, ALERT_IS_NOT_A_TASK, AUTOMATION_DOMAIN_LABEL,
   AUTO_RESOLUTION_LIMITS, CUSTOMER_ANONYMITY_HOLDS, explanationLines,
-  formatDate, formatDateTime, IDEMPOTENT_AND_REARMS, NO_EMPLOYEE_SURVEILLANCE,
+  describeSignalOrigin, formatDate, formatDateTime, IDEMPOTENT_AND_REARMS, NO_EMPLOYEE_SURVEILLANCE,
   SEVERITY_LABEL, SIGNAL_IS_NOT_AN_ALERT, SIGNAL_STATUS_LABEL,
   SNAPSHOT_IS_MINIMAL, SUPPRESSION_IS_NOT_RESOLUTION, TASK_IS_NOT_AN_ACTION,
   type AutomationDomain,
@@ -48,7 +48,7 @@ export function SignalsScreen({
         action={<ExportPdfButton exportKey="quality.automation-signal.list" label="Descargar PDF" />}
       >
         <Table
-          headers={["Gravedad", "Señal", "Objeto", "Dominio", "Regla", "Detectada",
+          headers={["Gravedad", "Señal", "Objeto", "Dominio", "Origen", "Regla", "Detectada",
                     "Veces", "Alertas", "Tareas", "Estado", ""]}
           empty="No hay ninguna señal abierta."
           rows={abiertas.map((s) => [
@@ -70,6 +70,12 @@ export function SignalsScreen({
                 : null}
             </span>,
             AUTOMATION_DOMAIN_LABEL[s.domain as AutomationDomain] ?? s.domain,
+            <span key="or" className={s.fromEvent ? "text-ink" : "text-ink-soft"}>
+              {s.fromEvent ? "Por un hecho" : "Barrido"}
+              {s.fromEvent && s.sourceEventLabel
+                ? <span className="block text-ink-soft">{s.sourceEventLabel}</span>
+                : null}
+            </span>,
             <span key="r">
               {s.ruleCode ?? "—"}
               {s.ruleVersionNumber !== null
@@ -161,6 +167,12 @@ export function SignalFile({
           <Fact label="Regla" value={signal.ruleName ?? "—"} />
           <Fact label="Versión de la regla"
             value={signal.ruleVersionNumber !== null ? `v${signal.ruleVersionNumber}` : "—"} />
+          {/* QUALITY-11.1 · §38 · De dónde vino la señal. */}
+          <Fact label="Origen"
+            value={describeSignalOrigin(signal.fromEvent, signal.sourceEventLabel)} />
+          {signal.fromEvent && signal.sourceEventAt ? (
+            <Fact label="El hecho ocurrió" value={formatDateTime(signal.sourceEventAt)} />
+          ) : null}
           <Fact label="Detectada por primera vez" value={formatDateTime(signal.firstDetectedAt)} />
           <Fact label="Vista por última vez" value={formatDateTime(signal.lastDetectedAt)} />
           <Fact label="Veces detectada" value={String(signal.detectionCount)} />

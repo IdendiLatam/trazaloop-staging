@@ -1265,7 +1265,9 @@ check("T4. una empresa que falle no arrastra a las demás", () => {
 check("T5. la ejecución sin sesión se registra como PROGRAMADA, no como manual", () => {
   assert(/when auth\.uid\(\) is null then 'scheduled' else 'manual' end/.test(RUN),
     "no se distingue el barrido programado del disparado a mano");
-  assert(RUN_KINDS.join() === "manual,scheduled,simulation", "los tipos de ejecución cambiaron");
+  // QUALITY-11.1 añadió «event»: una ejecución nacida de un hecho que ocurrió.
+  assert(RUN_KINDS.join() === "manual,scheduled,simulation,event",
+    "los tipos de ejecución cambiaron");
 });
 
 check("T5b. el barrido programado NO se queda ciego sin sesión", () => {
@@ -1303,8 +1305,10 @@ check("U1. QUALITY-11 son DOS migraciones: la 0129 y su corrección 0130", () =>
   assert(migraciones.includes("0129_quality_automation_observation.sql"), "falta la 0129");
   assert(migraciones.includes("0130_quality_automation_scheduled_observers.sql"),
     "falta la corrección 0130");
-  assert(migraciones[migraciones.length - 1] === "0130_quality_automation_scheduled_observers.sql",
-    "la 0130 no es la última: alguien añadió algo por encima");
+  // QUALITY-11.1 añadió la 0131 POR ENCIMA, sin tocar ninguna de las dos.
+  const i129 = migraciones.indexOf("0129_quality_automation_observation.sql");
+  const i130 = migraciones.indexOf("0130_quality_automation_scheduled_observers.sql");
+  assert(i130 === i129 + 1, "alguien metió una migración entre la 0129 y la 0130");
 });
 
 check("U1b. la corrección toca UNA cosa y no reescribe la 0129", () => {

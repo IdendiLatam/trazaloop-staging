@@ -114,6 +114,8 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0129_quality_automation_observation.sql",
     // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
     "0130_quality_automation_scheduled_observers.sql",
+    // QUALITY-11.1: puente de eventos y paridad del barrido programado.
+    "0131_quality_automation_event_bridge.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

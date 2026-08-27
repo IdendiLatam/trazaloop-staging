@@ -212,6 +212,47 @@ export const RECIPIENT_IS_STRUCTURAL =
 // Reglas, versiones y autonomía (§18, §20…§24, AT-06)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Cómo se dispara una regla (QUALITY-11.1 · §10, §35)
+// ---------------------------------------------------------------------------
+
+export const TRIGGER_KINDS = ["schedule", "event"] as const;
+export type TriggerKind = (typeof TRIGGER_KINDS)[number];
+
+export const TRIGGER_KIND_LABEL: Record<TriggerKind, string> = {
+  schedule: "Revisando cada día",
+  event: "Cuando ocurre un hecho",
+};
+
+export const TRIGGER_KIND_MEANING: Record<TriggerKind, string> = {
+  schedule:
+    "La plataforma mira el estado de las cosas todos los días. Es lo que hace "
+    + "falta para «vence dentro de 30 días»: ese día no ocurre nada, simplemente "
+    + "se llega a él.",
+  event:
+    "La plataforma reacciona en cuanto algo pasa: se registra una queja, se "
+    + "cierra una evaluación, se carga una medición. No hay que esperar a la "
+    + "noche para enterarse.",
+};
+
+/** §59 · Lo que hace que los dos caminos no puedan duplicarse. */
+export const ONE_CONDITION_ONE_SIGNAL =
+  "La misma condición produce UNA señal, la detecte el hecho al ocurrir o el "
+  + "barrido de la noche. No hay que elegir entre los dos caminos ni evitar que "
+  + "coincidan: la identidad de la condición no incluye por dónde se detectó.";
+
+/** §14 · Un hecho no decide nada, igual que una condición no decide nada. */
+export const EVENT_IS_NOT_A_DECISION =
+  "Que ocurra un hecho no declara nada. Registrar una queja no la convierte en "
+  + "no conformidad; cerrar una evaluación no aprueba al proveedor; evaluar un "
+  + "hallazgo no lo formaliza. La regla por evento avisa antes, y nada más.";
+
+/** §22 · Por qué un hecho procesado dos veces no emite dos veces. */
+export const EVENT_DELIVERY_IS_ACKNOWLEDGED =
+  "De cada hecho queda escrito qué regla ya lo vio. Procesarlo otra vez no "
+  + "vuelve a evaluarlo, y un reintento después de un fallo retoma exactamente "
+  + "donde se quedó.";
+
 export const RULE_STATUSES = ["draft", "active", "inactive", "retired"] as const;
 export type RuleStatus = (typeof RULE_STATUSES)[number];
 
@@ -337,13 +378,14 @@ export const SUPPRESSION_IS_NOT_RESOLUTION =
 // Ejecuciones (§43, §44, §45, §72)
 // ---------------------------------------------------------------------------
 
-export const RUN_KINDS = ["manual", "scheduled", "simulation"] as const;
+export const RUN_KINDS = ["manual", "scheduled", "simulation", "event"] as const;
 export type RunKind = (typeof RUN_KINDS)[number];
 
 export const RUN_KIND_LABEL: Record<RunKind, string> = {
   manual: "Manual",
   scheduled: "Programada",
   simulation: "Simulación",
+  event: "Por un hecho ocurrido",
 };
 
 export const RUN_STATUSES = ["running", "success", "partial", "failed"] as const;
@@ -594,6 +636,34 @@ export function describeRun(r: RunSummary): string {
   }
   if (r.failures > 0) partes.push(`${r.failures} regla(s) con fallo`);
   return partes.join(" · ") + ".";
+}
+
+/** §36 · «Cuando ocurra X y se cumpla Y, la plataforma hará Z», generado
+ *  determinísticamente. La misma regla produce la misma frase, siempre. */
+export function describeEventRule(
+  eventLabels: string[], conditions: Condition[], outputs: Output[],
+  labels: Record<string, string> = {}
+): string {
+  const hechos = eventLabels.length > 0
+    ? eventLabels.map((e) => e.toLowerCase()).join(" o ")
+    : "ocurra el hecho";
+  const partes = conditions.map((c) => describeCondition(c, labels[c.field]));
+  const salidas = outputs.map((o) => {
+    switch (o.kind) {
+      case "CREATE_SIGNAL": return "emitirá una señal";
+      case "CREATE_ALERT": return "avisará al cargo responsable";
+      case "CREATE_TASK": return "creará una tarea";
+    }
+  });
+  return `Cuando ${hechos}` 
+    + (partes.length > 0 ? ` y ${partes.join(" y ")}` : "")
+    + `, Trazaloop ${salidas.length > 0 ? salidas.join(", ") : "no hará nada"}.`;
+}
+
+/** §38 · De dónde vino una señal, dicho como lo diría una persona. */
+export function describeSignalOrigin(fromEvent: boolean, eventLabel: string | null): string {
+  if (!fromEvent) return "Observación programada";
+  return eventLabel ? `Automatización por evento · ${eventLabel}` : "Automatización por evento";
 }
 
 /** §41 · La explicación de una señal, en líneas. */

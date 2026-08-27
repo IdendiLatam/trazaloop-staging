@@ -56,3 +56,22 @@ porque exista una tabla.
 La única limitación conocida no corresponde a ningún AT: es GAP-01 del informe
 —dos barridos heredados que exigen sesión y por tanto no corren bajo el
 planificador—, y viene de QUALITY-03 y QUALITY-04, no de esta capa.
+
+---
+
+# Adenda · QUALITY-11.1
+
+La matriz de arriba se mantiene como quedó: **45 IMPLEMENTED**. QUALITY-11.1 no
+cambia ningún veredicto, pero refuerza cuatro con evidencia que antes no existía:
+
+| AT | Refuerzo |
+|---|---|
+| **AT-02** · evento ≠ estado actual | ahora hay un camino que reacciona a eventos, y sigue sin confundirlos: la regla por evento relee el estado del sujeto por el proveedor tipado |
+| **AT-26** · un solo motor | eran dos caminos y un evaluador; ahora son **tres** —programado, manual, por evento— y siguen compartiendo evaluador **y** ejecutor de salidas, que se extrajo para que fuera literalmente el mismo |
+| **AT-27** · barrido acotado | el puente también: `p_limit` por pasada y marca de agua |
+| **AT-31** · sin motores duplicados | los dos barridos que quedaban omitidos bajo el planificador ya corren, y ceden ante su regla equivalente para que no haya dos avisos |
+
+Y el criterio **#11 del cierre de QUALITY-11** —«camino por evento»— pasa de
+PARCIAL a **PASS**: hay hecho de negocio real, enrutador, regla activa, mismo
+evaluador, mismo ejecutor, señal real, linaje e idempotencia, probados de punta
+a punta en cuatro dominios.

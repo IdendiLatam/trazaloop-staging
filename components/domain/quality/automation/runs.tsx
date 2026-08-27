@@ -36,6 +36,13 @@ export function RunsScreen({ runs, detail }: { runs: RunRow[]; detail: RunRow | 
         title="Historial de ejecuciones"
         action={<ExportPdfButton exportKey="quality.automation-run.list" label="Descargar PDF" />}
       >
+        {/* QUALITY-11.1 · §37 · Las cuatro maneras de que haya una ejecución. */}
+        <DomainNote>
+          Una ejecución puede venir de cuatro sitios: del barrido programado de
+          la noche, de alguien que pulsó «Ejecutar ahora», de un hecho que
+          acaba de ocurrir, o de una simulación —que no crea nada—. Las cuatro
+          usan el mismo evaluador.
+        </DomainNote>
         <Table
           headers={["Cuándo", "Día de negocio", "Tipo", "Estado", "Reglas", "Sujetos",
                     "Coincidencias", "Nuevas", "Duración", ""]}
