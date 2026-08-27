@@ -63,6 +63,10 @@ const QUALITY_01_ALLOWED = new Set([
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -361,6 +365,10 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

@@ -364,6 +364,16 @@ export const QUALITY_REVISION_DIRECCION_GROUP: ModuleNavGroup = {
   ],
 };
 
+export const QUALITY_AUTOMATIZACION_GROUP: ModuleNavGroup = {
+  title: "Automatización",
+  items: [
+    { label: "Resumen", href: "/quality/automation", exact: true },
+    { label: "Reglas", href: "/quality/automation/rules" },
+    { label: "Señales", href: "/quality/automation/signals" },
+    { label: "Ejecuciones", href: "/quality/automation/runs" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -380,7 +390,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
            QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
            QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP,
-           QUALITY_REVISION_DIRECCION_GROUP, QUALITY_DOCUMENTOS_GROUP],
+           QUALITY_REVISION_DIRECCION_GROUP, QUALITY_AUTOMATIZACION_GROUP,
+           QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

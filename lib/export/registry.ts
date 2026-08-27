@@ -90,6 +90,11 @@ import {
   qualityManagementReviewInputs, qualityManagementReviewList,
   qualityManagementReviewMinutes, qualityManagementReviewReport,
 } from "./adapters/quality-management-review";
+import {
+  qualityAutomationRuleDetail, qualityAutomationRuleList,
+  qualityAutomationRunDetail, qualityAutomationRunList,
+  qualityAutomationSignalDetail, qualityAutomationSignalList,
+} from "./adapters/quality-automation";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -266,6 +271,22 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualityManagementReviewAgenda, qualityManagementReviewInputs,
   qualityManagementReviewDecisionList, qualityManagementReviewReport,
   qualityManagementReviewMinutes, qualityManagementReviewFollowUp,
+
+  // ------------------------------------------------------------------
+  // QUALITY-11 · automatización determinística y observación
+  //
+  // Cuatro reglas atraviesan los seis. Todos explican POR QUÉ pasó lo que
+  // pasó, campo a campo: una señal que no se explica no vale nada. La ficha
+  // de regla imprime TODAS sus versiones, porque una señal de hace un año se
+  // lee con la versión que la emitió, no con la de hoy. Ninguno afirma que
+  // la plataforma decidió nada: la automatización observa, avisa y encarga
+  // trabajo —declarar, aprobar, aceptar y cerrar siguen siendo de personas—.
+  // Y ninguno rompe el anonimato de QUALITY-08 ni convierte la observación
+  // de competencias en vigilancia de personas.
+  // ------------------------------------------------------------------
+  qualityAutomationRuleList, qualityAutomationRuleDetail,
+  qualityAutomationSignalList, qualityAutomationSignalDetail,
+  qualityAutomationRunList, qualityAutomationRunDetail,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

@@ -273,6 +273,10 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

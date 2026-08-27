@@ -675,10 +675,25 @@ async function main() {
     const pg = new PgClient({ connectionString: DB_URL });
     await pg.connect();
 
+    // Los CATÁLOGOS DE PLATAFORMA son la excepción declarada, y es una excepción
+    // con forma: son iguales para todas las empresas, no llevan
+    // `organization_id`, ninguna empresa los escribe y solo conceden `select`.
+    // Exigirles RLS por empresa sería exigirles una empresa que no tienen. La
+    // prueba 50b comprueba que sean exactamente eso y nada más.
+    const CATALOGOS_DE_PLATAFORMA = [
+      "quality_management_review_input_catalog",
+      "quality_automation_sources",
+      "quality_automation_source_fields",
+      "quality_automation_rule_templates",
+    ];
+    const listaSql = CATALOGOS_DE_PLATAFORMA.map((t) => `'${t}'`).join(", ");
+
     await check("50. TODA tabla de Quality tiene RLS activa", async () => {
       const { rows } = await pg.query(
         `select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
-          where n.nspname='public' and c.relkind='r' and c.relname like 'quality\\_%' and not c.relrowsecurity`
+          where n.nspname='public' and c.relkind='r' and c.relname like 'quality\\_%'
+            and c.relname not in (${listaSql})
+            and not c.relrowsecurity`
       );
       assert(rows.length === 0, `sin RLS: ${rows.map((r) => r.relname).join(", ")}`);
       const { rows: all } = await pg.query(
@@ -709,10 +724,31 @@ async function main() {
       assert(rows[0].n === 0, `hay ${rows[0].n} privilegios peligrosos concedidos`);
     });
 
+    await check("50b. los catálogos de plataforma son globales y de SOLO LECTURA", async () => {
+      // Existen, no tienen empresa, y nadie puede escribirlos. Si alguno
+      // dejara de cumplirlo, la excepción de la prueba 50 se convertiría en un
+      // agujero silencioso.
+      for (const tabla of CATALOGOS_DE_PLATAFORMA) {
+        const { rows: existe } = await pg.query(
+          `select 1 from pg_tables where schemaname='public' and tablename=$1`, [tabla]
+        );
+        assert(existe.length === 1, `el catálogo ${tabla} no existe`);
+        const { rows: escritura } = await pg.query(
+          `select privilege_type from information_schema.role_table_grants
+            where table_schema='public' and table_name=$1
+              and grantee in ('anon','authenticated')
+              and privilege_type <> 'SELECT'`, [tabla]
+        );
+        assert(escritura.length === 0,
+          `${tabla} concede ${escritura.map((r) => r.privilege_type).join(", ")}`);
+      }
+    });
+
     await check("53. Toda tabla de Quality declara organization_id", async () => {
       const { rows } = await pg.query(
         `select t.tablename from pg_tables t
           where t.schemaname='public' and t.tablename like 'quality\\_%'
+            and t.tablename not in (${listaSql})
             and not exists (select 1 from information_schema.columns c
                              where c.table_schema='public' and c.table_name=t.tablename
                                and c.column_name='organization_id')`

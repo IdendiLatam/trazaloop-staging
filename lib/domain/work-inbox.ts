@@ -54,6 +54,11 @@ export const SUBJECT_TYPES = [
   // es la ENTRADA, no la revisión: es lo que hay que preparar o analizar.
   "quality_management_review", "quality_management_review_input",
   "quality_management_review_decision",
+  // QUALITY-11 · Automatización. La tarea automática nombra el OBJETO que la
+  // provocó, no la regla: quien la recibe tiene que ir al objeto, no al motor.
+  "quality_automation_rule", "quality_signal",
+  "quality_competency_evidence", "quality_supplier_scope", "quality_control",
+  "quality_opportunity", "quality_survey_campaign",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -122,6 +127,9 @@ export const TASK_TYPES = [
   "management_review_analysis",
   "management_review_closure",
   "management_review_action_followup",
+  // QUALITY-11 · Una sola tarea, porque el motor solo sabe hacer una cosa:
+  // pedir que alguien mire lo que una regla encontró.
+  "automation_follow_up",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -168,6 +176,7 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   management_review_analysis: "Analizar una entrada de la revisión",
   management_review_closure: "Cerrar una revisión por la dirección",
   management_review_action_followup: "Seguir una acción decidida por la dirección",
+  automation_follow_up: "Atender lo que la automatización detectó",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -244,6 +253,10 @@ export const ALERT_TYPES = [
   "management_review_source_updated",
   "management_review_action_overdue",
   "management_review_followup_pending",
+  // QUALITY-11 · Uno para las señales y otro para las averías del motor. No se
+  // mezclan: la avería del termómetro no es fiebre.
+  "automation_signal",
+  "automation_engine_failure",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -298,6 +311,8 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   management_review_source_updated: "Una fuente cambió después de preparar la entrada",
   management_review_action_overdue: "Una acción decidida por la dirección venció",
   management_review_followup_pending: "Hay seguimiento pendiente de una revisión",
+  automation_signal: "La automatización detectó algo que mirar",
+  automation_engine_failure: "El motor de automatización está fallando",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

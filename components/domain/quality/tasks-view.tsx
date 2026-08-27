@@ -103,6 +103,7 @@ const TASK_TONE: Record<TaskType, string> = {
   management_review_analysis: "border-amber/40 bg-amber/5",
   management_review_closure: "border-loop/30 bg-loop/5",
   management_review_action_followup: "border-loop/30 bg-loop/5",
+  automation_follow_up: "border-amber/40 bg-amber/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -148,6 +149,7 @@ const TASK_CTA: Record<TaskType, string> = {
   management_review_analysis: "Analizar la entrada",
   management_review_closure: "Cerrar la revisión",
   management_review_action_followup: "Ver el seguimiento",
+  automation_follow_up: "Ver lo detectado",
 };
 
 /**
@@ -240,6 +242,22 @@ function subjectHref(
       return `/quality/management-review`;
     case "quality_management_review_decision":
       return `/quality/management-review/followup`;
+    // QUALITY-11 · La señal y la regla tienen ficha propia. El resto de asuntos
+    // son objetos de OTROS dominios, y por eso llevan a sus pantallas: la tarea
+    // pide atender el objeto, no configurar el motor.
+    case "quality_signal":
+      return `/quality/automation/signals/${subjectId}`;
+    case "quality_automation_rule":
+      return `/quality/automation/rules/${subjectId}`;
+    case "quality_competency_evidence":
+      return `/quality/people`;
+    case "quality_supplier_scope":
+      return `/quality/suppliers`;
+    case "quality_control":
+    case "quality_opportunity":
+      return `/quality/risks`;
+    case "quality_survey_campaign":
+      return `/quality/customer-voice/campaigns/${subjectId}`;
     default:
       return null;
   }

@@ -44,6 +44,8 @@ export const LIFECYCLE_ENTITIES = [
   "audit", "audit_program",
   // QUALITY-10 · Y la revisión por la dirección, por la misma puerta.
   "management_review",
+  // QUALITY-11 · Y la regla de automatización, por la misma puerta.
+  "automation_rule",
 ] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
@@ -190,6 +192,8 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar este programa mientras no tenga auditorías ni más de una revisión. Después se cierra, no se borra: su cobertura es la prueba de qué se planificó auditar y qué se auditó de verdad.",
   management_review:
     "Podrás eliminar esta revisión mientras siga siendo un borrador sin análisis, sin decisiones y sin acta. Después se cierra o se cancela, no se borra: lo que la dirección revisó y decidió es la prueba de que el sistema se revisó, y sin ella la empresa no puede demostrar que lo hizo.",
+  automation_rule:
+    "Podrás eliminar esta regla mientras siga siendo un borrador que no se ha publicado ni se ha ejecutado. En cuanto haya observado algo, se desactiva o se retira: borrarla dejaría señales sin poder explicar por qué saltaron, y una señal que no se puede explicar no sirve para nada.",
   methodology_version:
     "Podrás eliminar esta versión mientras siga en borrador y no se haya usado para evaluar. Una vez publicada, se sustituye por una versión nueva en lugar de reescribirla.",
 };
@@ -213,6 +217,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   audit: "auditoría",
   audit_program: "programa de auditorías",
   management_review: "revisión por la dirección",
+  automation_rule: "regla de automatización",
 };
 
 /**
@@ -222,7 +227,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
  */
 const FEMININE_ENTITIES: ReadonlySet<LifecycleEntity> = new Set([
   "action", "opportunity", "methodology_version", "survey", "audit",
-  "management_review",
+  "management_review", "automation_rule",
 ]);
 
 /** «Este proceso» / «Esta acción», según toque. */

@@ -21,6 +21,10 @@ import { getSupplierHomeSignals } from "@/lib/db/quality-suppliers";
 import { getCustomerVoiceHomeSignals } from "@/lib/db/quality-customer-voice";
 import { getAuditHomeSignals } from "@/lib/db/quality-audits";
 import { getManagementReviewHomeSignals } from "@/lib/db/quality-management-review";
+import { getAutomationHomeSignals } from "@/lib/db/quality-automation";
+import {
+  AUTOMATION_DOMAIN_LABEL, type AutomationDomain,
+} from "@/lib/domain/quality-automation";
 import { summarizeInbox, summaryLines } from "@/lib/domain/work-inbox";
 
 function Card({
@@ -58,7 +62,7 @@ export default async function QualityHomePage() {
   const org = await requireQualityModule();
   const { user } = await requireSession();
   const [summary, tasks, objectives, indicators, cases, risks, people, suppliers,
-         customerVoice, audits, managementReview] = await Promise.all([
+         customerVoice, audits, managementReview, automation] = await Promise.all([
     getQualitySummary(org.organizationId),
     listMyTasks(org.organizationId, user.id),
     listObjectives(org.organizationId),
@@ -70,6 +74,7 @@ export default async function QualityHomePage() {
     getCustomerVoiceHomeSignals(org.organizationId),
     getAuditHomeSignals(org.organizationId),
     getManagementReviewHomeSignals(org.organizationId),
+    getAutomationHomeSignals(org.organizationId),
   ]);
 
   // Parte 24 del encargo: un resumen MÍNIMO de lo pendiente, no un tablero.
@@ -275,6 +280,28 @@ export default async function QualityHomePage() {
     );
   }
 
+  // QUALITY-11 · §171 · UNA línea consolidada, no una tarjeta por dominio: cada
+  // dominio ya tiene la suya arriba, y repetirlas aquí sería el ruido que este
+  // sprint existe para evitar.
+  const automationLines: string[] = [];
+  if (automation.openSignals > 0) {
+    automationLines.push(
+      plural(automation.openSignals, "señal abierta", "señales abiertas")
+        + (automation.criticalSignals > 0
+          ? ` · ${automation.criticalSignals} crítica${automation.criticalSignals === 1 ? "" : "s"}`
+          : "")
+    );
+    for (const d of automation.byDomain.slice(0, 4)) {
+      const nombre = AUTOMATION_DOMAIN_LABEL[d.domain as AutomationDomain] ?? d.domain;
+      automationLines.push(`· ${d.count} en ${nombre}`);
+    }
+  }
+  if (automation.engineFailing) {
+    automationLines.push(
+      "El motor de automatización falló en los últimos días — es una avería, no una condición de calidad."
+    );
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <header className="space-y-2">
@@ -388,6 +415,24 @@ export default async function QualityHomePage() {
           </p>
           <Link href="/quality/customer-voice" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
             Ver voz del cliente →
+          </Link>
+        </section>
+      ) : null}
+
+      {automationLines.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Requieren atención</h2>
+          <ul className="mt-1 space-y-0.5">
+            {automationLines.map((line) => (
+              <li key={line} className="text-sm text-ink">{line}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-soft">
+            Lo que la plataforma detectó observando lo que ya está registrado. Una
+            señal es un hecho que merece que alguien mire, no una decisión tomada.
+          </p>
+          <Link href="/quality/automation/signals" className="mt-2 inline-block text-sm font-medium text-loop hover:underline">
+            Ver señales →
           </Link>
         </section>
       ) : null}

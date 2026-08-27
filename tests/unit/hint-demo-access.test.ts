@@ -372,6 +372,10 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **189** |
-| Ejes clasificados (ficha · listado · histórico) | **567** |
-| `AVAILABLE` | **215** |
-| `EMBEDDED` | **241** |
-| `NOT_APPLICABLE` | **63** |
+| Entidades clasificadas | **201** |
+| Ejes clasificados (ficha · listado · histórico) | **603** |
+| `AVAILABLE` | **224** |
+| `EMBEDDED` | **256** |
+| `NOT_APPLICABLE` | **75** |
 | `HISTORICAL_NOT_SUPPORTED` | **48** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **158** |
+| Claves distintas en el registro | **164** |
 
 ## Quality
 
@@ -162,6 +162,18 @@ No existe `PENDING`.
 | Acta de revisión por la dirección | `/quality/management-review/[reviewId]` | A | **AVAILABLE** · `quality.management-review-minutes.detail` | EMBEDDED · dentro de *Revisión por la dirección* | **AVAILABLE** · `quality.management-review-minutes.detail` |
 | Nota de la revisión por la dirección | — | D | EMBEDDED · dentro de *Informe de revisión por la dirección* | EMBEDDED · dentro de *Informe de revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
 | Seguimiento de la revisión por la dirección | `/quality/management-review/followup` | B | EMBEDDED · dentro de *Seguimiento de la revisión por la dirección* | **AVAILABLE** · `quality.management-review-followup.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Regla de automatización | `/quality/automation/rules/[ruleId]` | C | **AVAILABLE** · `quality.automation-rule.detail` | **AVAILABLE** · `quality.automation-rule.list` | **AVAILABLE** · `quality.automation-rule.detail` |
+| Versión de regla de automatización | — | D | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* |
+| Condición de una regla | — | D | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* |
+| Salida de una regla | — | D | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* | EMBEDDED · dentro de *Regla de automatización* |
+| Señal | `/quality/automation/signals/[signalId]` | C | **AVAILABLE** · `quality.automation-signal.detail` | **AVAILABLE** · `quality.automation-signal.list` | **AVAILABLE** · `quality.automation-signal.detail` |
+| Supresión de señal | — | D | EMBEDDED · dentro de *Señal* | EMBEDDED · dentro de *Señal* | EMBEDDED · dentro de *Señal* |
+| Ejecución de la automatización | `/quality/automation/runs` | C | **AVAILABLE** · `quality.automation-run.detail` | **AVAILABLE** · `quality.automation-run.list` | **AVAILABLE** · `quality.automation-run.detail` |
+| Resultado de una regla en una ejecución | — | D | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* | EMBEDDED · dentro de *Ejecución de la automatización* |
+| Fuente observable | — | E | N/A | N/A | N/A |
+| Campo observable | — | E | N/A | N/A | N/A |
+| Plantilla de regla de automatización | — | E | N/A | N/A | N/A |
+| Ajustes de la automatización | `/quality/automation` | E | N/A | N/A | N/A |
 
 ## TrazaDocs
 
@@ -600,3 +612,30 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Nota de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Seguimiento de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Seguimiento de la revisión por la dirección*. El seguimiento es, por naturaleza, un listado: qué sigue abierto de TODO lo que la dirección decidió. |
 | Seguimiento de la revisión por la dirección | Histórico | HISTORICAL_NOT_SUPPORTED | El seguimiento es la situación de hoy. Lo que quedaba abierto al emitir el acta se lee en el acta de esa fecha, que lo guarda. |
+| Versión de regla de automatización | Ficha | EMBEDDED | Dentro de *Regla de automatización*. Una versión es la regla congelada en un momento; separarla de su regla invitaría a leerla como si fuera otra regla distinta. |
+| Versión de regla de automatización | Listado | EMBEDDED | Dentro de *Regla de automatización*. El listado de versiones de una regla es la ficha de esa regla: fuera de ella no significa nada. |
+| Versión de regla de automatización | Histórico | EMBEDDED | Dentro de *Regla de automatización*. La ficha ya imprime la historia completa de versiones, con sus condiciones y sus salidas. |
+| Condición de una regla | Ficha | EMBEDDED | Dentro de *Regla de automatización*. Una condición suelta no observa nada: solo tiene sentido junto a las demás condiciones de su versión. |
+| Condición de una regla | Listado | EMBEDDED | Dentro de *Regla de automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Condición de una regla | Histórico | EMBEDDED | Dentro de *Regla de automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Salida de una regla | Ficha | EMBEDDED | Dentro de *Regla de automatización*. Una salida declara qué se emite cuando la condición se cumple; fuera de su versión no se puede saber cuándo se emite. |
+| Salida de una regla | Listado | EMBEDDED | Dentro de *Regla de automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Salida de una regla | Histórico | EMBEDDED | Dentro de *Regla de automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Supresión de señal | Ficha | EMBEDDED | Dentro de *Señal*. Silenciar no es resolver: la supresión es una anotación sobre la señal y sacarla de ella la haría parecer un cierre. |
+| Supresión de señal | Listado | EMBEDDED | Dentro de *Señal*. Las supresiones se leen sobre la señal que silencian, no como una colección aparte. |
+| Supresión de señal | Histórico | EMBEDDED | Dentro de *Señal*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Resultado de una regla en una ejecución | Ficha | EMBEDDED | Dentro de *Ejecución de la automatización*. Es una fila del informe de ejecución: cuántos sujetos miró esa regla, cuántos coincidieron y si falló. |
+| Resultado de una regla en una ejecución | Listado | EMBEDDED | Dentro de *Ejecución de la automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Resultado de una regla en una ejecución | Histórico | EMBEDDED | Dentro de *Ejecución de la automatización*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Fuente observable | Ficha | NOT_APPLICABLE | Es catálogo de plataforma, igual en todas las empresas: declara QUÉ se puede observar y con qué campos, y ninguna empresa lo edita ni le pertenece. |
+| Fuente observable | Listado | NOT_APPLICABLE | Es catálogo de plataforma: el listado sería idéntico para todas las empresas y no documenta nada de la empresa que lo descargue. |
+| Fuente observable | Histórico | NOT_APPLICABLE | El catálogo de fuentes cambia con las versiones del producto, no con la vida de una empresa. |
+| Campo observable | Ficha | NOT_APPLICABLE | Es catálogo de plataforma: un campo declara qué operadores admite, y eso pertenece al producto, no a la empresa. |
+| Campo observable | Listado | NOT_APPLICABLE | Es catálogo de plataforma: los campos disponibles se eligen dentro del editor de la regla, y allí se ven. |
+| Campo observable | Histórico | NOT_APPLICABLE | El catálogo de campos cambia con las versiones del producto, no con la vida de una empresa. |
+| Plantilla de regla de automatización | Ficha | NOT_APPLICABLE | Es catálogo de plataforma: una plantilla no observa nada hasta que la empresa la instancia, y lo que se instancia es una regla, que sí tiene ficha. |
+| Plantilla de regla de automatización | Listado | NOT_APPLICABLE | Es catálogo de plataforma: el listado de plantillas se ofrece dentro de la pantalla de reglas y es idéntico para todas las empresas. |
+| Plantilla de regla de automatización | Histórico | NOT_APPLICABLE | Una plantilla no tiene historia empresarial: la historia empieza en la regla que la empresa creó a partir de ella. |
+| Ajustes de la automatización | Ficha | NOT_APPLICABLE | Es configuración operativa —si el motor está encendido y en qué huso horario cierra el día—, no un objeto de negocio documentable. |
+| Ajustes de la automatización | Listado | NOT_APPLICABLE | Es único por empresa: no existe una colección que listar. La automatización se configura una vez por empresa. |
+| Ajustes de la automatización | Histórico | NOT_APPLICABLE | La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia. |

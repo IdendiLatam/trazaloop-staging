@@ -364,6 +364,10 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

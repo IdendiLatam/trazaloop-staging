@@ -1306,6 +1306,103 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: noHistory(
       "El seguimiento es la situación de hoy. Lo que quedaba abierto al emitir el acta se lee en el acta de esa fecha, que lo guarda."),
   },
+
+  // ------------------------------------------------------- QUALITY-11
+  // La automatización observa el resto del sistema. Casi nada de lo que
+  // crea es una entidad nueva: la señal sí lo es, la ejecución sí lo es, y
+  // el resto son piezas que viven dentro de una de las dos, o catálogo de
+  // plataforma que ninguna empresa puede editar ni le pertenece.
+  {
+    entity: "Regla de automatización", module: "quality",
+    route: "/quality/automation/rules/[ruleId]", klass: "C",
+    detail: has("quality.automation-rule.detail"),
+    list: has("quality.automation-rule.list"),
+    // La ficha ES el histórico: imprime TODAS las versiones publicadas, no
+    // solo la vigente, porque una señal de hace un año se lee con la versión
+    // que la emitió.
+    historical: has("quality.automation-rule.detail"),
+  },
+  {
+    entity: "Versión de regla de automatización", module: "quality", route: null, klass: "D",
+    detail: embedded("Regla de automatización",
+      "Una versión es la regla congelada en un momento; separarla de su regla invitaría a leerla como si fuera otra regla distinta."),
+    list: embedded("Regla de automatización",
+      "El listado de versiones de una regla es la ficha de esa regla: fuera de ella no significa nada."),
+    historical: embedded("Regla de automatización",
+      "La ficha ya imprime la historia completa de versiones, con sus condiciones y sus salidas."),
+  },
+  {
+    entity: "Condición de una regla", module: "quality", route: null, klass: "D",
+    detail: embedded("Regla de automatización",
+      "Una condición suelta no observa nada: solo tiene sentido junto a las demás condiciones de su versión."),
+    list: embedded("Regla de automatización"),
+    historical: embedded("Regla de automatización"),
+  },
+  {
+    entity: "Salida de una regla", module: "quality", route: null, klass: "D",
+    detail: embedded("Regla de automatización",
+      "Una salida declara qué se emite cuando la condición se cumple; fuera de su versión no se puede saber cuándo se emite."),
+    list: embedded("Regla de automatización"),
+    historical: embedded("Regla de automatización"),
+  },
+  {
+    entity: "Señal", module: "quality",
+    route: "/quality/automation/signals/[signalId]", klass: "C",
+    detail: has("quality.automation-signal.detail"),
+    list: has("quality.automation-signal.list"),
+    // La ficha de una señal es un documento del pasado: guarda con qué versión
+    // se emitió, qué datos miró y por qué disparó.
+    historical: has("quality.automation-signal.detail"),
+  },
+  {
+    entity: "Supresión de señal", module: "quality", route: null, klass: "D",
+    detail: embedded("Señal",
+      "Silenciar no es resolver: la supresión es una anotación sobre la señal y sacarla de ella la haría parecer un cierre."),
+    list: embedded("Señal",
+      "Las supresiones se leen sobre la señal que silencian, no como una colección aparte."),
+    historical: embedded("Señal"),
+  },
+  {
+    entity: "Ejecución de la automatización", module: "quality",
+    route: "/quality/automation/runs", klass: "C",
+    detail: has("quality.automation-run.detail"),
+    list: has("quality.automation-run.list"),
+    // Una ejecución no se modifica nunca: reimprimirla dentro de dos años
+    // devuelve exactamente lo que ocurrió aquel día.
+    historical: has("quality.automation-run.detail"),
+  },
+  {
+    entity: "Resultado de una regla en una ejecución", module: "quality", route: null, klass: "D",
+    detail: embedded("Ejecución de la automatización",
+      "Es una fila del informe de ejecución: cuántos sujetos miró esa regla, cuántos coincidieron y si falló."),
+    list: embedded("Ejecución de la automatización"),
+    historical: embedded("Ejecución de la automatización"),
+  },
+  {
+    entity: "Fuente observable", module: "quality", route: null, klass: "E",
+    detail: na("Es catálogo de plataforma, igual en todas las empresas: declara QUÉ se puede observar y con qué campos, y ninguna empresa lo edita ni le pertenece."),
+    list: na("Es catálogo de plataforma: el listado sería idéntico para todas las empresas y no documenta nada de la empresa que lo descargue."),
+    historical: na("El catálogo de fuentes cambia con las versiones del producto, no con la vida de una empresa."),
+  },
+  {
+    entity: "Campo observable", module: "quality", route: null, klass: "E",
+    detail: na("Es catálogo de plataforma: un campo declara qué operadores admite, y eso pertenece al producto, no a la empresa."),
+    list: na("Es catálogo de plataforma: los campos disponibles se eligen dentro del editor de la regla, y allí se ven."),
+    historical: na("El catálogo de campos cambia con las versiones del producto, no con la vida de una empresa."),
+  },
+  {
+    entity: "Plantilla de regla de automatización", module: "quality", route: null, klass: "E",
+    detail: na("Es catálogo de plataforma: una plantilla no observa nada hasta que la empresa la instancia, y lo que se instancia es una regla, que sí tiene ficha."),
+    list: na("Es catálogo de plataforma: el listado de plantillas se ofrece dentro de la pantalla de reglas y es idéntico para todas las empresas."),
+    historical: na("Una plantilla no tiene historia empresarial: la historia empieza en la regla que la empresa creó a partir de ella."),
+  },
+  {
+    entity: "Ajustes de la automatización", module: "quality",
+    route: "/quality/automation", klass: "E",
+    detail: na("Es configuración operativa —si el motor está encendido y en qué huso horario cierra el día—, no un objeto de negocio documentable."),
+    list: na(NO_LIST_SINGLETON + " La automatización se configura una vez por empresa."),
+    historical: na("La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia."),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

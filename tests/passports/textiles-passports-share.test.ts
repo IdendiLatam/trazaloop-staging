@@ -110,6 +110,10 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
     "0128_quality_management_review.sql",
+    // QUALITY-11: automatización determinística, señales y observación transversal.
+    "0129_quality_automation_observation.sql",
+    // QUALITY-11 · corrección: el barrido programado y los observadores heredados.
+    "0130_quality_automation_scheduled_observers.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);
