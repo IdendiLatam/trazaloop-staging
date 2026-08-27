@@ -64,6 +64,12 @@ export const DEMO_EXPIRED_BANNER =
 
 export const DEMO_PARTIAL_BANNER_TITLE = "Algunas pruebas de módulos han finalizado.";
 
+/** Hay pruebas en curso, pero la empresa NO está de prueba: tiene algo más. */
+export const DEMO_ACTIVE_PARTIAL_TITLE = "Tienes módulos en periodo de prueba.";
+
+export const DEMO_ACTIVE_PARTIAL_BODY =
+  "El resto de tu acceso no es una prueba y no vence.";
+
 export const DEMO_PARTIAL_BANNER_BODY =
   "Los módulos con acceso vigente continúan disponibles.";
 
@@ -87,7 +93,8 @@ export const DEMO_PARTIAL_BANNER_BODY =
  */
 export type DemoNoticeKind =
   | "none" // nada que anunciar
-  | "active" // hay pruebas en curso
+  | "active" // TODO lo que la empresa tiene está en prueba
+  | "active_partial" // hay pruebas en curso, pero algo NO es una prueba
   | "partial" // venció alguna prueba, pero queda al menos un módulo entrable
   | "all_expired"; // venció alguna prueba y NO queda ningún módulo entrable
 
@@ -110,7 +117,24 @@ export function classifyDemoNotice(modules: ModuleNoticeInput[]): DemoNoticeKind
   const activeDemo = applicable.some((m) => m.state === "demo_active");
 
   if (expired) return enterable ? "partial" : "all_expired";
-  if (activeDemo) return "active";
+
+  // Que haya una prueba en curso no convierte a la EMPRESA en una prueba.
+  //
+  // Esto se vio en la validación de QUALITY-12.1: una empresa con Quality en
+  // Full sin vencimiento y dos módulos que nunca usa en Demo de dos días leía
+  // «Tu empresa está utilizando Trazaloop en modo Demo… finaliza el 29 de
+  // agosto» mientras trabajaba dentro de Quality. Es el mismo error que ya se
+  // había corregido para el vencimiento —hablar en nombre de la cuenta cuando
+  // el hecho es de un módulo— y que en el caso «hay prueba activa» seguía
+  // intacto.
+  //
+  // La distinción es la que importa: si TODO lo que la empresa tiene es una
+  // prueba, decir que la empresa está de prueba es cierto. Si además tiene algo
+  // contratado, no lo es, y hay que nombrar qué está en prueba.
+  if (activeDemo) {
+    const soloPruebas = applicable.every((m) => m.state === "demo_active");
+    return soloPruebas ? "active" : "active_partial";
+  }
   return "none";
 }
 

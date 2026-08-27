@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatRemainingTrial } from "@/lib/modules/access";
 import {
+  DEMO_ACTIVE_PARTIAL_BODY,
+  DEMO_ACTIVE_PARTIAL_TITLE,
   DEMO_BANNER_INTRO,
   DEMO_EXPIRED_BANNER,
   DEMO_PARTIAL_BANNER_BODY,
@@ -80,6 +82,10 @@ export function DemoTrialBanner({
   // periodo de prueba finaliza el…»— volvería a hablar en nombre de la cuenta
   // justo en el caso en que la cuenta no es la que vence, así que ahí se
   // enumeran los módulos uno por uno aunque compartan fecha.
+  //
+  // Tampoco en un aviso «hay pruebas, pero no todo es prueba»: ahí «Tu periodo
+  // de prueba finaliza el…» diría que a la empresa se le acaba el acceso, y a
+  // la empresa no se le acaba nada.
   const uniqueDates = [...new Set(trials.map((t) => t.expiresAt))];
   const sharedExpiry =
     notice === "active" && trials.length > 0 && uniqueDates.length === 1 ? uniqueDates[0] : null;
@@ -88,19 +94,21 @@ export function DemoTrialBanner({
   // Un vencimiento que deja módulos en pie es informativo; uno que no deja
   // ninguno sí pide acción. El color acompaña esa diferencia en vez de gritar
   // igual en los dos casos.
-  const tone =
-    notice === "partial"
-      ? "border-hairline bg-surface"
-      : "border-amber/40 bg-amber/10";
-  const titleTone = notice === "partial" ? "text-ink" : "text-amber";
-  const bodyTone = notice === "partial" ? "text-ink-soft" : "text-amber/90";
+  // Una prueba que convive con acceso contratado es informativa, no urgente:
+  // no se le grita a alguien por algo que no le quita nada.
+  const sereno = notice === "partial" || notice === "active_partial";
+  const tone = sereno ? "border-hairline bg-surface" : "border-amber/40 bg-amber/10";
+  const titleTone = sereno ? "text-ink" : "text-amber";
+  const bodyTone = sereno ? "text-ink-soft" : "text-amber/90";
 
   const title =
     notice === "all_expired"
       ? DEMO_EXPIRED_BANNER.split(" Tus datos")[0]
       : notice === "partial"
         ? DEMO_PARTIAL_BANNER_TITLE
-        : DEMO_BANNER_INTRO;
+        : notice === "active_partial"
+          ? DEMO_ACTIVE_PARTIAL_TITLE
+          : DEMO_BANNER_INTRO;
 
   return (
     <div
@@ -115,6 +123,10 @@ export function DemoTrialBanner({
           <p className={bodyTone}>
             {`${listNames(expiredModules)}: la prueba terminó y los datos se conservan. ${DEMO_PARTIAL_BANNER_BODY}`}
           </p>
+        )}
+
+        {notice === "active_partial" && (
+          <p className={bodyTone}>{DEMO_ACTIVE_PARTIAL_BODY}</p>
         )}
 
         {notice === "all_expired" && (

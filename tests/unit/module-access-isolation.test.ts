@@ -218,6 +218,44 @@ check("M12. aviso GENERAL solo cuando NINGÚN módulo aplicable es entrable", ()
   );
 });
 
+check("M12b. una prueba en curso NO convierte a la empresa en una prueba", () => {
+  // Lo encontró la validación de QUALITY-12.1: una empresa con un módulo en
+  // Full sin vencimiento y otros dos en Demo de dos días leía «Tu empresa está
+  // utilizando Trazaloop en modo Demo… finaliza el 29 de agosto» mientras
+  // trabajaba DENTRO del módulo contratado. El vencimiento de una prueba no es
+  // un estado de la cuenta —eso ya estaba corregido para lo vencido— y tener
+  // una prueba abierta tampoco lo es.
+  const mixto = [
+    { state: stateOf(SUBJECT, full) },
+    ...OTHERS.map((m) => ({ state: stateOf(m, demoActive) })),
+  ];
+  assert(
+    classifyDemoNotice(mixto) === "active_partial",
+    "con algo contratado, el aviso no puede hablar en nombre de la empresa"
+  );
+
+  // Si TODO lo que la empresa tiene es una prueba, decirlo sí es cierto.
+  const soloPruebas = FUNCTIONAL.map((m) => ({ state: stateOf(m, demoActive) }));
+  assert(
+    classifyDemoNotice(soloPruebas) === "active",
+    "si todo es prueba, el aviso general es el correcto"
+  );
+
+  // Y el aviso mixto no puede usar el texto que habla de la cuenta.
+  const mensajes = read("lib/modules/messages.ts");
+  const banner = read("components/domain/modules/demo-trial-banner.tsx");
+  assert(/DEMO_ACTIVE_PARTIAL_TITLE/.test(mensajes) && /DEMO_ACTIVE_PARTIAL_TITLE/.test(banner),
+    "el aviso mixto no tiene texto propio");
+  // El texto de la cuenta solo puede salir cuando el aviso ES el de la cuenta.
+  assert(/notice === "active_partial"\s*\?\s*DEMO_ACTIVE_PARTIAL_TITLE/.test(banner),
+    "el aviso mixto no usa su propio título");
+  assert(/notice === "active_partial" &&[\s\S]{0,120}DEMO_ACTIVE_PARTIAL_BODY/.test(banner),
+    "el aviso mixto no explica que el resto no vence");
+  // Y «Tu periodo de prueba finaliza el…» tampoco: eso habla de la empresa.
+  assert(/sharedExpiry =\s*\n?\s*notice === "active" &&/.test(banner),
+    "la fecha compartida dejó de acotarse al aviso general");
+});
+
 console.log("\nTrazaloop · El módulo utilizable no se esconde\n");
 
 check("M13. el selector pone delante los módulos a los que SÍ se puede entrar", () => {

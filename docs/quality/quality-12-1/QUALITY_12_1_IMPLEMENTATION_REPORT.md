@@ -173,8 +173,55 @@ de paso.
 | 101 | las plantillas suben de versión al cambiar | **PASS** | prueba J4 |
 | 102 | ninguna migración anterior se editó | **PASS** | prueba J5 |
 | 103 | Q1–Q7 aceptadas humanamente | **PASS** | tercera prueba humana |
+| 104 | Q8 aceptada humanamente | **PASS** | run `a93c08f0` · 3 temas persistidos |
+| 105 | validación real contra OpenAI completa | **PASS** | 65 comprobaciones, 0 fallos |
+| 106 | el aviso de prueba no habla en nombre de la cuenta | **PASS** | prueba M12b |
+| 107 | Quality de la empresa QA en Full sin vencimiento | **PASS** | `organization_modules` |
+| 108 | veredicto emitible | **PASS** | ver abajo |
 
-**101 PASS · 1 EN CURSO (Q8) · 1 PENDIENTE (veredicto) · 0 FALLOS**
+**108 PASS · 0 EN CURSO · 0 PENDIENTES · 0 FALLOS**
+
+---
+
+# VEREDICTO
+
+> ## QUALITY-12.1 — PASS
+> ## QUALITY-12.1 OPENAI COPILOT READY FOR USER TESTING
+
+| | |
+|---|---|
+| **Rama** | `fix/quality-12-1-openai-live-provider` |
+| **Base** | `383124d` (cierre de QUALITY-12) |
+| **Migraciones** | 0133 · 0134 · 0135, todas append-only |
+| **Cabecera Local** | **0135** |
+| **Cabecera Staging** | **0135**, sin desalineadas |
+| **Cabecera Production** | **0111 · SIN TOCAR** |
+| **Pruebas** | 56 + 31 + 70 + 31 + 25 + 18 · `test:all` **EXIT 0** |
+
+## Los tres huecos de QUALITY-12, cerrados
+
+**GAP-01** proveedor en vivo · **GAP-02** las siete fuentes · **GAP-03** los
+temas persistidos. Los tres demostrados contra OpenAI con una persona delante.
+
+## Los once defectos que la validación encontró, cerrados
+
+Están en `QUALITY_12_1_LIVE_VALIDATION.md`, cada uno con su causa medida, su
+corrección y la prueba que impide que vuelva. Ninguno se ocultó y ninguno se
+arregló tocando la respuesta del modelo.
+
+## Gaps restantes
+
+**Ninguno.**
+
+Lo que sigue fuera de alcance por decisión explícita del encargo, no por
+omisión: no hay base vectorial ni búsqueda semántica (§158 de QUALITY-12); no
+hay streaming (§88, opcional); y no se ha inventado ninguna decisión comercial
+sobre si la IA se cobra aparte (§79).
+
+## Production
+
+Sin migración, sin variables de IA, sin credencial, sin despliegue de esta
+rama, sin alias y sin promoción. **Intacta en 0111.**
 
 ---
 
