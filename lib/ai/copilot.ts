@@ -54,6 +54,8 @@ export type CopilotOutcome =
                  truncated: boolean; items: number };
       provider: string; model: string; live: boolean;
       droppedCitations: number;
+      /** Cuántos temas de clientes se persistieron; cero en el resto de casos. */
+      themesRecorded: number;
     }
   | { ok: false; runId: string | null; reason: string; message: string };
 
@@ -118,8 +120,12 @@ export async function runCopilot(
   const pack = await buildContext(ctxReq, db);
 
   // ---- 3 · Las referencias, ANTES de preguntar ----------------------------
+  // Se guarda el identificador que devuelve cada una: es lo que después permite
+  // anclar un tema de clientes a la evidencia REAL en lugar de a un número que
+  // el modelo escribió (§, GAP-03 de QUALITY-12).
+  const idPorOrdinal = new Map<number, string>();
   for (const r of pack.refs) {
-    await db.rpc("quality_ai_add_reference", {
+    const { data: refId } = await db.rpc("quality_ai_add_reference", {
       p_run_id: runId,
       p_ordinal: r.ordinal,
       p_source_code: r.sourceCode,
@@ -130,6 +136,7 @@ export async function runCopilot(
       p_as_of: r.asOf ?? null,
       p_revision: r.revisionLabel ?? null,
     });
+    if (typeof refId === "string") idPorOrdinal.set(r.ordinal, refId);
   }
 
   // §19/§67 · Sin contexto no se llama al proveedor: se responde que no hay
@@ -144,6 +151,7 @@ export async function runCopilot(
         "No hay datos autorizados relacionados con la pregunta, o quedan fuera de lo que tu rol puede consultar.",
       ],
       evidence: "missing",
+      themes: [],
     };
     await db.rpc("quality_ai_complete_run", {
       p_run_id: runId, p_answer: respuesta as unknown as Record<string, unknown>,
@@ -154,6 +162,7 @@ export async function runCopilot(
       context: { sources: [], limitations: pack.temporalLimitations,
                  conflicts: pack.conflicts, truncated: false, items: 0 },
       provider: provider.name, model: cfg.model, live, droppedCitations: 0,
+      themesRecorded: 0,
     };
   }
 
@@ -210,7 +219,39 @@ export async function runCopilot(
     p_input_tokens: resultado.usage.inputTokens,
     p_output_tokens: resultado.usage.outputTokens,
     p_tool_calls: 0,
+    // §12 · Lo que el proveedor informe. Lo que no informe llega como null y se
+    // queda como null: la tabla de consumo no rellena huecos por su cuenta.
+    p_cached_input_tokens: resultado.usage.cachedInputTokens ?? null,
+    p_reasoning_tokens: resultado.usage.reasoningTokens ?? null,
+    p_total_tokens: resultado.usage.totalTokens ?? null,
   });
+
+  // ---- 6 · Los temas de clientes, si los hay ------------------------------
+  // Solo en la consulta de temas: en cualquier otra, lo que venga en `themes`
+  // se ignora. Un modelo que rellena un campo que no le tocaba no puede acabar
+  // escribiendo en una tabla del sistema de gestión.
+  let temasGuardados = 0;
+  if (req.useCase === "customer_themes" && respuesta.themes.length > 0) {
+    for (const t of respuesta.themes) {
+      const ids = t.references
+        .map((o) => idPorOrdinal.get(o))
+        .filter((x): x is string => typeof x === "string");
+      if (ids.length === 0) continue;
+      const { error } = await db.rpc("quality_ai_record_customer_theme", {
+        p_run_id: runId,
+        p_theme_key: t.key,
+        p_label: t.label,
+        p_summary: t.summary,
+        p_sentiment: t.sentiment,
+        p_period_start: req.temporal.periodStart ?? null,
+        p_period_end: req.temporal.periodEnd ?? null,
+        p_reference_ids: ids,
+      });
+      // §85 · Que un tema no se pueda guardar no invalida la respuesta: la
+      // respuesta ya está cerrada y citada. Se cuenta lo que sí se guardó.
+      if (!error) temasGuardados += 1;
+    }
+  }
 
   return {
     ok: true, runId, answer: respuesta, references: pack.refs,
@@ -220,6 +261,7 @@ export async function runCopilot(
     },
     provider: provider.name, model: cfg.model, live,
     droppedCitations: validado.droppedCitations,
+    themesRecorded: temasGuardados,
   };
 }
 

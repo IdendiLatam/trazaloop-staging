@@ -3,6 +3,7 @@ import "server-only";
 import { aiApiKey, aiConfig, aiCredentialConfigured, type AiModelConfig } from "./config";
 import { anthropicProvider } from "./providers/anthropic";
 import { fakeProvider } from "./providers/fake";
+import { openaiProvider } from "./providers/openai";
 
 /**
  * Trazaloop · QUALITY-12 · §5 · El contrato del proveedor.
@@ -36,7 +37,15 @@ export type AiRequest = {
   config: AiModelConfig;
 };
 
-export type AiUsage = { inputTokens: number | null; outputTokens: number | null };
+export type AiUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  /** §12 · Lo que el proveedor informe, si lo informa. No se inventa ninguno:
+   *  un campo ausente se queda en `null` y el informe lo muestra vacío. */
+  cachedInputTokens?: number | null;
+  reasoningTokens?: number | null;
+  totalTokens?: number | null;
+};
 
 export type AiResult =
   | { ok: true; value: unknown; usage: AiUsage; raw: string }
@@ -59,14 +68,19 @@ export type QualityAiProvider = {
  */
 export function resolveProvider(): { provider: QualityAiProvider; live: boolean } {
   const cfg = aiConfig();
-  if (cfg.provider === "anthropic") {
-    const key = aiApiKey();
-    if (key) return { provider: anthropicProvider(key), live: true };
+  const key = aiApiKey();
+
+  // §62 · Sin credencial NO se llama a nadie, y no se disimula: se responde con
+  // el doble y la pantalla dice que falta configurar el proveedor.
+  if (key) {
+    if (cfg.provider === "openai") return { provider: openaiProvider(key), live: true };
+    if (cfg.provider === "anthropic") return { provider: anthropicProvider(key), live: true };
   }
   return { provider: fakeProvider(), live: false };
 }
 
 export function providerIsLive(): boolean {
   const cfg = aiConfig();
-  return cfg.provider === "anthropic" && aiCredentialConfigured();
+  return (cfg.provider === "openai" || cfg.provider === "anthropic")
+    && aiCredentialConfigured();
 }

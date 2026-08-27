@@ -496,6 +496,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0131_quality_automation_event_bridge.sql",
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
+    "0133_quality_ai_copilot_completion.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

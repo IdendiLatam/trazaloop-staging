@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/auth/require-session";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
 import {
   acceptSuggestion, createSession, createSuggestion, getSettings, listReferences,
-  recordFeedback, rejectSuggestion, updateSettings,
+  recordFeedback, rejectSuggestion, resolveCustomerTheme, updateSettings,
 } from "@/lib/db/quality-ai";
 import { runCopilot } from "@/lib/ai/copilot";
 import {
@@ -44,6 +44,8 @@ export type AiActionState = {
     provider: string; model: string; live: boolean; sources: string[];
     limitations: string[]; conflicts: string[]; truncated: boolean;
     droppedCitations: number;
+    /** QUALITY-12.1 · Cuántos temas de clientes quedaron guardados. */
+    themesRecorded?: number;
   };
 };
 
@@ -156,6 +158,7 @@ export async function askCopilotAction(
     }
 
     revalidatePath("/quality/copilot");
+    if (r.themesRecorded > 0) revalidatePath("/quality/customer-voice");
     return {
       error: null,
       success: true,
@@ -169,6 +172,7 @@ export async function askCopilotAction(
         sources: r.context.sources, limitations: r.context.limitations,
         conflicts: r.context.conflicts, truncated: r.context.truncated,
         droppedCitations: r.droppedCitations,
+        themesRecorded: r.themesRecorded,
       },
     };
   } catch (e) {
@@ -343,4 +347,46 @@ export async function referencesForRunAction(
   organizationId: string, runId: string
 ) {
   return listReferences(organizationId, runId);
+}
+
+
+// ---------------------------------------------------------------------------
+// QUALITY-12.1 · Resolver un tema de clientes · GAP-03 de QUALITY-12
+// ---------------------------------------------------------------------------
+// Confirmar un tema NO crea nada en el sistema de gestión: solo dice que una
+// persona lo ha mirado y que sirve para seguirlo. Descartarlo tampoco lo borra;
+// queda constando quién lo descartó, que es lo que permite explicar dentro de
+// dos años por qué esa serie tiene un hueco.
+
+export async function resolveCustomerThemeAction(
+  _prev: AiActionState, formData: FormData
+): Promise<AiActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+
+  const mutate = await checkQualityCanMutate();
+  if (!mutate.allowed) return { error: mutate.error };
+
+  const themeId = text(formData, "theme_id");
+  const status = text(formData, "status");
+  if (!themeId) return { error: "Falta el tema." };
+  if (status !== "confirmed" && status !== "discarded") {
+    return { error: "Un tema se confirma o se descarta." };
+  }
+
+  try {
+    await resolveCustomerTheme(themeId, status, optional(formData, "note"));
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo resolver el tema." };
+  }
+
+  revalidatePath("/quality/copilot");
+  revalidatePath("/quality/customer-voice");
+  return {
+    error: null,
+    success: true,
+    message: status === "confirmed"
+      ? "Tema confirmado. A partir de ahora se puede seguir periodo a periodo."
+      : "Tema descartado. Queda constancia de quién lo descartó.",
+  };
 }

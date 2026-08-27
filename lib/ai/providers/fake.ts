@@ -27,6 +27,13 @@ import type { AiRequest, AiResult, QualityAiProvider } from "../provider";
  * fallo: `[[TEST:timeout]]`, `[[TEST:unavailable]]`, `[[TEST:invalid]]`. No
  * son magia: son la única forma de comprobar el comportamiento ante un
  * proveedor caído sin tirar el proveedor.
+ *
+ * QUALITY-12.1 · TAMBIÉN AGRUPA TEMAS, PERO SIN LEER
+ *
+ * Cuando la tarea es la de temas de clientes, agrupa los comentarios anónimos
+ * por la campaña de la que vienen. No es análisis de contenido —no lo pretende—:
+ * es una agrupación real y comprobable que permite ejercitar la persistencia,
+ * la procedencia y los recuentos sin depender de que un modelo acierte.
  */
 export function fakeProvider(): QualityAiProvider {
   return {
@@ -68,6 +75,7 @@ export function fakeProvider(): QualityAiProvider {
             suggestions: [],
             unanswered: ["No hay datos autorizados que respondan a la pregunta."],
             evidence: "missing",
+            themes: [],
           },
         };
       }
@@ -89,10 +97,38 @@ export function fakeProvider(): QualityAiProvider {
           suggestions: [],
           unanswered: [],
           evidence: hechos.length > 0 ? "sufficient" : "limited",
+          themes: temas(req.system, referencias),
         },
       };
     },
   };
+}
+
+/**
+ * Los temas, solo cuando la tarea es la de temas. Se agrupa por campaña porque
+ * es lo que la etiqueta de la referencia dice de verdad; inventar temas por el
+ * contenido sería justo lo que un doble determinístico no puede hacer.
+ */
+function temas(system: string, referencias: { n: number; etiqueta: string }[]) {
+  if (!system.includes("Agrupa comentarios de clientes en temas")) return [];
+
+  const porCampana = new Map<string, number[]>();
+  for (const r of referencias) {
+    const m = /campaña (.+)$/.exec(r.etiqueta);
+    if (!m) continue;
+    const campana = m[1].trim();
+    const lista = porCampana.get(campana) ?? [];
+    lista.push(r.n);
+    porCampana.set(campana, lista);
+  }
+
+  return [...porCampana.entries()].map(([campana, nums]) => ({
+    key: campana.toLowerCase().slice(0, 80),
+    label: `Comentarios de ${campana}`,
+    summary: "Agrupación por campaña de origen. No es un análisis del contenido.",
+    sentiment: "unknown",
+    references: nums,
+  }));
 }
 
 /** Un recuento aproximado, para que los topes y el informe de consumo tengan

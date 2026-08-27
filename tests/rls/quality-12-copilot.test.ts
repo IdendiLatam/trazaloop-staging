@@ -576,7 +576,10 @@ async function main() {
   await check("I1. la empresa ajena no ve ni una consulta, ni un borrador", async () => {
     for (const tabla of ["quality_ai_runs", "quality_ai_suggestions",
                          "quality_ai_run_references", "quality_ai_sessions",
-                         "quality_ai_settings", "quality_ai_feedback"]) {
+                         "quality_ai_settings", "quality_ai_feedback",
+                         // QUALITY-12.1 · Las tablas nuevas, con la misma regla.
+                         "quality_ai_customer_themes",
+                         "quality_ai_customer_theme_evidence"]) {
       const { data } = await O.from(tabla).select("id").eq("organization_id", A);
       assert((data ?? []).length === 0, `${tabla}: la empresa ajena ve filas de A`);
     }
@@ -609,11 +612,21 @@ async function main() {
     assert(e2, "se insertó un borrador a mano");
     const { error: e3 } = await Q.from("quality_ai_runs").delete().eq("organization_id", A);
     assert(e3, "se borró la historia del Copilot");
+    // QUALITY-12.1 · Y un tema tampoco se escribe saltándose la RPC.
+    const { error: e4 } = await Q.from("quality_ai_customer_themes").insert({
+      organization_id: A, run_id: await ultimaEjecucion(Q, A),
+      period_start: HOY, period_end: HOY, theme_key: "a mano", label: "A mano",
+      provider: "x", model: "x", prompt_template: "x", prompt_version: 1,
+    });
+    assert(e4, "se insertó un tema a mano");
   });
 
   await check("I4. el anónimo no alcanza nada del Copilot", async () => {
     for (const t of ["quality_ai_runs", "quality_ai_suggestions", "quality_ai_sources",
-                     "quality_ai_settings", "v_quality_campaign_comments"]) {
+                     "quality_ai_settings", "v_quality_campaign_comments",
+                     // QUALITY-12.1 · Y tampoco lo que se guardó después.
+                     "quality_ai_customer_themes", "quality_ai_customer_theme_evidence",
+                     "v_quality_ai_customer_theme_series"]) {
       const { data, error } = await publico.from(t).select("*").limit(1);
       assert(error || (data ?? []).length === 0, `${t}: el anónimo lee filas`);
     }

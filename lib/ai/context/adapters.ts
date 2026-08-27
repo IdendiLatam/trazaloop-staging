@@ -528,3 +528,387 @@ registerAdapter({
     }
   },
 });
+
+
+// ===========================================================================
+// QUALITY-12.1 · Los siete adaptadores que faltaban (§22, §23, §27)
+// ---------------------------------------------------------------------------
+// Mismas reglas que los doce anteriores: campos escritos a mano, lectura con la
+// sesión de quien pregunta, recuentos calculados aquí y citas con enlace
+// interno. Ninguno abre una consulta genérica y ninguno acepta nada del modelo.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Documentos y revisiones · §24, §25, §26 · el que más cuidado exige
+// ---------------------------------------------------------------------------
+// Tres cosas que este adaptador NO hace, y son la razón de que sea el más
+// largo:
+//
+//   · NO manda el documento entero. Manda las secciones que caben, recortadas
+//     (§25). Preguntar por una cláusula no puede costar doscientas páginas.
+//   · NO usa la revisión de hoy para una pregunta de hace dos años (§24). Lee
+//     la revisión que estaba VIGENTE en esa fecha y su contenido congelado.
+//   · NO se fía del texto que lee (§26). El contenido de un documento es de la
+//     empresa, y va al contexto como material marcado, igual que un comentario.
+// ---------------------------------------------------------------------------
+const SECCIONES_POR_DOCUMENTO = 6;
+const CARACTERES_POR_SECCION = 600;
+
+registerAdapter({
+  code: "document_revision",
+  useCases: ["*"],
+  temporal: "as_of",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("trazadoc_documents")
+      .select("id, code, title, status, category_code, current_revision_id, module_key")
+      .eq("organization_id", req.organizationId)
+      .neq("status", "obsolete")
+      .limit(req.pinned?.type === "trazadoc_document" ? 1 : 6);
+    if (req.pinned?.type === "trazadoc_document") q = q.eq("id", req.pinned.id);
+    const { data } = await q;
+    const documentos = filasDe(data);
+    if (documentos.length === 0) return;
+
+    for (const d of documentos) {
+      // §24 · Qué revisión responde a ESTA pregunta.
+      //   · pregunta de hoy      → la vigente hoy
+      //   · pregunta de una fecha → la que estaba vigente ESE día
+      const corte = req.temporal.mode === "as_of" && req.temporal.asOf
+        ? req.temporal.asOf
+        : new Date().toISOString().slice(0, 10);
+
+      const r = db.from("trazadoc_document_revisions")
+        .select("id, revision_number, revision_label, workflow_state, "
+          + "effective_from, effective_to, content_snapshot, review_due_at")
+        .eq("organization_id", req.organizationId)
+        .eq("document_id", d.id)
+        .in("workflow_state", ["approved", "superseded"])
+        .not("effective_from", "is", null)
+        .lte("effective_from", corte)
+        .order("effective_from", { ascending: false })
+        .limit(1);
+      const { data: revs } = await r;
+      const rev = filasDe(revs)[0];
+
+      if (!rev) {
+        const n = w.ref({
+          sourceCode: "document_revision", entityType: "trazadoc_document",
+          entityId: String(d.id),
+          label: `Documento ${d.code}: ${d.title}`,
+          deepLink: `/quality/documents/${d.id}`,
+        });
+        w.fact(
+          `El documento «${d.title}» (${d.code}) está ${d.status} y no tenía `
+          + `ninguna revisión vigente al ${corte}.`, [n]);
+        continue;
+      }
+
+      // §24 · La revisión vigente en la fecha puede haber terminado su vigencia
+      // antes de esa misma fecha: entonces ese día no había ninguna en vigor.
+      const caducada = rev.effective_to !== null
+        && String(rev.effective_to) < corte;
+
+      const n = w.ref({
+        sourceCode: "document_revision", entityType: "trazadoc_document_revision",
+        entityId: String(rev.id),
+        label: `Documento ${d.code}: ${d.title} · revisión `
+          + `${rev.revision_label ?? rev.revision_number}`,
+        deepLink: `/quality/documents/${d.id}`,
+        asOf: corte,
+        revisionLabel: String(rev.revision_label ?? rev.revision_number),
+      });
+
+      w.fact(
+        `Al ${corte}, el documento «${d.title}» (${d.code}) iba por la revisión `
+        + `${rev.revision_label ?? rev.revision_number}, vigente desde el `
+        + `${rev.effective_from}`
+        + (rev.effective_to ? ` hasta el ${rev.effective_to}` : "")
+        + (caducada ? ", es decir: ese día NO había ninguna revisión en vigor" : "")
+        + ".", [n]);
+
+      if (rev.review_due_at) {
+        w.fact(
+          `Su revisión periódica vence el ${String(rev.review_due_at).slice(0, 10)}.`, [n]);
+      }
+
+      // §25 · El contenido, recortado. Del snapshot congelado de ESA revisión,
+      // que es lo que hace que una pregunta histórica lea el texto de entonces
+      // y no el de ahora.
+      const snap = rev.content_snapshot as { sections?: unknown[] } | null;
+      const secciones = Array.isArray(snap?.sections) ? snap!.sections! : [];
+      for (const s of secciones.slice(0, SECCIONES_POR_DOCUMENTO)) {
+        const sec = s as { title?: string; content?: string };
+        const texto = typeof sec.content === "string" ? sec.content.trim() : "";
+        if (texto.length === 0) continue;
+        w.note(
+          `${d.code} · ${sec.title ?? "sección"} `
+          + `(revisión ${rev.revision_label ?? rev.revision_number})`,
+          texto.length > CARACTERES_POR_SECCION
+            ? `${texto.slice(0, CARACTERES_POR_SECCION)}…`
+            : texto,
+          [n]);
+      }
+      if (secciones.length > SECCIONES_POR_DOCUMENTO) {
+        w.limitation(
+          `Del documento ${d.code} se leyeron ${SECCIONES_POR_DOCUMENTO} de sus `
+          + `${secciones.length} secciones: el resto no cabía en el contexto.`);
+      }
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Objetivos
+// ---------------------------------------------------------------------------
+registerAdapter({
+  code: "objective",
+  useCases: ["*"],
+  temporal: "period",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("v_quality_objective_performance")
+      .select("objective_id, code, name, period_start, period_end, admin_state, "
+        + "indicator_count, indicators_not_met, indicators_without_data")
+      .eq("organization_id", req.organizationId)
+      .limit(LIMITE);
+    if (req.pinned?.type === "quality_objective") q = q.eq("objective_id", req.pinned.id);
+    if (req.temporal.periodStart) q = q.gte("period_end", req.temporal.periodStart);
+    if (req.temporal.periodEnd) q = q.lte("period_start", req.temporal.periodEnd);
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const o of filas) {
+      const n = w.ref({
+        sourceCode: "objective", entityType: "quality_objective",
+        entityId: String(o.objective_id),
+        label: `Objetivo ${o.code}: ${o.name}`,
+        deepLink: `/quality/objectives/${o.objective_id}`,
+      });
+      nums.push(n);
+      w.fact(
+        `El objetivo «${o.name}» (${o.code}) del periodo ${o.period_start} — `
+        + `${o.period_end} está ${o.admin_state} y se mide con `
+        + `${o.indicator_count ?? 0} indicador(es): ${o.indicators_not_met ?? 0} `
+        + `no cumple(n) la meta y ${o.indicators_without_data ?? 0} no tiene(n) dato.`,
+        [n]);
+    }
+    w.fact(`Hay ${filas.length} objetivo(s) en el alcance consultado.`, nums);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Acciones · el estado completo, no solo las vencidas
+// ---------------------------------------------------------------------------
+// El adaptador `task` ya traía las vencidas, que es lo que importa para «qué
+// requiere atención». Este trae el panorama: qué hay abierto, de qué tipo y
+// cuánto queda por verificar.
+registerAdapter({
+  code: "action",
+  useCases: ["*"],
+  temporal: "period",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("work_actions")
+      .select("id, code, title, action_kind, status, due_on, completed_on, "
+        + "requires_effectiveness, effectiveness_result, expected_result")
+      .eq("organization_id", req.organizationId)
+      .order("due_on", { ascending: true, nullsFirst: false })
+      .limit(LIMITE);
+    if (req.pinned?.type === "work_action") q = q.eq("id", req.pinned.id);
+    if (req.temporal.periodStart) q = q.gte("due_on", req.temporal.periodStart);
+    if (req.temporal.periodEnd) q = q.lte("due_on", req.temporal.periodEnd);
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const a of filas) {
+      const n = w.ref({
+        sourceCode: "action", entityType: "work_action", entityId: String(a.id),
+        label: `Acción ${a.code}: ${a.title}`,
+        deepLink: `/quality/cases`,
+      });
+      nums.push(n);
+      w.fact(
+        `La acción «${a.title}» (${a.code}, ${a.action_kind}) está ${a.status}`
+        + (a.due_on ? `, con compromiso para el ${a.due_on}` : "")
+        + (a.requires_effectiveness
+          ? `, y su eficacia está ${a.effectiveness_result}`
+          : ", y no exige verificar eficacia")
+        + ".", [n]);
+    }
+    // §32 · Los recuentos, en el servidor.
+    const abiertas = filas.filter(
+      (a) => a.status === "planned" || a.status === "in_progress").length;
+    const porVerificar = filas.filter(
+      (a) => a.requires_effectiveness === true && a.effectiveness_result === "pending").length;
+    w.fact(
+      `De las acciones consultadas, ${abiertas} sigue(n) abierta(s) y `
+      + `${porVerificar} espera(n) verificación de eficacia.`, nums);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Controles
+// ---------------------------------------------------------------------------
+registerAdapter({
+  code: "control",
+  useCases: ["*"],
+  temporal: "current",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("quality_controls")
+      .select("id, code, title, control_nature, operation_mode, frequency, status")
+      .eq("organization_id", req.organizationId)
+      .neq("status", "retired")
+      .limit(LIMITE);
+    if (req.pinned?.type === "quality_control") q = q.eq("id", req.pinned.id);
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const c of filas) {
+      const n = w.ref({
+        sourceCode: "control", entityType: "quality_control", entityId: String(c.id),
+        label: `Control ${c.code}: ${c.title}`,
+        deepLink: `/quality/risks`,
+      });
+      nums.push(n);
+      w.fact(
+        `El control «${c.title}» (${c.code}) es ${c.control_nature}, opera de forma `
+        + `${c.operation_mode} con frecuencia ${c.frequency}, y está ${c.status}.`, [n]);
+    }
+    w.fact(`Hay ${filas.length} control(es) vigente(s).`, nums);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Conocimiento crítico
+// ---------------------------------------------------------------------------
+registerAdapter({
+  code: "knowledge_item",
+  useCases: ["*"],
+  temporal: "current",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    // §35 · Se lee la vista de continuidad, que ya trae el número de titulares
+    // CALCULADO y sin nombres. Un conocimiento con un solo titular es un dato
+    // del sistema de gestión; quién es esa persona no hace falta para decirlo.
+    let q = db.from("v_quality_knowledge_continuity")
+      .select("knowledge_item_id, title, criticality, holder_count, "
+        + "continuity_attention, documentation_status")
+      .eq("organization_id", req.organizationId)
+      .limit(LIMITE);
+    if (req.pinned?.type === "quality_knowledge_item") {
+      q = q.eq("knowledge_item_id", req.pinned.id);
+    }
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const k of filas) {
+      const n = w.ref({
+        sourceCode: "knowledge_item", entityType: "quality_knowledge_item",
+        entityId: String(k.knowledge_item_id),
+        label: `Conocimiento: ${k.title}`,
+        deepLink: `/quality/people/knowledge`,
+      });
+      nums.push(n);
+      w.fact(
+        `El conocimiento «${k.title}» es de criticidad ${k.criticality}, lo `
+        + `dominan ${k.holder_count ?? 0} persona(s)`
+        + (k.continuity_attention ? " y su continuidad requiere atención" : "")
+        + `; su documentación está ${k.documentation_status}.`, [n]);
+    }
+    const enRiesgo = filas.filter((k) => k.continuity_attention === true).length;
+    w.fact(
+      `De los conocimientos consultados, ${enRiesgo} requiere(n) atención por continuidad.`,
+      nums);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Quejas y retroalimentación · clase RESTRINGIDA
+// ---------------------------------------------------------------------------
+// La fuente es `restricted` en el catálogo: la RLS de QUALITY-08 decide quién
+// puede leerla, y aquí se lee con la sesión de quien pregunta. Si su rol no
+// alcanza, no vienen filas y no hay nada que contar.
+registerAdapter({
+  code: "customer_feedback",
+  feature: "customer",
+  useCases: ["*"],
+  temporal: "period",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("quality_customer_feedback")
+      .select("id, title, feedback_kind, status, severity, received_on")
+      .eq("organization_id", req.organizationId)
+      .order("received_on", { ascending: false })
+      .limit(LIMITE);
+    if (req.pinned?.type === "quality_customer_feedback") q = q.eq("id", req.pinned.id);
+    if (req.temporal.periodStart) q = q.gte("received_on", req.temporal.periodStart);
+    if (req.temporal.periodEnd) q = q.lte("received_on", req.temporal.periodEnd);
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const f of filas) {
+      const n = w.ref({
+        sourceCode: "customer_feedback", entityType: "quality_customer_feedback",
+        entityId: String(f.id),
+        label: `${f.feedback_kind === "complaint" ? "Queja" : "Retroalimentación"}: ${f.title}`,
+        deepLink: `/quality/customer-voice/feedback`,
+      });
+      nums.push(n);
+      w.fact(
+        `«${f.title}» es ${f.feedback_kind}, se recibió el ${f.received_on} y está `
+        + `${f.status}` + (f.severity ? ` (severidad ${f.severity})` : "") + ".", [n]);
+    }
+    const quejas = filas.filter(
+      (f) => f.feedback_kind === "complaint" || f.feedback_kind === "claim").length;
+    const abiertas = filas.filter(
+      (f) => f.status === "open" || f.status === "under_review").length;
+    w.fact(
+      `De lo consultado, ${quejas} es/son queja o reclamación, y ${abiertas} sigue(n) `
+      + `sin cerrar.`, nums);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Reglas de automatización · para poder explicar QUÉ vigila la plataforma
+// ---------------------------------------------------------------------------
+registerAdapter({
+  code: "automation_rule",
+  useCases: ["*"],
+  temporal: "current",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    let q = db.from("v_quality_automation_rule_overview")
+      .select("rule_id, code, name, category, status, current_version_number, "
+        + "open_signal_count, last_evaluated_at, trigger_kind, is_suppressed")
+      .eq("organization_id", req.organizationId)
+      .eq("status", "active")
+      .limit(LIMITE);
+    if (req.pinned?.type === "quality_automation_rule") q = q.eq("rule_id", req.pinned.id);
+    const { data } = await q;
+    const filas = filasDe(data);
+    if (filas.length === 0) return;
+
+    const nums: number[] = [];
+    for (const r of filas) {
+      const n = w.ref({
+        sourceCode: "automation_rule", entityType: "quality_automation_rule",
+        entityId: String(r.rule_id),
+        label: `Regla ${r.code}: ${r.name}`,
+        deepLink: `/quality/automation/rules/${r.rule_id}`,
+      });
+      nums.push(n);
+      w.fact(
+        `La regla «${r.name}» (${r.code}) está activa en su versión `
+        + `v${r.current_version_number ?? "—"}, `
+        + (r.trigger_kind === "event" ? "reacciona a un hecho" : "se revisa cada día")
+        + `, y tiene ${r.open_signal_count ?? 0} señal(es) abierta(s)`
+        + (r.is_suppressed ? ", aunque ahora está silenciada" : "") + ".", [n]);
+    }
+    w.fact(`La plataforma vigila ${filas.length} condición(es) con reglas activas.`, nums);
+  },
+});

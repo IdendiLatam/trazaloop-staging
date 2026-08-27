@@ -118,6 +118,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0131_quality_automation_event_bridge.sql",
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
+    "0133_quality_ai_copilot_completion.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

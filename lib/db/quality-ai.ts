@@ -79,12 +79,20 @@ export type AiRunRow = {
   promptTemplate: string; promptVersion: number; status: string;
   startedAt: string; completedAt: string | null; latencyMs: number | null;
   inputTokens: number | null; outputTokens: number | null;
+  /** §12 · Solo si el proveedor los informa; si no, quedan en null. */
+  cachedInputTokens: number | null; reasoningTokens: number | null;
+  totalTokens: number | null;
   contextItems: number; evidenceLevel: string | null; errorMessage: string | null;
   actorName: string | null; isMine: boolean;
   question: string | null; answer: Record<string, unknown> | null;
   suggestionCount: number; acceptedCount: number; feedbackUseful: boolean | null;
   temporalMode: string; asOf: string | null;
 };
+
+/** Un hueco es un hueco: null no se convierte en cero (§12). */
+function numeroOpcional(v: unknown): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
 
 function mapRun(r: Record<string, unknown>): AiRunRow {
   return {
@@ -100,6 +108,9 @@ function mapRun(r: Record<string, unknown>): AiRunRow {
     latencyMs: r.latency_ms === null || r.latency_ms === undefined ? null : Number(r.latency_ms),
     inputTokens: r.input_tokens === null || r.input_tokens === undefined ? null : Number(r.input_tokens),
     outputTokens: r.output_tokens === null || r.output_tokens === undefined ? null : Number(r.output_tokens),
+    cachedInputTokens: numeroOpcional(r.cached_input_tokens),
+    reasoningTokens: numeroOpcional(r.reasoning_tokens),
+    totalTokens: numeroOpcional(r.total_tokens),
     contextItems: Number(r.context_items ?? 0),
     evidenceLevel: (r.evidence_level as string | null) ?? null,
     errorMessage: (r.error_message as string | null) ?? null,
@@ -302,4 +313,67 @@ export async function listAiSources(client?: Db): Promise<Record<string, unknown
     .select("*").order("position_order");
   if (error) throw new Error(fail(error, "No se pudo leer el catálogo del Copilot."));
   return filas(data);
+}
+
+
+// ---------------------------------------------------------------------------
+// QUALITY-12.1 · Los temas de clientes persistidos · GAP-03 de QUALITY-12
+// ---------------------------------------------------------------------------
+
+export type AiThemeRow = {
+  id: string; themeKey: string; label: string; summary: string | null;
+  sentiment: string; status: string;
+  periodStart: string; periodEnd: string;
+  evidenceCount: number;
+  runId: string; provider: string; model: string;
+  promptTemplate: string; promptVersion: number;
+  createdAt: string;
+  /** Del periodo anterior DEL MISMO TEMA; null si es la primera lectura. */
+  previousSentiment: string | null;
+  previousEvidenceCount: number | null;
+  previousPeriodEnd: string | null;
+};
+
+export async function listCustomerThemes(
+  organizationId: string, limit = 60, client?: Db
+): Promise<AiThemeRow[]> {
+  const s = await db(client);
+  const { data, error } = await s
+    .from("v_quality_ai_customer_theme_series")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("period_start", { ascending: false })
+    .order("theme_key", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(fail(error, "No se pudieron leer los temas de clientes."));
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.theme_id),
+    themeKey: String(r.theme_key),
+    label: String(r.label),
+    summary: (r.summary as string | null) ?? null,
+    sentiment: String(r.sentiment ?? "unknown"),
+    status: String(r.status ?? "proposed"),
+    periodStart: String(r.period_start),
+    periodEnd: String(r.period_end),
+    evidenceCount: Number(r.evidence_count ?? 0),
+    runId: String(r.run_id),
+    provider: String(r.provider),
+    model: String(r.model),
+    promptTemplate: String(r.prompt_template),
+    promptVersion: Number(r.prompt_version ?? 1),
+    createdAt: String(r.created_at),
+    previousSentiment: (r.previous_sentiment as string | null) ?? null,
+    previousEvidenceCount: numeroOpcional(r.previous_evidence_count),
+    previousPeriodEnd: (r.previous_period_end as string | null) ?? null,
+  }));
+}
+
+export async function resolveCustomerTheme(
+  themeId: string, status: "confirmed" | "discarded", note: string | null, client?: Db
+): Promise<void> {
+  const s = await db(client);
+  const { error } = await s.rpc("quality_ai_resolve_customer_theme", {
+    p_theme_id: themeId, p_status: status, p_note: note,
+  });
+  if (error) throw new Error(fail(error, "No se pudo resolver el tema."));
 }

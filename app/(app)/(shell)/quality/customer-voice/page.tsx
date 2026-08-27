@@ -12,17 +12,22 @@ import {
 } from "@/lib/domain/quality-customer-voice";
 import { CustomerVoiceSummary } from "@/components/domain/quality/customer-voice/summary";
 import { VoiceSubnav } from "@/components/domain/quality/customer-voice/shared";
+import { CustomerThemes } from "@/components/domain/quality/customer-voice/themes";
+import { listCustomerThemes } from "@/lib/db/quality-ai";
 
 export const metadata = { title: "Voz del cliente" };
 
 export default async function CustomerVoicePage() {
   const org = await requireQualityModule();
-  const [definitions, series, signals, reviews, positions] = await Promise.all([
+  const [definitions, series, signals, reviews, positions, themes] = await Promise.all([
     listMetricDefinitions(org.organizationId),
     listMetricSeries(org.organizationId),
     listCustomerSignals(org.organizationId),
     listVoiceReviews(org.organizationId),
     listQualityPositions(org.organizationId),
+    // QUALITY-12.1 · Si el Copilot está apagado o nunca se usó, esto es una
+    // lista vacía y el bloque no aparece. La Voz del cliente no depende de la IA.
+    listCustomerThemes(org.organizationId).catch(() => []),
   ]);
 
   return (
@@ -48,6 +53,8 @@ export default async function CustomerVoicePage() {
         canClose={canCloseCustomerVoice(org.roleCode)}
         today={todayIso()}
       />
+
+      <CustomerThemes themes={themes} canManage={canManageCustomerVoice(org.roleCode)} />
     </div>
   );
 }

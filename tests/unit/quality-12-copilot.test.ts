@@ -730,11 +730,16 @@ check("N6. NO se creó ninguna base vectorial (§158)", () => {
     "el contexto usa embeddings");
 });
 
-check("N7. la migración es la 0132 y es la última (§129)", () => {
+check("N7. la 0132 sigue siendo la migración de QUALITY-12 (§129)", () => {
   const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
-  assert(migraciones[migraciones.length - 1] === "0132_quality_ai_copilot.sql",
-    "la 0132 no es la última");
+  // Ya no se exige que sea la última —QUALITY-12.1 añadió la 0133 detrás—, sino
+  // que siga siendo la que trae QUALITY-12 y que nadie haya metido nada por
+  // delante: es la adyacencia lo que prueba que el orden no se tocó.
+  const i = migraciones.indexOf("0132_quality_ai_copilot.sql");
+  assert(i > 0, "la 0132 no está");
+  assert(migraciones[i - 1] === "0131_quality_automation_event_bridge.sql",
+    "algo se coló entre la 0131 y la 0132");
   // Que una migración anterior NOMBRE a QUALITY-12 es normal —la 0129 dice que
   // la IA será otra capa—. Lo que no puede haber es contenido de QUALITY-12
   // dentro: nada de `quality_ai_`, ni tablas, ni funciones del Copilot.

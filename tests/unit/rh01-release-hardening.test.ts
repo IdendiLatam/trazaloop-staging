@@ -788,6 +788,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0131_quality_automation_event_bridge.sql",
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
+    "0133_quality_ai_copilot_completion.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

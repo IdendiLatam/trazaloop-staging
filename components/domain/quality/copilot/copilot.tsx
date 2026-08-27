@@ -275,6 +275,13 @@ function Answer({ state }: { state: AiActionState }) {
           ninguna fuente autorizada.
         </p>
       ) : null}
+      {meta && (meta.themesRecorded ?? 0) > 0 ? (
+        <p className="text-xs text-ink-soft">
+          Se guardaron {meta.themesRecorded} tema(s) de clientes con su periodo y
+          los comentarios en los que se apoyan. Quedan como propuesta hasta que
+          alguien los confirme, en Voz del cliente.
+        </p>
+      ) : null}
 
       <Feedback runId={state.runId!} />
     </article>
@@ -337,15 +344,31 @@ function Feedback({ runId }: { runId: string }) {
 
 function Usage({ usage, live }: { usage: Record<string, unknown>; live: boolean }) {
   const n = (k: string) => Number(usage[k] ?? 0);
+  // §12 · Un total que el proveedor informa manda sobre la suma que podríamos
+  // hacer aquí: es el número que después aparece en la factura.
+  const total = n("total_tokens_this_month");
+  const razonamiento = n("reasoning_tokens_this_month");
+  const cache = n("cached_input_tokens_this_month");
   return (
     <section className="rounded-lg border border-hairline bg-surface p-4 space-y-2">
       <h2 className="text-sm font-semibold text-ink">Consumo</h2>
       <div className="grid gap-2 text-xs sm:grid-cols-4">
         <Dato label="Consultas este mes" valor={`${n("runs_this_month")} / ${n("monthly_run_limit")}`} />
-        <Dato label="Tuyas hoy" valor={`${n("runs_today_by_me")} / ${n("daily_user_limit")}`} />
-        <Dato label="Tokens de entrada" valor={String(n("input_tokens_this_month"))} />
-        <Dato label="Fallos del mes" valor={String(n("failures_this_month"))} />
+        <Dato label="Tuyas hoy" valor={`${n("runs_today")} / ${n("daily_user_limit")}`} />
+        <Dato
+          label="Tokens de entrada"
+          valor={cache > 0
+            ? `${n("input_tokens_this_month")} (${cache} en caché)`
+            : String(n("input_tokens_this_month"))} />
+        <Dato label="Fallos del mes" valor={String(n("failed_this_month"))} />
       </div>
+      {total > 0 || razonamiento > 0 ? (
+        <div className="grid gap-2 text-xs sm:grid-cols-4">
+          <Dato label="Tokens de salida" valor={String(n("output_tokens_this_month"))} />
+          <Dato label="De ellos, razonando" valor={String(razonamiento)} />
+          <Dato label="Total del proveedor" valor={String(total)} />
+        </div>
+      ) : null}
       <p className="text-xs text-ink-soft">
         {live
           ? "Las consultas pasan por el proveedor configurado en el servidor."

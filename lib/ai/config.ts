@@ -18,7 +18,13 @@ import "server-only";
  * base, ni en la respuesta de una acción.
  */
 
-export type AiProviderName = "anthropic" | "fake";
+export type AiProviderName = "openai" | "anthropic" | "fake";
+
+/** §13 · Cuánto piensa el modelo antes de responder. El Copilot resume datos
+ *  que ya tiene delante y los cita: no está resolviendo un problema abierto.
+ *  `low` da la calidad que hace falta sin pagar latencia ni tokens de más, y
+ *  se puede subir por configuración sin tocar código. */
+export type AiReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export type AiModelConfig = {
   provider: AiProviderName;
@@ -35,6 +41,8 @@ export type AiModelConfig = {
   maxQuestionChars: number;
   /** §72 · Cuántas veces puede pedir datos el modelo en una misma consulta. */
   maxToolCalls: number;
+  /** §13 · Solo lo usan los modelos que razonan; los demás lo ignoran. */
+  reasoningEffort: AiReasoningEffort;
 };
 
 /** La configuración vigente. Es server-only y se lee entera en cada ejecución. */
@@ -43,23 +51,48 @@ export function aiConfig(): AiModelConfig {
   const model = (process.env.QUALITY_AI_MODEL ?? "").trim();
 
   return {
-    // Sin proveedor configurado, el Copilot no se inventa uno: queda apagado y
-    // lo dice. El doble determinístico solo entra si se pide explícitamente.
-    provider: provider === "anthropic" ? "anthropic" : provider === "fake" ? "fake" : "fake",
-    model: model.length > 0 ? model : "claude-sonnet-5",
+    // §61 · Un proveedor que no se reconoce NO cae en silencio sobre otro: cae
+    // sobre el doble determinístico, que no llama a nadie y lo dice en pantalla.
+    // Elegir OpenAI porque alguien escribió mal «anthropic» sería exactamente
+    // el fallo silencioso que este sprint tiene que evitar.
+    provider: provider === "openai" ? "openai"
+      : provider === "anthropic" ? "anthropic"
+        : "fake",
+    model: model.length > 0 ? model : defaultModel(provider),
     maxOutputTokens: intFromEnv("QUALITY_AI_MAX_OUTPUT_TOKENS", 1500, 200, 8000),
     temperature: 0,
     timeoutMs: intFromEnv("QUALITY_AI_TIMEOUT_MS", 30_000, 3_000, 120_000),
     contextBudgetChars: intFromEnv("QUALITY_AI_CONTEXT_BUDGET", 24_000, 2_000, 120_000),
     maxQuestionChars: intFromEnv("QUALITY_AI_MAX_QUESTION", 1_200, 100, 4_000),
     maxToolCalls: intFromEnv("QUALITY_AI_MAX_TOOL_CALLS", 4, 0, 12),
+    reasoningEffort: effortFromEnv(),
   };
+}
+
+/** §63 · El modelo lo pone el SERVIDOR. Nunca llega del navegador, y cada
+ *  proveedor tiene el suyo por omisión para que una configuración a medias no
+ *  acabe pidiendo un modelo que no existe en ese proveedor. */
+function defaultModel(provider: string): string {
+  if (provider === "openai") return "gpt-5.4-mini";
+  if (provider === "anthropic") return "claude-sonnet-5";
+  return "doble-determinista-1";
+}
+
+function effortFromEnv(): AiReasoningEffort {
+  const v = (process.env.QUALITY_AI_REASONING_EFFORT ?? "").trim().toLowerCase();
+  return v === "minimal" || v === "low" || v === "medium" || v === "high"
+    ? (v as AiReasoningEffort)
+    : "low";
 }
 
 /** §164 · Si no hay credencial, la pantalla lo explica en vez de fallar. */
 export function aiCredentialConfigured(): boolean {
   const provider = (process.env.QUALITY_AI_PROVIDER ?? "").trim().toLowerCase();
   if (provider === "fake") return true;
+  // §9 · Se comprueba que HAY algo con forma de credencial, no que empiece por
+  // un prefijo concreto: los prefijos cambian y una comprobación rígida acaba
+  // rechazando una clave buena. Lo que importa es no llamar con la cadena
+  // vacía ni con un «PENDIENTE» que alguien dejó puesto (§62).
   return (process.env.QUALITY_AI_API_KEY ?? "").trim().length > 20;
 }
 

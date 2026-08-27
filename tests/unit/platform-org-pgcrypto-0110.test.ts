@@ -66,6 +66,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0131_quality_automation_event_bridge.sql",
     // QUALITY-12: el Copilot, sus consultas y sus borradores.
     "0132_quality_ai_copilot.sql",
+    "0133_quality_ai_copilot_completion.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

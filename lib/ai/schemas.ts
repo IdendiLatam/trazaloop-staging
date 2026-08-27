@@ -19,6 +19,22 @@
  */
 
 export type AiFact = { statement: string; references: number[] };
+
+/**
+ * QUALITY-12.1 · Un tema de la voz del cliente.
+ *
+ * Lo que pone el modelo es la etiqueta, el resumen, el tono y QUÉ COMENTARIOS
+ * van en el tema —por su número—. Lo que NO pone es cuántos son: eso lo cuenta
+ * el servidor sobre los números que resulten válidos, y por eso un tema no
+ * puede afirmar más respaldo del que tiene.
+ */
+export type AiTheme = {
+  key: string;
+  label: string;
+  summary: string;
+  sentiment: "negative" | "mixed" | "neutral" | "positive" | "unknown";
+  references: number[];
+};
 export type AiSuggestion = { title: string; detail: string; kind: string };
 
 export type AiAnswer = {
@@ -28,6 +44,8 @@ export type AiAnswer = {
   suggestions: AiSuggestion[];
   unanswered: string[];
   evidence: "sufficient" | "limited" | "missing";
+  /** Solo se rellena en la consulta de temas de clientes; en las demás va vacío. */
+  themes: AiTheme[];
 };
 
 export const ANSWER_SCHEMA_NAME = "respuesta_trazaloop";
@@ -80,8 +98,36 @@ export const ANSWER_SCHEMA: Record<string, unknown> = {
       items: { type: "string" },
     },
     evidence: { type: "string", enum: ["sufficient", "limited", "missing"] },
+    themes: {
+      type: "array",
+      description:
+        "SOLO para la consulta de temas de clientes; en cualquier otra, déjalo "
+        + "vacío. Cada tema con su etiqueta corta y estable, un resumen, el tono "
+        + "que transmiten los comentarios, y los NÚMEROS de los comentarios que "
+        + "lo forman. No cuentes cuántos son: eso lo cuenta Trazaloop.",
+      items: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            description:
+              "Etiqueta corta y estable del asunto, en minúsculas, para poder "
+              + "seguirlo de un periodo a otro. Ej.: «plazo de entrega».",
+          },
+          label: { type: "string" },
+          summary: { type: "string" },
+          sentiment: {
+            type: "string",
+            enum: ["negative", "mixed", "neutral", "positive", "unknown"],
+          },
+          references: { type: "array", items: { type: "integer" } },
+        },
+        required: ["key", "label", "summary", "sentiment", "references"],
+      },
+    },
   },
-  required: ["summary", "facts", "interpretation", "suggestions", "unanswered", "evidence"],
+  required: ["summary", "facts", "interpretation", "suggestions", "unanswered",
+             "evidence", "themes"],
 };
 
 export type ValidationResult =
@@ -141,13 +187,40 @@ export function validateAnswer(value: unknown, maxReference: number): Validation
     .map((s) => (typeof s === "string" ? s.trim() : ""))
     .filter((s) => s.length > 0);
 
+  // Los temas se limpian igual que los hechos: una cita fuera de rango es una
+  // cita inventada, y un tema que se queda sin ninguna no tiene en qué
+  // apoyarse, así que no pasa.
+  const themes: AiTheme[] = [];
+  for (const t of asArray(v.themes)) {
+    if (typeof t !== "object" || t === null) continue;
+    const fila = t as Record<string, unknown>;
+    const label = typeof fila.label === "string" ? fila.label.trim() : "";
+    const key = (typeof fila.key === "string" ? fila.key : label)
+      .trim().toLowerCase().slice(0, 80);
+    if (key.length < 2 || label.length === 0) continue;
+    const crudas = asArray(fila.references)
+      .map((n) => Number(n))
+      .filter((n) => Number.isInteger(n));
+    const validas = [...new Set(crudas.filter((n) => n >= 1 && n <= maxReference))];
+    dropped += crudas.length - validas.length;
+    if (validas.length === 0) continue;
+    const tono = fila.sentiment;
+    themes.push({
+      key, label,
+      summary: typeof fila.summary === "string" ? fila.summary.trim() : "",
+      sentiment: tono === "negative" || tono === "mixed" || tono === "neutral"
+        || tono === "positive" ? tono : "unknown",
+      references: validas,
+    });
+  }
+
   const evidence = v.evidence === "sufficient" || v.evidence === "limited"
     || v.evidence === "missing" ? v.evidence : "limited";
 
   return {
     ok: true,
     droppedCitations: dropped,
-    answer: { summary, facts, interpretation, suggestions, unanswered, evidence },
+    answer: { summary, facts, interpretation, suggestions, unanswered, evidence, themes },
   };
 }
 
