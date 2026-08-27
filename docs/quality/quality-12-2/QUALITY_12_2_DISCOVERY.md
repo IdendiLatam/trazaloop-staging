@@ -589,7 +589,7 @@ Ninguna toca 0132–0135. Production sigue en 0111.
 |---|---|---|---|
 | **12.2A** · Guía canónica ✅ **HECHA** | enriquecer y **versionar** la guía; poblar `description`; revisar los 250 hints por lenguaje de conformidad (R-3); un único `resolveAuthoringGuidance` para botón «i» e Intelligence | `0136` | — |
 | **12.2B** · Perfil e identidad ✅ **HECHA** | los cuatro campos de perfil; catálogo de roles de sección; guía de respaldo para Quality | `0137` | A |
-| **12.2C** · Quick Edit | política documental corta, esquema pequeño, orquestador de autoría, un solo punto de entrada, botón en los editores, comparación y reemplazo en borrador | ninguna | A, B |
+| **12.2C** · Quick Edit ✅ **HECHA** | política documental corta, esquema pequeño, orquestador de autoría, un solo punto de entrada, botón en los editores, comparación y reemplazo en borrador | `0138` | A, B |
 | **12.2D** · Revisión contextual | nivel 4 dirigido por `related_context_types`, citas visibles, reutilización de los adaptadores de Quality | ninguna | C |
 | **12.2E** · Renombrado | Copilot → Trazaloop Intelligence en interfaz, menú, textos de producto e inventario de exportación; sin tocar `quality_ai_*` | ninguna | independiente |
 | **12.2F** · Consumo y cuotas | separar el consumo por caso de uso; cuotas diferenciadas si se confirman | `0138` | C |
@@ -605,7 +605,9 @@ estaba previsto.
 
 > **Nota posterior · QUALITY-12.2A y 12.2B están hechas.**
 > 12.2A cerró las tres condiciones de abajo; 12.2B añadió el perfil de empresa
-> y la guía de autoría de Quality. Ver `QUALITY_12_2B_IMPLEMENTATION.md`.
+> y la guía de autoría de Quality; 12.2C construyó la asistencia de redacción
+> con su propia política y su propio esquema —coste fijo 801 tokens frente a
+> los 1 664 que este documento midió—. Ver los informes de cada una.
 >
 > **QUALITY-12.2A cerró las tres condiciones de abajo.**
 > La guía está versionada, los 250 textos revisados y la puerta de Demo
