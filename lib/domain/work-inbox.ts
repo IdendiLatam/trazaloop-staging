@@ -50,6 +50,10 @@ export const SUBJECT_TYPES = [
   // no la auditoría: es lo que hay que evaluar, y evaluarlo no lo convierte en
   // no conformidad.
   "quality_audit_program", "quality_audit", "quality_audit_finding",
+  // QUALITY-10 · Revisión por la dirección. El asunto de una tarea de entrada
+  // es la ENTRADA, no la revisión: es lo que hay que preparar o analizar.
+  "quality_management_review", "quality_management_review_input",
+  "quality_management_review_decision",
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
@@ -111,6 +115,13 @@ export const TASK_TYPES = [
   "audit_report_issue",
   "audit_finding_evaluation",
   "audit_followup",
+  // QUALITY-10 · Preparar y seguir son tareas. Decidir NO se convierte en tarea
+  // sola: llenaría la bandeja de recordatorios que nadie pidió.
+  "management_review_preparation",
+  "management_review_input",
+  "management_review_analysis",
+  "management_review_closure",
+  "management_review_action_followup",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -152,6 +163,11 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   audit_report_issue: "Emitir el informe de una auditoría",
   audit_finding_evaluation: "Evaluar un hallazgo de auditoría",
   audit_followup: "Seguir lo que dejó abierto una auditoría",
+  management_review_preparation: "Preparar una revisión por la dirección",
+  management_review_input: "Preparar una entrada de la revisión",
+  management_review_analysis: "Analizar una entrada de la revisión",
+  management_review_closure: "Cerrar una revisión por la dirección",
+  management_review_action_followup: "Seguir una acción decidida por la dirección",
 };
 
 export const ALERT_STATUSES = ["new", "seen", "acknowledged", "resolved", "dismissed"] as const;
@@ -220,6 +236,14 @@ export const ALERT_TYPES = [
   "audit_finding_unevaluated",
   "audit_independence_conflict",
   "audit_program_coverage_gap",
+  // QUALITY-10 · Ninguno concluye, decide ni cierra nada: dicen que hay algo
+  // que mirar.
+  "management_review_due",
+  "management_review_overdue",
+  "management_review_input_pending",
+  "management_review_source_updated",
+  "management_review_action_overdue",
+  "management_review_followup_pending",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -268,6 +292,12 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   audit_finding_unevaluated: "Un hallazgo lleva días sin evaluar",
   audit_independence_conflict: "Hay un conflicto de independencia sin decidir",
   audit_program_coverage_gap: "El programa va corto de cobertura",
+  management_review_due: "Se acerca una revisión por la dirección",
+  management_review_overdue: "Una revisión por la dirección se pasó de fecha",
+  management_review_input_pending: "Quedan entradas sin mirar en una revisión",
+  management_review_source_updated: "Una fuente cambió después de preparar la entrada",
+  management_review_action_overdue: "Una acción decidida por la dirección venció",
+  management_review_followup_pending: "Hay seguimiento pendiente de una revisión",
 };
 
 export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;

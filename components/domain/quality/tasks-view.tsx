@@ -98,6 +98,11 @@ const TASK_TONE: Record<TaskType, string> = {
   audit_report_issue: "border-amber/40 bg-amber/5",
   audit_finding_evaluation: "border-amber/40 bg-amber/5",
   audit_followup: "border-loop/30 bg-loop/5",
+  management_review_preparation: "border-loop/30 bg-loop/5",
+  management_review_input: "border-amber/40 bg-amber/5",
+  management_review_analysis: "border-amber/40 bg-amber/5",
+  management_review_closure: "border-loop/30 bg-loop/5",
+  management_review_action_followup: "border-loop/30 bg-loop/5",
 };
 
 const TASK_CTA: Record<TaskType, string> = {
@@ -138,6 +143,11 @@ const TASK_CTA: Record<TaskType, string> = {
   audit_report_issue: "Emitir el informe",
   audit_finding_evaluation: "Ver los hallazgos",
   audit_followup: "Ver el seguimiento",
+  management_review_preparation: "Preparar la revisión",
+  management_review_input: "Preparar la entrada",
+  management_review_analysis: "Analizar la entrada",
+  management_review_closure: "Cerrar la revisión",
+  management_review_action_followup: "Ver el seguimiento",
 };
 
 /**
@@ -221,6 +231,15 @@ function subjectHref(
       return `/quality/audits/${subjectId}`;
     case "quality_audit_finding":
       return `/quality/audits/findings`;
+    // QUALITY-10 · La revisión tiene ficha propia. La entrada y la decisión se
+    // ven DENTRO de ella, y la tarea no guarda a cuál pertenecen: llevan al
+    // listado y al seguimiento, que existen.
+    case "quality_management_review":
+      return `/quality/management-review/${subjectId}`;
+    case "quality_management_review_input":
+      return `/quality/management-review`;
+    case "quality_management_review_decision":
+      return `/quality/management-review/followup`;
     default:
       return null;
   }

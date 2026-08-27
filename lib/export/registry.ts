@@ -84,6 +84,12 @@ import {
   qualityAuditFollowupList, qualityAuditList, qualityAuditPlanDetail,
   qualityAuditProgramDetail, qualityAuditProgramList, qualityAuditReportDetail,
 } from "./adapters/quality-audits";
+import {
+  qualityManagementReviewAgenda, qualityManagementReviewDecisionList,
+  qualityManagementReviewDetail, qualityManagementReviewFollowUp,
+  qualityManagementReviewInputs, qualityManagementReviewList,
+  qualityManagementReviewMinutes, qualityManagementReviewReport,
+} from "./adapters/quality-management-review";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -245,6 +251,21 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   qualityAuditChecklistDetail, qualityAuditExecutionDetail,
   qualityAuditFindingDetail, qualityAuditFindingList,
   qualityAuditReportDetail, qualityAuditFollowupList,
+
+  // ------------------------------------------------------------------
+  // QUALITY-10 · revisión por la dirección
+  //
+  // Cuatro reglas atraviesan los ocho. El ACTA se imprime desde su
+  // instantánea —la revisión de 2027 reimpresa en 2029 devuelve 2027—.
+  // Ninguno confunde decisión con acción: las dos columnas van separadas y
+  // el papel explica por qué los números no coinciden. Ninguno escribe cero
+  // donde no hubo medición. Y ninguno rompe el anonimato de QUALITY-08,
+  // porque lo único que este dominio guarda de los clientes son agregados.
+  // ------------------------------------------------------------------
+  qualityManagementReviewList, qualityManagementReviewDetail,
+  qualityManagementReviewAgenda, qualityManagementReviewInputs,
+  qualityManagementReviewDecisionList, qualityManagementReviewReport,
+  qualityManagementReviewMinutes, qualityManagementReviewFollowUp,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

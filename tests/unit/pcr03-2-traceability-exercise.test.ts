@@ -62,6 +62,7 @@ const QUALITY_01_ALLOWED = new Set([
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -359,6 +360,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

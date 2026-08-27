@@ -356,6 +356,14 @@ export const QUALITY_AUDITORIAS_GROUP: ModuleNavGroup = {
   ],
 };
 
+export const QUALITY_REVISION_DIRECCION_GROUP: ModuleNavGroup = {
+  title: "Revisión por la dirección",
+  items: [
+    { label: "Revisiones", href: "/quality/management-review", exact: true },
+    { label: "Seguimiento", href: "/quality/management-review/followup" },
+  ],
+};
+
 export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   key: "quality",
   name: "Trazaloop Quality",
@@ -371,7 +379,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   ],
   groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
            QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
-           QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP, QUALITY_DOCUMENTOS_GROUP],
+           QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP,
+           QUALITY_REVISION_DIRECCION_GROUP, QUALITY_DOCUMENTOS_GROUP],
 };
 
 // ---------------------------------------------------------------------------

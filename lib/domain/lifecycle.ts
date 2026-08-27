@@ -42,6 +42,8 @@ export const LIFECYCLE_ENTITIES = [
   "customer", "survey",
   // QUALITY-09 · Y con el mismo criterio, la auditoría y su programa.
   "audit", "audit_program",
+  // QUALITY-10 · Y la revisión por la dirección, por la misma puerta.
+  "management_review",
 ] as const;
 export type LifecycleEntity = (typeof LIFECYCLE_ENTITIES)[number];
 
@@ -186,6 +188,8 @@ export const DISPOSABLE_HINT: Record<LifecycleEntity, string> = {
     "Podrás eliminar esta auditoría mientras siga en borrador, sin hallazgos, sin evidencia y sin informe. En cuanto se ejecuta se cancela, no se borra: una auditoría cancelada sigue contando como planificada no ejecutada, y borrarla mejoraría la cobertura del programa sin que nadie hubiera auditado nada.",
   audit_program:
     "Podrás eliminar este programa mientras no tenga auditorías ni más de una revisión. Después se cierra, no se borra: su cobertura es la prueba de qué se planificó auditar y qué se auditó de verdad.",
+  management_review:
+    "Podrás eliminar esta revisión mientras siga siendo un borrador sin análisis, sin decisiones y sin acta. Después se cierra o se cancela, no se borra: lo que la dirección revisó y decidió es la prueba de que el sistema se revisó, y sin ella la empresa no puede demostrar que lo hizo.",
   methodology_version:
     "Podrás eliminar esta versión mientras siga en borrador y no se haya usado para evaluar. Una vez publicada, se sustituye por una versión nueva en lugar de reescribirla.",
 };
@@ -208,6 +212,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
   survey: "encuesta",
   audit: "auditoría",
   audit_program: "programa de auditorías",
+  management_review: "revisión por la dirección",
 };
 
 /**
@@ -217,6 +222,7 @@ export const ENTITY_LABEL: Record<LifecycleEntity, string> = {
  */
 const FEMININE_ENTITIES: ReadonlySet<LifecycleEntity> = new Set([
   "action", "opportunity", "methodology_version", "survey", "audit",
+  "management_review",
 ]);
 
 /** «Este proceso» / «Esta acción», según toque. */

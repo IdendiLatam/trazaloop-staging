@@ -291,6 +291,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   assert(
     dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f)).length === 0,

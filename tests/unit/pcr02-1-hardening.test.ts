@@ -363,6 +363,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

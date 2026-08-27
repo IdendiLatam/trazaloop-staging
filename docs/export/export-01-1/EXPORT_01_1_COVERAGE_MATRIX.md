@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **178** |
-| Ejes clasificados (ficha · listado · histórico) | **534** |
-| `AVAILABLE` | **203** |
-| `EMBEDDED` | **221** |
+| Entidades clasificadas | **189** |
+| Ejes clasificados (ficha · listado · histórico) | **567** |
+| `AVAILABLE` | **215** |
+| `EMBEDDED` | **241** |
 | `NOT_APPLICABLE` | **63** |
-| `HISTORICAL_NOT_SUPPORTED` | **47** |
+| `HISTORICAL_NOT_SUPPORTED` | **48** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **150** |
+| Claves distintas en el registro | **158** |
 
 ## Quality
 
@@ -151,6 +151,17 @@ No existe `PENDING`.
 | Hallazgo de auditoría | `/quality/audits/findings` | C | **AVAILABLE** · `quality.audit-finding.detail` | **AVAILABLE** · `quality.audit-finding.list` | EMBEDDED · dentro de *Informe de auditoría* |
 | Informe de auditoría | `/quality/audits/[auditId]` | A | **AVAILABLE** · `quality.audit-report.detail` | EMBEDDED · dentro de *Auditoría* | **AVAILABLE** · `quality.audit-report.detail` |
 | Seguimiento de auditorías | `/quality/audits` | B | EMBEDDED · dentro de *Seguimiento de auditorías* | **AVAILABLE** · `quality.audit-followup.list` | **HISTORICAL_NOT_SUPPORTED** |
+| Revisión por la dirección | `/quality/management-review/[reviewId]` | C | **AVAILABLE** · `quality.management-review.detail` | **AVAILABLE** · `quality.management-review.list` | **AVAILABLE** · `quality.management-review-minutes.detail` |
+| Entrada de la revisión por la dirección | — | D | EMBEDDED · dentro de *Paquete de entradas de la revisión por la dirección* | EMBEDDED · dentro de *Paquete de entradas de la revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Paquete de entradas de la revisión por la dirección | `/quality/management-review/[reviewId]` | A | **AVAILABLE** · `quality.management-review-inputs.detail` | EMBEDDED · dentro de *Revisión por la dirección* | **AVAILABLE** · `quality.management-review-minutes.detail` |
+| Aportación manual de la dirección | — | D | EMBEDDED · dentro de *Paquete de entradas de la revisión por la dirección* | EMBEDDED · dentro de *Paquete de entradas de la revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Participante de la revisión por la dirección | — | D | EMBEDDED · dentro de *Agenda de la revisión por la dirección* | EMBEDDED · dentro de *Agenda de la revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Agenda de la revisión por la dirección | `/quality/management-review/[reviewId]` | A | **AVAILABLE** · `quality.management-review-agenda.detail` | EMBEDDED · dentro de *Revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Decisión de la revisión por la dirección | `/quality/management-review/[reviewId]` | B | EMBEDDED · dentro de *Decisión de la revisión por la dirección* | **AVAILABLE** · `quality.management-review-decision.list` | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Informe de revisión por la dirección | `/quality/management-review/[reviewId]` | A | **AVAILABLE** · `quality.management-review-report.detail` | EMBEDDED · dentro de *Revisión por la dirección* | **AVAILABLE** · `quality.management-review-minutes.detail` |
+| Acta de revisión por la dirección | `/quality/management-review/[reviewId]` | A | **AVAILABLE** · `quality.management-review-minutes.detail` | EMBEDDED · dentro de *Revisión por la dirección* | **AVAILABLE** · `quality.management-review-minutes.detail` |
+| Nota de la revisión por la dirección | — | D | EMBEDDED · dentro de *Informe de revisión por la dirección* | EMBEDDED · dentro de *Informe de revisión por la dirección* | EMBEDDED · dentro de *Acta de revisión por la dirección* |
+| Seguimiento de la revisión por la dirección | `/quality/management-review/followup` | B | EMBEDDED · dentro de *Seguimiento de la revisión por la dirección* | **AVAILABLE** · `quality.management-review-followup.list` | **HISTORICAL_NOT_SUPPORTED** |
 
 ## TrazaDocs
 
@@ -568,3 +579,24 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Informe de auditoría | Listado | EMBEDDED | Dentro de *Auditoría*. Los informes de una auditoría se listan dentro de ella: un listado global de informes sin decir de qué auditoría no se consulta. |
 | Seguimiento de auditorías | Ficha | EMBEDDED | Dentro de *Seguimiento de auditorías*. El seguimiento es, por naturaleza, un listado: qué quedó abierto en TODAS las auditorías. |
 | Seguimiento de auditorías | Histórico | HISTORICAL_NOT_SUPPORTED | El seguimiento es la situación de hoy. Lo que quedaba abierto en un momento dado se lee en el informe de esa fecha, que lo guarda. |
+| Entrada de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Paquete de entradas de la revisión por la dirección*. Una entrada suelta no se consulta: lo que se mira es el paquete completo del periodo, porque el sentido de cada dato está en el conjunto. |
+| Entrada de la revisión por la dirección | Listado | EMBEDDED | Dentro de *Paquete de entradas de la revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Entrada de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. El acta congela las entradas TAL COMO SE REVISARON, con su dato y su análisis. |
+| Paquete de entradas de la revisión por la dirección | Listado | EMBEDDED | Dentro de *Revisión por la dirección*. Lo que la gente lista son revisiones; el paquete se abre por revisión. |
+| Aportación manual de la dirección | Ficha | EMBEDDED | Dentro de *Paquete de entradas de la revisión por la dirección*. Una aportación manual pertenece a la entrada que complementa; fuera de ella pierde la pregunta que contestaba. |
+| Aportación manual de la dirección | Listado | EMBEDDED | Dentro de *Paquete de entradas de la revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Aportación manual de la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Participante de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Agenda de la revisión por la dirección*. Lo que importa no es cada participante por separado, sino quiénes estuvieron y con qué cargo. |
+| Participante de la revisión por la dirección | Listado | EMBEDDED | Dentro de *Agenda de la revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Participante de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. El acta congela los participantes CON EL CARGO DE ENTONCES. |
+| Agenda de la revisión por la dirección | Listado | EMBEDDED | Dentro de *Revisión por la dirección*. Un listado de agendas sin decir de qué revisiones no se consulta nunca. |
+| Agenda de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Decisión de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Decisión de la revisión por la dirección*. Una decisión se lee junto a las demás de su revisión: aislada pierde el contexto de qué se estaba revisando. Su documento es el listado de decisiones de esa revisión. |
+| Decisión de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. El acta congela las decisiones y las acciones que existían al emitirla. |
+| Informe de revisión por la dirección | Listado | EMBEDDED | Dentro de *Revisión por la dirección*. El informe se compone por revisión; el listado que la gente pide es el de revisiones. |
+| Acta de revisión por la dirección | Listado | EMBEDDED | Dentro de *Revisión por la dirección*. Las actas de una revisión se listan dentro de ella: un listado global de actas sin decir de qué revisión no se consulta. |
+| Nota de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Informe de revisión por la dirección*. Una nota suelta no es un documento, y sacarla del informe invitaría a tratarla como si fuera el acta. |
+| Nota de la revisión por la dirección | Listado | EMBEDDED | Dentro de *Informe de revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Nota de la revisión por la dirección | Histórico | EMBEDDED | Dentro de *Acta de revisión por la dirección*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Seguimiento de la revisión por la dirección | Ficha | EMBEDDED | Dentro de *Seguimiento de la revisión por la dirección*. El seguimiento es, por naturaleza, un listado: qué sigue abierto de TODO lo que la dirección decidió. |
+| Seguimiento de la revisión por la dirección | Histórico | HISTORICAL_NOT_SUPPORTED | El seguimiento es la situación de hoy. Lo que quedaba abierto al emitir el acta se lee en el acta de esa fecha, que lo guarda. |

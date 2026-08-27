@@ -779,6 +779,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

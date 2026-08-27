@@ -272,6 +272,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

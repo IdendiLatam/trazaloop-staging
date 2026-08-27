@@ -1212,6 +1212,100 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: noHistory(
       "El seguimiento es la situación de hoy. Lo que quedaba abierto en un momento dado se lee en el informe de esa fecha, que lo guarda."),
   },
+  // ------------------------------------------------------------------
+  // QUALITY-10 · revisión por la dirección
+  //
+  // Los nombres llevan apellido: «Decisión» a secas ya existe en el motor de
+  // casos, y «Acta» sola no diría de qué. El inventario no admite dos filas
+  // con el mismo nombre, y aquí eso además evitaría una confusión real.
+  // ------------------------------------------------------------------
+  {
+    entity: "Revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "C",
+    detail: has("quality.management-review.detail"),
+    list: has("quality.management-review.list"),
+    historical: has("quality.management-review-minutes.detail"),
+  },
+  {
+    entity: "Entrada de la revisión por la dirección", module: "quality", route: null, klass: "D",
+    detail: embedded("Paquete de entradas de la revisión por la dirección",
+      "Una entrada suelta no se consulta: lo que se mira es el paquete completo del periodo, porque el sentido de cada dato está en el conjunto."),
+    list: embedded("Paquete de entradas de la revisión por la dirección"),
+    historical: embedded("Acta de revisión por la dirección",
+      "El acta congela las entradas TAL COMO SE REVISARON, con su dato y su análisis."),
+  },
+  {
+    entity: "Paquete de entradas de la revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "A",
+    detail: has("quality.management-review-inputs.detail"),
+    list: embedded("Revisión por la dirección",
+      "Lo que la gente lista son revisiones; el paquete se abre por revisión."),
+    historical: has("quality.management-review-minutes.detail"),
+  },
+  {
+    entity: "Aportación manual de la dirección", module: "quality", route: null, klass: "D",
+    detail: embedded("Paquete de entradas de la revisión por la dirección",
+      "Una aportación manual pertenece a la entrada que complementa; fuera de ella pierde la pregunta que contestaba."),
+    list: embedded("Paquete de entradas de la revisión por la dirección"),
+    historical: embedded("Acta de revisión por la dirección"),
+  },
+  {
+    entity: "Participante de la revisión por la dirección", module: "quality", route: null, klass: "D",
+    detail: embedded("Agenda de la revisión por la dirección",
+      "Lo que importa no es cada participante por separado, sino quiénes estuvieron y con qué cargo."),
+    list: embedded("Agenda de la revisión por la dirección"),
+    historical: embedded("Acta de revisión por la dirección",
+      "El acta congela los participantes CON EL CARGO DE ENTONCES."),
+  },
+  {
+    entity: "Agenda de la revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "A",
+    detail: has("quality.management-review-agenda.detail"),
+    list: embedded("Revisión por la dirección",
+      "Un listado de agendas sin decir de qué revisiones no se consulta nunca."),
+    historical: embedded("Acta de revisión por la dirección"),
+  },
+  {
+    entity: "Decisión de la revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "B",
+    detail: embedded("Decisión de la revisión por la dirección",
+      "Una decisión se lee junto a las demás de su revisión: aislada pierde el contexto de qué se estaba revisando. Su documento es el listado de decisiones de esa revisión."),
+    list: has("quality.management-review-decision.list"),
+    historical: embedded("Acta de revisión por la dirección",
+      "El acta congela las decisiones y las acciones que existían al emitirla."),
+  },
+  {
+    entity: "Informe de revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "A",
+    detail: has("quality.management-review-report.detail"),
+    list: embedded("Revisión por la dirección",
+      "El informe se compone por revisión; el listado que la gente pide es el de revisiones."),
+    historical: has("quality.management-review-minutes.detail"),
+  },
+  {
+    entity: "Acta de revisión por la dirección", module: "quality",
+    route: "/quality/management-review/[reviewId]", klass: "A",
+    detail: has("quality.management-review-minutes.detail"),
+    list: embedded("Revisión por la dirección",
+      "Las actas de una revisión se listan dentro de ella: un listado global de actas sin decir de qué revisión no se consulta."),
+    historical: has("quality.management-review-minutes.detail"),
+  },
+  {
+    entity: "Nota de la revisión por la dirección", module: "quality", route: null, klass: "D",
+    detail: embedded("Informe de revisión por la dirección",
+      "Una nota suelta no es un documento, y sacarla del informe invitaría a tratarla como si fuera el acta."),
+    list: embedded("Informe de revisión por la dirección"),
+    historical: embedded("Acta de revisión por la dirección"),
+  },
+  {
+    entity: "Seguimiento de la revisión por la dirección", module: "quality",
+    route: "/quality/management-review/followup", klass: "B",
+    detail: embedded("Seguimiento de la revisión por la dirección",
+      "El seguimiento es, por naturaleza, un listado: qué sigue abierto de TODO lo que la dirección decidió."),
+    list: has("quality.management-review-followup.list"),
+    historical: noHistory(
+      "El seguimiento es la situación de hoy. Lo que quedaba abierto al emitir el acta se lee en el acta de esa fecha, que lo guarda."),
+  },
 ];
 
 /** Cuenta cuántas filas hay en cada estado, por eje. */

@@ -371,6 +371,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     // QUALITY-08: voz del cliente, satisfacción, retroalimentación y quejas.
     "0126_quality_customer_voice.sql",
     "0127_quality_audits.sql",
+    "0128_quality_management_review.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);
