@@ -284,6 +284,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
+    "0136_trazadoc_canonical_authoring_guidance.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);

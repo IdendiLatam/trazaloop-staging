@@ -7,8 +7,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/require-session";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTrazadocDocumentAction } from "@/server/actions/trazadocs";
-import { getBlueprintSections } from "@/lib/db/trazadocs";
-import { resolveModuleHintsForOrg } from "@/lib/db/hint-access";
+import { resolveGuidanceHintMap } from "@/lib/db/authoring-guidance";
 import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
 import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { canDeleteDraftDocument } from "@/lib/domain/trazadocs";
@@ -48,14 +47,15 @@ export default async function TrazaDocEditPage({
   // El acceso comercial se aplica AQUÍ, en servidor y para el módulo CPR:
   // en Demo el mapa que se serializa al cliente contiene únicamente el
   // aviso fijo — el texto administrado y sus enlaces nunca salen del
-  // servidor (lib/db/hint-access.ts).
+  // servidor (lib/db/authoring-guidance.ts).
   let hints: Record<string, ResolvedHint> = {};
   if (doc.blueprintId) {
-    const blueprintSections = await getBlueprintSections(doc.blueprintId);
-    hints = await resolveModuleHintsForOrg({
+    // QUALITY-12.2A · La guía sale de la fuente canónica, que aplica la regla
+    // comercial DENTRO de la base: en Demo el texto no llega aquí siquiera.
+    hints = await resolveGuidanceHintMap({
       organizationId: org.organizationId,
       moduleCode: CPR_MODULE_CODE,
-      sections: blueprintSections,
+      blueprintId: doc.blueprintId,
     });
   }
 

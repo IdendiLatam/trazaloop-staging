@@ -119,14 +119,18 @@ check("5. Sin contenido, el botón «i» NO se muestra ni abre panel vacío", ()
 check("6. Un hint CPR no aparece en Textiles: los hints se resuelven POR blueprint del documento", () => {
   const textilesDb = read("lib/db/textiles-trazadocs.ts");
   assert(textilesDb.includes('const MODULE = "textiles"'), "el wrapper Textil debía fijar module_key textiles");
-  assert(
-    textilesDb.includes("getBlueprintSections(blueprintId)"),
-    "los hints Textiles debían salir de las secciones del blueprint del documento"
-  );
+  // QUALITY-12.2A · La guía dejó de salir pegada a las secciones y pasó a la
+  // fuente canónica. Lo que se acota sigue siendo lo mismo —el blueprint del
+  // documento—, pero la resolución es una sola para los dos módulos.
   const textilesPage = read("app/(app)/(shell)/textiles/trazadocs/[documentId]/page.tsx");
   assert(
-    textilesPage.includes("listTextileTrazadocHints"),
-    "la página Textil debía resolver hints vía su wrapper de módulo"
+    textilesPage.includes("resolveGuidanceHintMap")
+      && textilesPage.includes("blueprintId: doc.blueprintId"),
+    "la página Textil debía resolver la guía del blueprint de su propio documento"
+  );
+  assert(
+    textilesPage.includes("TEXTILES_MODULE_CODE"),
+    "la página Textil debía comprobar el plan de su propio módulo"
   );
 });
 
@@ -138,8 +142,12 @@ check("7. Un hint Textiles no aparece en CPR: las consultas CPR filtran por su m
   );
   const cprEdit = read("app/(app)/(shell)/(cpr)/trazadocs/[id]/edit/page.tsx");
   assert(
-    cprEdit.includes("getBlueprintSections(doc.blueprintId)"),
-    "los hints CPR debían salir del blueprint del propio documento (nunca de otro módulo)"
+    cprEdit.includes("resolveGuidanceHintMap") && cprEdit.includes("blueprintId: doc.blueprintId"),
+    "la guía CPR debía salir del blueprint del propio documento (nunca de otro módulo)"
+  );
+  assert(
+    cprEdit.includes("CPR_MODULE_CODE"),
+    "la página CPR debía comprobar el plan de su propio módulo"
   );
 });
 
@@ -198,9 +206,13 @@ check("14. TrazaDocs CPR conserva su comportamiento previo (hint por sección + 
   assert(cpr.includes("<SectionHint hint={hint} />"), "la sección CPR debía conservar su botón «i»");
   const editor = read(BLUEPRINT_EDITOR);
   assert(editor.includes('name="hint"'), "el campo hint del blueprint debía conservar su name para el server action");
+  // QUALITY-12.2A · La etiqueta dice ahora «guía de autoría» y, cuando ya hay
+  // historia, qué revisión está vigente. El campo y su `name` no cambian: lo
+  // que cambia es que guardar publica una revisión en vez de sobrescribir.
   assert(
-    editor.includes("Tip / hint para diligenciar esta sección"),
-    "la etiqueta de edición del hint debía conservarse"
+    editor.includes("Guía de autoría para diligenciar esta sección")
+      && editor.includes("revisión ${section.guidanceRevision} vigente"),
+    "la etiqueta de edición de la guía debía conservarse, con su revisión"
   );
   const docEditor = read("components/domain/trazadocs/document-editor.tsx");
   assert(

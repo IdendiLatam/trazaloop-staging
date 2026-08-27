@@ -10,11 +10,11 @@ import { notFound } from "next/navigation";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import {
   getTextileTrazadocDetail,
-  listTextileTrazadocHints,
   listTextileTrazadocVersions,
   listTextileTrazadocsTemplates,
 } from "@/lib/db/textiles-trazadocs";
-import { resolveModuleHintsForOrg } from "@/lib/db/hint-access";
+import { resolveGuidanceHintMap } from "@/lib/db/authoring-guidance";
+import type { ResolvedHint } from "@/lib/domain/hint-access";
 import { TEXTILES_MODULE_CODE } from "@/lib/modules/catalog";
 import {
   TEXTILE_TRAZADOCS_DISCLAIMER,
@@ -42,19 +42,20 @@ export default async function TextileTrazadocDetailPage({
   const doc = await getTextileTrazadocDetail(org.organizationId, documentId);
   if (!doc) notFound();
 
-  const [hints, versions, templates] = await Promise.all([
-    doc.blueprintId ? listTextileTrazadocHints(doc.blueprintId) : Promise.resolve([]),
+  // QUALITY-12.2A · La guía sale de la fuente canónica, que aplica el acceso
+  // comercial POR MÓDULO dentro de la base: en Demo el texto administrado y
+  // sus enlaces no salen de ella, y el mapa serializado lleva solo el aviso.
+  const [hintBySectionId, versions, templates] = await Promise.all([
+    doc.blueprintId
+      ? resolveGuidanceHintMap({
+          organizationId: org.organizationId,
+          moduleCode: TEXTILES_MODULE_CODE,
+          blueprintId: doc.blueprintId,
+        })
+      : Promise.resolve({} as Record<string, ResolvedHint>),
     listTextileTrazadocVersions(org.organizationId, doc.id),
     listTextileTrazadocsTemplates(),
   ]);
-  // Acceso comercial POR MÓDULO, resuelto en servidor para Textiles: en Demo
-  // el mapa serializado al cliente lleva solo el aviso fijo; el contenido
-  // administrado y sus enlaces no se envían (lib/db/hint-access.ts).
-  const hintBySectionId = await resolveModuleHintsForOrg({
-    organizationId: org.organizationId,
-    moduleCode: TEXTILES_MODULE_CODE,
-    sections: hints,
-  });
   const blueprint = templates.find((t) => t.blueprintId === doc.blueprintId) ?? null;
   const moduleLinks = blueprint ? TEXTILE_TRAZADOCS_MODULE_LINKS[blueprint.code] ?? [] : [];
 

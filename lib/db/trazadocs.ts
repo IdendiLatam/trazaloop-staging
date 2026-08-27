@@ -207,7 +207,11 @@ export async function getBlueprintSections(blueprintId: string): Promise<Bluepri
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("trazadoc_blueprint_sections")
-    .select("id, section_key, title, hint, sort_order, is_required")
+    // QUALITY-12.2A · Ya no se lee `hint`: la guía de autoría vive en la
+    // fuente canónica y se pide por `lib/db/authoring-guidance`. Esta consulta
+    // sirve para construir las secciones de un documento nuevo, que necesita
+    // clave, título y obligatoriedad — nunca la guía.
+    .select("id, section_key, title, sort_order, is_required")
     .eq("blueprint_id", blueprintId)
     .eq("status", "active")
     .order("sort_order", { ascending: true });
@@ -215,7 +219,6 @@ export async function getBlueprintSections(blueprintId: string): Promise<Bluepri
     id: r.id as string,
     sectionKey: r.section_key as string,
     title: r.title as string,
-    hint: (r.hint as string | null) ?? null,
     sortOrder: Number(r.sort_order ?? 0),
     isRequired: Boolean(r.is_required),
   }));

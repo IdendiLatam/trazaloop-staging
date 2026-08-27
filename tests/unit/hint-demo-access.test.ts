@@ -184,8 +184,15 @@ check("10. El superadministrador conserva consulta, edición y vista previa del 
   assert(!editor.includes(DEMO_HINT_MESSAGE), "el editor jamás debe mostrar el aviso Demo en lugar del real");
 
   const platformDb = read("lib/db/trazadocs-platform.ts");
-  assert(platformDb.includes("hint: input.hint"), "la creación de hints del superadmin debía conservarse");
-  assert(platformDb.includes("hint: input.hint,"), "la edición de hints del superadmin debía conservarse");
+  // QUALITY-12.2A · El superadministrador sigue creando y editando la guía,
+  // pero ya no escribiendo una columna: publica una revisión, que es lo que
+  // conserva con qué guía se redactó cada documento.
+  assert(platformDb.includes("publishSectionGuidance("),
+    "la creación y edición de guías del superadmin debía conservarse");
+  assert(platformDb.includes("trazadoc_publish_guidance"),
+    "la edición debía pasar por la publicación de revisiones");
+  assert(!/hint: input\.hint/.test(platformDb),
+    "el backoffice volvió a escribir la columna congelada en lugar de publicar una revisión");
   assert(!platformDb.includes(DEMO_HINT_MESSAGE), "el mensaje Demo jamás se persiste en la capa de datos");
 
   const actions = read("server/actions/trazadocs-master.ts") + read("server/actions/trazadocs.ts");
@@ -258,26 +265,42 @@ check("12. Tooltips y ayudas NO administrables no se sustituyen", () => {
 });
 
 check("13. La decisión ocurre en SERVIDOR: al cliente solo llega el hint autorizado", () => {
-  const gate = read("lib/db/hint-access.ts");
+  // QUALITY-12.2A · La puerta comercial se mudó de la aplicación a la BASE.
+  // Antes se decidía aquí sobre un texto que el servidor ya tenía en la mano;
+  // ahora la decide `trazadoc_guidance_as_of` y en Demo el texto ni siquiera
+  // sale de la base. Es una protección más fuerte, no la misma en otro sitio:
+  // cierra el hueco de pedir la fila por identificador desde el navegador.
+  const gate = read("lib/db/authoring-guidance.ts");
   assert(gate.startsWith('import "server-only";'), "la puerta comercial debía ser server-only");
   assert(
-    gate.includes("resolveModuleAccessForOrg"),
-    "debía reutilizarse la fuente de verdad de acceso por módulo (sin segunda interpretación)"
+    gate.includes("trazadoc_guidance_as_of"),
+    "debía resolverse por la función que aplica el acceso por módulo dentro de la base"
   );
   assert(
     !gate.includes("createAdminClient") && !gate.includes("SERVICE_ROLE"),
     "la puerta comercial no debe usar service role"
   );
+  // La columna congelada no puede volver a leerse. Se mira el CÓDIGO, no los
+  // comentarios: el módulo explica de dónde viene, y explicarlo no es leerlo.
+  const gateCode = gate.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  // Se busca la COLUMNA —`.hint`, `"hint"`, `hint:`—, no la palabra: los tipos
+  // compartidos con el botón «i» (`ResolvedHint`, `hasHintContent`) siguen
+  // siendo legítimos, porque el objeto que se pinta no ha cambiado.
+  assert(
+    !gateCode.includes("trazadoc_blueprint_sections")
+      && !/[.("']hint["')\s:]/.test(gateCode),
+    "la puerta comercial no debe volver a leer la columna congelada"
+  );
 
   const cprPage = read("app/(app)/(shell)/(cpr)/trazadocs/[id]/edit/page.tsx");
   assert(
-    cprPage.includes("resolveModuleHintsForOrg") && cprPage.includes("CPR_MODULE_CODE"),
-    "la página CPR debía resolver los hints con el módulo CPR en servidor"
+    cprPage.includes("resolveGuidanceHintMap") && cprPage.includes("CPR_MODULE_CODE"),
+    "la página CPR debía resolver la guía con el módulo CPR en servidor"
   );
   const texPage = read("app/(app)/(shell)/textiles/trazadocs/[documentId]/page.tsx");
   assert(
-    texPage.includes("resolveModuleHintsForOrg") && texPage.includes("TEXTILES_MODULE_CODE"),
-    "la página Textil debía resolver los hints con el módulo Textiles en servidor"
+    texPage.includes("resolveGuidanceHintMap") && texPage.includes("TEXTILES_MODULE_CODE"),
+    "la página Textil debía resolver la guía con el módulo Textiles en servidor"
   );
 
   // Los componentes de cliente reciben el objeto ya autorizado; jamás
@@ -290,7 +313,8 @@ check("13. La decisión ocurre en SERVIDOR: al cliente solo llega el hint autori
   ]) {
     const src = read(rel);
     assert(
-      !src.includes('from "@/lib/db/hint-access"'),
+      !src.includes('from "@/lib/db/hint-access"')
+        && !src.includes('from "@/lib/db/authoring-guidance"'),
       `${rel} no debe importar la puerta server-only desde el cliente`
     );
     assert(
@@ -383,6 +407,11 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
+    "0136_trazadoc_canonical_authoring_guidance.sql",
+    // QUALITY-12.2A: la guía de autoría canónica, con historia. No toca el
+    // aviso Demo: lo refuerza — el texto administrado deja de ser legible
+    // directamente y la regla comercial pasa a vivir dentro de la base.
+    "0136_trazadoc_canonical_authoring_guidance.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));
   assert(forbidden.length === 0, `no debía existir una migración nueva: ${forbidden.join(", ")}`);

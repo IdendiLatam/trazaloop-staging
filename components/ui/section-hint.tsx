@@ -19,7 +19,8 @@ import type { ResolvedHint } from "@/lib/domain/hint-access";
  *   admite saltos de línea y enlaces seguros; nunca interpreta HTML.
  *
  * ACCESO COMERCIAL POR MÓDULO: el hint llega YA AUTORIZADO desde el servidor
- * (lib/db/hint-access.ts sobre la regla canónica de lib/modules/access.ts).
+ * (lib/db/authoring-guidance.ts, que aplica la regla comercial DENTRO de la
+ * base: en Demo el texto administrado ni siquiera sale de ella).
  * En Demo el objeto recibido contiene ÚNICAMENTE el aviso fijo: este
  * componente no oculta nada, sencillamente nunca recibe el contenido
  * administrado ni sus enlaces. El aviso se muestra dentro del MISMO panel,

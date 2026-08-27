@@ -319,7 +319,9 @@ check("F2. la 0133 y la 0134 van detrás de la 0132, en orden", () => {
     "algo se coló entre la 0133 y la 0134");
   assert(migraciones[i + 2] === "0135_quality_ai_theme_evidence_scope.sql",
     "algo se coló entre la 0134 y la 0135");
-  assert(i + 2 === migraciones.length - 1, "la 0135 no es la última");
+  // Ya no se exige que la 0135 sea la última —QUALITY-12.2A añadió la 0136
+  // detrás—, sino que las cuatro de QUALITY-12.1 sigan siendo adyacentes y en
+  // orden: es la adyacencia lo que prueba que nadie metió nada por en medio.
 });
 
 check("F3. las tablas nuevas tienen RLS y nada se abre a anon", () => {

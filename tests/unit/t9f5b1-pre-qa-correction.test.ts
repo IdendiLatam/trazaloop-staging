@@ -499,6 +499,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
+    "0136_trazadoc_canonical_authoring_guidance.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

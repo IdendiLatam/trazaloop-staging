@@ -152,10 +152,19 @@ function BlueprintSectionRow({
           </span>
         </div>
         <HintEditorField
-          label="Tip / hint para diligenciar esta sección"
+          label={section.guidanceRevision === null
+            ? "Guía de autoría para diligenciar esta sección"
+            : `Guía de autoría · revisión ${section.guidanceRevision} vigente`}
           initialValue={section.hint ?? ""}
           disabled={!canManage}
         />
+        {canManage ? (
+          <p className="text-[11px] text-ink-soft">
+            Guardar con un texto distinto publica una revisión nueva. La anterior
+            no se pierde: queda con su periodo de vigencia, de modo que siempre
+            se puede saber con qué guía se redactó un documento.
+          </p>
+        ) : null}
         {canManage ? (
           <div className="flex items-center gap-2">
             <Button type="submit" disabled={pending} className="!w-auto">

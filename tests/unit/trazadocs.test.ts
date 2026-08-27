@@ -55,8 +55,8 @@ console.log("Trazaloop · TrazaDocs: crear documento desde estructura sugerida\n
 
 check("1. Crear documento desde estructura sugerida genera secciones vacías", () => {
   const blueprintSections: BlueprintSectionFacts[] = [
-    { id: "bs-1", sectionKey: "objetivo", title: "Objetivo", hint: "Describe el objetivo.", sortOrder: 2, isRequired: true },
-    { id: "bs-2", sectionKey: "alcance", title: "Alcance", hint: "Describe el alcance.", sortOrder: 1, isRequired: true },
+    { id: "bs-1", sectionKey: "objetivo", title: "Objetivo", sortOrder: 2, isRequired: true },
+    { id: "bs-2", sectionKey: "alcance", title: "Alcance", sortOrder: 1, isRequired: true },
   ];
   const drafted = buildSectionsFromBlueprint(blueprintSections);
   assert(drafted.length === 2, "debía copiar las 2 secciones del blueprint");
@@ -86,11 +86,20 @@ check("3. Documento libre permite secciones personalizadas", () => {
   assert(slugifySectionKey("¡¿??!") === "seccion", "un título sin caracteres válidos debía caer a una clave por defecto, nunca vacía");
 });
 
-check("4. Cada sección de blueprint puede tener un hint (o no)", () => {
-  const withHint: BlueprintSectionFacts = { id: "s1", sectionKey: "k", title: "T", hint: "un tip útil", sortOrder: 1, isRequired: true };
-  const withoutHint: BlueprintSectionFacts = { id: "s2", sectionKey: "k2", title: "T2", hint: null, sortOrder: 2, isRequired: false };
-  assert(withHint.hint === "un tip útil", "una sección con hint debía conservarlo");
-  assert(withoutHint.hint === null, "una sección sin hint debía poder quedar en null, sin ser obligatorio");
+check("4. QUALITY-12.2A · la guía ya NO viaja pegada a la sección", () => {
+  // Antes esta prueba comprobaba que `BlueprintSectionFacts` llevara un hint.
+  // Desde QUALITY-12.2A la guía de autoría es una fuente canónica con historia
+  // y con regla comercial propia: pedirla junto a los datos estructurales
+  // invitaba a copiarla dentro del documento, que es justo lo que no debe
+  // pasar —la guía orienta la redacción, no forma parte de lo redactado—.
+  const seccion: BlueprintSectionFacts = {
+    id: "s1", sectionKey: "k", title: "T", sortOrder: 1, isRequired: true,
+  };
+  assert(!("hint" in seccion), "la guía volvió a viajar pegada a la sección");
+  const copia = buildSectionsFromBlueprint([seccion]);
+  assert(copia[0].content === "", "una sección nueva nace vacía, nunca con la guía dentro");
+  assert(copia[0].blueprintSectionId === "s1",
+    "la sección debe conservar de qué sección de estructura viene: es por ahí por donde se pide su guía");
 });
 
 console.log("\nTrazaloop · TrazaDocs: permisos por rol de empresa\n");
@@ -211,8 +220,8 @@ console.log("\nTrazaloop · Sprint 9.1: versión inicial real al crear un docume
 
 check("1. Crear documento desde estructura sugerida genera versión inicial v1", () => {
   const blueprintSections: BlueprintSectionFacts[] = [
-    { id: "bs-1", sectionKey: "objetivo", title: "Objetivo", hint: "tip", sortOrder: 1, isRequired: true },
-    { id: "bs-2", sectionKey: "alcance", title: "Alcance", hint: "tip", sortOrder: 2, isRequired: true },
+    { id: "bs-1", sectionKey: "objetivo", title: "Objetivo", sortOrder: 1, isRequired: true },
+    { id: "bs-2", sectionKey: "alcance", title: "Alcance", sortOrder: 2, isRequired: true },
   ];
   const drafted = buildSectionsFromBlueprint(blueprintSections);
   const snapshot = buildInitialVersionSnapshot(

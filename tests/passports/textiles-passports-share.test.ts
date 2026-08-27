@@ -121,6 +121,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0133_quality_ai_copilot_completion.sql",
     "0134_quality_ai_provider_call_truth.sql",
     "0135_quality_ai_theme_evidence_scope.sql",
+    "0136_trazadoc_canonical_authoring_guidance.sql",
   ];
   for (const f of mandatory) {
     assert(after91.includes(f), `falta la migración obligatoria ${f}`);

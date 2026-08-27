@@ -182,11 +182,20 @@ export function isBlueprintSelectable(status: BlueprintStatus): boolean {
 // Construcción de secciones al crear un documento desde blueprint (Parte
 // 8.1, caso de prueba 1: "genera secciones vacías").
 // ---------------------------------------------------------------------------
+/**
+ * Los datos de una sección de estructura que hacen falta para CREAR las
+ * secciones de un documento.
+ *
+ * QUALITY-12.2A · Ya no lleva `hint`. La guía de autoría dejó de ser un campo
+ * que se arrastra junto a los demás: es una fuente canónica con historia, se
+ * pide aparte y se autoriza por plan. Tenerla aquí invitaba a copiarla dentro
+ * del documento, que es justo lo que no debe pasar —la guía orienta la
+ * redacción, no forma parte del contenido redactado—.
+ */
 export type BlueprintSectionFacts = {
   id: string;
   sectionKey: string;
   title: string;
-  hint: string | null;
   sortOrder: number;
   isRequired: boolean;
 };
