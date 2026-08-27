@@ -4,7 +4,8 @@
 QUALITY-12)
 **Migraciones** `0133_quality_ai_copilot_completion.sql` ·
 `0134_quality_ai_provider_call_truth.sql` — Staging al **0134**
-**Preview** `https://trazaloop-production-224ns1yr8-idendi-latam-s-projects.vercel.app`
+**Preview** ver `QUALITY_12_1_LIVE_VALIDATION.md` · alias de rama
+`trazaloop-production-git-fix-qua-49ea69-idendi-latam-s-projects.vercel.app`
 **Production** intacta, en **0111**
 
 ---
@@ -158,8 +159,16 @@ de paso.
 | 87 | pregunta ABIERTA recupera contexto | **PASS** | prueba B4 |
 | 88 | pregunta ABIERTA histórica trae la revisión de entonces | **PASS** | prueba B5 |
 | 89 | la 0133 no se editó para corregir esto | **PASS** | prueba G1 |
+| 90 | la pantalla ofrece el alcance temporal | **PASS** | pruebas H1, H3 · B7, B8 |
+| 91 | la pantalla ofrece los siete casos de uso | **PASS** | prueba H2 · C1b |
+| 92 | el alcance elegido llega al servidor y queda registrado | **PASS** | prueba B8 |
+| 93 | una fecha ausente no se inventa | **PASS** | prueba H5 |
+| 94 | un objetivo sin indicadores no se lee como cumplido | **PASS** | prueba I1 |
+| 95 | cero titulares se distingue de uno solo | **PASS** | prueba I2 |
+| 96 | una sola autoridad para los marcadores de cita | **PASS** | prueba I3 |
+| 97 | la respuesta separa lo citado de lo consultado | **PASS** | prueba I4 |
 
-**87 PASS · 1 EN CURSO · 1 PENDIENTE · 0 FALLOS**
+**95 PASS · 1 EN CURSO · 1 PENDIENTE · 0 FALLOS**
 
 ---
 
@@ -252,3 +261,53 @@ El veredicto definitivo —`QUALITY-12.1 OPENAI COPILOT READY FOR USER TESTING`�
 se emite cuando la validación real contra OpenAI esté hecha, y no antes: dar por
 buena una llamada que nunca ocurrió sería exactamente lo que este sistema está
 construido para no hacer.
+
+
+---
+
+# La segunda prueba humana
+
+Ocho consultas reales contra OpenAI. El proveedor funciona, las citas
+funcionan, las barreras aguantan y el consumo se mide de verdad —el caché de
+2304 tokens de entrada a partir de la segunda consulta solo lo puede dar la
+API—. El detalle está en `QUALITY_12_1_LIVE_VALIDATION.md`.
+
+Encontró un defecto crítico y cuatro menores. Ninguno estaba en el código que
+QUALITY-12.1 escribió: el crítico llevaba ahí desde QUALITY-12, y las pruebas
+de los dos sprints pasaban por encima de él sin verlo.
+
+## El crítico: la pantalla no ofrecía lo que el servidor esperaba
+
+El servidor leía `temporal_mode`, `as_of`, `period_start` y `period_end`. La
+pantalla no pintaba ninguno de los cuatro, y el caso de uso era un campo oculto.
+**Las ocho consultas llegaron como `current` y `ask`**, incluidas la que se
+quiso hacer a seis meses y la que se quiso hacer como Temas de clientes.
+
+Por eso la pregunta histórica respondió con el documento de hoy —correctamente,
+para lo que recibió— y por eso no se persistió ningún tema.
+
+### Por qué ninguna prueba lo vio
+
+Todas montaban el alcance a mano y llamaban al constructor de contexto. Incluso
+las que este sprint añadió tras la primera prueba humana —B4 y B5— empezaban
+*después* de la capa que fallaba.
+
+La lección no es «hacían falta más pruebas». Es que **una prueba que construye
+su propia entrada no prueba quién la construye en producción**. La corrección
+mueve la traducción formulario→consulta a una función del dominio sin
+dependencias, y la prueba parte de un `FormData` con los mismos nombres de
+campo que pinta la pantalla.
+
+## Los cuatro menores
+
+| Hallazgo | Qué era | Qué se hizo |
+|---|---|---|
+| Objetivo «0 no cumplen» junto a un indicador fuera de meta | el adaptador ignoraba `performance` y pintaba contadores en crudo; el objetivo no tenía indicadores | decir que sin indicadores no se puede medir, declarar el conflicto, y completar el vínculo que faltaba en el escenario |
+| «0 personas lo dominan» | fixture sin titulares **y** una frase que iguala cero con uno | distinguirlos —cero es peor— y completar el fixture |
+| «[1] [1]» | el modelo escribía marcadores y la interfaz añadía los suyos | una sola autoridad: se limpian los del modelo |
+| 17 fuentes para una cita | todo con el mismo peso | «Fuentes citadas» delante, el resto desplegable |
+
+## Lo que no se tocó
+
+El proveedor en vivo, que ya está demostrado. Ni una migración: nada de esto
+era de base de datos. Ni un permiso.

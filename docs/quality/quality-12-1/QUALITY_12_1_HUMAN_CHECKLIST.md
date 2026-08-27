@@ -56,8 +56,12 @@ sostenerlo.
 **al menos dos revisiones aprobadas** con textos distintos. Anota qué dice la
 vigente y qué decía la anterior, y desde cuándo rige cada una.
 
-**7.** Vuelve al Copilot, elige el alcance temporal **«a fecha»** y pon una
-fecha **anterior** al cambio. Pregunta por lo que cambió.
+**7.** Vuelve al Copilot. Debajo de «Para qué preguntas» hay **«Sobre qué
+momento»**: elige **«A una fecha pasada»** y pon una fecha **anterior** al
+cambio. Al elegirlo aparece el campo de fecha; si no aparece, el selector no
+está haciendo su trabajo y hay que anotarlo.
+
+Pregunta por lo que cambió.
 
 *Lo que tiene que pasar*: responde con el texto **antiguo**, y la fuente citada
 dice la revisión y la fecha. Si te contesta con el texto de hoy, es un fallo y
@@ -92,8 +96,14 @@ un resumen de las quejas.
 
 ## E · Los temas de clientes
 
-**15.** Necesitas una campaña anónima **con comentarios**. Elige el uso **Temas
-de clientes**, pon un periodo que los cubra y pregunta.
+**15.** Necesitas una campaña anónima **con comentarios**. En **«Para qué
+preguntas»** elige **«Temas de clientes»** —es un selector, no hay que
+escribirlo en la pregunta—, en «Sobre qué momento» elige **«Un periodo»**, pon
+unas fechas que cubran los comentarios y pregunta.
+
+Escribir «temas de clientes» dentro del texto de la pregunta **no** cambia el
+uso: lo cambia el selector. Si el uso no es el correcto, no se persiste ningún
+tema — y eso es exactamente lo que pasó en la segunda prueba.
 
 **16.** Ve a **Calidad → Voz del cliente**. Abajo aparece **Temas recurrentes**.
 Mira cada tema: periodo, tono, en cuántos comentarios se apoya, y con qué
@@ -139,5 +149,10 @@ seguir igual de rápido: el Copilot no está en el camino de nada.
 ## Qué anotar
 
 De cada paso: **qué esperabas**, **qué pasó** y, si no coinciden, una captura.
+
+Y una comprobación que ahorra tiempo: al pie de cada respuesta debe aparecer
+**«Fuentes citadas»**, y los números de cita deben salir **una sola vez**. Si
+ves «[1] [1]», el modelo y la interfaz han vuelto a ser dos autoridades para el
+mismo marcador.
 Los pasos 7, 12, 17, 20 y 25 son los que hay que mirar con más atención: son los
 que separan «funciona» de «funciona bien».
