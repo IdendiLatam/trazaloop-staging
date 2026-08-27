@@ -1,7 +1,6 @@
 # QUALITY-12.1 · Validación contra el proveedor real
 
-> **Estado: segunda prueba humana hecha. El proveedor real funciona. Encontró
-> un defecto crítico y cuatro menores, todos corregidos. Falta repetirla.**
+> **Estado: Q1–Q7 aceptadas humanamente. Falta únicamente Q8.**
 
 ## Lo que la segunda prueba demostró que YA funciona
 
@@ -157,3 +156,83 @@ Sin base vectorial ni búsqueda semántica, como pedía el encargo.
 | 9 | anonimidad | **PASS** |
 | 10 | fallo aislado | pendiente |
 | 11 | consulta sin contexto declarada «sin llamada» | pendiente |
+
+
+---
+
+# Tercera prueba humana · Q1–Q7 aceptadas
+
+Q1 · Q2 · Q3 · Q4 · Q5 · Q6 · Q7 → **PASS**, aceptadas por el usuario.
+
+Q3, que era el crítico, quedó demostrada con el selector puesto:
+`as_of 2026-02-28` · **CINCO días** · **Revisión 1** · cita `[13]`.
+
+Y con ella: consumo real de OpenAI con entrada, salida, caché y razonamiento;
+citas sin duplicar; fuentes citadas separadas de las consultadas;
+objetivo e indicador coherentes; conocimiento con una única titular;
+anonimato preservado; inyección no obedecida; ninguna escritura formal.
+
+## Q8 · el run real
+
+```
+run          a6a088f7-bbe6-4422-a264-f592ba62b8b7   2026-08-27 17:56:27 UTC
+use_case     ask                    ← debía ser customer_themes
+plantilla    copilot.ask v1         ← debía ser copilot.customer_themes
+temporal     period · 2026-02-28 … 2026-08-27      ← CORRECTO
+provider     openai / gpt-5.4-mini · provider_called = true
+contexto     17 referencias · 7 de comentarios ([4]…[10]) · evidencia sufficient
+tokens       in 2601 (caché 1792) · out 736 (razonando 73) · total 3337 · 10246 ms
+themes       3 en la respuesta
+persistidos  0
+```
+
+### Cuál de los cuatro casos era
+
+**Caso A: el selector «Para qué preguntas» se quedó en «Pregunta abierta».**
+
+Lo que lo demuestra es el propio run: en **la misma** consulta,
+`temporal_mode = period` con las fechas exactas. Los dos selectores se pintan
+igual y viajan por el mismo formulario; si el transporte estuviera roto,
+tampoco habría llegado el periodo. Llegó.
+
+* No es **B** — el formulario sí transportó el campo hermano.
+* No es **C** — el listado etiqueta por `use_case`, y `use_case` era `ask`.
+* No es **D** — la persistencia no se intentó: con `ask` no se persiste ningún
+  tema, por diseño (prueba E4).
+
+**No hace falta cambiar la arquitectura.** El modelo emitió tres temas de todos
+modos —el esquema pide siempre el campo— y el servidor los ignoró, que es
+exactamente lo que debe pasar.
+
+## Los dos defectos que Q8 sí destapó
+
+### §5 · El número de la cita no es el número de la cosa
+
+La respuesta escribió «El comentario **#10** no aporta un tema…». `[10]` es el
+número de la **fuente**; el comentario es el **anónimo #7**.
+
+En los hechos lo hizo bien —«el comentario anónimo #1 … [4]», «#2 … [5]»…— y
+solo se confundió al hablar del que excluía. Pero es una confusión real y puede
+ocurrir con cualquier fuente. La política lo dice ahora explícitamente, como
+regla general: el corchete identifica la fuente dentro de la consulta y nada
+más; para nombrar la entidad se usa el nombre de su etiqueta.
+
+### §6 · Qué no es un tema de cliente
+
+El modelo **excluyó por su cuenta** el comentario con órdenes dentro, no lo
+convirtió en tema y explicó por qué. Es el comportamiento correcto —y no puede
+depender de la suerte—: las instrucciones de temas lo dicen ahora.
+
+### Y uno más, que salió al leer los temas
+
+El tema «Retraso de entrega» se apoyaba en `[3, 4, 5, 6]`: tres comentarios
+anónimos **y un caso interno**. El caso habla del mismo asunto y es legítimo
+leerlo, pero no es voz del cliente: si cuenta como respaldo, el tema afirma
+«cuatro» donde los clientes dijeron tres.
+
+Migración **0135**: la evidencia de un tema se limita a `customer_comment` y
+`customer_feedback`. Regresión `C4b`.
+
+## Lo único que falta
+
+Repetir **solo Q8**, con el selector puesto.

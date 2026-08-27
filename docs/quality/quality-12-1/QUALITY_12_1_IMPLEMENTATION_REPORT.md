@@ -167,8 +167,14 @@ de paso.
 | 95 | cero titulares se distingue de uno solo | **PASS** | prueba I2 |
 | 96 | una sola autoridad para los marcadores de cita | **PASS** | prueba I3 |
 | 97 | la respuesta separa lo citado de lo consultado | **PASS** | prueba I4 |
+| 98 | el número de cita no se confunde con el de la entidad | **PASS** | prueba J1 |
+| 99 | lo que no es voz de cliente no se convierte en tema | **PASS** | prueba J2 |
+| 100 | un tema solo cuenta respaldo de voz del cliente | **PASS** | prueba J3 · C4b |
+| 101 | las plantillas suben de versión al cambiar | **PASS** | prueba J4 |
+| 102 | ninguna migración anterior se editó | **PASS** | prueba J5 |
+| 103 | Q1–Q7 aceptadas humanamente | **PASS** | tercera prueba humana |
 
-**95 PASS · 1 EN CURSO · 1 PENDIENTE · 0 FALLOS**
+**101 PASS · 1 EN CURSO (Q8) · 1 PENDIENTE (veredicto) · 0 FALLOS**
 
 ---
 
