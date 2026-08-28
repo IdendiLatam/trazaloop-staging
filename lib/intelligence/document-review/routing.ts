@@ -11,7 +11,7 @@ import { FactWriter } from "./facts";
 import {
   controlAdapter, documentAdapter, indicatorAdapter,
   loadOrganizationProfile, positionAdapter, processAdapter, riskAdapter,
-  type ControlSeen, type PositionSeen, type ReviewAdapter,
+  type ControlSeen, type PositionSeen, type ProcessOwnerSeen, type ReviewAdapter,
 } from "./adapters";
 import {
   frequencyOf, FRECUENCIA_LEGIBLE, positionCatalog, processCatalog, resolveNames,
@@ -180,10 +180,14 @@ export async function buildReviewContext(params: {
   // ---- 3 · Los adaptadores -----------------------------------------------
   const cargosVistos: PositionSeen[] = [];
   const controlesVistos: ControlSeen[] = [];
+  // Se llena mientras corre el adaptador de procesos y lo lee el de cargos.
+  // El orden de `ORDEN` lo garantiza: procesos va antes que cargos, y los
+  // adaptadores calculan sus ids DENTRO de `load`, no al construirse.
+  const duenosDeProceso: ProcessOwnerSeen[] = [];
 
   const registro: Partial<Record<RelatedContextType, ReviewAdapter>> = {
-    process: processAdapter,
-    position: positionAdapter(cargosExtra, cargosVistos),
+    process: processAdapter(duenosDeProceso),
+    position: positionAdapter(cargosExtra, cargosVistos, duenosDeProceso),
     control: controlAdapter(controlesVistos),
     indicator: indicatorAdapter,
     risk: riskAdapter,
@@ -239,10 +243,16 @@ export async function buildReviewContext(params: {
  * palabras o a otra cosa. Decirlo es honesto; adivinarlo no.
  */
 function compareResponsibility(vistos: PositionSeen[], texto: string): Observation[] {
-  const dueno = vistos.find((v) => v.isOwner) ?? null;
+  // Primero el cargo responsable DEL DOCUMENTO. Si no lo hay —en PCR y en
+  // Textiles no lo hay nunca, su pantalla no ofrece ese campo—, sirve el cargo
+  // dueño del proceso, y solo si hay UNO: con dos procesos y dos dueños no se
+  // sabe cuál de los dos gobierna la frase, y elegir sería adivinar.
+  const duenoDoc = vistos.find((v) => v.isOwner) ?? null;
+  const duenosProc = vistos.filter((v) => !v.isOwner && v.ownsProcess !== null);
+  const dueno = duenoDoc ?? (duenosProc.length === 1 ? duenosProc[0] : null);
   if (!dueno) return [];
 
-  const nombrados = vistos.filter((v) => !v.isOwner);
+  const nombrados = vistos.filter((v) => v.id !== dueno.id);
   const duenoEscrito = normalizaContiene(texto, dueno.name);
 
   if (duenoEscrito) {

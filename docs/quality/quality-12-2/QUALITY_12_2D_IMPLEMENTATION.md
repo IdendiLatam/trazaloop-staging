@@ -109,6 +109,27 @@ Todas son relaciones que alguien creó a mano en Trazaloop. Ninguna la dedujo un
 modelo. Un documento sin procesos atados y sin cargo dueño tiene alcance vacío,
 y entonces no hay revisión que hacer: se dice y no se gasta una llamada.
 
+### El cargo responsable, y el rodeo que hace falta en PCR y Textiles
+
+Solo los documentos de **Quality** tienen un selector de cargo responsable en
+su pantalla. Los de PCR y Textiles no lo tienen: la columna existe, pero nada
+la rellena.
+
+Sin rodeo, «responsabilidad en conflicto» sería una función que en dos de los
+tres módulos no puede dispararse nunca. Así que el **cargo dueño del proceso**
+al que el documento está ligado entra también en el material, y sirve de
+referencia cuando el documento no tiene cargo propio.
+
+Con dos condiciones:
+
+- **solo si hay uno.** Con dos procesos y dos dueños distintos no se sabe cuál
+  gobierna la frase, y elegir sería adivinar;
+- **con su nombre exacto.** El hecho dice «Cargo dueño del proceso *X*: *Y*»,
+  nunca «responsable de este documento». No son lo mismo, y escribirlas igual
+  invitaría a leer la segunda donde solo está la primera.
+
+No cuesta ni una consulta más: el adaptador de procesos ya pedía esa columna.
+
 ### La única excepción, y por qué es segura
 
 El texto **sí** puede meter un cargo o un proceso en el material, con dos
@@ -130,7 +151,7 @@ señala a **una** fila, nunca a dos.
 |---|---|---|
 | `organization_profile` | la empresa | no consulta nada |
 | `process` | procesos del documento | **sí** · `quality_process_revisions` |
-| `position` | cargo dueño + dueños de proceso + los nombrados | **sí** · `quality_position_versions` |
+| `position` | cargo responsable del documento + dueños de sus procesos + los nombrados | **sí** · `quality_position_versions` |
 | `document` | otros documentos del mismo proceso | **sí** · `trazadoc_document_revisions` |
 | `control` | controles de esos procesos | no |
 | `indicator` | indicadores de esos procesos | no |

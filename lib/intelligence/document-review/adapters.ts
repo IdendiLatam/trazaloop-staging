@@ -87,7 +87,12 @@ export function loadOrganizationProfile(
 // en marzo sin adivinarlo.
 // ===========================================================================
 
-export const processAdapter: ReviewAdapter = {
+/** Quién es el cargo dueño de cada proceso del alcance. Sale de la consulta que
+ *  el adaptador de procesos ya hace, así que no cuesta ni un viaje más. */
+export type ProcessOwnerSeen = { positionId: string; processName: string };
+
+export function processAdapter(sink: ProcessOwnerSeen[]): ReviewAdapter {
+  return {
   type: "process",
   historical: true,
   async load(db, scope, w) {
@@ -136,9 +141,23 @@ export const processAdapter: ReviewAdapter = {
         + `${txt(p.status) || "sin estado"}`
         + (rev && corto(rev.purpose, 140) ? `. Propósito: ${corto(rev.purpose, 140)}` : "")
         + `.`, [n]);
+
+      // El cargo dueño del proceso viaja al adaptador de cargos.
+      //
+      // Hace falta para los documentos que NO tienen cargo responsable propio,
+      // que en PCR y en Textiles son todos: su pantalla no ofrece ese campo, y
+      // sin esto la única forma de contrastar una responsabilidad allí sería
+      // que la persona nombrara un cargo, con lo que nunca habría nada contra
+      // qué contrastarlo.
+      //
+      // Sale de este `select`, que ya pedía la columna: cero consultas nuevas.
+      if (txt(p.owner_position_id)) {
+        sink.push({ positionId: txt(p.owner_position_id), processName: txt(p.name) });
+      }
     }
   },
-};
+  };
+}
 
 // ===========================================================================
 // CARGOS
@@ -157,15 +176,24 @@ export const processAdapter: ReviewAdapter = {
 // segundos los resuelve `observations.ts`; aquí se aceptan ya resueltos.
 // ===========================================================================
 
-export type PositionSeen = { fact: number; id: string; name: string; isOwner: boolean };
+export type PositionSeen = {
+  fact: number; id: string; name: string;
+  /** Cargo responsable DEL DOCUMENTO. */
+  isOwner: boolean;
+  /** Cargo dueño de un proceso del alcance, y de cuál. */
+  ownsProcess: string | null;
+};
 
-export function positionAdapter(extraIds: string[], sink: PositionSeen[]): ReviewAdapter {
+export function positionAdapter(
+  extraIds: string[], sink: PositionSeen[], processOwners: ProcessOwnerSeen[] = []
+): ReviewAdapter {
   return {
     type: "position",
     historical: true,
     async load(db, scope, w) {
       const ids = [...new Set([
         ...(scope.ownerPositionId ? [scope.ownerPositionId] : []),
+        ...processOwners.map((o) => o.positionId),
         ...extraIds,
       ])];
       if (ids.length === 0) return;
@@ -205,16 +233,26 @@ export function positionAdapter(extraIds: string[], sink: PositionSeen[]): Revie
           revisionLabel: v ? `versión ${String(v.version_number)}` : null,
         });
         const esDueno = String(p.id) === scope.ownerPositionId;
+        const proceso = processOwners.find((o) => o.positionId === String(p.id));
+        // Cada frase dice EXACTAMENTE de qué es responsable. «Responsable de
+        // este documento» y «dueño de este proceso» no son lo mismo, y
+        // escribirlas igual invitaría a leer la segunda como la primera.
         const nHecho = w.fact("position",
           esDueno
             ? `Responsable registrado de este documento: cargo «${txt(p.name)}»`
               + `${txt(p.org_unit) ? ` (${txt(p.org_unit)})` : ""}.`
-            : `Cargo «${txt(p.name)}»`
-              + `${txt(p.org_unit) ? ` (${txt(p.org_unit)})` : ""}`
-              + `${p.is_active === false ? ", inactivo" : ""}.`,
+            : proceso
+              ? `Cargo dueño del proceso «${proceso.processName}»: «${txt(p.name)}»`
+                + `${txt(p.org_unit) ? ` (${txt(p.org_unit)})` : ""}.`
+              : `Cargo «${txt(p.name)}»`
+                + `${txt(p.org_unit) ? ` (${txt(p.org_unit)})` : ""}`
+                + `${p.is_active === false ? ", inactivo" : ""}.`,
           [n]);
         if (nHecho !== null) {
-          sink.push({ fact: nHecho, id: String(p.id), name: txt(p.name), isOwner: esDueno });
+          sink.push({
+            fact: nHecho, id: String(p.id), name: txt(p.name), isOwner: esDueno,
+            ownsProcess: proceso ? proceso.processName : null,
+          });
         }
         if (v && corto(v.authority, 120)) {
           w.fact("position",

@@ -245,8 +245,12 @@ check("D3. el ascenso exige que el código haya comparado y que se cite lo mismo
 });
 
 check("D4. las comparaciones exigen los DOS lados resueltos", () => {
-  assert(/const dueno = vistos\.find\(\(v\) => v\.isOwner\) \?\? null;\s*\n\s*if \(!dueno\) return \[\];/.test(RUTA),
+  // Sin cargo responsable —ni del documento ni de un proceso— no se compara.
+  assert(/const dueno = duenoDoc \?\? \(duenosProc\.length === 1 \? duenosProc\[0\] : null\);\s*\n\s*if \(!dueno\) return \[\];/.test(RUTA),
     "se compara el cargo sin cargo registrado");
+  // Y con DOS procesos con dueños distintos tampoco: no se sabe cuál gobierna.
+  assert(/duenosProc\.length === 1/.test(RUTA),
+    "con varios dueños de proceso se elegiría uno");
   assert(/if \(!registrada \|\| registrada === escrita\) continue;/.test(RUTA),
     "se compara la frecuencia sin frecuencia registrada");
 });

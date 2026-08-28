@@ -346,9 +346,12 @@ async function main() {
   // =========================================================================
 
   // §36 · PCR con datos reales del dominio, no un accesorio para la prueba.
+  // SIN cargo responsable propio, que es como son los documentos de PCR de
+  // verdad: su pantalla no ofrece ese campo. El único camino a un cargo es el
+  // dueño del proceso al que está ligado.
   const PCR = await nuevoDocumento(A, "cpr", {
     blueprintCode: "procedimiento_produccion", sectionKey: "responsables",
-    sectionTitle: "Responsables", ownerPositionId: posId["Coordinador de Compras"],
+    sectionTitle: "Responsables", ownerPositionId: null,
     ligarProceso: PROC, contenido: "Pendiente.",
   });
   const TEX = await nuevoDocumento(A, "textiles", {
@@ -356,14 +359,19 @@ async function main() {
     ownerPositionId: null, ligarProceso: PROC, contenido: "Pendiente.",
   });
 
-  await check("C1. PCR revisa, con su propio módulo comercial", async () => {
+  await check("C1. PCR revisa sin cargo propio, por el dueño del proceso", async () => {
     const r = await revisar({ ...PCR, org: A, cliente: J, moduleKey: "cpr",
       texto: "El Coordinador de Calidad autoriza la liberación de cada lote "
         + "producido y firma el registro correspondiente." });
     assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
     assert(r.ok && r.used.types.includes("position"), "PCR no resolvió cargos");
     const f = r.ok ? r.review.findings.find((x) => x.type === "confirmed_conflict") : undefined;
-    assert(f, "PCR no detectó la discrepancia de cargo");
+    assert(f, "PCR no detectó la discrepancia de cargo por el dueño del proceso");
+    // Y el hecho tiene que decir de qué es dueño: «del proceso», no «de este
+    // documento», que sería afirmar algo que no está registrado.
+    const dice = r.ok ? JSON.stringify(r.review) : "";
+    assert(!/Responsable registrado de este documento/.test(dice),
+      "se presentó el dueño del proceso como responsable del documento");
   });
 
   await check("C2. Textiles revisa, con el perfil de la empresa", async () => {
