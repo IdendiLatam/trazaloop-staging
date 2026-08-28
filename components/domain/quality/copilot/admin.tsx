@@ -1,4 +1,8 @@
 "use client";
+import {
+  INTELLIGENCE_SETTINGS_TITLE, INTELLIGENCE_SHORT_NAME,
+  INTELLIGENCE_SUGGESTIONS_TITLE,
+} from "@/lib/domain/intelligence-identity";
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
@@ -42,7 +46,7 @@ export function CopilotAdmin({
       <section className="rounded-lg border border-hairline bg-surface p-4 space-y-3">
         <header className="flex flex-wrap items-start justify-between gap-2">
           <div className="space-y-1">
-          <h2 className="text-sm font-semibold text-ink">Borradores del Copilot</h2>
+          <h2 className="text-sm font-semibold text-ink">{INTELLIGENCE_SUGGESTIONS_TITLE}</h2>
           <p className="text-xs text-ink-soft">
             Propuestas guardadas. Ninguna es un registro: para que exista una
             acción, un riesgo o una decisión, la crea una persona desde su módulo
@@ -199,14 +203,14 @@ function Settings({ settings }: { settings: AiSettingsRow }) {
   return (
     <section className="rounded-lg border border-hairline bg-surface p-4 space-y-3">
       <header className="space-y-1">
-        <h2 className="text-sm font-semibold text-ink">Ajustes del Copilot</h2>
+        <h2 className="text-sm font-semibold text-ink">{INTELLIGENCE_SETTINGS_TITLE}</h2>
         <p className="text-xs text-ink-soft">
-          El Copilot nace apagado. Encenderlo es decidir que la información de
+          Nace apagado. Encenderlo es decidir que la información de
           esta empresa se use para responder preguntas, y eso lo decide la empresa.
         </p>
       </header>
       <form action={action} className="space-y-3">
-        <Check name="is_enabled" checked={settings.isEnabled} label="Copilot encendido" />
+        <Check name="is_enabled" checked={settings.isEnabled} label={`${INTELLIGENCE_SHORT_NAME} encendido`} />
         <Check name="allow_customer" checked={settings.allowCustomer}
           label="Puede analizar comentarios de clientes"
           hint="Siempre en agregado y sin identidad: las campañas anónimas siguen siendo anónimas." />

@@ -16,6 +16,9 @@
 import { JSDOM } from "jsdom";
 import { createElement, StrictMode } from "react";
 import type { DocumentReviewState } from "@/server/actions/document-review";
+// QUALITY-12.2E · La etiqueta sale de la identidad compartida, no de una copia
+// literal aquí: si mañana cambia el nombre, esta prueba no se queda atrás.
+import { INTELLIGENCE_ACTIONS } from "@/lib/domain/intelligence-identity";
 
 const dom = new JSDOM("<!doctype html><html><body><div id=\"raiz\"></div></body></html>", {
   url: "https://trazaloop.test", pretendToBeVisual: true,
@@ -156,7 +159,7 @@ async function main() {
 
   await check("A1. el panel NO mete un formulario dentro del de guardado", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     const forms = v.host.querySelectorAll("form");
     assert(forms.length === 1,
       `hay ${forms.length} formularios anidados: el navegador descartaría el interno`);
@@ -164,7 +167,7 @@ async function main() {
 
   await check("A2. ningún botón del panel puede enviar el formulario de guardado", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     for (const b of v.host.querySelectorAll("button")) {
       assert(b.getAttribute("type") === "button",
         `un botón del panel es «${b.getAttribute("type") ?? "submit"}» y enviaría el guardado`);
@@ -176,7 +179,7 @@ async function main() {
     const v = await montar({
       action: async (_p, f) => { recibido = f; return REVISION; },
     });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     assert(recibido !== null, "la acción no llegó a llamarse: el botón no hace nada");
     const f = recibido as unknown as FormData;
@@ -195,7 +198,7 @@ async function main() {
     const v = await montar({
       action: () => new Promise<DocumentReviewState>((r) => { resolver = r; }),
     });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     assert(v.host.querySelector("[data-testid=\"review-pending\"]") !== null,
       "no se ve nada mientras trabaja: eso es un botón que parece roto");
@@ -204,7 +207,7 @@ async function main() {
 
   await check("B2. los hallazgos se pintan, uno por uno", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     const n = v.host.querySelectorAll("[data-testid=\"review-finding\"]").length;
     assert(n === 3, `se pintaron ${n} hallazgos de 3`);
@@ -212,7 +215,7 @@ async function main() {
 
   await check("B3. cada hallazgo enseña los DOS lados", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     const t = v.texto();
     assert(t.includes("Tu texto dice"), "no se enseña lo que dice el texto");
@@ -225,7 +228,7 @@ async function main() {
     const v = await montar({
       action: async () => ({ error: "La revisión no está disponible ahora." }),
     });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     assert(v.texto().includes("no está disponible"), "el error no se ve");
     assert(v.aplicado === null, "se aplicó algo pese al error");
@@ -237,7 +240,7 @@ async function main() {
 
   await check("C1. «Aplicar redacción» solo cambia el editor", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     await v.click("Aplicar redacción");
     assert(v.aplicado === "El Coordinador de Compras revisará los proveedores aprobados.",
@@ -246,7 +249,7 @@ async function main() {
 
   await check("C2. solo ofrece aplicar donde hay redacción que aplicar", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     const botones = [...v.host.querySelectorAll("button")]
       .filter((b) => (b.textContent ?? "").includes("Aplicar redacción"));
@@ -256,7 +259,7 @@ async function main() {
 
   await check("C3. ignorar un hallazgo lo esconde y no toca el resto", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     await v.click("Ignorar");
     const n = v.host.querySelectorAll("[data-testid=\"review-finding\"]").length;
@@ -267,7 +270,7 @@ async function main() {
   await check("C4. nada de lo que hace el panel guarda", async () => {
     let llamadas = 0;
     const v = await montar({ action: async () => { llamadas += 1; return REVISION; } });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     await v.click("Aplicar redacción");
     await v.click("Ignorar");
@@ -280,7 +283,7 @@ async function main() {
 
   await check("D1. avisa de que esto no es una auditoría", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     const t = v.texto();
     assert(/no es una auditoría ni una no conformidad/.test(t),
@@ -290,7 +293,7 @@ async function main() {
 
   await check("D2. dice lo que NO pudo mirar", async () => {
     const v = await montar({ action: async () => REVISION });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     assert(v.texto().includes("no ha podido mirar todo"), "no declara sus límites");
     assert(v.texto().includes("Objetivos"), "no dice qué tipo quedó sin revisar");
@@ -304,7 +307,7 @@ async function main() {
         providerCalled: false,
       }),
     });
-    await v.click("Revisar consistencia");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Revisar contra Trazaloop");
     assert(v.texto().includes("sin llamada al modelo"),
       "no se distingue una respuesta determinista de una del modelo");
@@ -318,7 +321,7 @@ async function main() {
 
   await check("E1. con el editor casi vacío el botón está apagado", async () => {
     const v = await montar({ action: async () => REVISION, texto: "Se revisa." });
-    const b = v.boton("Revisar consistencia");
+    const b = v.boton(INTELLIGENCE_ACTIONS.review);
     assert(b !== null, "no está el botón");
     assert(b!.hasAttribute("disabled"), "el botón está activo con un texto de diez caracteres");
     assert(v.texto().includes("Escribe primero"), "no se explica por qué está apagado");
@@ -329,7 +332,7 @@ async function main() {
     const v = await montar({
       action: async () => { llamadas += 1; return REVISION; }, texto: "Se revisa.",
     });
-    const b = v.boton("Revisar consistencia");
+    const b = v.boton(INTELLIGENCE_ACTIONS.review);
     await act(async () => {
       b!.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     });

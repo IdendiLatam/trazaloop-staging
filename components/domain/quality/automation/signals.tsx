@@ -162,7 +162,7 @@ export function SignalFile({
                 el Copilot solo la traduce a por qué le importa a esta empresa. */}
             <AskCopilotButton
               type="quality_signal" id={signal.id} label={`Señal: ${signal.title}`}
-              text="Explicar con Copilot"
+              text="Explicar con Intelligence"
             />
           </span>
         }

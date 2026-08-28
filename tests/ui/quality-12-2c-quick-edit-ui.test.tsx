@@ -136,14 +136,14 @@ async function main() {
   console.log("\nB · PULSAR PROPONER HACE ALGO");
   // =========================================================================
 
-  await check("B1. se ve el estado «pensando» mientras trabaja", async () => {
+  await check("B1. se ve el estado de trabajo mientras trabaja", async () => {
     let resolver: ((v: QuickEditState) => void) | null = null;
     const lenta = () => new Promise<QuickEditState>((r) => { resolver = r; });
     const v = await montar({ action: lenta });
     await v.click("Mejorar con Intelligence");
-    assert(!v.texto().includes("Pensando"), "aparece «pensando» antes de pulsar");
+    assert(!v.texto().includes("Preparando"), "aparece el estado de trabajo antes de pulsar");
     await v.click("Proponer");
-    assert(v.texto().includes("Pensando"),
+    assert(v.texto().includes("Preparando"),
       "al pulsar Proponer no se ve ningún estado de trabajo");
     assert(v.host.querySelector("[data-testid=quick-edit-pending]"),
       "no hay indicador de trabajo con rol de estado");
@@ -157,10 +157,10 @@ async function main() {
     const v = await montar({ action: lenta });
     await v.click("Mejorar con Intelligence");
     await v.click("Proponer");
-    const boton = v.boton("Pensando");
+    const boton = v.boton("Preparando");
     assert(boton && (boton as HTMLButtonElement).disabled,
       "el botón sigue habilitado mientras trabaja");
-    await v.click("Pensando");
+    await v.click("Preparando");
     assert(veces === 1, `se envió ${veces} veces`);
     await act(async () => { resolver!(PROPUESTA); });
   });
@@ -176,7 +176,7 @@ async function main() {
     assert(t.includes("Se ordenó la frase."), "no se pintó el resumen del cambio");
     assert(t.includes("Responsable") && t.includes("Frecuencia"),
       "no se pintó lo que falta");
-    assert(!t.includes("Pensando"), "sigue diciendo que está pensando");
+    assert(!t.includes("Preparando"), "sigue diciendo que está preparando");
   });
 
   await check("B4. se ve qué contexto se usó, sin lista de fuentes", async () => {

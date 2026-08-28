@@ -1,4 +1,5 @@
 import "server-only";
+import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
 
 import { aiConfig, aiCredentialConfigured } from "./config";
 import { buildContext, type ContextRequest } from "./context/builder";
@@ -109,7 +110,7 @@ export async function runCopilot(
   if (!p?.allowed) {
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
-      message: p?.message ?? "El Copilot no está disponible para esta empresa.",
+      message: p?.message ?? `${INTELLIGENCE_SHORT_NAME} no está disponible para esta empresa.`,
     };
   }
   const runId = String(p.run_id);
@@ -200,8 +201,9 @@ export async function runCopilot(
     return {
       ok: false, runId, reason: resultado.kind,
       message: resultado.kind === "timeout"
-        ? "El Copilot tardó demasiado. Inténtalo de nuevo en un momento."
-        : "El Copilot no está disponible temporalmente. El resto de Trazaloop sigue funcionando.",
+        ? "La consulta tardó demasiado. Inténtalo de nuevo en un momento."
+        : `${INTELLIGENCE_SHORT_NAME} no está disponible temporalmente. El resto de `
+          + "Trazaloop sigue funcionando.",
     };
   }
 
@@ -213,7 +215,7 @@ export async function runCopilot(
     });
     return {
       ok: false, runId, reason: "invalid_output",
-      message: "El Copilot devolvió una respuesta que no se pudo interpretar. No se guardó nada.",
+      message: "La respuesta no se pudo interpretar. No se guardó nada.",
     };
   }
 

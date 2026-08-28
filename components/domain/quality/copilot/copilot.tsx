@@ -1,4 +1,7 @@
 "use client";
+import {
+  INTELLIGENCE_ACTIONS, INTELLIGENCE_SHORT_NAME,
+} from "@/lib/domain/intelligence-identity";
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
@@ -75,9 +78,11 @@ export function CopilotPanel({
   if (!enabled) {
     return (
       <section className="rounded-lg border border-hairline bg-surface p-4 space-y-2">
-        <h2 className="text-sm font-semibold text-ink">El Copilot está apagado</h2>
+        <h2 className="text-sm font-semibold text-ink">
+          {INTELLIGENCE_SHORT_NAME} está apagado
+        </h2>
         <p className="text-sm text-ink-soft">
-          Esta empresa todavía no ha encendido el Copilot.
+          Esta empresa todavía no lo ha encendido.
           {canConfigure
             ? " Puedes encenderlo abajo, en los ajustes."
             : " Puede encenderlo quien administra Calidad."}
@@ -91,8 +96,8 @@ export function CopilotPanel({
     <div className="space-y-4">
       {!configured ? (
         <InfoAlert message={
-          "El Copilot está encendido pero no hay ningún proveedor de IA "
-          + "configurado en el servidor. Las respuestas se componen únicamente "
+          `${INTELLIGENCE_SHORT_NAME} está encendido pero no hay ningún proveedor `
+          + "de IA configurado en el servidor. Las respuestas se componen únicamente "
           + "con los datos que Trazaloop encontró, sin pasar por ningún modelo. "
           + "Quien administre la instalación tiene que configurar el proveedor."
         } />
@@ -103,7 +108,7 @@ export function CopilotPanel({
           <span className="font-medium">Contexto: </span>{pinned.label}
           <span className="block text-ink-soft">
             La consulta empieza por aquí. Puedes preguntar por otras cosas y el
-            Copilot ampliará el contexto dentro de lo que tu rol puede ver.
+            Se ampliará el contexto dentro de lo que tu rol puede ver.
           </span>
         </p>
       ) : null}
@@ -206,7 +211,7 @@ export function CopilotPanel({
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={pending}>
-            {pending ? "Consultando…" : "Preguntar al Copilot"}
+            {pending ? "Consultando…" : INTELLIGENCE_ACTIONS.ask}
           </Button>
           <span id="copilot-aviso" className="text-xs text-ink-soft">{AI_DISCLAIMER}</span>
         </div>
@@ -220,7 +225,7 @@ export function CopilotPanel({
 
       <details className="rounded-lg border border-hairline bg-surface p-4">
         <summary className="cursor-pointer text-sm font-semibold text-ink">
-          Qué hace y qué no hace el Copilot
+          {`Qué hace y qué no hace ${INTELLIGENCE_SHORT_NAME}`}
         </summary>
         <div className="mt-2 space-y-2 text-xs text-ink-soft">
           <p>{AI_IS_NOT_A_DECISION}</p>

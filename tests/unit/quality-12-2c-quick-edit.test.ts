@@ -389,11 +389,19 @@ check("K1. la capacidad se llama «Mejorar con Intelligence»", () => {
   assert(!/Copilot/.test(UI), "la capacidad nueva se presenta como Copilot");
 });
 
-check("K2. NO se hizo el renombrado global", () => {
-  // 12.2E es quien renombra. Aquí solo se nombra la capacidad nueva.
-  const registry = read("lib/modules/registry.ts");
-  assert(/label: "Copilot"/.test(registry),
-    "se renombró el menú del Copilot, que es trabajo de 12.2E");
+check("K2. la capacidad se nombra desde la identidad compartida", () => {
+  // Decía «NO se hizo el renombrado global» y comprobaba que la navegación
+  // siguiera diciendo «Copilot». Era una barrera de alcance para 12.2C y dejó
+  // de tener sentido cuando 12.2E hizo justo eso.
+  //
+  // Lo que sí sigue valiendo, y es lo que ahora se comprueba: esta pantalla no
+  // inventa su propia etiqueta. Sale de la identidad compartida, que es lo que
+  // permite cambiar el nombre en un sitio y no en cuarenta componentes.
+  assert(/INTELLIGENCE_ACTIONS\.improve/.test(UI),
+    "la etiqueta de la mejora está escrita a mano en el panel");
+  const identidad = read("lib/domain/intelligence-identity.ts");
+  assert(/improve: `Mejorar con \$\{INTELLIGENCE_SHORT_NAME\}`/.test(identidad),
+    "la acción de mejora ya no vive en la identidad compartida");
 });
 
 // ===========================================================================

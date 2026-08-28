@@ -42,7 +42,7 @@ export function CustomerThemes({
       <header className="space-y-1">
         <h2 className="text-sm font-semibold text-ink">Temas recurrentes</h2>
         <p className="text-xs text-ink-soft">
-          Agrupaciones que el Copilot propuso a partir de comentarios anónimos.
+          Agrupaciones que Intelligence propuso a partir de comentarios anónimos.
           Son una lectura, no una medición: el recuento sale de los comentarios
           citados y el tono lo interpretó un modelo. Confírmalos para poder
           seguirlos periodo a periodo.

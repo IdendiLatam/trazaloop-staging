@@ -1425,16 +1425,16 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: na("La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia."),
   },
   {
-    entity: "Consulta al Copilot", module: "quality", route: "/quality/copilot",
+    entity: "Consulta a Intelligence", module: "quality", route: "/quality/copilot",
     klass: "B",
-    detail: embedded("Borrador del Copilot",
+    detail: embedded("Propuesta de Intelligence",
       "Una consulta suelta no es un documento de la empresa: lo que se archiva es el borrador que salió de ella, si es que salió alguno."),
     list: has("quality.ai-run.list"),
     historical: noHistory(
       "El reporte retrata las consultas que existen hoy. Cada una conserva con qué modelo y con qué instrucciones se respondió, y eso se lee en el propio reporte."),
   },
   {
-    entity: "Borrador del Copilot", module: "quality", route: "/quality/copilot",
+    entity: "Propuesta de Intelligence", module: "quality", route: "/quality/copilot",
     klass: "C",
     detail: has("quality.ai-suggestion.detail"),
     list: has("quality.ai-suggestion.list"),
@@ -1443,14 +1443,14 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     historical: has("quality.ai-suggestion.detail"),
   },
   {
-    entity: "Fuente citada por el Copilot", module: "quality", route: null, klass: "D",
-    detail: embedded("Borrador del Copilot",
+    entity: "Fuente citada por Intelligence", module: "quality", route: null, klass: "D",
+    detail: embedded("Propuesta de Intelligence",
       "Una fuente citada solo significa algo dentro de la respuesta que la citó; suelta es un enlace sin pregunta."),
-    list: embedded("Borrador del Copilot"),
-    historical: embedded("Borrador del Copilot"),
+    list: embedded("Propuesta de Intelligence"),
+    historical: embedded("Propuesta de Intelligence"),
   },
   {
-    entity: "Conversación con el Copilot", module: "quality", route: "/quality/copilot",
+    entity: "Conversación con Intelligence", module: "quality", route: "/quality/copilot",
     klass: "E",
     detail: na("Una conversación es un hilo de trabajo, no un registro del sistema de gestión. Lo que alguien quiera conservar lo registra en su dominio, a mano."),
     list: na("Las conversaciones son privadas de cada persona: un listado de las conversaciones de la empresa no es un documento que nadie deba poder descargar."),
@@ -1459,7 +1459,7 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
   {
     entity: "Valoración de una respuesta", module: "quality", route: null, klass: "E",
     detail: na("Un pulgar arriba o abajo es telemetría de producto, no información de la empresa: no documenta nada del sistema de gestión."),
-    list: na("Idem: se agrega para saber si el Copilot sirve, no para archivarlo."),
+    list: na("Idem: se agrega para saber si Intelligence sirve, no para archivarlo."),
     historical: na("No hay historia empresarial que reconstruir en una valoración de utilidad."),
   },
 ];

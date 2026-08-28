@@ -31,7 +31,7 @@ import { organizationIdentity } from "../branding";
  * lo que dice, no vale para nada: ni para decidir ni para discutirlo.
  */
 
-const SYSTEM = "Trazaloop Quality · Copilot";
+const SYSTEM = "Trazaloop Intelligence";
 
 function stamp(iso: string): string {
   return iso.slice(0, 10);
@@ -50,7 +50,7 @@ function fecha(iso: string | null): string {
 export const qualityAiSuggestionDetail: ExportDefinition = {
   key: "quality.ai-suggestion.detail",
   module: "quality",
-  entity: "Borrador del Copilot",
+  entity: "Propuesta de Intelligence",
   recordType: "Borrador generado con IA",
   documentName: "Borrador generado con IA",
   kind: "detail",
@@ -141,8 +141,8 @@ export const qualityAiSuggestionDetail: ExportDefinition = {
 export const qualityAiSuggestionList: ExportDefinition = {
   key: "quality.ai-suggestion.list",
   module: "quality",
-  entity: "Listado de borradores del Copilot",
-  recordType: "Borradores del Copilot",
+  entity: "Listado de propuestas de Intelligence",
+  recordType: "Propuestas de Intelligence",
   documentName: "Listado de borradores generados con IA",
   kind: "list",
   permission: "member",
@@ -165,11 +165,11 @@ export const qualityAiSuggestionList: ExportDefinition = {
 
     return {
       filenameParts: {
-        recordType: "Borradores del Copilot", title: "Listado",
+        recordType: "Propuestas de Intelligence", title: "Listado",
         code: null, stamp: stamp(req.generatedAt),
       },
       document: {
-        recordType: "Borradores del Copilot",
+        recordType: "Propuestas de Intelligence",
         title: "Listado de borradores generados con IA",
         code: null,
         subtitle: `${items.length} borrador(es) · ${aceptados} aceptado(s) por una persona`,
@@ -223,9 +223,9 @@ export const qualityAiSuggestionList: ExportDefinition = {
 export const qualityAiRunList: ExportDefinition = {
   key: "quality.ai-run.list",
   module: "quality",
-  entity: "Consultas al Copilot",
-  recordType: "Consultas al Copilot",
-  documentName: "Reporte de consultas al Copilot",
+  entity: "Consultas a Intelligence",
+  recordType: "Consultas a Intelligence",
+  documentName: "Reporte de consultas a Intelligence",
   kind: "list",
   permission: "member",
   orientation: "landscape",
@@ -243,12 +243,12 @@ export const qualityAiRunList: ExportDefinition = {
 
     return {
       filenameParts: {
-        recordType: "Consultas al Copilot", title: "Reporte",
+        recordType: "Consultas a Intelligence", title: "Reporte",
         code: null, stamp: stamp(req.generatedAt),
       },
       document: {
-        recordType: "Consultas al Copilot",
-        title: "Reporte de consultas al Copilot",
+        recordType: "Consultas a Intelligence",
+        title: "Reporte de consultas a Intelligence",
         code: null,
         subtitle: `${runs.length} consulta(s) · ${fallidas} con fallo · `
           + `${bloqueadas} bloqueada(s) por el tope`,
@@ -286,7 +286,7 @@ export const qualityAiRunList: ExportDefinition = {
               r.evidenceLevel ? EVIDENCE_LABEL[r.evidenceLevel] ?? r.evidenceLevel : "—",
               r.latencyMs !== null ? `${r.latencyMs} ms` : "—",
             ]),
-            "Todavía no se ha consultado al Copilot."
+            "Todavía no se ha consultado a Intelligence."
           )),
           section(null, note(
             "Este reporte no incluye el texto de las preguntas ni de las "

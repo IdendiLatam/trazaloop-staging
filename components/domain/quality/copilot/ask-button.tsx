@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { INTELLIGENCE_ACTIONS } from "@/lib/domain/intelligence-identity";
 
 /**
- * Trazaloop Quality · QUALITY-12 · §48 · «Preguntar al Copilot», desde donde
- * estés.
+ * Trazaloop · QUALITY-12 · §48 · «Preguntar a Intelligence», desde donde estés.
  *
  * POR QUÉ ES UN ENLACE Y NO UN CHAT INCRUSTADO
  *
@@ -12,7 +12,8 @@ import Link from "next/link";
  * copias del mismo componente que se han ido separando.
  */
 export function AskCopilotButton({
-  type, id, label, text = "Preguntar al Copilot",
+
+  type, id, label, text = INTELLIGENCE_ACTIONS.ask,
 }: { type: string; id: string; label: string; text?: string }) {
   const href = `/quality/copilot?type=${encodeURIComponent(type)}`
     + `&id=${encodeURIComponent(id)}&label=${encodeURIComponent(label)}`;

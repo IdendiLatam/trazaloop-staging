@@ -1,17 +1,21 @@
 /**
- * Trazaloop · QUALITY-12 · El dominio puro del Copilot.
+ * Trazaloop · QUALITY-12 · El dominio puro de Trazaloop Intelligence.
  *
  * Aquí viven las seis separaciones que sostienen el sprint, escritas para que
  * la pantalla las diga con las mismas palabras y para que las pruebas puedan
  * comprobar que siguen existiendo. Nada de esto toca base de datos ni red.
  */
 
+import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
+
 // ---------------------------------------------------------------------------
 // Las seis separaciones (§8, §43, §44)
 // ---------------------------------------------------------------------------
 
 export const AI_IS_NOT_A_FACT =
-  "Lo que el Copilot dice es una LECTURA de datos, no un hecho nuevo. El hecho "
+
+  `Lo que ${INTELLIGENCE_SHORT_NAME} dice es una LECTURA de datos, no un hecho `
+  + "nuevo. El hecho "
   + "sigue siendo lo que está registrado en su dominio, con su autor y su fecha.";
 
 export const AI_IS_NOT_A_DECISION =
@@ -25,7 +29,7 @@ export const AI_DRAFT_IS_NOT_A_RECORD =
 
 export const AI_INFERENCE_IS_NOT_EVIDENCE =
   "Una inferencia no es evidencia. La evidencia es el documento, la medición o "
-  + "el registro que ya existía; lo que el Copilot deduce de ellos va aparte y "
+  + "el registro que ya existía; lo que se deduce de ellos va aparte y "
   + "se muestra aparte.";
 
 export const AI_SUMMARY_IS_NOT_THE_SOURCE =
@@ -35,8 +39,9 @@ export const AI_SUMMARY_IS_NOT_THE_SOURCE =
 
 export const AI_IS_NOT_AUTOMATION =
   "La automatización de QUALITY-11 es determinística: la misma condición da "
-  + "siempre el mismo resultado y se puede explicar campo a campo. El Copilot "
-  + "interpreta y redacta. Ni el uno hace lo del otro, ni comparten motor.";
+  + "siempre el mismo resultado y se puede explicar campo a campo. "
+  + `${INTELLIGENCE_SHORT_NAME} interpreta y redacta. Ni el uno hace lo del otro, `
+  + "ni comparten motor.";
 
 // ---------------------------------------------------------------------------
 // Lo que el Copilot NO puede hacer (§34…§41, §96…§100)
@@ -150,7 +155,8 @@ export const AI_DISCLAIMER =
 
 /** §83 · Las palabras precisas. Pasar contexto no es aprender. */
 export const NO_LEARNING_CLAIM =
-  "El Copilot no aprende de tu empresa. En cada consulta se le entrega la "
+  `${INTELLIGENCE_SHORT_NAME} no aprende de tu empresa. En cada consulta se le `
+  + "entrega la "
   + "información autorizada que hace falta para responderla, y nada de eso "
   + "entrena ningún modelo.";
 
@@ -162,7 +168,8 @@ export const DATA_HANDLING_NOTE =
   + "otras empresas, ni nada que tu rol no pueda ver.";
 
 export const HUMAN_IN_THE_LOOP =
-  "Nada de lo que el Copilot propone se convierte en un registro por sí solo. "
+  `Nada de lo que ${INTELLIGENCE_SHORT_NAME} propone se convierte en un registro `
+  + "por sí solo. "
   + "Si algo te sirve, lo usas tú con el comando de siempre, y el autor del "
   + "registro eres tú.";
 

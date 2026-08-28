@@ -12,6 +12,8 @@
  * lib/modules/textiles.ts + lib/auth/require-textiles-module.ts.
  */
 
+import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
+
 export type ModuleNavLink = {
   label: string;
   href: string;
@@ -365,9 +367,13 @@ export const QUALITY_REVISION_DIRECCION_GROUP: ModuleNavGroup = {
 };
 
 export const QUALITY_COPILOT_GROUP: ModuleNavGroup = {
-  title: "Copilot",
+  // QUALITY-12.2E · La etiqueta es la corta: la barra lateral y el móvil no
+  // tienen sitio para «Trazaloop Intelligence», y abreviarlo a «IA» describiría
+  // la tecnología en vez del producto. El identificador del grupo se queda como
+  // está: renombrarlo no cambiaría nada visible.
+  title: INTELLIGENCE_SHORT_NAME,
   items: [
-    { label: "Copilot", href: "/quality/copilot", exact: true },
+    { label: INTELLIGENCE_SHORT_NAME, href: "/quality/copilot", exact: true },
   ],
 };
 

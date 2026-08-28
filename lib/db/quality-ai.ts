@@ -1,4 +1,5 @@
 import "server-only";
+import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
@@ -62,7 +63,7 @@ export async function updateSettings(
     ...(input.retainQuestion !== undefined ? { retain_question: input.retainQuestion } : {}),
     ...(input.retainAnswer !== undefined ? { retain_answer: input.retainAnswer } : {}),
   });
-  if (error) throw new Error(fail(error, "No se pudo guardar la configuración del Copilot."));
+  if (error) throw new Error(fail(error, `No se pudo guardar la configuración de ${INTELLIGENCE_SHORT_NAME}.`));
 }
 
 export async function getUsage(
@@ -70,7 +71,7 @@ export async function getUsage(
 ): Promise<Record<string, unknown> | null> {
   const s = await db(client);
   const { data, error } = await s.rpc("quality_ai_usage", { p_organization_id: organizationId });
-  if (error) throw new Error(fail(error, "No se pudo leer el consumo del Copilot."));
+  if (error) throw new Error(fail(error, `No se pudo leer el consumo de ${INTELLIGENCE_SHORT_NAME}.`));
   return (data ?? null) as Record<string, unknown> | null;
 }
 
@@ -314,7 +315,7 @@ export async function listAiSources(client?: Db): Promise<Record<string, unknown
   const s = await db(client);
   const { data, error } = await s.from("quality_ai_sources")
     .select("*").order("position_order");
-  if (error) throw new Error(fail(error, "No se pudo leer el catálogo del Copilot."));
+  if (error) throw new Error(fail(error, `No se pudo leer el catálogo de ${INTELLIGENCE_SHORT_NAME}.`));
   return filas(data);
 }
 

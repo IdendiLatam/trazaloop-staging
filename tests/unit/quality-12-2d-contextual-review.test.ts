@@ -481,8 +481,11 @@ check("K3. el estado de trabajo se ve", () => {
 });
 
 check("K4. se distingue de «Mejorar redacción»", () => {
-  assert(/Revisar consistencia/.test(UI), "el botón no se llama distinto");
-  assert(!/Mejorar con Intelligence/.test(UI), "el panel reusa la etiqueta de 12.2C");
+  // QUALITY-12.2E · La etiqueta pasó a «Revisar con Intelligence» y sale de la
+  // identidad compartida. Lo que se comprueba sigue siendo lo mismo: que las
+  // dos capacidades NO se llamen igual.
+  assert(/INTELLIGENCE_ACTIONS\.review/.test(UI), "el botón no usa la acción de revisión");
+  assert(!/INTELLIGENCE_ACTIONS\.improve/.test(UI), "el panel reusa la acción de 12.2C");
   assert(/QuickEditPanel[\s\S]*ContextualReviewPanel/.test(EDITOR),
     "los dos paneles no conviven en el editor compartido");
   assert(/ContextualReviewPanel/.test(TEXTIL), "el editor textil no lo tiene");

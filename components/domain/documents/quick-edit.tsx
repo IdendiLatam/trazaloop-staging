@@ -5,6 +5,7 @@ import { quickEditAction, type QuickEditState } from "@/server/actions/document-
 import {
   QUICK_EDIT_ACTIONS, QUICK_EDIT_LABEL, type QuickEditAction,
 } from "@/lib/domain/document-authoring";
+import { INTELLIGENCE_ACTIONS } from "@/lib/domain/intelligence-identity";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
@@ -90,7 +91,7 @@ export function QuickEditPanel({
           disabled={!hayTexto}
           className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-loop disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Mejorar con Intelligence
+          {INTELLIGENCE_ACTIONS.improve}
         </button>
         {!hayTexto ? (
           <span className="text-[11px] text-ink-soft">
@@ -126,7 +127,7 @@ export function QuickEditPanel({
           disabled={trabajando || !hayTexto}
           className="!w-auto px-3 py-1.5 text-xs"
         >
-          {trabajando ? "Pensando…" : state.suggestion ? "Intentar otra redacción" : "Proponer"}
+          {trabajando ? "Preparando…" : state.suggestion ? "Intentar otra redacción" : "Proponer"}
         </Button>
         <button
           type="button"
@@ -141,7 +142,7 @@ export function QuickEditPanel({
           que falla: con el primero nadie sabe si pulsó. */}
       {trabajando ? (
         <p role="status" className="text-xs text-ink-soft" data-testid="quick-edit-pending">
-          Pensando en una propuesta… tu texto no se toca hasta que decidas.
+          Preparando una propuesta… tu texto no se toca hasta que decidas.
         </p>
       ) : null}
 

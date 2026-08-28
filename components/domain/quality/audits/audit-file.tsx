@@ -161,7 +161,7 @@ function Header({ audit, detail, program, reschedules }: {
             exportKey="quality.audit-plan.detail" id={audit.id} label="Descargar PDF"
           />
           <AskCopilotButton type="quality_audit" id={audit.id}
-            label={`Auditoría: ${audit.title}`} text="Preparar con Copilot" />
+            label={`Auditoría: ${audit.title}`} text="Preparar con Intelligence" />
         </span>
       }
     >

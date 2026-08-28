@@ -549,8 +549,15 @@ check("K1. las cuatro formas de fallar están distinguidas", () => {
 
 check("K2. un fallo del proveedor NO tumba Calidad (§85)", () => {
   assert(/quality_ai_fail_run/.test(COPILOT), "un fallo no se registra");
-  assert(/El Copilot no está disponible temporalmente/.test(COPILOT),
+  // QUALITY-12.2E · La identidad visible cambió; lo que se comprueba no: que
+  // haya un mensaje sobrio y no un volcado técnico.
+  assert(/no está disponible temporalmente/.test(COPILOT),
     "no hay mensaje sobrio para el usuario");
+  // El literal está partido en varias líneas del fuente: se aplana antes de
+  // mirarlo, o la comprobación depende de dónde caiga el salto.
+  const copilotPlano = COPILOT.replace(/`\s*\n\s*\+ "/g, "").replace(/"\s*\n\s*\+ "/g, "");
+  assert(/El resto de Trazaloop sigue funcionando/.test(copilotPlano),
+    "el mensaje no acota el alcance del fallo");
   assert(/catch \(e\)/.test(ACTIONS), "la acción no protege la pantalla");
 });
 
@@ -610,9 +617,11 @@ check("L4. se explica qué NO hace, sin fingir que aprende (§83, §84)", () => 
   }
 });
 
-check("L5. sin Copilot encendido o sin proveedor, se explica (§164)", () => {
-  assert(/El Copilot está apagado/.test(UI), "no hay estado para el Copilot apagado");
-  assert(/no hay ningún proveedor de IA/.test(UI),
+check("L5. sin Intelligence encendido o sin proveedor, se explica (§164)", () => {
+  assert(/INTELLIGENCE_SHORT_NAME\} está apagado/.test(UI),
+    "no hay estado para cuando está apagado");
+  const uiPlano = UI.replace(/`\s*\n\s*\+ "/g, "").replace(/"\s*\n\s*\+ "/g, "");
+  assert(/no hay ningún proveedor de IA/.test(uiPlano),
     "no se explica que falta configurar el proveedor");
 });
 
@@ -648,7 +657,7 @@ check("M1. las tres exportaciones existen y están clasificadas", () => {
     assert(claves.includes(k), `${k} no está clasificada en el inventario`);
   }
   const filas = EXPORT_INVENTORY.filter(
-    (r) => /Copilot|Valoración de una respuesta/i.test(r.entity));
+    (r) => /Intelligence|Valoración de una respuesta/i.test(r.entity));
   assert(filas.length >= 5, `solo ${filas.length} entidades del Copilot clasificadas`);
 });
 

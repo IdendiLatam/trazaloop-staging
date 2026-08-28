@@ -1,4 +1,7 @@
 "use server";
+import {
+  INTELLIGENCE_SETTINGS_TITLE, INTELLIGENCE_SHORT_NAME,
+} from "@/lib/domain/intelligence-identity";
 
 import { revalidatePath } from "next/cache";
 import { requireQualityForAction } from "@/lib/auth/require-quality-module";
@@ -111,8 +114,8 @@ export async function askCopilotAction(
   const ajustes = await getSettings(g.ok.organizationId);
   if (!ajustes.isEnabled) {
     return {
-      error: "El Copilot no está encendido para esta empresa. Puede activarlo "
-        + "quien administra Calidad desde los ajustes del Copilot.",
+      error: `${INTELLIGENCE_SHORT_NAME} no está encendido para esta empresa. `
+        + `Puede activarlo quien administra Calidad desde ${INTELLIGENCE_SETTINGS_TITLE.toLowerCase()}.`,
     };
   }
 
@@ -166,7 +169,7 @@ export async function askCopilotAction(
     return {
       error: e instanceof Error && e.message.length < 200
         ? e.message
-        : "El Copilot no está disponible temporalmente. El resto de Trazaloop sigue funcionando.",
+        : `${INTELLIGENCE_SHORT_NAME} no está disponible temporalmente. El resto de Trazaloop sigue funcionando.`,
     };
   }
 }
@@ -302,7 +305,7 @@ export async function updateAiSettingsAction(
   const g = await gate();
   if (!g.ok) return { error: g.error };
   if (!["admin", "quality"].includes(g.ok.roleCode)) {
-    return { error: "Tu rol no permite configurar el Copilot." };
+    return { error: `Tu rol no permite configurar ${INTELLIGENCE_SHORT_NAME}.` };
   }
 
   const entero = (name: string, alt: number) => {
@@ -322,7 +325,7 @@ export async function updateAiSettingsAction(
       retainAnswer: formData.get("retain_answer") === "on",
     });
     revalidatePath("/quality/copilot");
-    return { error: null, success: true, message: "Configuración del Copilot guardada." };
+    return { error: null, success: true, message: `Configuración de ${INTELLIGENCE_SHORT_NAME} guardada.` };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "No se pudo guardar." };
   }

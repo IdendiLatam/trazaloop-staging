@@ -9,13 +9,14 @@ import {
   REVIEW_FINDING_LABEL, REVIEW_SEVERITY_LABEL, RELATED_CONTEXT_LABEL,
   type ReviewSeverity,
 } from "@/lib/domain/document-review";
+import { INTELLIGENCE_ACTIONS } from "@/lib/domain/intelligence-identity";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
 const initial: DocumentReviewState = { error: null };
 
 /**
- * Trazaloop · QUALITY-12.2D · «Revisar consistencia», junto a la sección.
+ * Trazaloop · QUALITY-12.2D · «Revisar con Intelligence», junto a la sección.
  *
  * POR QUÉ ES UN PANEL APARTE Y NO UNA OPCIÓN MÁS DEL DE 12.2C
  *
@@ -103,7 +104,7 @@ export function ContextualReviewPanel({
           data-testid="review-open"
           className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-loop disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Revisar consistencia
+          {INTELLIGENCE_ACTIONS.review}
         </button>
         {!hayTexto ? (
           <span className="text-[11px] text-ink-soft">

@@ -121,7 +121,7 @@ export function QualityCaseDetail({ model }: { model: CaseDetailModel }) {
           <h1 className="text-2xl font-semibold tracking-tight">{model.title}</h1>
           <ExportPdfButton exportKey="quality.case.detail" id={model.caseId} />
           <AskCopilotButton type="work_case" id={model.caseId}
-            label={`Caso: ${model.title}`} text="Hipótesis con Copilot" />
+            label={`Caso: ${model.title}`} text="Hipótesis con Intelligence" />
           <ClassificationBadge value={model.classification} />
           <CaseStatusBadge value={model.status} />
         </div>
