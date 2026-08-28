@@ -173,14 +173,11 @@ cuesta una consulta no hace falta leerla.
 
 **Blóqueres: 0. Gaps de 12.2F: 0.**
 
-**Una incompletitud, nombrada y no escondida:**
-
-`ai.usage_hard_limit_reached` está definido y **nadie lo emite**. Cuando el
-tope duro deniega, la puerta retorna antes de llegar al emisor —que es lo mismo
-que evita crear una fila de operación para un rechazo—. El bloqueo funciona y
-está validado con una persona delante; lo que falta es que ese momento deje un
-hecho en `work_events`. Se arregla tocando las dos puertas, o sea con una
-migración, y este cierre no la lleva.
+**Cerrado en 12.2F.1:** `ai.usage_hard_limit_reached` estaba definido y nadie
+lo emitía. Se emite ahora desde el orquestador, justo después de la denegación
+— **sin migración**, porque el tipo, el emisor, el bus y la deduplicación ya
+existían. Detalle y la asimetría que eso deja en
+`QUALITY_12_2F_USAGE_LIMITS.md`.
 
 **Anotado, con datos ya disponibles para decidirlo:**
 

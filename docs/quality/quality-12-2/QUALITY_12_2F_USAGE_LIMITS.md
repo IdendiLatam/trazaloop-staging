@@ -166,22 +166,41 @@ Se emiten en `work_events` con `source_domain = 'ai'`, que es donde ya conviven
 `ai.run_completed` y `ai.suggestion_accepted`. **No se ha construido un segundo
 bus ni un motor de correos.**
 
-| Evento | Cuándo | Estado |
+| Evento | Cuándo | Emitido desde |
 |---|---|---|
-| `ai.usage_threshold_reached` | se cruza el umbral blando | **se emite** |
-| `ai.usage_hard_limit_reached` | se alcanza el techo | **definido, todavía sin emisor** |
+| `ai.usage_threshold_reached` | se cruza el umbral blando | la puerta, en SQL |
+| `ai.usage_hard_limit_reached` | se alcanza el techo | el orquestador · **12.2F.1** |
 
-> **El segundo no se emite, y conviene decirlo.** El tipo existe, la función
-> emisora lo soporta y el vocabulario del bus lo acepta, pero las dos puertas
-> llaman al emisor solo en el caso blando: cuando el tope duro deniega, la
-> función retorna **antes** de llegar a esa línea, que es justamente lo que
-> hace que no se cree una fila de operación para registrar un rechazo.
->
-> No afecta al bloqueo, que funciona y está validado. Afecta a la
-> **observabilidad**: alcanzar el techo se ve en la consola y en el estado de
-> la empresa, pero no deja un hecho en el bus para que la automatización
-> reaccione. Emitirlo exige tocar las dos funciones, o sea una migración, y
-> este cierre no la lleva.
+### Por qué el segundo se emite desde otro sitio
+
+12.2F cerró con este hueco: el tipo existía, el emisor lo soportaba, el
+vocabulario del bus lo aceptaba, y **nadie lo llamaba**. Las dos puertas
+invocan al emisor solo en el caso blando, porque cuando el tope duro deniega la
+función retorna antes de llegar a esa línea.
+
+**Y esa salida temprana no se toca.** Es la misma que evita crear una fila de
+operación para registrar un rechazo: `quality_ai_runs` es el libro de lo que
+llegó a ejecutarse, no de lo que se intentó.
+
+Emitirlo dentro de la puerta obligaría a reescribir las dos funciones, o sea
+una migración — para una emisión que faltaba de un tipo que ya existía, en un
+bus que ya existía, con un emisor ya autorizado. Mover el esquema por comodidad.
+
+Así que se emite desde el orquestador, justo después de la denegación, donde no
+puede conceder nada. **Queda una asimetría y se dice en voz alta**: el aviso
+blando nace en SQL y el duro en TypeScript. Se paga a cambio de no tocar el
+esquema, y el día que haya otra razón real para reescribir esas funciones, el
+emisor se muda allí.
+
+### Veinte pulsaciones, un hecho
+
+La deduplicación **no se inventó para esto**: es `dedupe_key` —
+`tipo:empresa:AAAA-MM` con `on conflict do nothing` y su índice único—, el
+mecanismo que `work_events` ya usaba. Hay una prueba que pulsa el botón
+bloqueado veintiún veces y exige **un** hecho.
+
+Los dos hechos conviven en el mismo mes: son momentos distintos —80 % y 100 %—
+y sus claves difieren por el tipo.
 
 Se llaman `ai.*` y no `intelligence.*` porque esa es la convención del bus: la
 identidad visible es una cosa y el espacio técnico es otra, que es exactamente

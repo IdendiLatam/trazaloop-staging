@@ -335,6 +335,36 @@ check("J2. un aviso por empresa y mes, no uno por operación", () => {
   assert(/on conflict do nothing/.test(MIG), "el mismo aviso se repetiría");
 });
 
+check("J2b. tocar techo TAMBIÉN deja un hecho", () => {
+  // 12.2F cerró con este hueco: el tipo existía y nadie lo emitía, porque la
+  // puerta retorna antes de llegar al emisor cuando el tope duro deniega. Se
+  // emite desde el orquestador, que es donde la denegación se ve.
+  const eventos = read("lib/intelligence/usage-events.ts");
+  assert(/p_hard: true/.test(eventos), "el emisor no marca el hecho como tope duro");
+  assert(/denial\.reason !== "monthly_cap"/.test(eventos),
+    "se emitiría también para topes por minuto u hora, que no son noticia");
+  for (const orq of ["lib/intelligence/document-authoring/quick-edit.ts",
+                     "lib/intelligence/document-review/contextual-review.ts"]) {
+    const c = read(orq);
+    assert(/emitHardLimitEvent\(db, req\.organizationId, p\)/.test(c),
+      `${orq} no emite el hecho al denegar`);
+    // Y se emite DESPUÉS de la denegación: no puede conceder nada.
+    const cuerpo = c.slice(c.indexOf("if (!p?.allowed)"));
+    assert(cuerpo.indexOf("emitHardLimitEvent") < cuerpo.indexOf("return"),
+      `${orq} emite fuera de la rama de denegación`);
+  }
+});
+
+check("J2c. y no se creó un segundo bus para ello", () => {
+  const eventos = read("lib/intelligence/usage-events.ts");
+  assert(/intelligence_emit_usage_event/.test(eventos),
+    "se emite por otro camino que no es el emisor existente");
+  const m = readdirSync(join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql")).sort();
+  assert(m[m.length - 1] === "0141_intelligence_platform_visibility.sql",
+    `se creó una migración para una emisión que faltaba: ${m[m.length - 1]}`);
+});
+
 check("J3. un aviso que falla no tumba la operación", () => {
   const fn = /create or replace function public\.intelligence_emit_usage_event[\s\S]*?\$\$;/
     .exec(MIG)?.[0] ?? "";

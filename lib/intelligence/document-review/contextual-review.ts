@@ -9,6 +9,7 @@ import type { RelatedContextType } from "@/lib/domain/document-review";
 import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
 import { buildReviewContext, type EmptyReason } from "./routing";
 import { reviewPrompt } from "./policy";
+import { emitHardLimitEvent } from "@/lib/intelligence/usage-events";
 import { REVIEW_SCHEMA, REVIEW_SCHEMA_NAME, validateReview, type DocumentReview } from "./schema";
 import {
   renderReviewInput, type ReviewContextUsed, type ReviewDocumentContext, type ReviewLimit,
@@ -143,8 +144,15 @@ export async function runContextualReview(
   if (errPermiso) {
     return { ok: false, runId: null, reason: "denied", message: errPermiso.message };
   }
-  const p = permiso as { allowed: boolean; reason?: string; message?: string; run_id?: string };
+  const p = permiso as {
+    allowed: boolean; reason?: string; message?: string; run_id?: string;
+    used?: number; limit?: number; percent?: number;
+  };
   if (!p?.allowed) {
+    // QUALITY-12.2F.1 · Tocar techo deja un hecho en el bus. Se emite DESPUÉS
+    // de la denegación, así que no puede conceder nada, y solo para el tope
+    // mensual: un tope por minuto es un doble clic, no una noticia.
+    await emitHardLimitEvent(db, req.organizationId, p);
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
       message: p?.message

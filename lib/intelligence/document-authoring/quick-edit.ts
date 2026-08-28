@@ -8,6 +8,7 @@ import {
   type QuickEditSuggestion,
 } from "./schema";
 import { quickEditPrompt, type QuickEditAction } from "./policy";
+import { emitHardLimitEvent } from "@/lib/intelligence/usage-events";
 import {
   contextUsed, renderQuickEditInput, type ContextUsed, type QuickEditContext,
 } from "./context";
@@ -116,8 +117,15 @@ export async function runQuickEdit(
   if (errPermiso) {
     return { ok: false, runId: null, reason: "denied", message: errPermiso.message };
   }
-  const p = permiso as { allowed: boolean; reason?: string; message?: string; run_id?: string };
+  const p = permiso as {
+    allowed: boolean; reason?: string; message?: string; run_id?: string;
+    used?: number; limit?: number; percent?: number;
+  };
   if (!p?.allowed) {
+    // QUALITY-12.2F.1 · Tocar techo deja un hecho en el bus. Se emite DESPUÉS
+    // de la denegación, así que no puede conceder nada, y solo para el tope
+    // mensual: un tope por minuto es un doble clic, no una noticia.
+    await emitHardLimitEvent(db, req.organizationId, p);
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
       message: p?.message ?? "No se puede usar la asistencia de redacción aquí.",
