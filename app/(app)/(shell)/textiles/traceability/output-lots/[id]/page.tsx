@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MEASUREMENT_UNIT_OPTIONS } from "@/lib/domain/measurement-units";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import {
   getTextileOutputLot,
@@ -66,7 +67,8 @@ export default async function TextileOutputLotDetailPage({
   const fields: CatalogFieldDef[] = [
     { key: "outputLotCode", label: "Código del lote final", type: "text", required: true },
     { key: "quantityProduced", label: "Cantidad producida", type: "text", required: true },
-    { key: "unit", label: "Unidad", type: "text" },
+    // PT-03B · Catálogo cerrado: la unidad dejó de ser texto libre.
+    { key: "unit", label: "Unidad", type: "select", options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })) },
     { key: "producedDate", label: "Fecha de producción (AAAA-MM-DD)", type: "text" },
     {
       key: "status",

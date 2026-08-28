@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { MEASUREMENT_UNIT_OPTIONS } from "@/lib/domain/measurement-units";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import { searchTextileProductionOrders } from "@/lib/db/textiles-traceability";
 import { listTextileReferences } from "@/lib/db/textiles-products";
@@ -54,7 +55,12 @@ export default async function TextileOrdersPage({
       ],
     },
     { key: "plannedQuantity", label: "Cantidad planeada", type: "text", placeholder: "p. ej. 500" },
-    { key: "unit", label: "Unidad", type: "text", placeholder: "units", help: "Sin conversión automática: mantén consistencia manual" },
+    // PT-03B · Era un campo de TEXTO LIBRE con la ayuda «mantén consistencia
+    // manual». Esa consistencia manual es justo lo que fallaba: escribir
+    // «kilogramos» donde el lote decía «kg» desactivaba el control de
+    // sobreconsumo entero. Ahora es un catálogo cerrado y la base compara por
+    // código canónico.
+    { key: "unit", label: "Unidad", type: "select", options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })) },
     { key: "plannedStartDate", label: "Inicio planeado (AAAA-MM-DD)", type: "text" },
     { key: "plannedEndDate", label: "Fin planeado (AAAA-MM-DD)", type: "text" },
     {

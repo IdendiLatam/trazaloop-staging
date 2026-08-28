@@ -127,6 +127,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
   ];
   for (const f of mandatory) {

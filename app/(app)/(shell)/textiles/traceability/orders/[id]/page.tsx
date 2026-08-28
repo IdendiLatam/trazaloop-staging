@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MEASUREMENT_UNIT_OPTIONS } from "@/lib/domain/measurement-units";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import {
   getTextileProductionOrder,
@@ -96,7 +97,8 @@ export default async function TextileOrderDetailPage({
     },
     { key: "plannedQuantity", label: "Cantidad planeada", type: "text" },
     { key: "producedQuantity", label: "Cantidad producida", type: "text" },
-    { key: "unit", label: "Unidad", type: "text" },
+    // PT-03B · Catálogo cerrado: la unidad dejó de ser texto libre.
+    { key: "unit", label: "Unidad", type: "select", options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })) },
     { key: "plannedStartDate", label: "Inicio planeado (AAAA-MM-DD)", type: "text" },
     { key: "plannedEndDate", label: "Fin planeado (AAAA-MM-DD)", type: "text" },
     { key: "actualStartDate", label: "Inicio real (AAAA-MM-DD)", type: "text" },
@@ -128,7 +130,10 @@ export default async function TextileOrderDetailPage({
       ],
     },
     { key: "quantityConsumed", label: "Cantidad consumida", type: "text", required: true },
-    { key: "unit", label: "Unidad", type: "text", required: true, help: "Debe coincidir con la del lote para controlar saldo" },
+    // PT-03B · «Debe coincidir con la del lote» era una petición al usuario.
+    // Ahora la base lo EXIGE: si no coincide, rechaza en vez de dejar pasar
+    // el consumo sin comprobar nada.
+    { key: "unit", label: "Unidad", type: "select", required: true, options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })), help: "Debe coincidir con la del lote: Trazaloop no convierte unidades" },
     {
       key: "consumptionRole",
       label: "Rol del consumo",
@@ -233,7 +238,8 @@ export default async function TextileOrderDetailPage({
   const outputFields: CatalogFieldDef[] = [
     { key: "outputLotCode", label: "Código del lote final", type: "text", required: true, placeholder: "p. ej. LF-2026-001" },
     { key: "quantityProduced", label: "Cantidad producida", type: "text", required: true },
-    { key: "unit", label: "Unidad", type: "text" },
+    // PT-03B · Catálogo cerrado: la unidad dejó de ser texto libre.
+    { key: "unit", label: "Unidad", type: "select", options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })) },
     { key: "producedDate", label: "Fecha de producción (AAAA-MM-DD)", type: "text" },
     {
       key: "status",

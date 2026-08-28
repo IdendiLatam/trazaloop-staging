@@ -413,6 +413,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
     // QUALITY-12.2A: la guía de autoría canónica, con historia. No toca el
     // aviso Demo: lo refuerza — el texto administrado deja de ser legible
@@ -423,6 +424,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
   ]);
   const forbidden = files.filter((f) => (/^010[5-9]|^01[1-9]\d/.test(f)) && !knownLater.has(f));

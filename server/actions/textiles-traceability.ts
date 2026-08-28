@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
+import { canonicalUnit } from "@/lib/domain/measurement-units";
 import { requireTextilesForAction } from "@/lib/auth/require-textiles-module";
 import { checkTextilesCanMutate, checkTextilesResourceLimit } from "@/server/actions/module-plans";
 import {
@@ -184,6 +185,10 @@ async function validateOrderInput(
       planned_quantity: planned,
       produced_quantity: produced,
       unit: cleanText(input.unit) ?? "units",
+      // PT-03B · El código canónico viaja al lado del texto. `null` cuando no
+      // se puede normalizar sin adivinar: es una respuesta, no un fallo, y la
+      // guarda del saldo sabe qué hacer con él.
+      unit_code: canonicalUnit(cleanText(input.unit) ?? "units"),
       planned_start_date: cleanText(input.plannedStartDate),
       planned_end_date: cleanText(input.plannedEndDate),
       actual_start_date: cleanText(input.actualStartDate),
@@ -327,6 +332,7 @@ async function validateInputLot(
       received_date: cleanText(input.receivedDate),
       quantity_received: quantity,
       unit: cleanText(input.unit),
+      unit_code: canonicalUnit(cleanText(input.unit)),
       document_reference: cleanText(input.documentReference),
       status,
       notes: cleanText(input.notes),
@@ -433,6 +439,7 @@ async function validateConsumption(
       input_lot_id: inputLotId,
       quantity_consumed: parsed.value,
       unit,
+      unit_code: canonicalUnit(unit),
       consumption_role: role,
       consumed_at: cleanText(input.consumedAt),
       notes: cleanText(input.notes),
@@ -701,6 +708,7 @@ function validateOutputLot(input: TextileOutputLotInput):
       output_lot_code: code,
       quantity_produced: parsed.value,
       unit: cleanText(input.unit) ?? "units",
+      unit_code: canonicalUnit(cleanText(input.unit) ?? "units"),
       produced_date: cleanText(input.producedDate),
       status,
       notes: cleanText(input.notes),

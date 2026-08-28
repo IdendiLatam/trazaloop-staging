@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 // unidades: el saldo compara solo consumos en la unidad del lote.
 
 import Link from "next/link";
+import { MEASUREMENT_UNIT_OPTIONS } from "@/lib/domain/measurement-units";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import { searchTextileInputLots } from "@/lib/db/textiles-traceability";
 import {
@@ -89,7 +90,8 @@ export default async function TextileInputLotsPage({
       ],
     },
     { key: "quantityReceived", label: "Cantidad recibida", type: "text", placeholder: "p. ej. 120" },
-    { key: "unit", label: "Unidad", type: "text", placeholder: "m, kg, units, rollos…" },
+    // PT-03B · Catálogo cerrado: la unidad dejó de ser texto libre.
+    { key: "unit", label: "Unidad", type: "select", options: MEASUREMENT_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label })) },
     { key: "receivedDate", label: "Fecha de recepción (AAAA-MM-DD)", type: "text" },
     { key: "documentReference", label: "Documento de referencia", type: "text", placeholder: "remisión, factura…" },
     {
