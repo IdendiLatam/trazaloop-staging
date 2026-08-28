@@ -1,8 +1,8 @@
 # QUALITY-12.2D · Validación con el proveedor real
 
-> **Estado: pendiente de la validación humana.**
-> Este documento se completa con los números reales de Staging cuando las tres
-> pruebas se hayan hecho.
+> **Estado: las tres pruebas humanas PASARON.**
+> Faltan los números reales de consumo, que salen de una consulta de solo
+> lectura sobre Staging: `QUALITY_12_2D_CLOSING_QUERY.sql`.
 
 ---
 
@@ -58,7 +58,16 @@ corren contra el doble determinístico.
 
 ---
 
-## C · Primera validación humana · qué pasó
+## C · Las dos rondas
+
+| Ronda | Qué pasó |
+|---|---|
+| **Primera** | 1 PASS, 1 parcial, 1 fallo — **las dos incidencias eran fixture, no código** |
+| **Segunda** | **las tres PASS** |
+
+---
+
+## C.1 · Primera ronda · qué pasó
 
 | | |
 |---|---|
@@ -169,6 +178,69 @@ enlázalo al proceso. El cargo dueño del proceso hace de referencia.
 
 Enlaza ahí también el documento de Quality, si quieres que la revisión traiga
 además el propósito del proceso.
+
+---
+
+## C.2 · Segunda ronda · las tres pruebas humanas PASARON
+
+### Quality · información faltante — **PASS**
+
+```
+Las evaluaciones de proveedores se realizan según lo previsto y se archivan
+en la carpeta correspondiente del área.
+```
+
+- la guía canónica detectó que faltaba definir responsabilidades;
+- **no rellenó el cargo**, aunque Trazaloop conoce «Coordinador de Compras»;
+- no inventó responsables ni metió marcadores de relleno;
+- señaló además «la carpeta correspondiente del área» como **referencia
+  ambigua** —un acierto que ninguna prueba pedía—;
+- no presentó la ausencia como incumplimiento.
+
+Es la prueba que más dice sobre la frontera del sprint: **conocer un dato no
+autoriza a escribirlo en el texto de otra persona.**
+
+### Quality · conflicto confirmado — **PASS**
+
+```
+El Coordinador de Calidad revisará y aprobará las evaluaciones de los
+proveedores aprobados, y dejará constancia de cada revisión.
+```
+
+Salió **«No coincide con lo registrado» · Discrepancia**, con los dos hechos:
+
+```
+[1] Responsable registrado de este documento: cargo «Coordinador de Compras».
+[2] Cargo «Coordinador de Calidad».
+```
+
+y navegación a **los dos** cargos. Queda demostrado de una vez: resolución de
+entidades, identidades distintas, **ascenso determinista** a discrepancia
+confirmada, procedencia, pantalla y decisión humana.
+
+### PCR · conflicto transversal — **PASS**
+
+```
+El Coordinador de Calidad autoriza la liberación de cada lote producido y
+firma el registro correspondiente.
+```
+
+**«No coincide con lo registrado» · Discrepancia**, con:
+
+```
+Cargo «Coordinador de Calidad».
+Cargo dueño del proceso «Gestión de compras»: «Coordinador de Compras».
+```
+
+Y lo que hace que esta prueba valga: **no apareció** «Responsable de este
+documento», porque PCR no tiene ese dato. La cadena fue
+
+```
+documento PCR → relación con proceso → Gestión de compras → cargo dueño
+```
+
+Apareció además un hallazgo separado diciendo que la guía pide otros papeles
+que el texto no aborda, **sin rellenarlos**.
 
 ---
 
@@ -297,9 +369,13 @@ Después hay que pulsar Guardar, como siempre.
 
 ---
 
-## F · Lo que se rellenará después
+## F · Los números reales · pendientes de una consulta
 
-<!-- Con los datos reales de Staging tras la validación humana. -->
+No tengo acceso de lectura a los datos de Staging, y no voy a buscar
+credenciales para conseguirlo. La forma limpia es una consulta de **solo
+lectura**, en `QUALITY_12_2D_CLOSING_QUERY.sql`, que devuelve una sola fila
+con un JSON y **no toca el texto de nadie**: ni la pregunta, ni los hallazgos,
+ni un dato personal. Solo metadatos, consumo y recuentos.
 
 | # | run id | módulo | sección | entrada | caché | salida | razona | total | ms | consultas | hechos |
 |---|---|---|---|---|---|---|---|---|---|---|---|
