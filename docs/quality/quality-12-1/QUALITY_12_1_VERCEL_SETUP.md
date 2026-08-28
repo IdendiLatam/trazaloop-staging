@@ -55,8 +55,13 @@ Hace falta un despliegue **nuevo**: las variables se resuelven en el momento de
 construir, así que el Preview que ya existe no la ve.
 
 ```bash
-vercel --yes
+npx vercel deploy --target=preview --yes
 ```
+
+> El destino va **explícito y en afirmativo**, siempre. Las formas que omiten
+> el destino, o que intentan negarlo, no hacen lo que parecen y costaron un
+> incidente de producción el 27 de agosto de 2026. Cuáles son y por qué
+> engañan: `docs/releases/VERCEL_DEPLOY_SAFETY.md`.
 
 O, desde la interfaz: **Deployments** → el último de esta rama → **Redeploy**.
 

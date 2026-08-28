@@ -28,7 +28,10 @@ directa) recibe el error de dominio — endurecimiento deliberado. Desplegar
 la app inmediatamente después de la migración.
 
 ## 4 · Deploy de la app
-`vercel deploy` + promote del artefacto que contiene PCR-02.4 (este ZIP).
+`npx vercel deploy --prod` del artefacto que contiene PCR-02.4 (este ZIP), o
+`npx vercel promote <deployment-url>` si ya está construido.
+
+El destino se escribe siempre. Ver `docs/releases/VERCEL_DEPLOY_SAFETY.md`.
 
 ## 5 · Smoke posterior
 Cerrar una orden de prueba → verificar que en su detalle y en
