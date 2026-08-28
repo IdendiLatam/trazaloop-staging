@@ -32,7 +32,9 @@ import {
   LinkEvidenceInline,
 } from "@/components/domain/traceability/action-button";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
-import { getOutputBatchInventoryByIds } from "@/lib/db/inventory";
+import { getOutputBatchStockByIds } from "@/lib/db/inventory";
+import { listOutputBatchMovements } from "@/lib/db/output-movements";
+import { OutputBatchMovements, type MovementRow } from "@/components/domain/traceability/output-movements";
 import { formatKg, inventoryState, INVENTORY_STATE_LABEL } from "@/lib/domain/inventory";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
@@ -71,10 +73,18 @@ export default async function OutputBatchesPage({
   // PCR-02.5 (§15): saldo interno de los lotes de la página, en UNA consulta
   // acotada a la vista de inventario. El listado sigue siendo consulta /
   // auditoría / inventario: la Orden / corrida permanece como eje (PCR-02).
-  const inventoryByBatch = await getOutputBatchInventoryByIds(
+  const stockByBatch = await getOutputBatchStockByIds(
     org.organizationId,
     pageBatches.map((b) => b.id)
   );
+
+  // PT-02B · Los movimientos del lote ABIERTO, no los de la página entera:
+  // solo se pintan cuando alguien despliega un lote.
+  const abierto = params.batch ?? null;
+  const movementsByBatch = abierto
+    ? await listOutputBatchMovements(org.organizationId, [abierto])
+    : new Map<string, MovementRow[]>();
+  const canRegisterMovements = ["admin", "quality", "consultant"].includes(org.roleCode);
 
   // Con paginación, el lote editado/expandido puede no estar en la página.
   const editing =
@@ -258,23 +268,44 @@ export default async function OutputBatchesPage({
                         .join("")}
                     </p>
                     {(() => {
-                      const inv = inventoryByBatch.get(b.id);
-                      if (!inv) return null;
-                      const state = inventoryState(inv.available_kg);
+                      const st = stockByBatch.get(b.id);
+                      if (!st) return null;
+                      const state = inventoryState(st.availableKg);
+                      // PT-F13 · Esto decía «Disponible: X» restando solo el
+                      // reproceso interno, que era el único camino de salida
+                      // que el modelo conocía. Un lote vendido entero figuraba
+                      // disponible para siempre, con la misma etiqueta que uno
+                      // que sigue en el almacén.
+                      //
+                      // Ahora la cifra descuenta también despachos, mermas y
+                      // uso interno, y cuando NO hay ningún movimiento
+                      // registrado se dice — porque «100 kg disponibles» de un
+                      // lote del que nadie ha registrado salidas no es una
+                      // medición, es una ausencia de datos.
                       return (
                         <p className="mt-0.5 text-xs text-ink-soft">
-                          Producido: {formatKg(inv.produced_kg)} · Consumido
-                          internamente: {formatKg(inv.consumed_internally_kg)} ·
-                          Disponible: {formatKg(inv.available_kg)}{" "}
-                          <span
-                            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                              state === "available"
-                                ? "bg-loop-soft text-loop-deep"
-                                : "bg-hairline text-ink-soft"
-                            }`}
-                          >
-                            {INVENTORY_STATE_LABEL[state]}
-                          </span>
+                          Producido: {formatKg(st.producedKg)} · Reproceso
+                          interno: {formatKg(st.reprocessedKg)} · Salidas:{" "}
+                          {formatKg(st.dispatchedKg + st.lostKg + st.internalUseKg)} ·{" "}
+                          {st.movementsCount === 0 ? (
+                            <>
+                              Sin salidas registradas — quedan{" "}
+                              {formatKg(st.availableKg)} según lo producido
+                            </>
+                          ) : (
+                            <>
+                              Disponible: {formatKg(st.availableKg)}{" "}
+                              <span
+                                className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  state === "available"
+                                    ? "bg-loop-soft text-loop-deep"
+                                    : "bg-hairline text-ink-soft"
+                                }`}
+                              >
+                                {INVENTORY_STATE_LABEL[state]}
+                              </span>
+                            </>
+                          )}
                         </p>
                       );
                     })()}
@@ -427,6 +458,24 @@ export default async function OutputBatchesPage({
                         evidences={evidenceOptions}
                       />
                     </div>
+
+                    {/* PT-02B · Las salidas físicas del lote. Hasta ahora el
+                        único camino de salida que el modelo conocía era el
+                        reproceso interno, así que un lote vendido entero
+                        figuraba disponible para siempre. */}
+                    {(() => {
+                      const st = stockByBatch.get(b.id);
+                      if (!st) return null;
+                      return (
+                        <OutputBatchMovements
+                          outputBatchId={b.id}
+                          availableKg={st.availableKg}
+                          movementsCount={st.movementsCount}
+                          movements={movementsByBatch.get(b.id) ?? []}
+                          canRegister={canRegisterMovements}
+                        />
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="mt-3 border-t border-hairline pt-3">

@@ -80,6 +80,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",
     "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
@@ -241,12 +242,25 @@ check("B6 · tabla agregada §7 + detalle por lote §8 con estados §18", () => 
   assert(INV_UI.includes("Los lotes agotados permanecen"), "§17: agotado visible, nunca borrado");
 });
 
-check("B7 · §15: el listado de lotes producidos muestra producido/consumido/disponible", () => {
-  assert(OUT_PAGE.includes("getOutputBatchInventoryByIds"), "saldos en una consulta acotada por página");
-  for (const s of ["Producido:", "Consumido", "internamente:", "Disponible:"]) {
+check("B7 · §15: el listado de lotes producidos muestra el saldo, en UNA consulta por página", () => {
+  // La comprobación fijaba el nombre `getOutputBatchInventoryByIds`. PT-02B lo
+  // sustituyó por `getOutputBatchStockByIds`, que resta además despachos,
+  // mermas y uso interno — antes solo se descontaba el reproceso interno, así
+  // que un lote vendido entero figuraba «Disponible» para siempre.
+  //
+  // El invariante que importaba —una consulta acotada a la página, y el saldo
+  // a la vista— se conserva y es lo que se comprueba ahora.
+  assert(/getOutputBatch(Inventory|Stock)ByIds/.test(OUT_PAGE),
+    "saldos en una consulta acotada por página");
+  assert(/\.map\(\(b\) => b\.id\)/.test(OUT_PAGE), "acotada a los lotes de la página");
+  for (const s of ["Producido:", "Disponible:"]) {
     assert(OUT_PAGE.includes(s), `texto «${s}»`);
   }
   assert(OUT_PAGE.includes("INVENTORY_STATE_LABEL"), "estado Disponible/Agotado derivado");
+  // PT-02B · Y la distinción que antes no existía: «quedan 100 kg» y «nadie ha
+  // registrado ninguna salida» no son lo mismo aunque el número coincida.
+  assert(/movementsCount === 0|Sin salidas registradas/.test(OUT_PAGE),
+    "un lote sin movimientos registrados debe decirse, no presentarse como medido");
 });
 
 console.log("\nPCR-02.5 · Bloques C/D — anti-sobreconsumo en tres capas\n");
@@ -548,6 +562,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",
     "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",

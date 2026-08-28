@@ -212,3 +212,80 @@ export async function getOutputBatchInventoryByIds(
   }
   return map;
 }
+
+// ===========================================================================
+// PT-02B · EL SALDO REAL DEL PRODUCTO TERMINADO
+// ---------------------------------------------------------------------------
+// `v_output_batch_inventory` sigue existiendo y sigue midiendo lo que siempre
+// midió: producido menos reproceso interno. Lo que cambia es que deja de
+// llamarse «disponible», porque nunca lo fue: el reproceso era el único
+// camino de salida que el modelo conocía.
+//
+// `v_output_batch_stock` es la lectura nueva. Y trae `movementsCount` porque
+// la diferencia entre «quedan 100 kg» y «nadie ha registrado ninguna salida»
+// es toda la diferencia, y hay que poder decirla.
+// ===========================================================================
+
+export type OutputBatchStock = {
+  outputBatchId: string;
+  batchCode: string;
+  producedKg: number;
+  reprocessedKg: number;
+  dispatchedKg: number;
+  lostKg: number;
+  internalUseKg: number;
+  adjustmentKg: number;
+  availableKg: number;
+  movementsCount: number;
+};
+
+const mapStock = (r: Record<string, unknown>): OutputBatchStock => ({
+  outputBatchId: r.output_batch_id as string,
+  batchCode: r.batch_code as string,
+  producedKg: num(r.produced_kg),
+  reprocessedKg: num(r.reprocessed_kg),
+  dispatchedKg: num(r.dispatched_kg),
+  lostKg: num(r.lost_kg),
+  internalUseKg: num(r.internal_use_kg),
+  adjustmentKg: num(r.adjustment_kg),
+  availableKg: num(r.available_kg),
+  movementsCount: num(r.movements_count),
+});
+
+const STOCK_COLUMNS =
+  "output_batch_id, batch_code, produced_kg, reprocessed_kg, dispatched_kg, lost_kg, internal_use_kg, adjustment_kg, available_kg, movements_count";
+
+/** El saldo de los lotes indicados. Acotado a la página que se está pintando. */
+export async function getOutputBatchStockByIds(
+  orgId: string,
+  ids: string[]
+): Promise<Map<string, OutputBatchStock>> {
+  const mapa = new Map<string, OutputBatchStock>();
+  if (ids.length === 0) return mapa;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("v_output_batch_stock")
+    .select(STOCK_COLUMNS)
+    .eq("organization_id", orgId)
+    .in("output_batch_id", ids);
+  for (const r of data ?? []) {
+    const fila = mapStock(r as Record<string, unknown>);
+    mapa.set(fila.outputBatchId, fila);
+  }
+  return mapa;
+}
+
+/** El saldo de UN lote, para la guarda previa de la acción de servidor. */
+export async function getOutputBatchStock(
+  orgId: string,
+  outputBatchId: string
+): Promise<OutputBatchStock | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("v_output_batch_stock")
+    .select(STOCK_COLUMNS)
+    .eq("organization_id", orgId)
+    .eq("output_batch_id", outputBatchId)
+    .maybeSingle();
+  return data ? mapStock(data as Record<string, unknown>) : null;
+}
