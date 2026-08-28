@@ -1,13 +1,13 @@
 # QUALITY-12.2D · Matriz de pruebas
 
-**159 comprobaciones en cinco suites · 0 fallos**
+**164 comprobaciones en cinco suites · 0 fallos**
 
 | Suite | Qué mira | |
 |---|---|---|
-| `test:quality122d` | el código, sin base | **71 ✔** |
+| `test:quality122d` | el código, sin base | **72 ✔** |
 | `test:quality122d-budget` | tokens y consultas | **15 ✔** |
 | `test:quality122d-ui` | el botón, pulsado en un DOM | **16 ✔** |
-| `test:quality122d-rls` | base real, doble determinístico | **35 ✔** |
+| `test:quality122d-rls` | base real, doble determinístico | **39 ✔** |
 | `test:quality122d-safety` | lo que no puede llegar a ser | **22 ✔** |
 
 Las tres primeras entran en `npm run test:all`. Las dos de base real se
@@ -280,3 +280,55 @@ todas verdes.
 > `service_role` se queda sin acceso a todo lo que las migraciones creen
 > después. El síntoma —`permission denied` en cuatro suites— parecía una
 > regresión y era el guion de la réplica. Queda anotado para la próxima.
+
+
+---
+
+## Ñ · Lo que añadió la validación humana
+
+Las dos incidencias de la primera ronda no eran defectos del algoritmo, pero
+destaparon tres huecos en las pruebas. Los tres reales, los tres cerrados.
+
+### 1 · El fixture no se comprobaba
+
+La suite construía sus datos y se ponía a probar. Un fixture a medias pasaba
+por bueno, que es exactamente lo que ocurrió en Staging con una persona
+delante.
+
+| | |
+|---|---|
+| `0A` | los **dos** cargos existen — sin ambos no se puede confirmar nada |
+| `0B` | el proceso tiene cargo dueño **y revisión publicada vigente** |
+| `0C` | el documento de Quality tiene cargo responsable |
+| `C0` | el documento de PCR está ligado al proceso **y no tiene cargo propio** |
+
+### 2 · Un `insert` que fallaba en silencio, desde hacía días
+
+`0B` falló en su **primera** ejecución: la revisión del proceso de la propia
+suite nunca se había insertado. Hay un `CHECK` que exige `published_at` en una
+revisión que no sea borrador, el `insert` lo violaba, y nadie miraba el error.
+
+El proceso viajaba al contexto **sin su propósito** y todo lo demás pasaba
+igual. Una prueba que solo mira el resultado final no ve eso; una que
+comprueba sus propias premisas, sí.
+
+### 3 · `C3` comprobaba lo que no era
+
+Decía «con Quality en Demo, PCR sigue funcionando» y lo que verificaba era que
+la operación **no fallara**. Un alcance vacío —cero hechos, sin llamada al
+modelo— habría pasado por bueno, que es justo el síntoma que luego apareció en
+la prueba humana.
+
+Ahora exige que resuelva **procesos y cargo**, y que **detecte la misma
+discrepancia** que detecta con Quality en Full.
+
+### 4 · Y una comprobación de la mejora de mensaje
+
+`H5` exige que el resumen distinga «la guía no señala contexto» de «a este
+documento le falta una relación», y que el segundo diga qué enlazar.
+
+### El comprobador de fixture
+
+`npm run check:122d-fixture -- "<empresa>"` · solo lee, no crea nada. Verifica
+las seis condiciones de §4 y, cuando algo falta, dice **dónde crearlo**. Su
+razón de ser es que una prueba humana no vuelva a gastarse en un dato ausente.

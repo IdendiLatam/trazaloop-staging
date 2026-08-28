@@ -172,7 +172,31 @@ importa: ¿esta capacidad se mantuvo pequeña?
 
 ---
 
-## H · Lo que falta medir
+## H · Los números reales · pendientes de la consulta de cierre
+
+Las tres pruebas humanas se hicieron y pasaron. El consumo real sale de
+`QUALITY_12_2D_CLOSING_QUERY.sql` —solo lectura, sin el texto de nadie— y se
+comparará, sin mover los criterios después de verlos, contra:
+
+| | Referencia |
+|---|---|
+| Presupuesto normal de 12.2D | **≤ 1 400** · diseñado en 1 277–1 382 |
+| Presupuesto complejo de 12.2D | **≤ 2 000** · diseñado en 1 952 |
+| Quick Edit real (12.2C) | **727** de entrada media |
+| Copilot global | **2 514 – 2 886** |
+| Consultas · Copilot | 19 adaptadores |
+| Consultas · 12.2D esperado | **7** en Quality y PCR, 4 en Textiles |
+
+Y una limitación que conviene decir antes de mirar los datos: se registra la
+**latencia total** de la operación, no separada entre construir el contexto y
+esperar al proveedor. Con los topes de consultas que hay —de cuatro a siete—
+la parte de contexto es pequeña, pero afirmarlo sin medirlo sería justo lo que
+este sprint no hace. Separarlas es trabajo de 12.2F, donde hace falta para
+costear.
+
+---
+
+## I · Lo que falta medir
 
 Los números de arriba son **estimaciones** con la regla de 3,6 caracteres por
 token. Faltan los reales del proveedor, que llegarán con la validación humana:

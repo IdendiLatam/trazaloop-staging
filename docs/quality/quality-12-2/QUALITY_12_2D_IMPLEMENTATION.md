@@ -469,6 +469,34 @@ una que comprobara que la escritura «no falló»—. Ahora va por función
 
 ---
 
+## P.bis · Lo que enseñó la validación humana
+
+Las tres pruebas pasaron en la segunda ronda. La primera dio una parcial y un
+fallo, y **ninguna de las dos era un defecto del algoritmo**: faltaba un cargo
+en un caso y la relación documento↔proceso en el otro. Se reprodujeron las dos
+contra base real, con el doble y sin gastar una llamada al proveedor.
+
+Pero una de ellas sí destapó un defecto propio, y es de los que importan.
+
+**El mensaje no distinguía dos problemas distintos.** «No encontré registros
+relacionados con esta sección» se decía igual cuando:
+
+- la guía de la sección **no señala ningún tipo de contexto** —no hay nada que
+  hacer, esta sección no se contrasta—; y cuando
+- la guía sí señala pero **al documento le falta la relación** —hay algo
+  concreto que enlazar—.
+
+El primero no tiene arreglo y el segundo sí, y la pantalla los contaba igual.
+Esa ambigüedad convirtió un dato ausente en algo indistinguible de un fallo del
+producto, y costó una prueba humana averiguarlo.
+
+Ahora el enrutado dice **por qué** quedó vacío —`no_types` o `empty_scope`— y
+el segundo caso explica qué enlazar. Es la clase de mejora que no sale de un
+diseño: sale de ver a alguien mirar una pantalla que no le dice lo que
+necesita.
+
+---
+
 ## Q · Gaps
 
 **Blóqueres: ninguno. Gaps del alcance de 12.2D: ninguno.**
