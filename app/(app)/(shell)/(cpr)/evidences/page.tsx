@@ -25,6 +25,9 @@ import { PhysicalEvidenceForm, DeclarePhysicalForm } from "@/components/domain/e
 import {
   EVIDENCE_CATEGORIES,
   EVIDENCE_CATEGORY_LABEL,
+  UNCATALOGUED_EVIDENCE_TYPE_LABEL,
+  evidenceTypeDisplay,
+  evidenceValidityLabel,
   EVIDENCE_MEDIUM_LABEL,
   EVIDENCE_REVIEW_LABEL,
   evidenceCategoryLabel,
@@ -92,12 +95,19 @@ export default async function EvidencesPage({
     listProducts(org.organizationId),
     listMaterials(org.organizationId),
     supabase.from("sites").select("id, name").eq("organization_id", org.organizationId),
-    // Opciones completas del selector de asociación (solo id+nombre): el
-    // formulario "Asociar evidencia" no depende de la página actual.
+    // PT-01 · Opciones del selector de asociación. Ya NO son «todas»: el
+    // selector ofrecía pendientes, rechazadas, archivadas y vencidas, y el
+    // motor las descartaba después en otra pantalla y en silencio. Dos de las
+    // cuatro condiciones de PT-F05 —aceptación interna y no archivada— se
+    // resuelven aquí, en SQL; la tercera (vigencia en la fecha del destino)
+    // necesita saber qué destino se eligió y vive en el formulario. Las tres
+    // se vuelven a comprobar en `evidence_link_confirm`, que es la barrera.
     supabase
       .from("evidences")
-      .select("id, name")
+      .select("id, name, valid_until")
       .eq("organization_id", org.organizationId)
+      .eq("status", "valid")
+      .is("archived_at", null)
       .order("name"),
     listInputBatches(org.organizationId),
     listProductionOrders(org.organizationId),
@@ -110,6 +120,10 @@ export default async function EvidencesPage({
       .order("customer_name"),
   ]);
   const evidences = result.rows;
+  // El día de hoy se calcula UNA vez por render: si se calculara por fila, dos
+  // filas de la misma lista podrían caer a distinto lado de la medianoche.
+  const hoy = new Date().toISOString().slice(0, 10);
+  const tipoDe = (v: string | null) => evidenceTypeDisplay(v);
   const pageIds = evidences.map((e) => e.id);
 
   // PCR-01 (punto 11): conteo de usos de la página + detalle bajo demanda.
@@ -144,9 +158,19 @@ export default async function EvidencesPage({
     product: products.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` })),
     product_family: families.map((f) => ({ value: f.id, label: f.name })),
     site: (sites ?? []).map((s) => ({ value: s.id, label: s.name })),
-    input_batch: inputBatches.map((b) => ({ value: b.id, label: b.batch_code })),
-    production_order: productionOrders.map((o) => ({ value: o.id, label: o.order_code })),
-    output_batch: outputBatches.map((b) => ({ value: b.id, label: b.batch_code })),
+    // PT-F02 · Los destinos que OCURREN un día concreto viajan con su fecha
+    // empresarial. Es contra ella —y no contra hoy— como se juzga si una
+    // evidencia amparaba la operación. Los destinos de catálogo (proveedor,
+    // material, producto…) no la traen: no ocurren un día concreto.
+    input_batch: inputBatches.map((b) => ({
+      value: b.id, label: b.batch_code, referenceDate: b.received_date,
+    })),
+    production_order: productionOrders.map((o) => ({
+      value: o.id, label: o.order_code, referenceDate: o.order_date,
+    })),
+    output_batch: outputBatches.map((b) => ({
+      value: b.id, label: b.batch_code, referenceDate: b.produced_date,
+    })),
     customer_requirement: (requirementOptionRows ?? []).map((r) => ({
       value: r.id as string,
       label: `${r.customer_name} · ${r.code} — ${r.title}`,
@@ -277,7 +301,15 @@ export default async function EvidencesPage({
                     <p className="text-xs text-ink-soft">
                       {EVIDENCE_MEDIUM_LABEL[e.medium as keyof typeof EVIDENCE_MEDIUM_LABEL] ?? e.medium}
                       {" · "}
-                      {evidenceCategoryLabel(e.evidence_type)}
+                      {tipoDe(e.evidence_type).label}
+                      {tipoDe(e.evidence_type).uncatalogued ? (
+                        <span
+                          title="Este valor se escribió antes del catálogo de tipos. Se muestra tal cual: no se ha reescrito nada."
+                          className="ml-1 rounded border border-hairline px-1 text-[10px] text-ink-soft"
+                        >
+                          {UNCATALOGUED_EVIDENCE_TYPE_LABEL}
+                        </span>
+                      ) : null}
                       {e.medium !== "digital" && e.physical_reference
                         ? ` · Ref. física: ${e.physical_reference}${e.physical_location ? ` (${e.physical_location})` : ""}${e.physical_custodian ? ` · custodia: ${e.physical_custodian}` : ""}`
                         : null}
@@ -290,10 +322,14 @@ export default async function EvidencesPage({
                       </p>
                     ) : null}
                     <p className="text-xs text-ink-soft">
+                      {/* PT-F01 · La vigencia del CATÁLOGO es el estado de HOY.
+                          Que aquí ponga «Obsoleta desde…» no significa que la
+                          evidencia deje de amparar las operaciones que ya
+                          amparaba: eso se juzga contra la fecha del lote, no
+                          contra el calendario (PT-F02/F03). */}
                       {[
-                        e.evidence_type,
                         e.evidence_date ? `fecha ${e.evidence_date}` : null,
-                        e.valid_until ? `vigente hasta ${e.valid_until}` : null,
+                        evidenceValidityLabel(e.valid_until, hoy),
                         e.has_file ? "con archivo" : "sin archivo",
                       ]
                         .filter(Boolean)
@@ -406,7 +442,11 @@ export default async function EvidencesPage({
           la evidencia como soporte de origen del material y valídala.
         </p>
         <EvidenceLinkForm
-          evidences={(evidenceOptionRows ?? []).map((e) => ({ value: e.id, label: e.name }))}
+          evidences={(evidenceOptionRows ?? []).map((e) => ({
+            value: e.id,
+            label: e.name,
+            validUntil: (e.valid_until as string | null) ?? null,
+          }))}
           targets={targets}
         />
       </section>

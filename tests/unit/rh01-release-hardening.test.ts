@@ -797,6 +797,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0142_evidence_catalog_and_historical_truth.sql",
   ]);
   const beyond = migrationFiles.filter((f) => {
     const n = Number(f.slice(0, 4));

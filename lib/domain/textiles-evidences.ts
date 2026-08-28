@@ -255,6 +255,23 @@ export const TEXTILE_EVIDENCE_REVIEW_TARGETS: readonly TextileEvidenceStatus[] =
   "pending_review",
 ];
 
+/**
+ * PT-F07 · Los estados que se OFRECEN en el panel de revisión.
+ *
+ * `archived` sale de la lista. En Textiles archivar no es una acción aparte
+ * como en PCR: es un valor más del mismo desplegable, junto a «Aceptada» y
+ * «Rechazada». Y ahí es donde confunde — parece una decisión de revisión
+ * cuando en realidad es un gesto de escritorio, y quien la elegía perdía el
+ * estado anterior sin recuperarlo.
+ *
+ * No se toca el `CHECK` de la base, ni la etiqueta, ni las filas que ya
+ * tienen ese estado: se siguen viendo como «Archivada» y se pueden mover a
+ * otro estado desde este mismo panel. Lo que desaparece es la forma de crear
+ * archivadas nuevas.
+ */
+export const TEXTILE_EVIDENCE_OFFERED_STATUSES: readonly TextileEvidenceStatus[] =
+  TEXTILE_EVIDENCE_REVIEW_TARGETS.filter((s) => s !== "archived");
+
 /** ¿El rol puede fijar este estado? (espejo del guard SQL: solo admin/quality) */
 export function canSetTextileEvidenceStatus(roleCode: string): boolean {
   return roleCode === "admin" || roleCode === "quality";

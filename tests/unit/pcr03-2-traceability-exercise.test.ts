@@ -80,6 +80,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0142_evidence_catalog_and_historical_truth.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -395,6 +396,7 @@ check("22. Tras 0105: bloque PCR-03 0106–0108 + hotfixes autorizados 0109 y 01
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0142_evidence_catalog_and_historical_truth.sql",
   ]);
   const intruders = later.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

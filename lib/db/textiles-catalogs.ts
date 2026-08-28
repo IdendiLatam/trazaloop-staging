@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { readAllStrict, readAll, readPage, sanitizeSearchTerm, type Page } from "@/lib/db/paged-read";
 
 /**
  * Trazaloop · Sprint T3 (Textil) · Consultas de los catálogos textiles.
@@ -66,29 +67,84 @@ export type TextileSupplierRow = {
   isActive: boolean;
 };
 
+
+// ===========================================================================
+// PT-01 · LEER SIN QUE LA BASE CORTE POR SU CUENTA
+// ---------------------------------------------------------------------------
+// Estas listas se leían sin `.range()` y sin `count`. Con `max_rows = 1000` en
+// PostgREST, eso significa que a partir de mil proveedores la pantalla enseña
+// mil y calla. Ni error, ni aviso, ni forma de notarlo desde dentro.
+//
+// Hay DOS lecturas porque hay dos necesidades distintas, y una sola función no
+// puede servir a las dos sin mentirle a una:
+//
+//   list…    devuelve TODO, recorriendo por lotes. Es la que usan los
+//            selectores y los exportadores, que necesitan el conjunto entero.
+//
+//   search…  devuelve UNA página con el total al lado. Es la que usan las
+//            pantallas, y el total es lo que impide aparentar completitud.
+//
+// El orden de la consulta es siempre el mismo y no es opcional:
+//   inquilino → filtros → búsqueda → count → order → range.
+// ===========================================================================
+
+/** Lo que una pantalla puede pedir: término, página y tamaño. */
+export type CatalogQuery = { q?: string | null; page?: string | number | null; pageSize?: number | null };
+
+const SELECT_SUPPLIER =
+  "id, name, tax_id, country, city, contact_name, contact_email, contact_phone, supplier_type, is_critical, notes, is_active";
+const SELECT_MATERIAL =
+  "id, name, internal_code, material_type, primary_fiber_type_id, supplier_id, declared_composition, country_of_origin, recycled_claim, organic_claim, has_supplier_datasheet, has_composition_support, notes, is_active, textile_fiber_types(name), textile_suppliers(name)";
+const SELECT_COMPONENT =
+  "id, name, component_type, material_description, supplier_id, separability, replacement_possible, notes, is_active, textile_suppliers(name)";
+const SELECT_PROCESS =
+  "id, name, process_type, description, responsible_area, traceability_risk, records_expected, is_active";
+const SELECT_OUTSOURCED =
+  "id, name, process_type, supplier_id, description, records_expected, traceability_risk, notes, is_active, textile_suppliers(name)";
+
+type Row = Record<string, unknown>;
+const rel = (v: unknown): { name: string } | null => (v as { name: string } | null) ?? null;
+
+/** TODAS las filas, recorriendo por lotes. Para selectores y exportadores. */
 export async function listTextileSuppliers(organizationId: string): Promise<TextileSupplierRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_suppliers")
-    .select("id, name, tax_id, country, city, contact_name, contact_email, contact_phone, supplier_type, is_critical, notes, is_active")
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    taxId: (r.tax_id as string | null) ?? null,
-    country: (r.country as string | null) ?? null,
-    city: (r.city as string | null) ?? null,
-    contactName: (r.contact_name as string | null) ?? null,
-    contactEmail: (r.contact_email as string | null) ?? null,
-    contactPhone: (r.contact_phone as string | null) ?? null,
-    supplierType: r.supplier_type as string,
-    isCritical: Boolean(r.is_critical),
-    notes: (r.notes as string | null) ?? null,
-    isActive: Boolean(r.is_active),
-  }));
+  const rows = await readAllStrict<Row>(() =>
+    supabase.from("textile_suppliers").select(SELECT_SUPPLIER)
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+  , "proveedores textiles");
+  return rows.map(mapTextileSuppliers);
 }
+
+/** UNA página con el total del conjunto filtrado. Para las pantallas. */
+export async function searchTextileSuppliers(
+  organizationId: string, query: CatalogQuery = {}
+): Promise<Page<TextileSupplierRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Row>(({ from, to }) => {
+    let req = supabase.from("textile_suppliers").select(SELECT_SUPPLIER, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapTextileSuppliers) };
+}
+
+const mapTextileSuppliers = (r: Row): TextileSupplierRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  taxId: (r.tax_id as string | null) ?? null,
+  country: (r.country as string | null) ?? null,
+  city: (r.city as string | null) ?? null,
+  contactName: (r.contact_name as string | null) ?? null,
+  contactEmail: (r.contact_email as string | null) ?? null,
+  contactPhone: (r.contact_phone as string | null) ?? null,
+  supplierType: r.supplier_type as string,
+  isCritical: Boolean(r.is_critical),
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
 
 export type TextileMaterialRow = {
   id: string;
@@ -109,39 +165,50 @@ export type TextileMaterialRow = {
   isActive: boolean;
 };
 
+/** TODAS las filas, recorriendo por lotes. Para selectores y exportadores. */
 export async function listTextileMaterials(organizationId: string): Promise<TextileMaterialRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_materials")
-    .select(
-      "id, name, internal_code, material_type, primary_fiber_type_id, supplier_id, declared_composition, country_of_origin, recycled_claim, organic_claim, has_supplier_datasheet, has_composition_support, notes, is_active, textile_fiber_types(name), textile_suppliers(name)"
-    )
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => {
-    const fiber = r.textile_fiber_types as unknown as { name: string } | null;
-    const supplier = r.textile_suppliers as unknown as { name: string } | null;
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      internalCode: (r.internal_code as string | null) ?? null,
-      materialType: r.material_type as string,
-      primaryFiberTypeId: (r.primary_fiber_type_id as string | null) ?? null,
-      primaryFiberName: fiber?.name ?? null,
-      supplierId: (r.supplier_id as string | null) ?? null,
-      supplierName: supplier?.name ?? null,
-      declaredComposition: (r.declared_composition as string | null) ?? null,
-      countryOfOrigin: (r.country_of_origin as string | null) ?? null,
-      recycledClaim: Boolean(r.recycled_claim),
-      organicClaim: Boolean(r.organic_claim),
-      hasSupplierDatasheet: Boolean(r.has_supplier_datasheet),
-      hasCompositionSupport: Boolean(r.has_composition_support),
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-    };
-  });
+  const rows = await readAllStrict<Row>(() =>
+    supabase.from("textile_materials").select(SELECT_MATERIAL)
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+  , "materiales textiles");
+  return rows.map(mapTextileMaterials);
 }
+
+/** UNA página con el total del conjunto filtrado. Para las pantallas. */
+export async function searchTextileMaterials(
+  organizationId: string, query: CatalogQuery = {}
+): Promise<Page<TextileMaterialRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Row>(({ from, to }) => {
+    let req = supabase.from("textile_materials").select(SELECT_MATERIAL, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapTextileMaterials) };
+}
+
+const mapTextileMaterials = (r: Row): TextileMaterialRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  internalCode: (r.internal_code as string | null) ?? null,
+  materialType: r.material_type as string,
+  primaryFiberTypeId: (r.primary_fiber_type_id as string | null) ?? null,
+  primaryFiberName: rel(r.textile_fiber_types)?.name ?? null,
+  supplierId: (r.supplier_id as string | null) ?? null,
+  supplierName: rel(r.textile_suppliers)?.name ?? null,
+  declaredComposition: (r.declared_composition as string | null) ?? null,
+  countryOfOrigin: (r.country_of_origin as string | null) ?? null,
+  recycledClaim: Boolean(r.recycled_claim),
+  organicClaim: Boolean(r.organic_claim),
+  hasSupplierDatasheet: Boolean(r.has_supplier_datasheet),
+  hasCompositionSupport: Boolean(r.has_composition_support),
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
 
 export type TextileComponentRow = {
   id: string;
@@ -156,30 +223,44 @@ export type TextileComponentRow = {
   isActive: boolean;
 };
 
+/** TODAS las filas, recorriendo por lotes. Para selectores y exportadores. */
 export async function listTextileComponents(organizationId: string): Promise<TextileComponentRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_components")
-    .select("id, name, component_type, material_description, supplier_id, separability, replacement_possible, notes, is_active, textile_suppliers(name)")
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => {
-    const supplier = r.textile_suppliers as unknown as { name: string } | null;
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      componentType: r.component_type as string,
-      materialDescription: (r.material_description as string | null) ?? null,
-      supplierId: (r.supplier_id as string | null) ?? null,
-      supplierName: supplier?.name ?? null,
-      separability: r.separability as string,
-      replacementPossible: (r.replacement_possible as boolean | null) ?? null,
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-    };
-  });
+  const rows = await readAllStrict<Row>(() =>
+    supabase.from("textile_components").select(SELECT_COMPONENT)
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+  , "componentes textiles");
+  return rows.map(mapTextileComponents);
 }
+
+/** UNA página con el total del conjunto filtrado. Para las pantallas. */
+export async function searchTextileComponents(
+  organizationId: string, query: CatalogQuery = {}
+): Promise<Page<TextileComponentRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Row>(({ from, to }) => {
+    let req = supabase.from("textile_components").select(SELECT_COMPONENT, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapTextileComponents) };
+}
+
+const mapTextileComponents = (r: Row): TextileComponentRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  componentType: r.component_type as string,
+  materialDescription: (r.material_description as string | null) ?? null,
+  supplierId: (r.supplier_id as string | null) ?? null,
+  supplierName: rel(r.textile_suppliers)?.name ?? null,
+  separability: r.separability as string,
+  replacementPossible: (r.replacement_possible as boolean | null) ?? null,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
 
 export type TextileProcessRow = {
   id: string;
@@ -192,25 +273,42 @@ export type TextileProcessRow = {
   isActive: boolean;
 };
 
+/** TODAS las filas, recorriendo por lotes. Para selectores y exportadores. */
 export async function listTextileProcesses(organizationId: string): Promise<TextileProcessRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_processes")
-    .select("id, name, process_type, description, responsible_area, traceability_risk, records_expected, is_active")
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    processType: r.process_type as string,
-    description: (r.description as string | null) ?? null,
-    responsibleArea: (r.responsible_area as string | null) ?? null,
-    traceabilityRisk: r.traceability_risk as string,
-    recordsExpected: (r.records_expected as string | null) ?? null,
-    isActive: Boolean(r.is_active),
-  }));
+  const rows = await readAllStrict<Row>(() =>
+    supabase.from("textile_processes").select(SELECT_PROCESS)
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+  , "procesos textiles");
+  return rows.map(mapTextileProcesses);
 }
+
+/** UNA página con el total del conjunto filtrado. Para las pantallas. */
+export async function searchTextileProcesses(
+  organizationId: string, query: CatalogQuery = {}
+): Promise<Page<TextileProcessRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Row>(({ from, to }) => {
+    let req = supabase.from("textile_processes").select(SELECT_PROCESS, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapTextileProcesses) };
+}
+
+const mapTextileProcesses = (r: Row): TextileProcessRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  processType: r.process_type as string,
+  description: (r.description as string | null) ?? null,
+  responsibleArea: (r.responsible_area as string | null) ?? null,
+  traceabilityRisk: r.traceability_risk as string,
+  recordsExpected: (r.records_expected as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
 
 export type TextileOutsourcedProcessRow = {
   id: string;
@@ -225,32 +323,44 @@ export type TextileOutsourcedProcessRow = {
   isActive: boolean;
 };
 
-export async function listTextileOutsourcedProcesses(
-  organizationId: string
-): Promise<TextileOutsourcedProcessRow[]> {
+/** TODAS las filas, recorriendo por lotes. Para selectores y exportadores. */
+export async function listTextileOutsourcedProcesses(organizationId: string): Promise<TextileOutsourcedProcessRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_outsourced_processes")
-    .select("id, name, process_type, supplier_id, description, records_expected, traceability_risk, notes, is_active, textile_suppliers(name)")
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => {
-    const supplier = r.textile_suppliers as unknown as { name: string } | null;
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      processType: r.process_type as string,
-      supplierId: (r.supplier_id as string | null) ?? null,
-      supplierName: supplier?.name ?? null,
-      description: (r.description as string | null) ?? null,
-      recordsExpected: (r.records_expected as string | null) ?? null,
-      traceabilityRisk: r.traceability_risk as string,
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-    };
-  });
+  const rows = await readAllStrict<Row>(() =>
+    supabase.from("textile_outsourced_processes").select(SELECT_OUTSOURCED)
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+  , "procesos externalizados");
+  return rows.map(mapTextileOutsourcedProcesses);
 }
+
+/** UNA página con el total del conjunto filtrado. Para las pantallas. */
+export async function searchTextileOutsourcedProcesses(
+  organizationId: string, query: CatalogQuery = {}
+): Promise<Page<TextileOutsourcedProcessRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Row>(({ from, to }) => {
+    let req = supabase.from("textile_outsourced_processes").select(SELECT_OUTSOURCED, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapTextileOutsourcedProcesses) };
+}
+
+const mapTextileOutsourcedProcesses = (r: Row): TextileOutsourcedProcessRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  processType: r.process_type as string,
+  supplierId: (r.supplier_id as string | null) ?? null,
+  supplierName: rel(r.textile_suppliers)?.name ?? null,
+  description: (r.description as string | null) ?? null,
+  recordsExpected: (r.records_expected as string | null) ?? null,
+  traceabilityRisk: r.traceability_risk as string,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
 
 /** ¿El proveedor existe, es de la empresa y está activo? (validación amigable) */
 export async function textileSupplierBelongsToOrg(

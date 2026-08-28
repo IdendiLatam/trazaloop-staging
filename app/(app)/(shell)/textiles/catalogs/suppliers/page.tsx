@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileSuppliers } from "@/lib/db/textiles-catalogs";
+import { searchTextileSuppliers } from "@/lib/db/textiles-catalogs";
 import {
   TEXTILE_SUPPLIER_TYPES,
   TEXTILE_SUPPLIER_TYPE_LABEL,
@@ -22,6 +22,7 @@ import {
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true },
@@ -41,9 +42,23 @@ const FIELDS: CatalogFieldDef[] = [
   { key: "notes", label: "Notas", type: "text" },
 ];
 
-export default async function TextileSuppliersPage() {
+export default async function TextileSuppliersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const suppliers = await listTextileSuppliers(org.organizationId);
+  // PT-01 · La lista se leía entera y sin cota. Con `max_rows = 1000` eso
+  // significa que a partir de mil filas la pantalla enseñaba mil y callaba.
+  // Ahora es una página con su total al lado, y la búsqueda va en el servidor
+  // sobre TODO el conjunto autorizado, no sobre la página visible.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const { rows: suppliers, total, page, pageSize } = await searchTextileSuppliers(org.organizationId, {
+    q,
+    page: one(params.page),
+  });
 
   const rows: CatalogRowView[] = suppliers.map((s) => ({
     id: s.id,
@@ -75,7 +90,7 @@ export default async function TextileSuppliersPage() {
         <p className="eyebrow">Trazaloop Textiles · Catálogos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Proveedores</h1>
         <div>
-          <ExportPdfButton exportKey="textiles.supplier.list" disabled={suppliers.length === 0} disabledReason="no hay proveedores" />
+          <ExportPdfButton exportKey="textiles.supplier.list" disabled={total === 0} disabledReason="no hay proveedores" />
         </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Proveedores de telas, avíos, hilos, empaque y terceros de proceso. La información
@@ -86,6 +101,11 @@ export default async function TextileSuppliersPage() {
           ← Todos los catálogos
         </Link>
       </header>
+      <ListSearchForm
+        basePath="/textiles/catalogs/suppliers"
+        q={q}
+        placeholder="Buscar proveedores por nombre…"
+      />
       <TextileCatalogManager<TextileSupplierInput>
         entityLabel="proveedor"
         entityLabelPlural="Proveedores"
@@ -96,6 +116,13 @@ export default async function TextileSuppliersPage() {
         setActiveAction={setTextileSupplierActiveAction}
         deleteAction={deleteTextileSupplierAction}
         canDelete={canAdministerTextileCatalogs(org.roleCode)}
+      />
+      <ListPagination
+        basePath="/textiles/catalogs/suppliers"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
       />
     </div>
   );

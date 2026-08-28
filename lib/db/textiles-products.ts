@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { readAllStrict, readPage, sanitizeSearchTerm, type Page } from "@/lib/db/paged-read";
 
 /**
  * Trazaloop · Sprint T4 (Textil) · Consultas de productos, referencias y
@@ -20,26 +21,50 @@ export type TextileCollectionRow = {
   isActive: boolean;
 };
 
+export type ProductsQuery = { q?: string | null; page?: string | number | null; pageSize?: number | null };
+
+type PRow = Record<string, unknown>;
+const SELECT_COLLECTION =
+  "id, name, code, season, year, customer_or_program, status, description, notes, is_active";
+const SELECT_PRODUCT =
+  "id, name, product_code, category, status, collection_id, intended_use, target_market, description, notes, is_active, textile_collections(name)";
+
+const mapCollection = (r: PRow): TextileCollectionRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  code: (r.code as string | null) ?? null,
+  season: (r.season as string | null) ?? null,
+  year: (r.year as number | null) ?? null,
+  customerOrProgram: (r.customer_or_program as string | null) ?? null,
+  status: r.status as string,
+  description: (r.description as string | null) ?? null,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
+
+/** TODAS. Alimenta el desplegable de colección de la ficha de producto. */
 export async function listTextileCollections(organizationId: string): Promise<TextileCollectionRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_collections")
-    .select("id, name, code, season, year, customer_or_program, status, description, notes, is_active")
-    .eq("organization_id", organizationId)
-    .order("name", { ascending: true });
-  if (error || !data) return [];
-  return data.map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    code: (r.code as string | null) ?? null,
-    season: (r.season as string | null) ?? null,
-    year: (r.year as number | null) ?? null,
-    customerOrProgram: (r.customer_or_program as string | null) ?? null,
-    status: r.status as string,
-    description: (r.description as string | null) ?? null,
-    notes: (r.notes as string | null) ?? null,
-    isActive: Boolean(r.is_active),
-  }));
+  const rows = await readAllStrict<PRow>(() =>
+    supabase.from("textile_collections").select(SELECT_COLLECTION)
+      .eq("organization_id", organizationId).order("name", { ascending: true })
+  , "colecciones textiles");
+  return rows.map(mapCollection);
+}
+
+/** UNA página, para la pantalla de colecciones. */
+export async function searchTextileCollections(
+  organizationId: string, query: ProductsQuery = {}
+): Promise<Page<TextileCollectionRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<PRow>(({ from, to }) => {
+    let req = supabase.from("textile_collections").select(SELECT_COLLECTION, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapCollection) };
 }
 
 export type TextileProductRow = {
@@ -58,54 +83,96 @@ export type TextileProductRow = {
   referenceCount: number;
 };
 
-export async function listTextileProducts(organizationId: string): Promise<TextileProductRow[]> {
-  const supabase = await createServerClient();
-  const [{ data, error }, { data: refs }] = await Promise.all([
-    supabase
-      .from("textile_products")
-      .select("id, name, product_code, category, status, collection_id, intended_use, target_market, description, notes, is_active, textile_collections(name)")
-      .eq("organization_id", organizationId)
-      .order("name", { ascending: true }),
-    supabase
-      .from("textile_references")
-      .select("product_id")
-      .eq("organization_id", organizationId),
-  ]);
-  if (error || !data) return [];
+const mapProduct = (r: PRow, referenceCount: number): TextileProductRow => ({
+  id: r.id as string,
+  name: r.name as string,
+  productCode: (r.product_code as string | null) ?? null,
+  category: r.category as string,
+  status: r.status as string,
+  collectionId: (r.collection_id as string | null) ?? null,
+  collectionName: ((r.textile_collections as { name: string } | null) ?? null)?.name ?? null,
+  intendedUse: (r.intended_use as string | null) ?? null,
+  targetMarket: (r.target_market as string | null) ?? null,
+  description: (r.description as string | null) ?? null,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+  referenceCount,
+});
+
+/**
+ * Cuántas referencias tiene cada producto de la lista.
+ *
+ * PT-01 · Antes se leían TODAS las referencias de la empresa para contarlas en
+ * memoria. Eso no solo se cortaba a las mil: producía un número EQUIVOCADO, que
+ * es peor que una lista corta — una lista corta se nota, un contador mal no.
+ *
+ * Ahora se pregunta solo por los productos de la página. La consulta sigue
+ * acotada al inquilino: el `in` restringe, no autoriza.
+ */
+async function contarReferencias(
+  organizationId: string, productIds: string[]
+): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  for (const r of refs ?? []) {
+  if (productIds.length === 0) return counts;
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<PRow>(() =>
+    supabase.from("textile_references").select("product_id")
+      .eq("organization_id", organizationId)
+      .in("product_id", productIds)
+      .order("product_id", { ascending: true })
+  , "referencias textiles");
+  for (const r of rows) {
     const pid = r.product_id as string;
     counts.set(pid, (counts.get(pid) ?? 0) + 1);
   }
-  return data.map((r) => {
-    const col = r.textile_collections as unknown as { name: string } | null;
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      productCode: (r.product_code as string | null) ?? null,
-      category: r.category as string,
-      status: r.status as string,
-      collectionId: (r.collection_id as string | null) ?? null,
-      collectionName: col?.name ?? null,
-      intendedUse: (r.intended_use as string | null) ?? null,
-      targetMarket: (r.target_market as string | null) ?? null,
-      description: (r.description as string | null) ?? null,
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-      referenceCount: counts.get(r.id as string) ?? 0,
-    };
-  });
+  return counts;
 }
 
+/** TODOS los productos. Para exportadores y para la ficha de detalle. */
+export async function listTextileProducts(organizationId: string): Promise<TextileProductRow[]> {
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<PRow>(() =>
+    supabase.from("textile_products").select(SELECT_PRODUCT)
+      .eq("organization_id", organizationId).order("name", { ascending: true })
+  , "productos textiles");
+  const counts = await contarReferencias(organizationId, rows.map((r) => r.id as string));
+  return rows.map((r) => mapProduct(r, counts.get(r.id as string) ?? 0));
+}
+
+/** UNA página de productos, con los contadores de esa página. */
+export async function searchTextileProducts(
+  organizationId: string, query: ProductsQuery = {}
+): Promise<Page<TextileProductRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<PRow>(({ from, to }) => {
+    let req = supabase.from("textile_products").select(SELECT_PRODUCT, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("name", `%${term}%`);
+    return req.order("name", { ascending: true }).range(from, to);
+  }, query);
+  const counts = await contarReferencias(organizationId, page.rows.map((r) => r.id as string));
+  return { ...page, rows: page.rows.map((r) => mapProduct(r, counts.get(r.id as string) ?? 0)) };
+}
+
+/**
+ * PT-01 · Mismo arreglo que en `getTextileReference`: se preguntaba por todos
+ * los productos y se buscaba el suyo en memoria, así que a partir de mil
+ * productos abrir una ficha devolvía «no existe».
+ */
 export async function getTextileProductDetail(
   organizationId: string,
   productId: string
 ): Promise<{ product: TextileProductRow; references: TextileReferenceRow[] } | null> {
-  const products = await listTextileProducts(organizationId);
-  const product = products.find((p) => p.id === productId);
-  if (!product) return null;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("textile_products").select(SELECT_PRODUCT)
+    .eq("organization_id", organizationId)
+    .eq("id", productId)
+    .maybeSingle();
+  if (!data) return null;
   const references = await listTextileReferences(organizationId, productId);
-  return { product, references };
+  return { product: mapProduct(data as PRow, references.length), references };
 }
 
 export type TextileReferenceRow = {
@@ -125,46 +192,75 @@ export type TextileReferenceRow = {
   isActive: boolean;
 };
 
+const SELECT_REFERENCE =
+  "id, sku, name, product_id, version_label, color, size_range, gender_or_fit, description, status, composition_status, notes, is_active, textile_products(name)";
+
+const mapReference = (r: PRow): TextileReferenceRow => ({
+  id: r.id as string,
+  sku: r.sku as string,
+  name: (r.name as string | null) ?? null,
+  productId: r.product_id as string,
+  productName: ((r.textile_products as { name: string } | null) ?? null)?.name ?? null,
+  versionLabel: (r.version_label as string | null) ?? null,
+  color: (r.color as string | null) ?? null,
+  sizeRange: (r.size_range as string | null) ?? null,
+  genderOrFit: (r.gender_or_fit as string | null) ?? null,
+  description: (r.description as string | null) ?? null,
+  status: r.status as string,
+  compositionStatus: r.composition_status as string,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+});
+
+/** TODAS las referencias (de la empresa o de un producto). */
 export async function listTextileReferences(
   organizationId: string,
   productId?: string
 ): Promise<TextileReferenceRow[]> {
   const supabase = await createServerClient();
-  let query = supabase
-    .from("textile_references")
-    .select("id, sku, name, product_id, version_label, color, size_range, gender_or_fit, description, status, composition_status, notes, is_active, textile_products(name)")
-    .eq("organization_id", organizationId)
-    .order("sku", { ascending: true });
-  if (productId) query = query.eq("product_id", productId);
-  const { data, error } = await query;
-  if (error || !data) return [];
-  return data.map((r) => {
-    const prod = r.textile_products as unknown as { name: string } | null;
-    return {
-      id: r.id as string,
-      sku: r.sku as string,
-      name: (r.name as string | null) ?? null,
-      productId: r.product_id as string,
-      productName: prod?.name ?? null,
-      versionLabel: (r.version_label as string | null) ?? null,
-      color: (r.color as string | null) ?? null,
-      sizeRange: (r.size_range as string | null) ?? null,
-      genderOrFit: (r.gender_or_fit as string | null) ?? null,
-      description: (r.description as string | null) ?? null,
-      status: r.status as string,
-      compositionStatus: r.composition_status as string,
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-    };
-  });
+  const rows = await readAllStrict<PRow>(() => {
+    let req = supabase.from("textile_references").select(SELECT_REFERENCE)
+      .eq("organization_id", organizationId);
+    if (productId) req = req.eq("product_id", productId);
+    return req.order("sku", { ascending: true });
+  }, "referencias textiles");
+  return rows.map(mapReference);
 }
 
+/** UNA página de referencias. La búsqueda va por SKU, que es como se buscan. */
+export async function searchTextileReferences(
+  organizationId: string, query: ProductsQuery & { productId?: string } = {}
+): Promise<Page<TextileReferenceRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<PRow>(({ from, to }) => {
+    let req = supabase.from("textile_references").select(SELECT_REFERENCE, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (query.productId) req = req.eq("product_id", query.productId);
+    if (term) req = req.ilike("sku", `%${term}%`);
+    return req.order("sku", { ascending: true }).range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapReference) };
+}
+
+/**
+ * Una referencia por id.
+ *
+ * PT-01 · Antes traía TODAS las referencias de la empresa y buscaba la suya en
+ * memoria. Además de leer de más, se cortaba a las mil: a partir de ahí, abrir
+ * la ficha de una referencia devolvía «no existe». Ahora se pregunta por ella.
+ */
 export async function getTextileReference(
   organizationId: string,
   referenceId: string
 ): Promise<TextileReferenceRow | null> {
-  const rows = await listTextileReferences(organizationId);
-  return rows.find((r) => r.id === referenceId) ?? null;
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("textile_references").select(SELECT_REFERENCE)
+    .eq("organization_id", organizationId)
+    .eq("id", referenceId)
+    .maybeSingle();
+  return data ? mapReference(data as PRow) : null;
 }
 
 export type ReferenceFiberRow = {

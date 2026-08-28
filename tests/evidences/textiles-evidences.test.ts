@@ -335,7 +335,18 @@ check("24. El sprint no modifica funcionalmente CPR (actions/rutas/migraciones i
   const dir = path.join(root, "supabase/migrations");
   const files = fs.readdirSync(dir).filter((f) => Number(f.slice(0, 4)) < 70);
   assert(files.length === 69 || files.length > 0, "las migraciones CPR debían seguir presentes");
-  assert(!listPage.includes("/evidences\"") && !detailPage.includes("from(\"evidences\")"), "la UI textil no debía apuntar a rutas/tablas CPR");
+  // La comprobación buscaba la SUBCADENA `/evidences"`, que también aparece
+  // dentro de `"/textiles/evidences"`. Mientras la página solo tuvo enlaces
+  // relativos nadie lo notó; en cuanto PT-01 le añadió un `basePath` con su
+  // propia ruta, la aserción se puso en rojo acusando de apuntar a PCR a una
+  // página que apunta a sí misma.
+  //
+  // Se hace PRECISA, no más laxa: sigue prohibida la ruta de PCR, y ahora se
+  // distingue de la textil.
+  const RUTA_PCR = /(?<!\/textiles)\/evidences"/;
+  assert(!RUTA_PCR.test(listPage), "la UI textil no debía apuntar a la ruta /evidences de PCR");
+  assert(!RUTA_PCR.test(detailPage), "el detalle textil no debía apuntar a la ruta /evidences de PCR");
+  assert(!detailPage.includes("from(\"evidences\")"), "el detalle textil no debía leer la tabla evidences de PCR");
 });
 
 console.log(`\nResultado: ${passed} pasaron, ${failed} fallaron\n`);

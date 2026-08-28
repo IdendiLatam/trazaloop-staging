@@ -3,8 +3,10 @@
 /**
  * PCR-03.1 · Acciones de GOBERNANZA por evidencia: aceptar internamente
  * (confirmación clara), rechazar (motivo OBLIGATORIO, panel propio — nada
- * de window.confirm) y archivar/desarchivar. Los permisos reales viven en
- * el trigger 0106 + RLS; aquí solo UX honesta y mensajes de la base.
+ * de window.confirm) y DESarchivar. Los permisos reales viven en el trigger
+ * 0106 + RLS; aquí solo UX honesta y mensajes de la base.
+ *
+ * PT-F07 · Archivar dejó de ofrecerse. Ver la nota junto al botón.
  */
 import { useActionState, useState } from "react";
 import {
@@ -69,16 +71,32 @@ export function EvidenceGovernanceActions({
             </button>
           </>
         ) : null}
-        {canReview ? (
+        {/* PT-F07 · «Archivar» ya no se ofrece.
+            Era una tercera dimensión —ortogonal al estado, con su propia
+            etiqueta y sus propias consecuencias en el cálculo— que en la
+            práctica se usaba como un borrado blando, y convivía en la misma
+            fila con «Aceptar», «Rechazar» y «Eliminar». Cuatro verbos para
+            tres decisiones.
+
+            NO se elimina `archived_at`, ni las filas ya archivadas, ni la
+            acción de servidor: el histórico se conserva entero y las
+            archivadas se siguen viendo y filtrando. Lo que desaparece es la
+            forma de crear archivadas nuevas.
+
+            «Desarchivar» SÍ se conserva, y solo cuando la fila ya lo está.
+            Quitar también la salida habría dejado atrapado para siempre lo
+            que se archivó antes de este sprint, que es reescribir la
+            historia por la vía de impedir corregirla. */}
+        {canReview && archived ? (
           <form action={archiveFormAction}>
             <input type="hidden" name="id" value={evidenceId} />
-            <input type="hidden" name="archive" value={archived ? "false" : "true"} />
+            <input type="hidden" name="archive" value="false" />
             <button
               type="submit"
               disabled={archiving}
               className="text-sm text-ink-soft hover:underline disabled:opacity-60"
             >
-              {archiving ? "Guardando…" : archived ? "Desarchivar" : "Archivar"}
+              {archiving ? "Guardando…" : "Desarchivar"}
             </button>
           </form>
         ) : null}

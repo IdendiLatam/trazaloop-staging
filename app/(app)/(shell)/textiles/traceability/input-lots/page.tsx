@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileInputLots } from "@/lib/db/textiles-traceability";
+import { searchTextileInputLots } from "@/lib/db/textiles-traceability";
 import {
   listTextileMaterials,
   listTextileComponents,
@@ -31,11 +31,23 @@ import {
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
-export default async function TextileInputLotsPage() {
+export default async function TextileInputLotsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const [lots, materials, components, suppliers] = await Promise.all([
-    listTextileInputLots(org.organizationId),
+  // PT-01 · La lista principal es una página con su total al lado, y la
+  // búsqueda va en el servidor sobre TODO el conjunto autorizado. Los
+  // catálogos auxiliares se siguen leyendo enteros: alimentan desplegables, y
+  // una opción que falta ahí es una opción que no se puede elegir.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const [{ rows: lots, total, page, pageSize }, materials, components, suppliers] = await Promise.all([
+    searchTextileInputLots(org.organizationId, { q, page: one(params.page) }),
     listTextileMaterials(org.organizationId),
     listTextileComponents(org.organizationId),
     listTextileSuppliers(org.organizationId),
@@ -137,6 +149,8 @@ export default async function TextileInputLotsPage() {
         </Link>
       </header>
 
+      <ListSearchForm basePath="/textiles/traceability/input-lots" q={q} placeholder="Buscar lotes por código…" />
+
       <TextileCatalogManager<TextileInputLotInput>
         entityLabel="lote de entrada"
         entityLabelPlural="lotes de entrada"
@@ -146,6 +160,13 @@ export default async function TextileInputLotsPage() {
         updateAction={updateTextileInputLotAction}
         setActiveAction={setTextileInputLotActiveAction}
         rowExportKey="textiles.input-lot.detail"
+      />
+      <ListPagination
+        basePath="/textiles/traceability/input-lots"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
       />
     </div>
   );

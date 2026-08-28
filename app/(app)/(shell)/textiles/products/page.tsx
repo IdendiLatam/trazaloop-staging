@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileProducts, listTextileCollections } from "@/lib/db/textiles-products";
+import { searchTextileProducts, listTextileCollections } from "@/lib/db/textiles-products";
 import {
   TEXTILE_PRODUCT_CATEGORIES,
   TEXTILE_PRODUCT_CATEGORY_LABEL,
@@ -20,11 +20,23 @@ import {
 import { TextileEntityForm } from "@/components/domain/textiles/entity-form";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
-export default async function TextileProductsPage() {
+export default async function TextileProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const [products, collections] = await Promise.all([
-    listTextileProducts(org.organizationId),
+  // PT-01 · La lista de productos se leía entera, y además contaba las
+  // referencias de cada uno leyendo TODAS las de la empresa. Eso no solo se
+  // cortaba a las mil: producía un contador equivocado, que es peor — una
+  // lista corta se nota, un número mal no.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const [{ rows: products, total, page, pageSize }, collections] = await Promise.all([
+    searchTextileProducts(org.organizationId, { q, page: one(params.page) }),
     listTextileCollections(org.organizationId),
   ]);
 
@@ -63,7 +75,7 @@ export default async function TextileProductsPage() {
         <p className="eyebrow">Trazaloop Textiles · Productos</p>
         <h1 className="text-2xl font-semibold tracking-tight">Productos textiles</h1>
         <div>
-          <ExportPdfButton exportKey="textiles.product.list" disabled={products.length === 0} disabledReason="no hay productos" />
+          <ExportPdfButton exportKey="textiles.product.list" disabled={total === 0} disabledReason="no hay productos" />
         </div>
         <p className="max-w-2xl text-sm text-ink-soft">
           Registra productos, referencias y composición estructurada para preparar
@@ -93,10 +105,20 @@ export default async function TextileProductsPage() {
       />
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Productos registrados ({products.length})</h2>
+        {/* El total es el del conjunto completo, no el de la página: enseñar
+            «Productos registrados (20)» sobre mil doscientos sería la misma
+            mentira que la lista sin cota. */}
+        <h2 className="text-sm font-semibold">Productos registrados ({total})</h2>
+        <ListSearchForm
+          basePath="/textiles/products"
+          q={q}
+          placeholder="Buscar productos por nombre…"
+        />
         {products.length === 0 ? (
           <p className="rounded-lg border border-hairline bg-surface p-4 text-sm text-ink-soft">
-            Aún no hay productos. Crea el primero con el formulario de arriba.
+            {q
+              ? `Ningún producto coincide con «${q}».`
+              : "Aún no hay productos. Crea el primero con el formulario de arriba."}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -132,6 +154,13 @@ export default async function TextileProductsPage() {
             ))}
           </ul>
         )}
+        <ListPagination
+          basePath="/textiles/products"
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          extraParams={{ q: q || undefined }}
+        />
       </section>
     </div>
   );

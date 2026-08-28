@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileComponents, listTextileSuppliers } from "@/lib/db/textiles-catalogs";
+import { searchTextileComponents, listTextileSuppliers } from "@/lib/db/textiles-catalogs";
 import {
   TEXTILE_COMPONENT_TYPES,
   TEXTILE_COMPONENT_TYPE_LABEL,
@@ -24,11 +24,27 @@ import {
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
-export default async function TextileComponentsPage() {
+export default async function TextileComponentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const [components, suppliers] = await Promise.all([
-    listTextileComponents(org.organizationId),
+  // PT-01 · La lista principal se leía entera y sin cota. Con `max_rows = 1000`
+  // eso significa que a partir de mil filas la pantalla enseñaba mil y callaba.
+  // Ahora es una página con su total al lado, y la búsqueda va en el servidor
+  // sobre TODO el conjunto autorizado, no sobre la página visible.
+  //
+  // Los catálogos AUXILIARES (proveedores, fibras) siguen leyéndose enteros:
+  // alimentan un desplegable y una opción que falta ahí es una opción que no
+  // se puede elegir. Su lectura ya recorre por lotes, así que tampoco se corta.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const [{ rows: components, total, page, pageSize }, suppliers] = await Promise.all([
+    searchTextileComponents(org.organizationId, { q, page: one(params.page) }),
     listTextileSuppliers(org.organizationId),
   ]);
 
@@ -99,6 +115,11 @@ export default async function TextileComponentsPage() {
           ← Todos los catálogos
         </Link>
       </header>
+      <ListSearchForm
+        basePath="/textiles/catalogs/components"
+        q={q}
+        placeholder="Buscar componentes por nombre…"
+      />
       <TextileCatalogManager<TextileComponentInput>
         entityLabel="componente"
         entityLabelPlural="Componentes"
@@ -109,6 +130,13 @@ export default async function TextileComponentsPage() {
         setActiveAction={setTextileComponentActiveAction}
         deleteAction={deleteTextileComponentAction}
         canDelete={canAdministerTextileCatalogs(org.roleCode)}
+      />
+      <ListPagination
+        basePath="/textiles/catalogs/components"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
       />
     </div>
   );

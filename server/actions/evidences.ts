@@ -335,6 +335,10 @@ export async function linkEvidenceAction(
   // jamás sustituye silenciosamente al campo (regla del motor intacta).
   const linkKind = String(formData.get("link_kind") ?? "general");
   const linkRoleInput = String(formData.get("link_role") ?? "").trim() || null;
+  // PT-F05 · La confirmación humana viaja como campo del formulario porque
+  // ES un hecho de la interacción, no un valor por defecto del servidor.
+  // Cancelar el diálogo no envía nada, y sin este campo la base rechaza.
+  const confirmed = String(formData.get("confirmed") ?? "") === "1";
 
   const allowed = [
     "supplier",
@@ -414,22 +418,49 @@ export async function linkEvidenceAction(
         ? "soporte de reclasificación del material"
         : null);
 
-  // Crear/mantener el enlace para trazabilidad y dossier. Un duplicado no
-  // debe bloquear la asignación del soporte (crear/MANTENER).
-  const { error: linkError } = await supabase.from("evidence_links").insert({
-    organization_id: org.organizationId,
-    evidence_id: evidenceId,
-    target_type: targetType,
-    target_id: targetId,
-    link_role: linkRole,
+  // PT-01 · La escritura entra por `evidence_link_confirm`, que es ahora la
+  // ÚNICA vía: 0142 retiró la política de insert de `evidence_links`. Ahí
+  // dentro se comprueban las cuatro condiciones de PT-F05 —misma empresa,
+  // aceptación interna, aplicabilidad en la fecha del destino y confirmación
+  // humana— y se congela el snapshot de PT-F06.
+  //
+  // Las comprobaciones de arriba (empresa de la evidencia, del material, del
+  // requisito) NO sobran: dan mensajes en el idioma de la pantalla antes de
+  // llegar a la base. Lo que ya no hacen es ser la única barrera.
+  //
+  // `p_confirmed` viaja explícito porque la confirmación es un hecho, no un
+  // valor por defecto: la pantalla la obtiene del diálogo y la transporta.
+  // El aviso «ya estaba asociada» se resuelve con una LECTURA previa, no
+  // interpretando lo que devuelve la RPC: `on conflict do nothing` seguido de
+  // un re-select entrega la misma forma en los dos casos, y adivinar cuál fue
+  // a partir de la fila sería una heurística donde cabe una consulta.
+  const { data: existente } = await supabase
+    .from("evidence_links")
+    .select("id")
+    .eq("organization_id", org.organizationId)
+    .eq("evidence_id", evidenceId)
+    .eq("target_type", targetType)
+    .eq("target_id", targetId)
+    .limit(1);
+  const yaEstaba = (existente ?? []).length > 0;
+
+  const { data: linkRow, error: linkError } = await supabase.rpc("evidence_link_confirm", {
+    p_evidence_id: evidenceId,
+    p_target_type: targetType,
+    p_target_id: targetId,
+    p_link_role: linkRole,
+    p_confirmed: confirmed,
   });
-  const duplicateLink = linkError?.code === "23505";
-  if (linkError && !duplicateLink) {
-    return { error: "No fue posible asociar. Verifica que la evidencia y el destino sean de tu empresa." };
+  if (linkError) {
+    // La base habla en castellano y con precisión —«no estaba vigente en la
+    // fecha de la operación (vigencia hasta X, fecha del destino Y)»—, así que
+    // se enseña su mensaje en vez de uno genérico que obligue a adivinar.
+    return { error: linkError.message || "No fue posible asociar la evidencia." };
   }
-  if (linkError && duplicateLink && linkKind === "general") {
+  if (yaEstaba && linkKind === "general") {
     return { error: null, warning: "La evidencia ya estaba asociada a ese destino." };
   }
+  void linkRow;
 
   // Actualizar el campo del material que el motor de cálculo exige.
   if (linkKind === "material_origin") {

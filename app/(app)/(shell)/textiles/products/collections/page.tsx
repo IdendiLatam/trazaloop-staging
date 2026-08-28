@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileCollections } from "@/lib/db/textiles-products";
+import { searchTextileCollections } from "@/lib/db/textiles-products";
 import {
   TEXTILE_COLLECTION_STATUSES,
   TEXTILE_COLLECTION_STATUS_LABEL,
@@ -20,6 +20,7 @@ import {
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true, placeholder: "p. ej. Línea institucional 2026" },
@@ -37,9 +38,23 @@ const FIELDS: CatalogFieldDef[] = [
   { key: "notes", label: "Notas", type: "text" },
 ];
 
-export default async function TextileCollectionsPage() {
+export default async function TextileCollectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const collections = await listTextileCollections(org.organizationId);
+  // PT-01 · La lista se leía entera y sin cota. Con `max_rows = 1000` eso
+  // significa que a partir de mil filas la pantalla enseñaba mil y callaba.
+  // Ahora es una página con su total al lado, y la búsqueda va en el servidor
+  // sobre TODO el conjunto autorizado, no sobre la página visible.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const { rows: collections, total, page, pageSize } = await searchTextileCollections(org.organizationId, {
+    q,
+    page: one(params.page),
+  });
 
   const rows: CatalogRowView[] = collections.map((c) => ({
     id: c.id,
@@ -80,6 +95,11 @@ export default async function TextileCollectionsPage() {
           ← Productos textiles
         </Link>
       </header>
+      <ListSearchForm
+        basePath="/textiles/products/collections"
+        q={q}
+        placeholder="Buscar colecciones por nombre…"
+      />
       <TextileCatalogManager<TextileCollectionInput>
         entityLabel="colección"
         entityLabelPlural="Colecciones"
@@ -88,6 +108,13 @@ export default async function TextileCollectionsPage() {
         createAction={createTextileCollectionAction}
         updateAction={updateTextileCollectionAction}
         setActiveAction={setTextileCollectionActiveAction}
+      />
+      <ListPagination
+        basePath="/textiles/products/collections"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
       />
     </div>
   );

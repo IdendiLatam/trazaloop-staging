@@ -81,6 +81,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0142_evidence_catalog_and_historical_truth.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -223,6 +224,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0142_evidence_catalog_and_historical_truth.sql",
   ]);
   const intruders = after105.filter((f) => !allowed.has(f));
   assert(intruders.length === 0, `migraciones no autorizadas: ${intruders.join(", ")}`);

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileProcesses } from "@/lib/db/textiles-catalogs";
+import { searchTextileProcesses } from "@/lib/db/textiles-catalogs";
 import {
   TEXTILE_PROCESS_TYPES,
   TEXTILE_PROCESS_TYPE_LABEL,
@@ -24,6 +24,7 @@ import {
   type CatalogRowView,
 } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
 const FIELDS: CatalogFieldDef[] = [
   { key: "name", label: "Nombre", type: "text", required: true },
@@ -44,9 +45,23 @@ const FIELDS: CatalogFieldDef[] = [
   { key: "recordsExpected", label: "Registros esperados", type: "text", placeholder: "p. ej. orden de corte, planilla de producción" },
 ];
 
-export default async function TextileProcessesPage() {
+export default async function TextileProcessesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const processes = await listTextileProcesses(org.organizationId);
+  // PT-01 · La lista se leía entera y sin cota. Con `max_rows = 1000` eso
+  // significa que a partir de mil filas la pantalla enseñaba mil y callaba.
+  // Ahora es una página con su total al lado, y la búsqueda va en el servidor
+  // sobre TODO el conjunto autorizado, no sobre la página visible.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const { rows: processes, total, page, pageSize } = await searchTextileProcesses(org.organizationId, {
+    q,
+    page: one(params.page),
+  });
 
   const rows: CatalogRowView[] = processes.map((p) => ({
     id: p.id,
@@ -83,6 +98,11 @@ export default async function TextileProcessesPage() {
           ← Todos los catálogos
         </Link>
       </header>
+      <ListSearchForm
+        basePath="/textiles/catalogs/processes"
+        q={q}
+        placeholder="Buscar procesos por nombre…"
+      />
       <TextileCatalogManager<TextileProcessInput>
         entityLabel="proceso"
         entityLabelPlural="Procesos"
@@ -93,6 +113,13 @@ export default async function TextileProcessesPage() {
         setActiveAction={setTextileProcessActiveAction}
         deleteAction={deleteTextileProcessAction}
         canDelete={canAdministerTextileCatalogs(org.roleCode)}
+      />
+      <ListPagination
+        basePath="/textiles/catalogs/processes"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
       />
     </div>
   );

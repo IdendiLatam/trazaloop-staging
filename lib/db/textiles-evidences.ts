@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { readAllStrict, readPage, sanitizeSearchTerm, type Page } from "@/lib/db/paged-read";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isCanonicalTextileObjectPath } from "@/lib/domain/textiles-evidences";
 
@@ -62,33 +63,72 @@ function mapEvidence(r: Record<string, unknown>, linkCount: number): TextileEvid
 const EVIDENCE_COLUMNS =
   "id, title, evidence_type, description, document_date, issuer, reference_code, file_name, file_path, file_mime_type, file_size_bytes, status, review_notes, valid_from, valid_until, is_active, reviewed_at, created_at";
 
+export type EvidencesQuery = {
+  q?: string | null; page?: string | number | null; pageSize?: number | null;
+  evidenceType?: string; status?: string;
+};
+
+/**
+ * Cuántos vínculos tiene cada evidencia de la lista.
+ *
+ * PT-01 · Antes se leían TODOS los vínculos de la empresa para contarlos en
+ * memoria. Con `max_rows = 1000` eso da un contador equivocado en cuanto una
+ * empresa pasa de mil vínculos, y un contador mal no se nota: la pantalla
+ * enseña «3 vínculos» donde hay siete y nadie tiene motivo para dudarlo.
+ */
+async function conteoVinculos(
+  organizationId: string, evidenceIds: string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (evidenceIds.length === 0) return counts;
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("textile_evidence_links").select("evidence_id")
+      .eq("organization_id", organizationId)
+      .in("evidence_id", evidenceIds)
+      .order("evidence_id", { ascending: true })
+  , "vínculos de evidencia textil");
+  for (const l of rows) {
+    const id = l.evidence_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** TODAS. Para exportadores y selectores de vinculación. */
 export async function listTextileEvidences(
   organizationId: string,
   filters?: { evidenceType?: string; status?: string }
 ): Promise<TextileEvidenceRow[]> {
   const supabase = await createServerClient();
-  let query = supabase
-    .from("textile_evidences")
-    .select(EVIDENCE_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  if (filters?.evidenceType) query = query.eq("evidence_type", filters.evidenceType);
-  if (filters?.status) query = query.eq("status", filters.status);
+  const rows = await readAllStrict<Record<string, unknown>>(() => {
+    let req = supabase.from("textile_evidences").select(EVIDENCE_COLUMNS)
+      .eq("organization_id", organizationId);
+    if (filters?.evidenceType) req = req.eq("evidence_type", filters.evidenceType);
+    if (filters?.status) req = req.eq("status", filters.status);
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false });
+  }, "textile_evidences");
+  const counts = await conteoVinculos(organizationId, rows.map((r) => r.id as string));
+  return rows.map((r) => mapEvidence(r, counts.get(r.id as string) ?? 0));
+}
 
-  const [{ data, error }, { data: links }] = await Promise.all([
-    query,
-    supabase
-      .from("textile_evidence_links")
-      .select("evidence_id")
-      .eq("organization_id", organizationId),
-  ]);
-  if (error || !data) return [];
-  const counts = new Map<string, number>();
-  for (const l of links ?? []) {
-    const id = l.evidence_id as string;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  return data.map((r) => mapEvidence(r as Record<string, unknown>, counts.get(r.id as string) ?? 0));
+/** UNA página, con el total del conjunto filtrado. */
+export async function searchTextileEvidences(
+  organizationId: string, query: EvidencesQuery = {}
+): Promise<Page<TextileEvidenceRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Record<string, unknown>>(({ from, to }) => {
+    let req = supabase.from("textile_evidences").select(EVIDENCE_COLUMNS, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (query.evidenceType) req = req.eq("evidence_type", query.evidenceType);
+    if (query.status) req = req.eq("status", query.status);
+    if (term) req = req.ilike("title", `%${term}%`);
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false })
+      .range(from, to);
+  }, query);
+  const counts = await conteoVinculos(organizationId, page.rows.map((r) => r.id as string));
+  return { ...page, rows: page.rows.map((r) => mapEvidence(r, counts.get(r.id as string) ?? 0)) };
 }
 
 export async function getTextileEvidence(
@@ -199,13 +239,14 @@ export async function listTextileEvidenceLinks(
   evidenceId: string
 ): Promise<TextileEvidenceLinkRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_evidence_links")
-    .select("id, evidence_id, entity_type, entity_id, link_type, notes")
-    .eq("organization_id", organizationId)
-    .eq("evidence_id", evidenceId)
-    .order("created_at", { ascending: true });
-  if (error || !data) return [];
+  const data = await readAllStrict<Record<string, unknown>>(() =>
+    supabase
+      .from("textile_evidence_links")
+      .select("id, evidence_id, entity_type, entity_id, link_type, notes")
+      .eq("organization_id", organizationId)
+      .eq("evidence_id", evidenceId)
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+  , "vínculos de la evidencia");
   const labels = await resolveEntityLabels(
     organizationId,
     data.map((r) => ({ entityType: r.entity_type as string, entityId: r.entity_id as string }))

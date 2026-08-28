@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { readAllStrict } from "@/lib/db/paged-read";
 
 export type InputBatch = {
   id: string;
@@ -104,38 +105,46 @@ export async function listInputBatches(
   filters?: { supplierId?: string; materialId?: string }
 ): Promise<InputBatch[]> {
   const supabase = await createServerClient();
-  let query = supabase
-    .from("input_batches")
-    .select(
-      "id, batch_code, supplier_id, material_id, site_id, residue_type, provenance, received_date, quantity_kg, storage_location, notes, suppliers(name), materials(name), sites(name), batch_consumption(mass_kg)"
-    )
-    .eq("organization_id", orgId)
-    .order("received_date", { ascending: false });
-
-  if (filters?.supplierId) query = query.eq("supplier_id", filters.supplierId);
-  if (filters?.materialId) query = query.eq("material_id", filters.materialId);
-
-  const { data } = await query;
+  // PT-01 · Recorre por lotes: sin cota, `max_rows = 1000` dejaba fuera del
+  // selector y de la exportación todo lo que pasara de mil.
+  //
+  // La consulta se CONSTRUYE dentro del callback, una por vuelta. Un builder
+  // de Supabase no es reutilizable: aplicarle `.range()` dos veces sobrescribe
+  // el rango en lugar de pedir la página siguiente, y el recorrido devolvería
+  // la primera página una y otra vez.
+  const data = await readAllStrict<Record<string, unknown>>(() => {
+    let query = supabase
+      .from("input_batches")
+      .select(
+        "id, batch_code, supplier_id, material_id, site_id, residue_type, provenance, received_date, quantity_kg, storage_location, notes, suppliers(name), materials(name), sites(name), batch_consumption(mass_kg)"
+      )
+      .eq("organization_id", orgId)
+      .order("received_date", { ascending: false })
+      .order("id", { ascending: false });
+    if (filters?.supplierId) query = query.eq("supplier_id", filters.supplierId);
+    if (filters?.materialId) query = query.eq("material_id", filters.materialId);
+    return query;
+  }, "lotes de entrada");
   return (data ?? []).map((b) => {
     const supplier = b.suppliers as unknown as { name: string } | null;
     const material = b.materials as unknown as { name: string } | null;
     const site = b.sites as unknown as { name: string } | null;
     const consumption = (b.batch_consumption as unknown as { mass_kg: number }[]) ?? [];
     return {
-      id: b.id,
-      batch_code: b.batch_code,
-      supplier_id: b.supplier_id,
+      id: b.id as string,
+      batch_code: b.batch_code as string,
+      supplier_id: b.supplier_id as string,
       supplier_name: supplier?.name ?? "—",
-      material_id: b.material_id,
+      material_id: b.material_id as string,
       material_name: material?.name ?? "—",
-      site_id: b.site_id,
+      site_id: b.site_id as string | null,
       site_name: site?.name ?? null,
-      residue_type: b.residue_type,
-      provenance: b.provenance,
-      received_date: b.received_date,
+      residue_type: b.residue_type as string,
+      provenance: b.provenance as string | null,
+      received_date: b.received_date as string,
       quantity_kg: num(b.quantity_kg),
-      storage_location: b.storage_location,
-      notes: b.notes,
+      storage_location: b.storage_location as string | null,
+      notes: b.notes as string | null,
       consumed_kg: consumption.reduce((acc, c) => acc + Number(c.mass_kg), 0),
     };
   });
@@ -143,25 +152,24 @@ export async function listInputBatches(
 
 export async function listProductionOrders(orgId: string): Promise<ProductionOrder[]> {
   const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("production_orders")
-    .select(
+  const data = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("production_orders").select(
       "id, order_code, order_date, status, site_id, pretreatment, process_variables, notes, history_locked_at, sites(name)"
-    )
-    .eq("organization_id", orgId)
-    .order("order_date", { ascending: false });
+    ).eq("organization_id", orgId)
+      .order("order_date", { ascending: false }).order("id", { ascending: false })
+  , "órdenes de producción");
   return (data ?? []).map((o) => {
     const site = o.sites as unknown as { name: string } | null;
     return {
-      id: o.id,
-      order_code: o.order_code,
-      order_date: o.order_date,
-      status: o.status,
-      site_id: o.site_id,
+      id: o.id as string,
+      order_code: o.order_code as string,
+      order_date: o.order_date as string,
+      status: o.status as string,
+      site_id: o.site_id as string | null,
       site_name: site?.name ?? null,
-      pretreatment: o.pretreatment,
-      process_variables: o.process_variables,
-      notes: o.notes,
+      pretreatment: o.pretreatment as string | null,
+      process_variables: o.process_variables as Record<string, unknown> | null,
+      notes: o.notes as string | null,
       history_locked_at: (o.history_locked_at as string | null) ?? null,
     };
   });
@@ -207,30 +215,29 @@ export async function listConsumption(
 
 export async function listOutputBatches(orgId: string): Promise<OutputBatch[]> {
   const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("output_batches")
-    .select(
+  const data = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("output_batches").select(
       "id, batch_code, production_order_id, product_id, produced_date, produced_quantity_kg, characteristics, intended_application, storage_location, notes, production_orders(order_code, status), products(code, name)"
-    )
-    .eq("organization_id", orgId)
-    .order("created_at", { ascending: false });
+    ).eq("organization_id", orgId)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })
+  , "lotes de salida");
   return (data ?? []).map((b) => {
     const po = b.production_orders as unknown as { order_code: string } | null;
     const p = b.products as unknown as { code: string; name: string } | null;
     return {
-      id: b.id,
-      batch_code: b.batch_code,
-      production_order_id: b.production_order_id,
+      id: b.id as string,
+      batch_code: b.batch_code as string,
+      production_order_id: b.production_order_id as string,
       production_order_code: po?.order_code ?? "—",
       production_order_status: (po as unknown as { status?: string })?.status ?? "",
-      product_id: b.product_id,
+      product_id: b.product_id as string | null,
       product_label: p ? `${p.code} · ${p.name}` : null,
-      produced_date: b.produced_date,
+      produced_date: b.produced_date as string | null,
       produced_quantity_kg: num(b.produced_quantity_kg),
-      characteristics: b.characteristics,
-      intended_application: b.intended_application,
-      storage_location: b.storage_location,
-      notes: b.notes,
+      characteristics: b.characteristics as string | null,
+      intended_application: b.intended_application as string | null,
+      storage_location: b.storage_location as string | null,
+      notes: b.notes as string | null,
     };
   });
 }
@@ -762,20 +769,45 @@ export async function searchInputBatchOptions(
 /** PCR-02.1 (hallazgo 4) · Opciones ACOTADAS de evidencias para vincular
  *  (sin cargar el universo completo; PCR-01.1 intacto: la vinculación sigue
  *  usando las mismas acciones y visores). */
+export type LinkableEvidenceOptions = {
+  options: Array<{ value: string; label: string; validUntil: string | null }>;
+  total: number;
+  limit: number;
+};
+
+/**
+ * PT-01 · Opciones ACOTADAS de evidencias ASOCIABLES.
+ *
+ * Dos cambios sobre la versión de PCR-02.1: solo aceptadas internamente y sin
+ * archivar —dos de las cuatro condiciones de PT-F05, resueltas en SQL— y cada
+ * opción viaja con su `valid_until`, que es lo que el formulario necesita para
+ * descartar las que no amparaban la fecha del destino.
+ *
+ * La tercera condición (vigencia en esa fecha) no se puede resolver aquí: no
+ * sabemos aún qué destino se elegirá. Y la cuarta (confirmación humana) es del
+ * momento de escribir, no del de ofrecer. Las cuatro se vuelven a comprobar en
+ * `evidence_link_confirm`, que es la barrera de verdad.
+ */
 export async function searchEvidenceOptions(
   orgId: string,
   term = "",
   limit: number = SELECTOR_OPTIONS_LIMIT
-): Promise<BoundedOptions> {
+): Promise<LinkableEvidenceOptions> {
   const supabase = await createServerClient();
   let request = supabase
     .from("evidences")
-    .select("id, name", { count: "exact" })
-    .eq("organization_id", orgId);
+    .select("id, name, valid_until", { count: "exact" })
+    .eq("organization_id", orgId)
+    .eq("status", "valid")
+    .is("archived_at", null);
   const cleaned = term.trim().replace(/[%_]/g, "");
   if (cleaned) request = request.ilike("name", `%${cleaned}%`);
   const { data, count } = await request.order("name").limit(limit);
-  const options = (data ?? []).map((e) => ({ value: e.id as string, label: e.name as string }));
+  const options = (data ?? []).map((e) => ({
+    value: e.id as string,
+    label: e.name as string,
+    validUntil: (e.valid_until as string | null) ?? null,
+  }));
   return { options, total: count ?? options.length, limit };
 }
 

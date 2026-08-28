@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { readAllStrict, readPage, sanitizeSearchTerm, type Page } from "@/lib/db/paged-read";
 
 /**
  * Trazaloop · Sprint T6 (Textil) · Consultas de trazabilidad. Todo bajo RLS
@@ -52,21 +53,46 @@ function mapOrder(r: Record<string, unknown>): TextileOrderRow {
 const ORDER_COLUMNS =
   "id, order_code, reference_id, planned_quantity, produced_quantity, unit, planned_start_date, planned_end_date, actual_start_date, actual_end_date, status, responsible_area, notes, is_active, textile_references(sku, textile_products(name))";
 
+export type TraceQuery = {
+  q?: string | null; page?: string | number | null; pageSize?: number | null;
+  status?: string; referenceId?: string;
+};
+
+/** TODAS las órdenes. Para exportadores y selectores. */
 export async function listTextileProductionOrders(
   organizationId: string,
   filters?: { status?: string; referenceId?: string }
 ): Promise<TextileOrderRow[]> {
   const supabase = await createServerClient();
-  let query = supabase
-    .from("textile_production_orders")
-    .select(ORDER_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  if (filters?.status) query = query.eq("status", filters.status);
-  if (filters?.referenceId) query = query.eq("reference_id", filters.referenceId);
-  const { data, error } = await query;
-  if (error || !data) return [];
-  return data.map((r) => mapOrder(r as Record<string, unknown>));
+  const rows = await readAllStrict<Record<string, unknown>>(() => {
+    let req = supabase.from("textile_production_orders").select(ORDER_COLUMNS)
+      .eq("organization_id", organizationId);
+    if (filters?.status) req = req.eq("status", filters.status);
+    if (filters?.referenceId) req = req.eq("reference_id", filters.referenceId);
+    // Orden ESTABLE: `created_at` puede repetirse entre dos filas creadas en
+    // el mismo instante, y con orden ambiguo dos páginas consecutivas pueden
+    // repetir una fila y saltarse otra. El id desempata.
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false });
+  }, "órdenes de producción textiles");
+  return rows.map((r) => mapOrder(r));
+}
+
+/** UNA página de órdenes, con el total del conjunto filtrado. */
+export async function searchTextileProductionOrders(
+  organizationId: string, query: TraceQuery = {}
+): Promise<Page<TextileOrderRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Record<string, unknown>>(({ from, to }) => {
+    let req = supabase.from("textile_production_orders").select(ORDER_COLUMNS, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (query.status) req = req.eq("status", query.status);
+    if (query.referenceId) req = req.eq("reference_id", query.referenceId);
+    if (term) req = req.ilike("order_code", `%${term}%`);
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false })
+      .range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map((r) => mapOrder(r)) };
 }
 
 export async function getTextileProductionOrder(
@@ -107,55 +133,90 @@ export type TextileInputLotRow = {
   otherUnitConsumptions: number;
 };
 
-export async function listTextileInputLots(organizationId: string): Promise<TextileInputLotRow[]> {
+const INPUT_LOT_COLUMNS =
+  "id, lot_code, lot_type, material_id, component_id, supplier_id, received_date, quantity_received, unit, document_reference, status, notes, is_active, textile_materials(name), textile_components(name), textile_suppliers(name)";
+
+type Balance = { consumed: number; remaining: number | null; other: number };
+
+/**
+ * Saldos de los lotes indicados. PT-01 · Antes se leían los de TODA la empresa
+ * para cruzarlos en memoria; con más de mil lotes la vista devolvía mil y los
+ * demás aparecían con saldo cero, que no es «no consumido»: es «no se leyó».
+ */
+async function saldosDeLotes(
+  organizationId: string, lotIds: string[]
+): Promise<Map<string, Balance>> {
+  const mapa = new Map<string, Balance>();
+  if (lotIds.length === 0) return mapa;
   const supabase = await createServerClient();
-  const [{ data, error }, { data: balances }] = await Promise.all([
-    supabase
-      .from("textile_input_lots")
-      .select("id, lot_code, lot_type, material_id, component_id, supplier_id, received_date, quantity_received, unit, document_reference, status, notes, is_active, textile_materials(name), textile_components(name), textile_suppliers(name)")
-      .eq("organization_id", organizationId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("v_textile_input_lot_balance")
+  const rows = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("v_textile_input_lot_balance")
       .select("input_lot_id, quantity_consumed, quantity_remaining, other_unit_consumptions_count")
-      .eq("organization_id", organizationId),
-  ]);
-  if (error || !data) return [];
-  const balance = new Map<string, { consumed: number; remaining: number | null; other: number }>();
-  for (const b of balances ?? []) {
-    balance.set(b.input_lot_id as string, {
+      .eq("organization_id", organizationId)
+      .in("input_lot_id", lotIds)
+      .order("input_lot_id", { ascending: true })
+  , "saldos de lotes textiles");
+  for (const b of rows) {
+    mapa.set(b.input_lot_id as string, {
       consumed: Number(b.quantity_consumed ?? 0),
       remaining: b.quantity_remaining === null ? null : Number(b.quantity_remaining),
       other: Number(b.other_unit_consumptions_count ?? 0),
     });
   }
-  return data.map((r) => {
-    const mat = r.textile_materials as unknown as { name: string } | null;
-    const comp = r.textile_components as unknown as { name: string } | null;
-    const sup = r.textile_suppliers as unknown as { name: string } | null;
-    const b = balance.get(r.id as string);
-    return {
-      id: r.id as string,
-      lotCode: r.lot_code as string,
-      lotType: r.lot_type as string,
-      materialId: (r.material_id as string | null) ?? null,
-      materialName: mat?.name ?? null,
-      componentId: (r.component_id as string | null) ?? null,
-      componentName: comp?.name ?? null,
-      supplierId: (r.supplier_id as string | null) ?? null,
-      supplierName: sup?.name ?? null,
-      receivedDate: (r.received_date as string | null) ?? null,
-      quantityReceived: r.quantity_received === null ? null : Number(r.quantity_received),
-      unit: (r.unit as string | null) ?? null,
-      documentReference: (r.document_reference as string | null) ?? null,
-      status: r.status as string,
-      notes: (r.notes as string | null) ?? null,
-      isActive: Boolean(r.is_active),
-      quantityConsumed: b?.consumed ?? 0,
-      quantityRemaining: b?.remaining ?? (r.quantity_received === null ? null : Number(r.quantity_received)),
-      otherUnitConsumptions: b?.other ?? 0,
-    };
-  });
+  return mapa;
+}
+
+const mapInputLot = (
+  r: Record<string, unknown>, b: Balance | undefined
+): TextileInputLotRow => ({
+  id: r.id as string,
+  lotCode: r.lot_code as string,
+  lotType: r.lot_type as string,
+  materialId: (r.material_id as string | null) ?? null,
+  materialName: ((r.textile_materials as { name: string } | null) ?? null)?.name ?? null,
+  componentId: (r.component_id as string | null) ?? null,
+  componentName: ((r.textile_components as { name: string } | null) ?? null)?.name ?? null,
+  supplierId: (r.supplier_id as string | null) ?? null,
+  supplierName: ((r.textile_suppliers as { name: string } | null) ?? null)?.name ?? null,
+  receivedDate: (r.received_date as string | null) ?? null,
+  quantityReceived: r.quantity_received === null ? null : Number(r.quantity_received),
+  unit: (r.unit as string | null) ?? null,
+  documentReference: (r.document_reference as string | null) ?? null,
+  status: r.status as string,
+  notes: (r.notes as string | null) ?? null,
+  isActive: Boolean(r.is_active),
+  quantityConsumed: b?.consumed ?? 0,
+  quantityRemaining: b?.remaining ?? (r.quantity_received === null ? null : Number(r.quantity_received)),
+  otherUnitConsumptions: b?.other ?? 0,
+});
+
+/** TODOS los lotes de entrada. Para exportadores y selectores. */
+export async function listTextileInputLots(organizationId: string): Promise<TextileInputLotRow[]> {
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("textile_input_lots").select(INPUT_LOT_COLUMNS)
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })
+  , "lotes de entrada textiles");
+  const saldos = await saldosDeLotes(organizationId, rows.map((r) => r.id as string));
+  return rows.map((r) => mapInputLot(r, saldos.get(r.id as string)));
+}
+
+/** UNA página de lotes de entrada, con los saldos de esa página. */
+export async function searchTextileInputLots(
+  organizationId: string, query: TraceQuery = {}
+): Promise<Page<TextileInputLotRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Record<string, unknown>>(({ from, to }) => {
+    let req = supabase.from("textile_input_lots").select(INPUT_LOT_COLUMNS, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("lot_code", `%${term}%`);
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false })
+      .range(from, to);
+  }, query);
+  const saldos = await saldosDeLotes(organizationId, page.rows.map((r) => r.id as string));
+  return { ...page, rows: page.rows.map((r) => mapInputLot(r, saldos.get(r.id as string))) };
 }
 
 export type TextileConsumptionRow = {
@@ -180,13 +241,17 @@ export async function listTextileOrderConsumptions(
   orderId: string
 ): Promise<TextileConsumptionRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_order_consumptions")
-    .select("id, order_id, input_lot_id, quantity_consumed, unit, consumption_role, consumed_at, notes, textile_input_lots(lot_code, lot_type, unit, textile_materials(name), textile_components(name), textile_suppliers(name))")
-    .eq("organization_id", organizationId)
-    .eq("order_id", orderId)
-    .order("created_at", { ascending: true });
-  if (error || !data) return [];
+  // Sublista de UNA orden: no se pagina en pantalla, pero se recorre igual.
+  // Mil consumos en una sola orden es improbable y por eso mismo sería el
+  // caso que nadie mira cuando el número sale mal.
+  const data = await readAllStrict<Record<string, unknown>>(() =>
+    supabase
+      .from("textile_order_consumptions")
+      .select("id, order_id, input_lot_id, quantity_consumed, unit, consumption_role, consumed_at, notes, textile_input_lots(lot_code, lot_type, unit, textile_materials(name), textile_components(name), textile_suppliers(name))")
+      .eq("organization_id", organizationId)
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+  , "consumos de la orden");
   return data.map((r) => {
     const lot = r.textile_input_lots as unknown as {
       lot_code: string; lot_type: string; unit: string | null;
@@ -237,14 +302,15 @@ export async function listTextileOrderProcessSteps(
   orderId: string
 ): Promise<TextileStepRow[]> {
   const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("textile_order_process_steps")
-    .select("id, order_id, step_order, step_type, process_id, outsourced_process_id, name, responsible_name, supplier_id, planned_date, completed_date, status, notes, textile_processes(name), textile_outsourced_processes(name), textile_suppliers(name)")
-    .eq("organization_id", organizationId)
-    .eq("order_id", orderId)
-    .order("step_order", { ascending: true })
-    .order("created_at", { ascending: true });
-  if (error || !data) return [];
+  const data = await readAllStrict<Record<string, unknown>>(() =>
+    supabase
+      .from("textile_order_process_steps")
+      .select("id, order_id, step_order, step_type, process_id, outsourced_process_id, name, responsible_name, supplier_id, planned_date, completed_date, status, notes, textile_processes(name), textile_outsourced_processes(name), textile_suppliers(name)")
+      .eq("organization_id", organizationId)
+      .eq("order_id", orderId)
+      .order("step_order", { ascending: true })
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+  , "pasos de proceso de la orden");
   return data.map((r) => {
     const proc = r.textile_processes as unknown as { name: string } | null;
     const out = r.textile_outsourced_processes as unknown as { name: string } | null;
@@ -288,30 +354,27 @@ export type TextileOutputLotRow = {
   updatedAt: string | null;
 };
 
-export async function listTextileOutputLots(
-  organizationId: string,
-  filters?: { orderId?: string }
-): Promise<TextileOutputLotRow[]> {
-  const supabase = await createServerClient();
-  let query = supabase
-    .from("v_textile_output_lot_traceability_summary")
-    .select("output_lot_id, output_lot_code, order_id, order_code, sku, product_name, quantity_produced, unit, traceability_status, status, evidence_links_count, created_at")
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: false });
-  if (filters?.orderId) query = query.eq("order_id", filters.orderId);
-  const { data, error } = await query;
-  if (error || !data) return [];
-  // La vista puede repetir filas por el join de evidencias: se dedup por lote
-  // sumando conteos.
+const OUTPUT_LOT_COLUMNS =
+  "output_lot_id, output_lot_code, order_id, order_code, sku, product_name, quantity_produced, unit, traceability_status, status, evidence_links_count, created_at";
+
+/**
+ * La vista repite una fila por cada evidencia enlazada, así que hay que
+ * deduplicar sumando conteos.
+ *
+ * PT-01 · Y por eso esta lista NO se pagina con `range` sobre la vista: cortar
+ * a la fila veinte podría partir un lote por la mitad y dejar su conteo de
+ * evidencias incompleto sin que se notara. Se recorre entera, se deduplica, y
+ * la página se toma DESPUÉS. El recorrido está acotado y declara si no llegó
+ * al final; eso es honesto. Paginar en SQL sobre una vista que multiplica
+ * filas no lo sería.
+ */
+function dedupOutputLots(data: Array<Record<string, unknown>>): TextileOutputLotRow[] {
   const byId = new Map<string, TextileOutputLotRow>();
   for (const r of data) {
     const id = r.output_lot_id as string;
-    const existing = byId.get(id);
     const links = Number(r.evidence_links_count ?? 0);
-    if (existing) {
-      existing.evidenceLinksCount += links;
-      continue;
-    }
+    const existing = byId.get(id);
+    if (existing) { existing.evidenceLinksCount += links; continue; }
     byId.set(id, {
       id,
       outputLotCode: r.output_lot_code as string,
@@ -331,6 +394,97 @@ export async function listTextileOutputLots(
     });
   }
   return [...byId.values()];
+}
+
+/** TODOS los lotes de salida. */
+export async function listTextileOutputLots(
+  organizationId: string,
+  filters?: { orderId?: string }
+): Promise<TextileOutputLotRow[]> {
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<Record<string, unknown>>(() => {
+    let req = supabase.from("v_textile_output_lot_traceability_summary").select(OUTPUT_LOT_COLUMNS)
+      .eq("organization_id", organizationId);
+    if (filters?.orderId) req = req.eq("order_id", filters.orderId);
+    return req.order("created_at", { ascending: false }).order("output_lot_id", { ascending: false });
+  }, "resumen de lotes de salida textiles");
+  return dedupOutputLots(rows);
+}
+
+const OUTPUT_LOT_BASE_COLUMNS =
+  "id, output_lot_code, order_id, quantity_produced, unit, produced_date, status, traceability_status, notes, is_active, updated_at, textile_production_orders(order_code, textile_references(sku, textile_products(name)))";
+
+/** Cuántas evidencias tiene cada lote de la página. Una consulta, acotada. */
+async function conteoEvidenciasPorLote(
+  organizationId: string, lotIds: string[]
+): Promise<Map<string, number>> {
+  const mapa = new Map<string, number>();
+  if (lotIds.length === 0) return mapa;
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("textile_evidence_links").select("entity_id")
+      .eq("organization_id", organizationId)
+      .eq("entity_type", "output_lot")
+      .in("entity_id", lotIds)
+      .order("entity_id", { ascending: true })
+  , "vínculos de evidencia textil");
+  for (const r of rows) {
+    const id = r.entity_id as string;
+    mapa.set(id, (mapa.get(id) ?? 0) + 1);
+  }
+  return mapa;
+}
+
+/**
+ * UNA página de lotes de salida.
+ *
+ * PT-01 · Se pagina sobre `textile_output_lots`, que tiene UNA fila por lote,
+ * y no sobre `v_textile_output_lot_traceability_summary`, que repite una fila
+ * por evidencia enlazada. Paginar con `range` sobre la vista habría partido un
+ * lote entre dos páginas y dejado su conteo incompleto sin que se notara: la
+ * página se vería bien y el número estaría mal.
+ *
+ * El conteo de evidencias se pide aparte, solo para los lotes de la página.
+ */
+export async function searchTextileOutputLots(
+  organizationId: string, query: TraceQuery & { orderId?: string } = {}
+): Promise<Page<TextileOutputLotRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Record<string, unknown>>(({ from, to }) => {
+    let req = supabase.from("textile_output_lots").select(OUTPUT_LOT_BASE_COLUMNS, { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (query.orderId) req = req.eq("order_id", query.orderId);
+    if (term) req = req.ilike("output_lot_code", `%${term}%`);
+    return req.order("created_at", { ascending: false }).order("id", { ascending: false })
+      .range(from, to);
+  }, query);
+
+  const conteos = await conteoEvidenciasPorLote(organizationId, page.rows.map((r) => r.id as string));
+  const rows = page.rows.map((r) => {
+    const order = (r.textile_production_orders as {
+      order_code: string;
+      textile_references: { sku: string; textile_products: { name: string } | null } | null;
+    } | null) ?? null;
+    return {
+      id: r.id as string,
+      outputLotCode: r.output_lot_code as string,
+      orderId: r.order_id as string,
+      orderCode: order?.order_code ?? null,
+      sku: order?.textile_references?.sku ?? null,
+      productName: order?.textile_references?.textile_products?.name ?? null,
+      quantityProduced: Number(r.quantity_produced),
+      unit: r.unit as string,
+      producedDate: (r.produced_date as string | null) ?? null,
+      status: r.status as string,
+      traceabilityStatus: r.traceability_status as string,
+      notes: (r.notes as string | null) ?? null,
+      isActive: Boolean(r.is_active),
+      evidenceLinksCount: conteos.get(r.id as string) ?? 0,
+      updatedAt: (r.updated_at as string | null) ?? null,
+    };
+  });
+  return { ...page, rows };
 }
 
 export async function getTextileOutputLot(

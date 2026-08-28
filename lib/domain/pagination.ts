@@ -8,6 +8,23 @@
  */
 
 export const DEFAULT_PAGE_SIZE = 20;
+
+/**
+ * PT-01 · Tamaño de lote del RECORRIDO completo (exportaciones y selectores).
+ *
+ * Vive aquí, con el resto de la aritmética de paginación, y no junto al lector
+ * de servidor: es una constante pura, y una prueba tiene que poder leerla sin
+ * arrastrar `server-only`.
+ *
+ * Es 500 y no 1000 a propósito. PostgREST corta en 1000 (`max_rows`), así que
+ * pedir mil exactos deja sin saber si el último lote fue el final o el corte.
+ * Con 500, una respuesta corta significa SIEMPRE «se acabó».
+ */
+export const TRAVERSAL_CHUNK = 500;
+
+/** Freno del recorrido. No es una cota de negocio: evita que un fallo de
+ *  paginación se convierta en un bucle infinito. */
+export const TRAVERSAL_MAX_ROWS = 100_000;
 export const MAX_PAGE_SIZE = 100;
 
 export type PageQuery = { q: string; page: number; pageSize: number };

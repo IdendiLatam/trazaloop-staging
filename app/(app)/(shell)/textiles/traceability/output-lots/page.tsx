@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileOutputLots } from "@/lib/db/textiles-traceability";
+import { searchTextileOutputLots } from "@/lib/db/textiles-traceability";
 import {
   TEXTILE_OUTPUT_LOT_STATUS_LABEL,
   TEXTILE_TRACEABILITY_STATUS_LABEL,
@@ -11,6 +11,7 @@ import {
   type TextileTraceabilityStatus,
 } from "@/lib/domain/textiles-traceability";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
 const TRACE_TONE: Record<TextileTraceabilityStatus, string> = {
   not_started: "border-hairline bg-paper text-ink-soft",
@@ -19,9 +20,22 @@ const TRACE_TONE: Record<TextileTraceabilityStatus, string> = {
   needs_review: "border-danger/30 bg-danger/5 text-danger",
 };
 
-export default async function TextileOutputLotsPage() {
+export default async function TextileOutputLotsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const org = await requireTextilesModule();
-  const lots = await listTextileOutputLots(org.organizationId);
+  // PT-01 · La lista principal es una página con su total al lado, y la
+  // búsqueda va en el servidor sobre TODO el conjunto autorizado. Los
+  // catálogos auxiliares se siguen leyendo enteros: alimentan desplegables, y
+  // una opción que falta ahí es una opción que no se puede elegir.
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const q = one(params.q) ?? "";
+  const { rows: lots, total, page, pageSize } = await searchTextileOutputLots(
+    org.organizationId, { q, page: one(params.page) }
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -46,8 +60,10 @@ export default async function TextileOutputLotsPage() {
         </div>
       </header>
 
+      <ListSearchForm basePath="/textiles/traceability/output-lots" q={q} placeholder="Buscar lotes por código…" />
+
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Lotes ({lots.length})</h2>
+        <h2 className="text-sm font-semibold">Lotes ({total})</h2>
         {lots.length === 0 ? (
           <p className="rounded-lg border border-hairline bg-surface p-4 text-sm text-ink-soft">
             Aún no hay lotes finales. Crea una orden y registra su primer lote producido
@@ -87,6 +103,13 @@ export default async function TextileOutputLotsPage() {
           </ul>
         )}
       </section>
+      <ListPagination
+        basePath="/textiles/traceability/output-lots"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined }}
+      />
     </div>
   );
 }

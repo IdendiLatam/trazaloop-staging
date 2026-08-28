@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorAlert } from "@/components/ui/alert";
 import {
-  TEXTILE_EVIDENCE_STATUSES,
+  TEXTILE_EVIDENCE_OFFERED_STATUSES,
   TEXTILE_EVIDENCE_STATUS_LABEL,
 } from "@/lib/domain/textiles-evidences";
 
@@ -61,7 +61,9 @@ export function TextileEvidenceStatusPanel({
             onChange={(e) => setStatus(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5"
           >
-            {TEXTILE_EVIDENCE_STATUSES.map((s) => (
+            {/* PT-F07 · «Archivada» ya no se ofrece; las que lo estén se
+                siguen viendo y se pueden mover a otro estado desde aquí. */}
+            {TEXTILE_EVIDENCE_OFFERED_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {TEXTILE_EVIDENCE_STATUS_LABEL[s]}
               </option>

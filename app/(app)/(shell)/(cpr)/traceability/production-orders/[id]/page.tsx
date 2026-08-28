@@ -309,6 +309,7 @@ export default async function ProductionOrderDetailPage({
           <LinkEvidenceInline
             targetType="production_order"
             targetId={order.id}
+            referenceDate={order.order_date}
             evidences={evidenceOptions}
           />
         </div>

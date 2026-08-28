@@ -57,9 +57,14 @@ export default async function OutputBatchesPage({
       listMaterials(org.organizationId),
       getCompleteness(org.organizationId),
       supabase
+        // PT-01 · Solo evidencias aceptadas internamente y sin archivar. El
+        // selector ofrecía también pendientes y rechazadas; el motor las
+        // descartaba luego, en otra pantalla y sin decirlo.
         .from("evidences")
-        .select("id, name")
+        .select("id, name, valid_until")
         .eq("organization_id", org.organizationId)
+        .eq("status", "valid")
+        .is("archived_at", null)
         .order("name"),
     ]);
   const pageBatches = result.rows;
@@ -133,7 +138,11 @@ export default async function OutputBatchesPage({
       : undefined;
   const productOptions = products.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }));
   const materialOptions = materials.map((m) => ({ value: m.id, label: m.name }));
-  const evidenceOptions = (evidenceRows ?? []).map((e) => ({ value: e.id, label: e.name }));
+  const evidenceOptions = (evidenceRows ?? []).map((e) => ({
+    value: e.id,
+    label: e.name,
+    validUntil: (e.valid_until as string | null) ?? null,
+  }));
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -414,6 +423,7 @@ export default async function OutputBatchesPage({
                       <LinkEvidenceInline
                         targetType="output_batch"
                         targetId={b.id}
+                        referenceDate={b.produced_date}
                         evidences={evidenceOptions}
                       />
                     </div>

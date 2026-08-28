@@ -359,10 +359,22 @@ check("J2c. y no se creó un segundo bus para ello", () => {
   const eventos = read("lib/intelligence/usage-events.ts");
   assert(/intelligence_emit_usage_event/.test(eventos),
     "se emite por otro camino que no es el emisor existente");
-  const m = readdirSync(join(ROOT, "supabase/migrations"))
-    .filter((f) => f.endsWith(".sql")).sort();
-  assert(m[m.length - 1] === "0141_intelligence_platform_visibility.sql",
-    `se creó una migración para una emisión que faltaba: ${m[m.length - 1]}`);
+  // La comprobación decía «0141 sigue siendo la última». Era cierta y útil
+  // MIENTRAS 12.2F.1 era el último sprint; el siguiente que añada una
+  // migración legítima la pone en rojo sin que nada haya empeorado.
+  //
+  // Lo que de verdad importaba no era el número: era que la emisión que
+  // faltaba se resolviera con el bus que YA existía, en vez de levantar un
+  // segundo. Eso sí es durable, y es lo que se comprueba ahora.
+  const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
+    .filter((f) => f.endsWith(".sql") && f > "0141").sort();
+  for (const f of migraciones) {
+    const sql = read(`supabase/migrations/${f}`);
+    assert(!/create table[^;]*\b(work_events|usage_events|intelligence_events)\b/i.test(sql),
+      `${f} crea un segundo bus de eventos`);
+    assert(!/create (or replace )?function[^(]*intelligence_emit_usage_event/i.test(sql),
+      `${f} reescribe el emisor en vez de reutilizarlo`);
+  }
 });
 
 check("J3. un aviso que falla no tumba la operación", () => {

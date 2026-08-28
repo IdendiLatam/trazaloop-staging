@@ -65,9 +65,14 @@ export default async function InputBatchesPage({
       listMaterials(org.organizationId),
       supabase.from("sites").select("id, name").eq("organization_id", org.organizationId),
       supabase
+        // PT-01 · Solo evidencias aceptadas internamente y sin archivar. El
+        // selector ofrecía también pendientes y rechazadas; el motor las
+        // descartaba luego, en otra pantalla y sin decirlo.
         .from("evidences")
-        .select("id, name")
+        .select("id, name, valid_until")
         .eq("organization_id", org.organizationId)
+        .eq("status", "valid")
+        .is("archived_at", null)
         .order("name"),
     ]);
   const batches = result.rows;
@@ -102,7 +107,11 @@ export default async function InputBatchesPage({
   const supplierOptions = suppliers.map((s) => ({ value: s.id, label: s.name }));
   const materialOptions = materials.map((m) => ({ value: m.id, label: m.name }));
   const siteOptions = (sites ?? []).map((s) => ({ value: s.id, label: s.name }));
-  const evidenceOptions = (evidenceRows ?? []).map((e) => ({ value: e.id, label: e.name }));
+  const evidenceOptions = (evidenceRows ?? []).map((e) => ({
+    value: e.id,
+    label: e.name,
+    validUntil: (e.valid_until as string | null) ?? null,
+  }));
 
   // PCR-01 (puntos 2 y 7): confirmación + resaltado del registro afectado.
   const highlightId = focusId;
@@ -292,6 +301,7 @@ export default async function InputBatchesPage({
                   <LinkEvidenceInline
                     targetType="input_batch"
                     targetId={b.id}
+                    referenceDate={b.received_date}
                     evidences={evidenceOptions}
                   />
                 </div>

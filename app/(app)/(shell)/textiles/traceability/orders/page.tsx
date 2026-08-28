@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
-import { listTextileProductionOrders } from "@/lib/db/textiles-traceability";
+import { searchTextileProductionOrders } from "@/lib/db/textiles-traceability";
 import { listTextileReferences } from "@/lib/db/textiles-products";
 import {
   TEXTILE_ORDER_STATUSES,
@@ -17,17 +17,27 @@ import { TextileEntityForm } from "@/components/domain/textiles/entity-form";
 import { isOneOf } from "@/lib/domain/textiles-catalogs";
 import type { CatalogFieldDef } from "@/components/domain/textiles/catalog-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 
 export default async function TextileOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
   const org = await requireTextilesModule();
-  const statusFilter = isOneOf(TEXTILE_ORDER_STATUSES, params.status ?? "") ? params.status : undefined;
-  const [orders, references] = await Promise.all([
-    listTextileProductionOrders(org.organizationId, { status: statusFilter }),
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const statusFilter = isOneOf(TEXTILE_ORDER_STATUSES, one(params.status) ?? "")
+    ? one(params.status) : undefined;
+  // PT-01 · La lista principal es una página con su total al lado, y la
+  // búsqueda va en el servidor sobre TODO el conjunto autorizado. Los
+  // catálogos auxiliares se siguen leyendo enteros: alimentan desplegables, y
+  // una opción que falta ahí es una opción que no se puede elegir.
+  const q = one(params.q) ?? "";
+  const [{ rows: orders, total, page, pageSize }, references] = await Promise.all([
+    searchTextileProductionOrders(org.organizationId, {
+      status: statusFilter, q, page: one(params.page),
+    }),
     listTextileReferences(org.organizationId),
   ]);
 
@@ -73,6 +83,13 @@ export default async function TextileOrdersPage({
         </Link>
       </header>
 
+      <ListSearchForm
+        basePath="/textiles/traceability/orders"
+        q={q}
+        placeholder="Buscar órdenes por código…"
+        hiddenParams={{ status: statusFilter }}
+      />
+
       <TextileEntityForm<TextileOrderInput>
         title="Nueva orden / corrida"
         fields={fields}
@@ -84,6 +101,9 @@ export default async function TextileOrdersPage({
 
       <section className="space-y-2">
         <form method="get" className="flex items-end gap-3 rounded-lg border border-hairline bg-surface p-3 text-sm">
+          {/* Un submit GET envía solo sus campos: sin esto, filtrar por estado
+              borraría la búsqueda escrita. */}
+          {q ? <input type="hidden" name="q" value={q} /> : null}
           <label className="space-y-1">
             <span className="block text-xs font-medium text-ink-soft">Estado</span>
             <select name="status" defaultValue={statusFilter ?? ""} className="rounded-md border border-hairline bg-paper px-2 py-1">
@@ -100,7 +120,7 @@ export default async function TextileOrdersPage({
           </button>
         </form>
 
-        <h2 className="text-sm font-semibold">Órdenes ({orders.length})</h2>
+        <h2 className="text-sm font-semibold">Órdenes ({total})</h2>
         {orders.length === 0 ? (
           <p className="rounded-lg border border-hairline bg-surface p-4 text-sm text-ink-soft">
             No hay órdenes con esos criterios.
@@ -137,6 +157,13 @@ export default async function TextileOrdersPage({
           </ul>
         )}
       </section>
+      <ListPagination
+        basePath="/textiles/traceability/orders"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        extraParams={{ q: q || undefined, status: statusFilter }}
+      />
     </div>
   );
 }
