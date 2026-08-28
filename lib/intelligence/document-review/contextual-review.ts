@@ -218,6 +218,10 @@ export async function runContextualReview(
       p_run_id: runId,
       p_status: resultado.kind === "refused" ? "refused" : "failed",
       p_error: resultado.message,
+      // QUALITY-12.2F · Un rechazo viene DEL proveedor: hubo llamada y hubo
+      // tokens. Un tiempo de espera o una caída, no. Decirlo mal falsea el
+      // recuento de llamadas, que es de lo que cuelga el análisis de coste.
+      p_provider_called: resultado.kind === "refused",
     });
     return {
       ok: false, runId, reason: resultado.kind,
@@ -232,6 +236,8 @@ export async function runContextualReview(
   if (!validado.ok) {
     await db.rpc("quality_ai_fail_run", {
       p_run_id: runId, p_status: "failed", p_error: validado.error,
+      // La respuesta llegó del proveedor: no cumplió el esquema, pero se pagó.
+      p_provider_called: true,
     });
     return {
       ok: false, runId, reason: "invalid_output",

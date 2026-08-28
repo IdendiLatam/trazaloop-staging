@@ -73,6 +73,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
+    "0140_intelligence_usage_and_cost.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");

@@ -356,13 +356,30 @@ check("J1. la 0138 va justo detrás de la 0137, y nadie la ha reescrito", () => 
     assert(!/document_authoring_start_run/.test(read(`supabase/migrations/${f}`)),
       `${f} fue editada con contenido de QUALITY-12.2C`);
   }
-  // Y las posteriores no tocan lo que 12.2C dejó funcionando.
+  // Y las posteriores no pueden ROMPER lo que 12.2C dejó funcionando.
+  //
+  // Decía «no pueden reescribir la puerta», y era demasiado: QUALITY-12.2F la
+  // reescribe a propósito para añadirle el guardián de presupuesto, y eso es
+  // legítimo. Lo que no puede pasar es que al reescribirla se pierda alguna de
+  // sus tres reglas, así que eso es lo que se comprueba.
   for (const f of m.slice(i + 1)) {
     const sql = read(`supabase/migrations/${f}`);
-    assert(!/create or replace function public\.document_authoring_start_run/.test(sql),
-      `${f} reescribe la puerta de QUALITY-12.2C`);
     assert(!/drop (view|function)[^;]*document_authoring/i.test(sql),
       `${f} borra algo de QUALITY-12.2C`);
+    if (!/create or replace function public\.document_authoring_start_run/.test(sql)) continue;
+    const nueva = /create or replace function public\.document_authoring_start_run[\s\S]*?\$\$;/
+      .exec(sql)?.[0] ?? "";
+    // El módulo lo manda el DOCUMENTO, no la petición.
+    assert(/v_doc\.module_key is distinct from p_module_key/.test(nueva),
+      `${f} reescribe la puerta y pierde la comprobación de módulo`);
+    // PCR es `cpr` en documentos y `traceability_6632` en el catálogo comercial.
+    assert(/when 'cpr' then 'traceability_6632'/.test(nueva),
+      `${f} reescribe la puerta y pierde la traducción de módulo de PCR`);
+    // Demo no: la guía de autoría no se entrega en Demo desde 12.2A.
+    assert(/not in \('full', 'extra'\)/.test(nueva),
+      `${f} reescribe la puerta y abre Demo`);
+    assert(/rate_limited/.test(nueva),
+      `${f} reescribe la puerta y pierde el tope diario`);
   }
 });
 

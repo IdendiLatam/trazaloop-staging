@@ -24,7 +24,7 @@ import { join } from "node:path";
 import {
   INTELLIGENCE_PRODUCT_NAME, INTELLIGENCE_SHORT_NAME, INTELLIGENCE_ACTIONS,
   INTELLIGENCE_SETTINGS_TITLE, INTELLIGENCE_SUGGESTIONS_TITLE,
-  INTELLIGENCE_NOT_AVAILABLE, KNOWN_USE_CASES, useCaseLabel,
+  INTELLIGENCE_NOT_AVAILABLE, KNOWN_USE_CASES, labelForUseCase,
 } from "../../lib/domain/intelligence-identity";
 
 const ROOT = process.cwd();
@@ -205,11 +205,21 @@ check("F1. las variables de entorno siguen llamándose igual", () => {
 check("F2. las tablas y funciones de la base siguen igual", () => {
   const mig = read("supabase/migrations/0139_document_contextual_review.sql");
   assert(/quality_ai_runs/.test(mig), "se tocó el espacio de nombres de la base");
-  // Y no hay migración nueva SOLO por el renombrado.
+  // La comprobación decía «0139 es la última», que era cierto mientras 12.2E
+  // fuera el último sprint y dejó de serlo con 12.2F. Lo que de verdad protege
+  // este sprint es que NINGUNA migración renombre el espacio técnico por un
+  // cambio de etiqueta, y eso se puede comprobar siempre.
   const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
-  assert(migraciones[migraciones.length - 1] === "0139_document_contextual_review.sql",
-    `se creó una migración por un cambio de etiqueta: ${migraciones[migraciones.length - 1]}`);
+  for (const f of migraciones) {
+    const sql = read(`supabase/migrations/${f}`);
+    assert(!/alter table\s+(public\.)?quality_ai_\w+\s+rename/i.test(sql),
+      `${f} renombra una tabla del espacio técnico`);
+    assert(!/rename\s+to\s+intelligence_ai_|rename column\s+use_case/i.test(sql),
+      `${f} renombra identificadores persistidos`);
+    assert(!/update\s+quality_ai_runs\s+set\s+use_case\s*=/i.test(sql),
+      `${f} reescribe use_case histórico: eso falsifica el registro`);
+  }
 });
 
 check("F3. los `use_case` persistidos NO se renombran", () => {
@@ -225,13 +235,13 @@ check("F3. los `use_case` persistidos NO se renombran", () => {
 });
 
 check("F4. la traducción vive en la presentación, no en la base", () => {
-  assert(useCaseLabel("copilot.ask") === "Pregunta a Intelligence",
-    useCaseLabel("copilot.ask"));
-  assert(useCaseLabel("document.contextual_review") === "Revisión contextual",
-    useCaseLabel("document.contextual_review"));
+  assert(labelForUseCase("copilot.ask") === "Pregunta a Intelligence",
+    labelForUseCase("copilot.ask"));
+  assert(labelForUseCase("document.contextual_review") === "Revisión contextual",
+    labelForUseCase("document.contextual_review"));
   // Un identificador desconocido se devuelve tal cual: inventarle un nombre
   // bonito escondería que apareció uno nuevo.
-  assert(useCaseLabel("algo.nuevo") === "algo.nuevo", "un caso desconocido se disfraza");
+  assert(labelForUseCase("algo.nuevo") === "algo.nuevo", "un caso desconocido se disfraza");
 });
 
 check("F5. las rutas no cambian por una etiqueta", () => {

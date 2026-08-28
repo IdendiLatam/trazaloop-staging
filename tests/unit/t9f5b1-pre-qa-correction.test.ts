@@ -503,6 +503,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
+    "0140_intelligence_usage_and_cost.sql",
   ];
   for (const f of mandatoryAfter0101) {
     assert(after0101.includes(f), `falta la migración obligatoria ${f}`);

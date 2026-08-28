@@ -9,13 +9,20 @@ import {
 } from "@/server/actions/settings";
 import { CompanySettingsForm } from "@/components/domain/settings/company-settings-form";
 import { OrganizationProfileForm } from "@/components/domain/settings/organization-profile-form";
+import { IntelligenceUsageCard } from "@/components/domain/settings/intelligence-usage-card";
+import { getOrganizationUsageStatus } from "@/lib/db/intelligence-usage";
+import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { LogoUploadForm } from "@/components/domain/settings/logo-upload-form";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
 export default async function CompanySettingsPage() {
-  const [{ data: company, canManage }, perfil] = await Promise.all([
+  const org = await requireActiveOrg();
+  const [{ data: company, canManage }, perfil, usoIntelligence] = await Promise.all([
     getCompanySettingsAction(),
     getOrganizationProfileAction(),
+    // QUALITY-12.2F · Cuánto lleva usado la empresa este mes. Sin dinero: ver
+    // el comentario de `IntelligenceUsageCard`.
+    getOrganizationUsageStatus(org.organizationId),
   ]);
   if (!company) notFound();
 
@@ -68,6 +75,8 @@ export default async function CompanySettingsPage() {
         <OrganizationProfileForm
           profile={perfil.profile} sectors={perfil.sectors} canManage={perfil.canManage} />
       </section>
+
+      {usoIntelligence ? <IntelligenceUsageCard status={usoIntelligence} /> : null}
     </div>
   );
 }

@@ -23,7 +23,7 @@
  * consulta, y reescribirlo sería falsificar el registro para que combine con
  * una etiqueta.
  *
- * De ahí que este archivo tenga `useCaseLabel()`: la traducción vive en la
+ * De ahí que este archivo tenga `labelForUseCase()`: la traducción vive en la
  * presentación, no en la base.
  *
  * Y NO es `server-only`: lo usan tanto las pantallas como el servidor.
@@ -92,10 +92,17 @@ const USE_CASE_LABEL: Record<string, string> = {
   "document.contextual_review": "Revisión contextual",
 };
 
-/** Cómo se llama un caso de uso en pantalla. Si no se conoce, se devuelve tal
- *  cual: inventarle un nombre bonito a un identificador desconocido esconde
- *  que apareció uno nuevo. */
-export function useCaseLabel(useCase: string): string {
+/**
+ * Cómo se llama un caso de uso en pantalla. Si no se conoce, se devuelve tal
+ * cual: inventarle un nombre bonito a un identificador desconocido esconde
+ * que apareció uno nuevo.
+ *
+ * Se llamó `useCaseLabel` durante 12.2E y hubo que renombrarla: cualquier
+ * función que empiece por `use` la tratan como un hook las herramientas de
+ * React, y eso prohíbe llamarla dentro de un `map`. El nombre era correcto en
+ * castellano y equivocado en este ecosistema.
+ */
+export function labelForUseCase(useCase: string): string {
   return USE_CASE_LABEL[useCase] ?? useCase;
 }
 

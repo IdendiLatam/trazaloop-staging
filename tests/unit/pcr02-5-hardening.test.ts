@@ -78,6 +78,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0137_organization_profile_and_quality_guidance.sql",
   "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
+    "0140_intelligence_usage_and_cost.sql",
 ]);
 
 const ROOT = join(__dirname, "..", "..");
@@ -540,6 +541,7 @@ check("R1 · migraciones: 0105 única de PCR-02.5; posteriores solo PCR-03 origi
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
+    "0140_intelligence_usage_and_cost.sql",
   ]);
   const historical = files.filter((f) => f <= "0105_z");
   assert(historical.length === 97, `97 migraciones históricas esperadas, hay ${historical.length}`);

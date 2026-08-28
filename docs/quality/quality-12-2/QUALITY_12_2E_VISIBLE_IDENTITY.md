@@ -87,7 +87,7 @@ Esta lista existe para que nadie la «complete» más adelante.
 ### Cómo se traduce sin tocar la base
 
 ```
-lib/domain/intelligence-identity.ts · useCaseLabel()
+lib/domain/intelligence-identity.ts · labelForUseCase()
 
   copilot.ask                  → Pregunta a Intelligence
   copilot.customer_themes      → Temas de la voz del cliente

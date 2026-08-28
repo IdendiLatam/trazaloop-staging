@@ -288,6 +288,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0137_organization_profile_and_quality_guidance.sql",
     "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
+    "0140_intelligence_usage_and_cost.sql",
   ]);
   const intruders = later.filter((f) => !allowedLater.has(f));
   assert(intruders.length === 0, `tras la 0104 solo 0105 y el bloque PCR-03: ${intruders.join(", ")}`);
