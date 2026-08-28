@@ -18,7 +18,10 @@ import {
 import { organizationIdentity } from "../branding";
 
 /**
- * Trazaloop · QUALITY-12 · Los papeles del Copilot.
+ * Trazaloop · QUALITY-12 · Los papeles de Trazaloop Intelligence.
+ *
+ * QUALITY-12.2E · Las etiquetas visibles pasaron a «Intelligence»; los
+ * identificadores de exportación (`quality.ai-*`) no, porque son claves.
  *
  * DOS REGLAS QUE ATRAVIESAN LOS TRES
  *
@@ -217,7 +220,7 @@ export const qualityAiSuggestionList: ExportDefinition = {
 };
 
 // ---------------------------------------------------------------------------
-// 3 · Reporte de consultas al Copilot
+// 3 · Reporte de consultas a Intelligence
 // ---------------------------------------------------------------------------
 
 export const qualityAiRunList: ExportDefinition = {

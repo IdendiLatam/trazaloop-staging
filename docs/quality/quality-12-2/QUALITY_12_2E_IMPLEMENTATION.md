@@ -1,5 +1,6 @@
 # QUALITY-12.2E · Trazaloop Intelligence · identidad visible
 
+> **CERRADO.** Validación humana visual: las cinco comprobaciones **PASS**.
 > Rama `feature/quality-12-2e-trazaloop-intelligence-identity`, desde `aeeca3d`.
 > **Local 0139 · Staging 0139 · Production 0111 — sin tocar. Sin migración.**
 
@@ -131,6 +132,37 @@ en presentación con `useCaseLabel()`.
 
 Hay una comprobación que falla si aparece una `0140`, precisamente para que
 nadie migre datos por una etiqueta.
+
+---
+
+## H.bis · La validación humana
+
+Cinco comprobaciones visuales sobre el Preview `ig1vypkni`, commit `fdbbc36`.
+Las cinco **PASS**:
+
+| | Qué se vio |
+|---|---|
+| Navegación | **Intelligence** en la barra lateral. Sin «Copilot» |
+| Página principal | **Trazaloop Intelligence** · **Intelligence** · **Preguntar a Intelligence**, y la ruta `/quality/copilot` conservada |
+| Quick Edit | **Mejorar con Intelligence**, y **Preparando…** durante la operación |
+| Contextual Review | **Revisar con Intelligence**, claramente distinta de la anterior |
+| Ajustes | **Ajustes de Intelligence** y **Propuestas de Intelligence** |
+
+Sin gastar una sola llamada al proveedor: la rama recibe la credencial pero no
+`QUALITY_AI_PROVIDER`, así que resuelve al doble determinístico. Los paneles
+funcionan enteros y no hay consumo. Fue deliberado — una validación visual no
+tiene por qué costar dinero.
+
+### Un resto que apareció en el repaso final
+
+Dos comentarios del adaptador de exportación seguían diciendo «Copilot» encima
+del código que ahora emite «Intelligence». El guard no los veía —y hace bien:
+solo mira cadenas visibles—, pero un comentario que describe el comportamiento
+actual y se ha quedado atrás confunde a quien lo lee. Actualizados.
+
+No es lo mismo que la documentación histórica de QUALITY-12, que **sí** debe
+seguir diciendo «Copilot»: aquello narra lo que pasó, esto describía lo que
+hace el código de al lado.
 
 ---
 

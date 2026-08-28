@@ -1,5 +1,9 @@
 # Trazaloop Intelligence · identidad visible
 
+> Decisión de producto **congelada** y validada visualmente el 28 de agosto de
+> 2026 sobre el Preview `ig1vypkni` (commit `fdbbc36`): cinco comprobaciones,
+> cinco PASS.
+>
 > Decisión de producto **congelada**. Este documento es la autoridad sobre cómo
 > se llama la capacidad de cara a quien la usa, y sobre qué **no** cambia por
 > debajo.

@@ -82,4 +82,15 @@ es una prueba de regresión.
 | TrazaDocs · PCR · Textiles · Quality | verdes |
 | **`npm run test:all`** | **EXIT 0** |
 
-Sin una sola llamada al proveedor: este sprint no la necesita.
+Sin una sola llamada al proveedor: este sprint no la necesita, y el Preview de
+la rama tampoco la habría hecho — recibe la credencial pero no
+`QUALITY_AI_PROVIDER`, así que resuelve al doble. Una validación visual que
+además no cuesta dinero.
+
+---
+
+## La validación humana
+
+Cinco comprobaciones sobre el Preview, **cinco PASS**: navegación, página
+principal, Quick Edit, Contextual Review y ajustes. Nada que las pruebas no
+anticiparan, que es la señal de que la suite cubría lo que decía cubrir.
