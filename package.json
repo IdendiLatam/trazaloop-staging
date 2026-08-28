@@ -199,7 +199,8 @@
     "test:pcr-textiles-02a": "tsx --tsconfig tsconfig.test.json tests/unit/pcr-textiles-02a-recycled.test.ts",
     "test:pcr-textiles-02b-rls": "tsx tests/rls/pcr-textiles-02b-movements.test.ts",
     "test:pcr-textiles-02b": "tsx --tsconfig tsconfig.test.json tests/unit/pcr-textiles-02b-movements.test.ts",
-    "test:pcr-textiles-preflight": "tsx --tsconfig tsconfig.test.json tests/unit/pcr-textiles-preflight.test.ts"
+    "test:pcr-textiles-preflight": "tsx --tsconfig tsconfig.test.json tests/unit/pcr-textiles-preflight.test.ts",
+    "verify:schema-dump": "node scripts/verify-schema-dump.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

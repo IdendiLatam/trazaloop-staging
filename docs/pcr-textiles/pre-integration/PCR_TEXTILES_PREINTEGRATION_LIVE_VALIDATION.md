@@ -1,272 +1,345 @@
-# PCR / Textiles · Pre-integración · Aplicación en Staging y validación humana
+# PCR / Textiles · Pre-integración · Validación en Staging
 
-> **Nada de esto se ejecutó.** No hay autenticación remota de Supabase
-> disponible en este entorno —no existe `~/.supabase/access-token` ni ningún
-> `project-ref` persistente— y no se buscó ninguna. Los comandos están escritos
-> para que los ejecute una persona.
+> **Staging aplicado.** `0142`–`0146` aplicadas contra
+> `qchzkxbnbqeyuxinipln` (`trazaloop-staging-qa`) el 2026-08-28.
+> Cabecera remota: **0146**. Cero deriva con Local.
 >
-> **Production no se toca.** Ningún comando de este documento apunta a ella.
+> **Production intacta.** Sirve `dpl_G7ShrFNuxpojx4wYnVQpj2dCirHp` desde hace
+> diez días, verificado **por dominio** (`vercel inspect https://www.trazaloop.com`),
+> no por la lista de despliegues. Es la lección del incidente de 12.2D: la
+> lista puede mentir, el dominio no.
+>
+> **Preview:** https://trazaloop-production-h4rzoa5lu-idendi-latam-s-projects.vercel.app
+> · `dpl_Apoy6tewveCwVtkLLEtBiagg1NZV` · `target: preview` · Ready.
 
 ---
 
-## 1 · Antes de nada
+## 0 · Precondición · treinta segundos, y son obligatorios
 
-El repositorio debe seguir **sin vínculo persistente** de Supabase. Toda
-operación remota lleva su `--project-ref` explícito: sin vínculo, ningún
-comando puede acertar por defecto contra el proyecto equivocado.
+**Antes de las ocho pruebas, confirme que el Preview habla con el Staging que
+se migró.**
+
+No pude comprobarlo desde aquí: el Preview está detrás del SSO de Vercel y las
+variables de entorno vienen enmascaradas al descargarlas. Y sí importa — hay
+**dos** proyectos parecidos:
+
+| Proyecto | Ref | Estado |
+|---|---|---|
+| `trazaloop-staging-qa` | `qchzkxbnbqeyuxinipln` | **el que se migró a 0146** |
+| `trazaloop-staging` | `dtrxxqmdweykzncfmahc` | INACTIVE, sigue sin las migraciones |
+
+Si el Preview apunta al segundo, **las ocho pruebas fallarán de forma
+confusa**: la interfaz será la nueva y la base la vieja.
+
+**Cómo comprobarlo.** Abra el Preview con su sesión de Vercel, entre a la
+aplicación y en las herramientas del navegador mire cualquier petición a
+Supabase: el host tiene que ser `qchzkxbnbqeyuxinipln.supabase.co`.
+
+Alternativa sin navegador:
 
 ```bash
-# Comprobar que NO hay vínculo. Debe salir vacío.
-ls supabase/.temp/ | grep -E 'project-ref|linked-project' || echo "sin vínculo: correcto"
-
-# Y que la rama y la cabecera local son las esperadas.
-git branch --show-current            # feature/pcr-textiles-pre-integration
-ls supabase/migrations | tail -5     # …0146_output_batch_movements.sql
+npx vercel env ls preview | grep NEXT_PUBLIC_SUPABASE_URL
+# y abrir su valor en el panel de Vercel
 ```
+
+**Si apunta al proyecto equivocado: pare.** Corregir la variable en Vercel y
+volver a desplegar el Preview; los cambios de variable no afectan a
+despliegues ya construidos.
 
 ---
 
-## 2 · Aplicar las migraciones en Staging
+## 1 · Qué se verificó y qué no
 
-`supabase db push` **no puede** con la 0105 —usa `LOCK TABLE` fuera de
-transacción— pero eso solo afecta a una reejecución desde cero. Para aplicar
-las cinco nuevas sobre una base que ya está en 0141, `db push` sirve.
+### Verificado contra Staging
+
+**45 comprobaciones estructurales, 0 fallos**, sobre el volcado del esquema
+real:
 
 ```bash
-STAGING_REF=qchzkxbnbqeyuxinipln
-
-# 1 · Ver QUÉ se va a aplicar, sin aplicar nada.
-npx supabase migration list --project-ref "$STAGING_REF"
-
-# 2 · Aplicar. Debe subir 0142, 0143, 0144, 0145 y 0146 y nada más.
-npx supabase db push --project-ref "$STAGING_REF"
-
-# 3 · Confirmar la cabecera.
-npx supabase migration list --project-ref "$STAGING_REF" | tail -8
+npx supabase db dump --project-ref qchzkxbnbqeyuxinipln \
+  --schema public --keep-comments -f /tmp/staging.sql
+node scripts/verify-schema-dump.mjs /tmp/staging.sql
 ```
 
-**Si algo falla a mitad**, cada migración se aplica en su propia transacción:
-la que falle no deja nada a medias. Las reversiones están en
-[MIGRATIONS](./PCR_TEXTILES_PREINTEGRATION_MIGRATIONS.md), una por migración.
+Cubre los doce puntos: instantánea de `evidence_links`, borrado bloqueado,
+elegibilidad temporal, `unit_code`, candado de concurrencia textil, metodología
+v2, el `CHECK` de `CALCULATION_INCOMPLETE`, inventario de materia prima,
+`output_batch_movements`, linaje de corrección, inventario de producto y
+aislamiento entre inquilinos.
 
-### Lo que hay que mirar después de aplicar
+El verificador **discrimina**: da 45/45 sobre los esquemas de Local y Staging,
+y 1/45 sobre un fichero que no es un esquema con estas migraciones. No es un
+sello de goma.
 
-```sql
--- El backfill de unidades: cuántas filas se normalizaron y cuántas no.
--- Lo que quede en NULL es lo que no se pudo normalizar sin adivinar.
-select 'textile_input_lots' t,
-       count(*) total,
-       count(unit_code) normalizadas,
-       count(*) - count(unit_code) sin_normalizar
-  from textile_input_lots
-union all select 'textile_order_consumptions', count(*), count(unit_code),
-       count(*) - count(unit_code) from textile_order_consumptions
-union all select 'textile_output_lots', count(*), count(unit_code),
-       count(*) - count(unit_code) from textile_output_lots
-union all select 'textile_production_orders', count(*), count(unit_code),
-       count(*) - count(unit_code) from textile_production_orders;
+### NO verificado contra Staging
 
--- Las variantes de texto que NO se normalizaron. Es la lista de trabajo.
-select unit, count(*) from textile_input_lots
- where unit_code is null and unit is not null group by 1 order by 2 desc;
+**Las cinco suites de comportamiento contra base.** Necesitan las claves de
+Staging, que no están en el repositorio y que no busqué. Corren verdes contra
+Local —18 · 8 · 15 · 20 · 17— sobre un esquema que el volcado confirma idéntico
+al de Staging.
 
--- Que ningún cálculo histórico se tocó: todos deben ser v1 y 'calculated'.
-select methodology_version, result_state, count(*)
-  from recycled_content_calculations group by 1, 2;
+Dicho con precisión: **el esquema de Staging está verificado; su comportamiento
+está verificado en un entorno con el mismo esquema.** No es lo mismo, y por eso
+lo digo en vez de sumarlo a la cuenta.
 
--- Que ninguna asociación legacy fingió confirmación.
-select count(*) filter (where confirmed_at is null) as legacy,
-       count(*) filter (where confirmed_at is not null) as confirmadas
-  from evidence_links;
-```
-
-**Lo que estas consultas tienen que decir:** `methodology_version` todo `1` y
-`result_state` todo `calculated` (nada se recalculó), y `confirmadas = 0` justo
-después de aplicar (nadie ha confirmado todavía).
-
----
-
-## 3 · Preview
-
-Solo si hace falta para la validación visual y **con el mecanismo guardado por
-`deploy-safety`**.
+Para cerrar esa brecha haría falta ejecutar, con las claves de Staging en el
+entorno:
 
 ```bash
-# NUNCA --prod=false. Es una bandera booleana: el `=false` no la apaga.
-npx vercel --target=preview --yes
-
-# Confirmar el SHA que sirve la vista previa antes de validar nada.
-npx vercel inspect <URL_DEL_PREVIEW> | grep -i 'commit\|sha'
+npm run test:pcr-textiles-01-rls
+npm run test:pcr-textiles-scale-rls    # crea 1 200 filas en su propia empresa QA
+npm run test:pcr-textiles-03b-rls
+npm run test:pcr-textiles-02a-rls
+npm run test:pcr-textiles-02b-rls
 ```
 
-Los alias de Production **no se tocan**.
+---
+
+## 2 · Fixtures · lo que hay que preparar
+
+Todo en **una sola empresa QA** identificable. Créela primero:
+
+**Empresa:** `QA PT · <su nombre> · 2026-08` — el prefijo `QA PT` es lo que
+permite encontrarlo todo después.
+
+Con **Textiles y PCR** activos, salvo el fixture 7, que necesita una empresa
+aparte **solo con Textiles**.
+
+| # | Fixture | Para | Cómo |
+|---|---|---|---|
+| F1 | Evidencia `QA PT vigente` · vence dentro de un año · **Aceptada** | P1, P2, P3 | Evidencias → Nueva |
+| F2 | Evidencia `QA PT obsoleta` · venció hace un año · **Aceptada** | P1, P2 | idem |
+| F3 | Evidencia `QA PT pendiente` · sin fecha · **Pendiente** | P2 | idem, sin aceptar |
+| F4 | Lote de entrada `QA-PT-LE-VIEJO` · recibido **hace dos años** · 100 kg · material postconsumo | P2, P3 | Trazabilidad → Lotes de entrada |
+| F5 | Lote `QA-PT-LE-PARCIAL` · 100 kg · con **40 kg consumidos** en una orden | P5 | Lote + orden + consumo |
+| F6 | Lote `QA-PT-LE-CALC` · 100 kg · **fracción reciclada 60 %** con procedencia · material postconsumo **con soporte aceptado** | P4 | El campo de fracción está en el lote |
+| F7 | Lote `QA-PT-LE-SINFRAC` · 100 kg · **sin fracción** · mismo material con soporte | P4 | idem |
+| F8 | Dos órdenes, cada una con **un solo** lote de salida: `QA-PT-LS-CALC` (consume F6) y `QA-PT-LS-INC` (consume F7), 100 kg producidos cada una | P4, P6 | Trazabilidad → Órdenes |
+| F9 | Empresa `QA PT Textiles` · **solo Textiles** · un usuario suyo | P7 | Plataforma → Nueva empresa |
+| F10 | En `QA PT Textiles`: **25 proveedores** `QA-PT-PROV-01` … `QA-PT-PROV-25` | P8 | Catálogos → Proveedores |
+
+> **F6 y F7 son el corazón de la prueba 4.** La única diferencia entre ellos es
+> la fracción declarada. Si los dos calculan igual, algo va mal.
 
 ---
 
-## 4 · Ocho pruebas humanas
+## 3 · Las ocho pruebas
 
-Solo lo que las pruebas automáticas **no** pueden cubrir: percepción, lenguaje
-y flujo. Todo lo demás está en la
-[matriz](./PCR_TEXTILES_PREINTEGRATION_TEST_MATRIX.md).
-
-Cada una tiene un resultado esperado literal. Si algo no coincide, es un fallo.
+Cada una dice **qué no debe ocurrir**. Eso es tan parte del resultado como lo
+que sí.
 
 ---
 
-### H1 · Vigente / obsoleta en el catálogo de evidencias
+### P1 · Vigencia: el presente y la historia
 
-**Dónde:** `/evidences`
-**Preparación:** una evidencia con «Vigente hasta» en el pasado y otra sin fecha.
+**Ruta:** `/evidences`  ·  **Fixtures:** F1, F2, F4
 
-1. La vencida dice **«Obsoleta desde AAAA-MM-DD»**.
-2. La que no tiene fecha dice **«Sin vencimiento declarado»** — no «obsoleta».
+1. En la lista, `QA PT vigente` dice **«Vigente hasta AAAA-MM-DD»**.
+2. `QA PT obsoleta` dice **«Obsoleta desde AAAA-MM-DD»**.
+3. Cree una evidencia sin fecha de vencimiento. Dice **«Sin vencimiento
+   declarado»**.
+4. Vaya a `/traceability/input-batches`, despliegue `QA-PT-LE-VIEJO` y abra
+   «Asociar evidencia».
+5. **`QA PT obsoleta` aparece en el selector**, porque estaba vigente cuando el
+   lote se recibió.
 
-> Lo que se valida es que «sin fecha» y «vencida» **no se confundan**. Son el
-> caso mayoritario y el caso de riesgo.
+**No debe ocurrir:** que «sin vencimiento» se muestre como obsoleta. Ni que una
+evidencia desaparezca del lote antiguo por estar vencida hoy.
 
----
-
-### H2 · El selector solo ofrece lo asociable
-
-**Dónde:** `/evidences` → «Asociar evidencia»
-**Preparación:** una evidencia aceptada, una pendiente y una vencida hace años.
-Un lote de entrada recibido hace más de un año.
-
-1. Con destino **Proveedor**: la pendiente **no aparece**.
-2. Cambiar a **Lote de entrada** y elegir el lote antiguo.
-3. La evidencia vencida **sí aparece** si estaba vigente cuando llegó el lote.
-4. Debajo del selector se lee cuántas se descartaron y contra qué fecha.
-
-> Es la prueba de PT-F02/F03 vista por una persona: una evidencia obsoleta hoy
-> puede seguir amparando una operación de cuando estaba vigente.
+**Limpieza:** ninguna.
 
 ---
 
-### H3 · Confirmar y cancelar
+### P2 · El selector solo ofrece lo asociable
 
-**Dónde:** el mismo formulario.
+**Ruta:** `/traceability/input-batches` → `QA-PT-LE-VIEJO`  ·  **Fixtures:** F1, F2, F3, F4
 
-1. Elegir evidencia y destino, pulsar **«Asociar evidencia»**.
-2. Aparece un diálogo que dice **qué** se va a asociar, **a qué**, y contra qué
-   fecha se juzgó.
-3. Pulsar **Cancelar**. Recargar la página: **no debe haber ninguna asociación
-   nueva**.
-4. Repetir y pulsar **Confirmar**. Ahora sí queda registrada.
+1. Abra el selector de evidencia del lote.
+2. **`QA PT pendiente` NO aparece.**
+3. `QA PT vigente` y `QA PT obsoleta` **sí** aparecen.
+4. Bajo el selector se lee contra qué fecha se está juzgando y cuántas se
+   descartaron.
 
-> Cancelar tiene que escribir **cero**. Es PT-F05 y no se puede probar mirando
-> la base: hay que pulsar el botón.
+**No debe ocurrir:** que aparezca una evidencia pendiente o rechazada. Ni que
+el texto hable de «hoy» cuando el destino tiene fecha propia.
 
----
-
-### H4 · Cálculo v2 y el incompleto
-
-**Dónde:** `/recycled-content`
-**Preparación:** un lote de salida cuya orden consuma un material elegible con
-soporte, **sin** fracción reciclada declarada.
-
-1. Calcular. El resultado es **`incomplete`** con el motivo «fracción no
-   declarada».
-2. **No aparece ningún porcentaje.** Ni 0, ni 100, ni el del cálculo anterior.
-3. Declarar la fracción en el lote de entrada (p. ej. 60) con su procedencia.
-4. Volver a calcular. Ahora sale **60 %**.
-5. El cálculo incompleto **sigue en el histórico**: no se borró.
-
-> Es la decisión PT-H02 vista de frente. Si el paso 1 devuelve un número, el
-> sprint falló en lo principal.
+**Limpieza:** ninguna.
 
 ---
 
-### H5 · Saldo trazado de materia prima
+### P3 · Cancelar escribe cero; confirmar escribe uno
 
-**Dónde:** `/traceability/input-batches#inventario` y
-`/textiles/traceability/inventory`
+**Ruta:** la misma  ·  **Fixtures:** F1, F4
 
-1. En PCR se lee **«Saldo trazado»**, no «Inventario», y debajo dice que **no
-   contempla mermas, devoluciones ni ajustes**.
-2. En Textiles, un material recibido en dos unidades distintas aparece en **dos
+1. Elija `QA PT vigente` y pulse **«Asociar evidencia»**.
+2. Aparece un diálogo que dice qué, a qué, contra qué fecha, y que **la
+   asociación queda como hecho histórico y no se elimina**.
+3. Pulse **Cancelar**. **Recargue la página.** No hay ninguna asociación nueva.
+4. Repita y pulse **Confirmar**. Ahora sí queda **una**.
+5. Repita el mismo par evidencia+lote y confirme otra vez. **Sigue habiendo
+   una**, no dos.
+
+**No debe ocurrir:** que cancelar deje rastro. Que confirmar dos veces
+duplique. Que exista un botón de eliminar la asociación.
+
+**Limpieza:** la asociación se conserva por diseño. Queda en la empresa QA.
+
+---
+
+### P4 · Contenido reciclado v2
+
+**Ruta:** `/recycled-content/output-batches/<id>`  ·  **Fixtures:** F6, F7, F8
+
+**Caso calculable — `QA-PT-LS-CALC`:**
+
+1. Pulse **«Calcular con metodología v2»**.
+2. Resultado **60 %**. La comprobación aritmética: 100 kg consumidos × 0,60 =
+   60 kg reciclados sobre 100 kg → 60 %.
+3. La ficha dice **«metodología v2»**.
+
+**Caso incompleto — `QA-PT-LS-INC`:**
+
+4. Pulse **«Calcular con metodología v2»**.
+5. Sale **«No es posible calcular todavía el contenido reciclado»**, con el
+   **código del lote** `QA-PT-LE-SINFRAC` y qué hay que hacer.
+6. **No aparece ningún porcentaje.**
+7. Declare 45 % en `QA-PT-LE-SINFRAC` y vuelva a calcular: sale **45 %**.
+8. El intento incompleto **sigue en el histórico**.
+
+**No debe ocurrir:** un 0 % en el paso 5. Que se presente como error técnico.
+Que pida registrar composición manual. Que el cálculo incompleto desaparezca.
+
+**Limpieza:** ninguna. Los cálculos son inmutables por diseño.
+
+---
+
+### P5 · Saldo trazado de materia prima
+
+**Ruta:** `/traceability/input-batches#inventario` y
+`/textiles/traceability/inventory`  ·  **Fixture:** F5
+
+1. En PCR, busque el material de `QA-PT-LE-PARCIAL`.
+2. **Recibido 100 · Consumido 40 · Disponible 60.** La resta cuadra.
+3. El encabezado dice **«Saldo trazado»**, no «Inventario», y debajo que **no
+   contempla mermas, devoluciones ni ajustes por recuento**.
+4. Las cantidades llevan **kg** visible.
+5. En Textiles, si tiene un material recibido en dos unidades, aparece en **dos
    filas**, no sumado.
-3. Buscar un material por nombre: la búsqueda encuentra también los que no
-   están en la primera página.
 
-> La 2 es la que importa: sumar 300 kg con 40 m daría 340 de nada.
+**No debe ocurrir:** que se llame «inventario» a secas. Que falte el alcance.
+Que dos unidades distintas se sumen.
 
----
-
-### H6 · Salida de producto y corrección
-
-**Dónde:** `/traceability/output-batches` → desplegar un lote
-
-1. Antes de registrar nada se lee **«Sin salidas registradas — quedan X kg
-   según lo producido»**, no «Disponible: X».
-2. Registrar un despacho de la mitad. Ahora sí dice **«Disponible»** con la
-   mitad.
-3. Intentar despachar más de lo que queda: se rechaza diciendo cuánto hay.
-4. **Corregir** ese despacho a una cantidad menor, con motivo.
-5. El saldo se ajusta, y desplegando «movimientos corregidos» **el original
-   sigue ahí** con su cantidad y su motivo de corrección.
-6. **No existe ningún botón de eliminar.**
-
-> El paso 1 es toda la diferencia entre medir y suponer.
+**Limpieza:** ninguna.
 
 ---
 
-### H7 · Navegación entre módulos
+### P6 · Salida de producto y corrección
 
-**Preparación:** una empresa **solo con Textiles**.
+**Ruta:** `/traceability/output-batches` → desplegar `QA-PT-LS-CALC`  ·  **Fixture:** F8
 
-1. Entrar y abrir **Centro de soporte** desde el menú.
-2. Pulsar **«Nuevo ticket»**.
-3. El menú lateral sigue siendo el de **Textiles** en todo momento.
-4. Filtrar los tickets con el formulario de arriba: **sigue siendo Textiles**.
-5. Crear un ticket: al abrirse el ticket recién creado, **sigue siendo
+1. Antes de registrar nada se lee **«Sin salidas registradas — quedan 100 kg
+   según lo producido»**.
+2. Registre un **despacho de 40 kg**, referencia `QA-PT-REM-001`.
+3. Ahora dice **«Disponible: 60 kg»**.
+4. Intente despachar **80 kg**: se rechaza diciendo cuánto queda.
+5. **Corrija** el despacho de 40 a **30**, motivo `QA · se pesó mal`.
+6. El saldo pasa a **70 kg**.
+7. Despliegue «movimientos corregidos»: **el original de 40 sigue ahí**, con su
+   motivo de corrección.
+8. **No existe ningún botón de eliminar.**
+
+**No debe ocurrir:** que el paso 1 diga «Disponible: 100 kg» sin más. Que
+corregir borre el original. Que exista borrado.
+
+**Limpieza:** los movimientos son historial y no se borran. Quedan en la
+empresa QA.
+
+---
+
+### P7 · Navegación con Textiles solo
+
+**Fixture:** F9 (empresa `QA PT Textiles`, sin PCR)  ·  **Entre con su usuario**
+
+1. `/textiles` → el menú lateral dice **Trazaloop Textiles**.
+2. **Centro de soporte** desde el menú → sigue siendo Textiles.
+3. **«Nuevo ticket»** → **sigue siendo Textiles**.
+4. Cree el ticket. Al abrirse el recién creado → **sigue siendo Textiles**.
+5. Vuelva a `/support` y **filtre** con el formulario → **sigue siendo
    Textiles**.
+6. **Datos de empresa** → sigue siendo Textiles. Vuelva.
+7. `/textiles/trazadocs` y `/textiles/evidences` → Textiles.
+8. **En móvil** (o ventana estrecha): abra el menú desde el encabezado y repita
+   los pasos 2 y 3.
 
-> El paso 2 es la cadena reproducida en Fase 1. Los pasos 4 y 5 son los dos que
-> el Design Freeze no había visto.
+**No debe ocurrir:** que en ningún momento aparezca el menú de PCR —Dashboard,
+Catálogos, Evidencias, Trazabilidad, Contenido reciclado— ni el distintivo
+«NTC 6632 · UNE-EN 15343».
 
----
-
-### H8 · Paginación y búsqueda en Textiles
-
-**Dónde:** `/textiles/catalogs/suppliers`
-
-1. La lista muestra **«Mostrando 1–20 de N»** con el **total real**.
-2. Buscar un proveedor que esté al final del alfabeto: **aparece**.
-3. Pasar a la última página con «Siguiente»: no se repiten ni faltan filas.
-
-> Con menos de veinte proveedores esta prueba no demuestra nada. Hace falta una
-> empresa con volumen; si no la hay en Staging, se cubre con
-> `test:pcr-textiles-scale-rls`, que crea 1 200 filas reales.
+**Limpieza:** el ticket queda; márquelo con `QA PT` en el asunto.
 
 ---
 
-## 5 · Qué NO hace falta probar a mano
+### P8 · Paginación y búsqueda
 
-Cubierto por completo por SQL o pruebas automáticas:
+**Ruta:** `/textiles/catalogs/suppliers` en `QA PT Textiles`  ·  **Fixture:** F10
 
-- la carrera de concurrencia en Textiles y en despachos;
-- el corte de las mil filas de PostgREST;
-- que un `incomplete` no pueda llevar número (lo impide un `CHECK`);
-- que un movimiento no se pueda borrar;
-- que v1 siga calculando igual;
-- el aislamiento entre empresas;
-- que las filas legacy no finjan confirmación.
+1. La lista muestra **«Mostrando 1–20 de 25»** — el total real, no el de la
+   página.
+2. Busque `QA-PT-PROV-23`, que está en la segunda página. **Aparece.**
+3. Borre la búsqueda, pulse **Siguiente**: salen los cinco restantes, **sin
+   repetir** ninguno de la primera.
+4. Repita en `/textiles/traceability/input-lots` y `/textiles/evidences`.
+
+**No debe ocurrir:** que la búsqueda solo mire la página visible. Que el total
+sea 20. Que una fila salga en dos páginas.
+
+> Las 1 200 filas ya las demostró `test:pcr-textiles-scale-rls` contra base
+> real. Aquí solo se valida la experiencia.
+
+**Limpieza:** los 25 proveedores quedan en la empresa QA.
 
 ---
 
-## 6 · Registro de la validación
+## 4 · Limpieza global
+
+Nada es urgente y nada rompe otros datos: todo vive en las dos empresas QA.
+
+Cuando ya no haga falta, y **solo con superadministrador**:
+
+1. `QA PT Textiles` y `QA PT · …` se pueden desactivar desde
+   `/platform/organizations`.
+2. **No borre** movimientos, asociaciones ni cálculos: son historial por diseño
+   y la base lo impide. Desactivar la empresa es la vía.
+
+---
+
+## 5 · Diferidos aceptados · no bloquean
+
+Están documentados como **by design** y no son hallazgos de la validación:
+
+- **v1 conserva su comportamiento histórico.** Sigue activa y calculable.
+- **Orden con varios lotes de salida → `CALCULATION_INCOMPLETE`.** Sin
+  atribución de consumos a lotes de salida, repartir sería inventarlo.
+- **Las trece raíces de PCR permanecen.** El fallo reproducido no estaba ahí.
+- **No hay conversión automática de unidades.** Dos unidades distintas son no
+  comparables, y esa es la respuesta completa.
+- **El inventario refleja solo los movimientos modelados.** Lo que no existe
+  como hecho registrable no se estima.
+
+---
+
+## 6 · Registro
 
 | # | Prueba | Resultado | Notas |
 |---|---|---|---|
-| H1 | Vigente / obsoleta | | |
-| H2 | Selector de evidencia elegible | | |
-| H3 | Confirmar y cancelar | | |
-| H4 | Cálculo v2 e incompleto | | |
-| H5 | Saldo de materia prima | | |
-| H6 | Salida de producto y corrección | | |
-| H7 | Navegación entre módulos | | |
-| H8 | Paginación y búsqueda | | |
+| 0 | Precondición: Preview → `qchzkxbnbqeyuxinipln` | | |
+| P1 | Vigencia | | |
+| P2 | Selector elegible | | |
+| P3 | Cancelar = 0 · Confirmar = 1 | | |
+| P4 | v2 calculable e incompleto | | |
+| P5 | Saldo de materia prima | | |
+| P6 | Salida y corrección | | |
+| P7 | Navegación Textiles-only | | |
+| P8 | Paginación y búsqueda | | |
 
-**Migraciones aplicadas en Staging:** ☐ `0142` ☐ `0143` ☐ `0144` ☐ `0145` ☐ `0146`
-**Cabecera de Staging tras aplicar:** ______
-**Production:** sin tocar ☐
+**Staging:** `0146` ☐  ·  **Production:** `dpl_G7ShrFNuxpojx4wYnVQpj2dCirHp`, sin tocar ☐
