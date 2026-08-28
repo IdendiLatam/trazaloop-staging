@@ -187,6 +187,16 @@ uno en `supabase_migrations.schema_migrations`.
 **Resultado verificado:** cabecera `0146`, 138 migraciones, **0 fallos**, y
 `test:all` en verde después.
 
+## El post-check se ejecuta antes
+
+La validación post-migración de este sprint se corrió primero contra la base
+local ya en `0146`, y ahí encontró que tres vistas habían perdido su
+`security_invoker` al recrearse. `db push` habría dado verde igual.
+
+La regla que salió de eso está en
+[POST_CHECK_AS_PREFLIGHT](../../releases/POST_CHECK_AS_PREFLIGHT.md), y el
+guion en [qa/POST_MIGRATION_CHECKS.sql](./qa/POST_MIGRATION_CHECKS.sql).
+
 ## Listas blancas
 
 Cada migración nueva debe autorizarse en 17 suites que comprueban que no ha
