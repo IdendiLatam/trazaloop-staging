@@ -17,6 +17,11 @@ import {
   EXCLUSION_LABEL,
   WARNING_LABEL,
 } from "@/lib/db/recycled";
+import {
+  explainReasons,
+  INCOMPLETE_TITLE,
+  INCOMPLETE_LEAD,
+} from "@/lib/domain/recycled-incomplete";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
@@ -93,7 +98,7 @@ export default async function CalculationDetailPage({
             outputBatchId={batch.id}
             hasCalculation={Boolean(latest)}
             disabled={composition.length === 0}
-            disabledReason="Sin composición registrada no se puede calcular."
+            disabledReason="La metodología v1 necesita composición registrada."
           />
         </div>
       </header>
@@ -172,10 +177,51 @@ export default async function CalculationDetailPage({
         )}
       </section>
 
-      {latest ? (
+      {/* PT-02A · Un cálculo INCOMPLETO no es un cálculo con ceros: es la
+          respuesta correcta cuando falta un dato determinante, y se presenta
+          como tal. Nunca sale un porcentaje, y nunca se pide otra vez la
+          composición: v2 la deduce de los consumos. */}
+      {latest && latest.result_state === "incomplete" ? (
+        <section className="rounded-lg border border-amber/40 bg-amber/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">{INCOMPLETE_TITLE}</h2>
+            <span className="rounded-full border border-amber/40 bg-surface px-2 py-0.5 text-[11px] font-medium text-amber">
+              Metodología v{latest.methodology_version} · sin resultado
+            </span>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm text-ink-soft">{INCOMPLETE_LEAD}</p>
+
+          <ul className="mt-4 space-y-3">
+            {explainReasons(latest.incomplete_reasons).map((r) => (
+              <li key={r.code} className="rounded-md border border-hairline bg-surface p-3">
+                <p className="text-sm font-medium">{r.what}</p>
+                {r.batchCodes.length > 0 ? (
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {r.batchCodes.length === 1 ? "Lote: " : "Lotes: "}
+                    <span className="code">{r.batchCodes.join(", ")}</span>
+                  </p>
+                ) : null}
+                <p className="mt-1 text-xs text-ink-soft">{r.fix}</p>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-4 text-xs text-ink-soft">
+            Intentado el {new Date(latest.calculated_at).toLocaleString("es-CO")}. Este
+            intento queda en el histórico: es la constancia de qué faltaba y cuándo.
+          </p>
+        </section>
+      ) : null}
+
+      {latest && latest.result_state === "calculated" ? (
         <section className="rounded-lg border border-loop/30 bg-surface p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">Último cálculo</h2>
+            <h2 className="text-sm font-semibold">
+              Último cálculo
+              <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
+                metodología v{latest.methodology_version}
+              </span>
+            </h2>
             <DefensibilityBadge level={latest.defensibility_level} />
           </div>
           {latest.defensibility_level === "preliminary" ? (
@@ -192,18 +238,18 @@ export default async function CalculationDetailPage({
 
           <dl className="mt-4 grid grid-cols-2 gap-4 text-center sm:grid-cols-5">
             <div>
-              <dd className="code text-xl font-semibold">{latest.total_mass_kg.toFixed(2)}</dd>
+              <dd className="code text-xl font-semibold">{(latest.total_mass_kg ?? 0).toFixed(2)}</dd>
               <dt className="text-xs text-ink-soft">Masa total kg</dt>
             </div>
             <div>
               <dd className="code text-xl font-semibold text-loop-deep">
-                {latest.recycled_mass_kg.toFixed(2)}
+                {(latest.recycled_mass_kg ?? 0).toFixed(2)}
               </dd>
               <dt className="text-xs text-ink-soft">Masa reciclada kg</dt>
             </div>
             <div>
               <dd className="code text-xl font-semibold text-loop-deep">
-                {latest.recycled_percent.toFixed(2)}%
+                {(latest.recycled_percent ?? 0).toFixed(2)}%
               </dd>
               <dt className="text-xs text-ink-soft">Calculado</dt>
             </div>
@@ -247,7 +293,7 @@ export default async function CalculationDetailPage({
                   {excludedMass.toFixed(2)} kg de material elegible no cuentan
                   como contenido reciclado porque su evidencia soporte falta o
                   no está validada. Esa masa NO se descarta: sigue sumando en
-                  la masa total del lote ({latest.total_mass_kg.toFixed(2)} kg,
+                  la masa total del lote ({(latest.total_mass_kg ?? 0).toFixed(2)} kg,
                   el denominador), por eso reduce el porcentaje en lugar de
                   desaparecer del balance. El detalle por material está en la
                   tabla: columna «¿Cuenta?» y su razón de exclusión. Al
@@ -333,8 +379,17 @@ export default async function CalculationDetailPage({
                 <span className="text-xs text-ink-soft">
                   {new Date(c.calculated_at).toLocaleString("es-CO")}
                 </span>
-                <span className="code">{c.recycled_percent.toFixed(2)}%</span>
-                <DefensibilityBadge level={c.defensibility_level} />
+                <span className="code">
+                  {c.recycled_percent === null
+                    ? "incompleto"
+                    : `${c.recycled_percent.toFixed(2)}%`}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-ink-soft">
+                  metodología v{c.methodology_version}
+                </span>
+                {c.recycled_percent === null ? null : (
+                  <DefensibilityBadge level={c.defensibility_level} />
+                )}
               </li>
             ))}
           </ul>

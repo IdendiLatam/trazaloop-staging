@@ -172,6 +172,36 @@ async function main() {
     assert(rows.length === 0, `el recorrido cruzó el inquilino: devolvió ${rows.length} filas`);
   });
 
+  await check("C2. NINGUNA vista de saldo o inventario cruza el inquilino", async () => {
+    // Esta comprobación existe porque la fuga ocurrió. Tres vistas de este
+    // sprint perdieron su `security_invoker` al recrearse —`create or replace`
+    // sin la cláusula RESTABLECE las opciones— y pasaron a ejecutarse con los
+    // permisos de su propietario, que tiene `bypassrls`.
+    //
+    // Leer el SQL lo detecta antes; esto lo detecta aunque el SQL cambie de
+    // forma. Una empresa recién creada no puede ver NADA de las demás.
+    const otro = `pt01scale-c-${stamp}@test.trazaloop.dev`;
+    const { data: u3 } = await admin.auth.admin.createUser({
+      email: otro, password, email_confirm: true, user_metadata: { full_name: "QA c" },
+    });
+    assert(u3.user, "tercer usuario");
+    const c3 = createClient(URL!, ANON!, { auth: { autoRefreshToken: false, persistSession: false } });
+    assert(!(await c3.auth.signInWithPassword({ email: otro, password })).error, "login c");
+    // Con su propia empresa vacía: si viera algo, sería de otra.
+    assert(!(await c3.rpc("create_organization", { p_name: `PT01 vacía ${stamp}` })).error, "empresa");
+
+    const VISTAS = [
+      "v_textile_input_lot_balance", "v_textile_material_inventory",
+      "v_latest_batch_recycled", "v_output_batch_stock",
+      "v_material_inventory", "v_input_batch_inventory",
+    ];
+    for (const v of VISTAS) {
+      const { data } = await c3.from(v).select("*").limit(5);
+      assert((data ?? []).length === 0,
+        `${v} devolvió ${(data ?? []).length} filas a una empresa vacía: fuga entre inquilinos`);
+    }
+  });
+
   console.log(`\n  ${passed} correctas, ${failed} fallidas\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

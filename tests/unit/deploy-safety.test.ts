@@ -53,6 +53,10 @@ const RELATOS_DEL_INCIDENTE = [
   "docs/quality/quality-12-2/QUALITY_12_2D_LIVE_VALIDATION.md",
   "docs/releases/VERCEL_DEPLOY_SAFETY.md",
   "tests/unit/deploy-safety.test.ts",
+  // Un guion de validación humana que dice «nunca escribas esto» tiene que
+  // poder escribirlo. Es la misma razón que las tres líneas de arriba: pedirle
+  // a alguien que no use una bandera sin nombrarla no funciona.
+  "docs/pcr-textiles/pre-integration/PCR_TEXTILES_PREINTEGRATION_LIVE_VALIDATION.md",
 ];
 
 const IGNORAR = new Set([

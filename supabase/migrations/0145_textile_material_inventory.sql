@@ -27,7 +27,11 @@
 -- que resuelve.
 -- ============================================================================
 
-create or replace view public.v_textile_material_inventory as
+-- `security_invoker = true`: sin ella la vista correria con los permisos de su
+-- propietario, que tiene `bypassrls`, y agregaria los lotes de TODAS las
+-- empresas. La vista de la que se alimenta lo lleva por la misma razon.
+create or replace view public.v_textile_material_inventory
+with (security_invoker = true) as
 with lotes as (
   select
     b.organization_id,

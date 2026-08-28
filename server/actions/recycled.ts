@@ -82,6 +82,54 @@ export async function calculateRecycledContentAction(
   return { error: null };
 }
 
+/**
+ * PT-02A · Calcular con la metodología v2.
+ *
+ * Convive con la de arriba a propósito. v1 no se retira todavía: hasta que las
+ * empresas declaren la fracción reciclada de sus lotes, v2 devolverá
+ * `incomplete` a menudo, y quitarles el cálculo que tienen antes de darles el
+ * que va a sustituirlo sería dejarlos sin ninguno.
+ *
+ * Un `incomplete` NO es un error: la RPC devuelve una fila con su estado y sus
+ * motivos, y la pantalla los explica. Por eso aquí solo se traduce el fallo de
+ * verdad —el que impide siquiera intentarlo—, y todo lo demás vuelve sin error.
+ */
+export async function calculateRecycledContentV2Action(
+  outputBatchId: string
+): Promise<{ error: string | null }> {
+  const org = await requireActiveOrg();
+  const mutateCheck = await checkCprCanMutate();
+  if (!mutateCheck.allowed) return { error: mutateCheck.error };
+
+  const supabase = await createServerClient();
+  const { data: batch } = await supabase
+    .from("output_batches")
+    .select("id")
+    .eq("id", outputBatchId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  if (!batch) {
+    return { error: "El lote producido / lote final no pertenece a tu empresa activa." };
+  }
+
+  const { error } = await supabase.rpc("calculate_recycled_content_v2", {
+    p_output_batch_id: outputBatchId,
+  });
+  if (error) {
+    const known = KNOWN_RPC_MESSAGES.find((m) => error.message?.includes(m));
+    return {
+      error: known
+        ? normalizeVisibleText(error.message)
+        : "No fue posible ejecutar el cálculo. Revisa los consumos de la orden.",
+    };
+  }
+
+  revalidatePath("/recycled-content");
+  revalidatePath("/recycled-content/output-batches");
+  revalidatePath(`/recycled-content/output-batches/${outputBatchId}`);
+  return { error: null };
+}
+
 export async function getLatestCalculationForOutputBatchAction(outputBatchId: string) {
   const org = await requireActiveOrg();
   const all = await listCalculationsForBatch(org.organizationId, outputBatchId);

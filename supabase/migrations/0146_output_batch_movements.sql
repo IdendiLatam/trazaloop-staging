@@ -387,7 +387,12 @@ comment on function public.correct_output_batch_movement(uuid, numeric, text, ti
 -- cambia es que deja de llamarse disponible.
 -- ============================================================================
 
-create or replace view public.v_output_batch_stock as
+-- `security_invoker = true` en la propia creacion, no en un `alter` aparte:
+-- `create or replace view` sin la clausula RESTABLECE las opciones, asi que un
+-- alter posterior funciona pero deja la proteccion a un `replace` de distancia.
+-- Tres vistas de este sprint perdieron la suya justamente asi.
+create or replace view public.v_output_batch_stock
+with (security_invoker = true) as
 select
   ob.organization_id,
   ob.id                    as output_batch_id,
@@ -437,8 +442,6 @@ left join lateral (
 left join lateral (
   select count(*) movimientos from public.output_batch_movements
    where organization_id = ob.organization_id and output_batch_id = ob.id and is_current) m on true;
-
-alter view public.v_output_batch_stock set (security_invoker = true);
 
 revoke all on public.v_output_batch_stock from public, anon;
 grant select on public.v_output_batch_stock to authenticated;

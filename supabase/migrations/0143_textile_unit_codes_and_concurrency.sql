@@ -255,7 +255,23 @@ comment on function public.guard_textile_lot_overconsumption() is
 -- depende de ella —comprobado en pg_depend—, así que no arrastra a nadie.
 drop view if exists public.v_textile_input_lot_balance;
 
-create view public.v_textile_input_lot_balance as
+--
+-- `security_invoker = true` NO ES OPCIONAL, y esta linea se perdio una vez.
+--
+-- La primera version de esta migracion recreo la vista sin la clausula `with`,
+-- creyendo que `create or replace` conservaba las opciones. No las conserva:
+-- las RESTABLECE. Sin `security_invoker`, la vista se ejecuta con los permisos
+-- de su propietario —`postgres`, que tiene `bypassrls`— y la RLS de las tablas
+-- base deja de aplicarse.
+--
+-- El efecto, comprobado antes de arreglarlo: una empresa recien creada, con
+-- cero lotes propios, veia los lotes de TODAS las demas. Una fuga entre
+-- inquilinos, en silencio, a traves de una vista de saldo.
+--
+-- Lo encontro el guion de validacion post-migracion (§4) contra la base local,
+-- ANTES de aplicar nada en Staging.
+create view public.v_textile_input_lot_balance
+with (security_invoker = true) as
 with u as (
   select il.*,
          coalesce(il.unit_code, lower(btrim(coalesce(il.unit, '')))) as ukey

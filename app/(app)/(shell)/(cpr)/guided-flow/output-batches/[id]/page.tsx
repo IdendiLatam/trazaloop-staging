@@ -243,7 +243,14 @@ export default async function GuidedBatchDetailPage({
               {latest ? (
                 <p className="flex flex-wrap items-center gap-2 text-sm">
                   Último cálculo:{" "}
-                  <span className="code">{latest.recycled_percent.toFixed(2)}%</span>
+                  {/* PT-02A · Un cálculo incompleto no tiene porcentaje. Poner
+                      «0,00 %» aquí afirmaría que no hay contenido reciclado, y
+                      lo que pasa es que no se sabe. */}
+                  <span className="code">
+                    {latest.recycled_percent === null
+                      ? "sin calcular"
+                      : `${latest.recycled_percent.toFixed(2)}%`}
+                  </span>
                   <DefensibilityBadge level={latest.defensibility_level} />
                   <RiskBadge risk={latest.risk_flag} />
                   <span className="text-xs text-ink-soft">

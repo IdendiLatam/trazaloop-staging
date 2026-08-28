@@ -140,7 +140,7 @@ export function LinkEvidenceInline({
       <ConfirmDialog
         open={confirming}
         title="Confirmar la asociación"
-        description={`Vas a asociar «${elegida?.label ?? ""}» a este destino. Se registrará que estaba aceptada internamente y vigente el ${fecha}, y ese registro no cambiará después aunque la evidencia sí lo haga.`}
+        description={`Vas a asociar «${elegida?.label ?? ""}» a este destino. Se registrará que estaba aceptada internamente y vigente el ${fecha}, y ese registro no cambiará después aunque la evidencia sí lo haga. Una vez confirmada, la asociación queda como hecho histórico: no se elimina.`}
         confirmLabel="Confirmar asociación"
         cancelLabel="Cancelar"
         pending={pending}

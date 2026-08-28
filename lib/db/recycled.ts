@@ -59,9 +59,16 @@ export type Calculation = {
   id: string;
   output_batch_id: string;
   methodology_id: string;
-  total_mass_kg: number;
-  recycled_mass_kg: number;
-  recycled_percent: number;
+  /**
+   * PT-02A · `calculated` o `incomplete`. Las tres masas son NULL cuando es
+   * incompleto, y eso NO es un hueco a rellenar con cero: es la respuesta.
+   */
+  result_state: "calculated" | "incomplete";
+  incomplete_reasons: string[];
+  methodology_version: number;
+  total_mass_kg: number | null;
+  recycled_mass_kg: number | null;
+  recycled_percent: number | null;
   declared_percent: number | null;
   risk_flag: boolean;
   defensibility_level: DefensibilityLevel;
@@ -98,9 +105,14 @@ function mapCalculation(r: Record<string, unknown>): Calculation {
     id: r.id as string,
     output_batch_id: r.output_batch_id as string,
     methodology_id: r.methodology_id as string,
-    total_mass_kg: num(r.total_mass_kg),
-    recycled_mass_kg: num(r.recycled_mass_kg),
-    recycled_percent: num(r.recycled_percent),
+    result_state: (r.result_state as "calculated" | "incomplete") ?? "calculated",
+    incomplete_reasons: (r.incomplete_reasons as string[]) ?? [],
+    methodology_version: Number(r.methodology_version ?? 1),
+    // numOrNull y no num: un cero y un «no se sabe» no pueden colapsar en el
+    // mismo valor justo aquí, que es donde empieza a leerse el dato.
+    total_mass_kg: numOrNull(r.total_mass_kg),
+    recycled_mass_kg: numOrNull(r.recycled_mass_kg),
+    recycled_percent: numOrNull(r.recycled_percent),
     declared_percent: numOrNull(r.declared_percent),
     risk_flag: Boolean(r.risk_flag),
     defensibility_level: r.defensibility_level as DefensibilityLevel,

@@ -548,7 +548,12 @@ comment on function public.calculate_recycled_content_v2(uuid, uuid) is
 --
 -- `replace` obliga a conservar las columnas anteriores en su orden exacto y
 -- solo permite AÑADIR al final. Es justo la restricción que hace falta.
-create or replace view public.v_latest_batch_recycled as
+-- La clausula `with` se REPITE aqui aunque 0029 ya la pusiera: `create or
+-- replace view` sin ella no conserva las opciones, las restablece. Omitirla
+-- convirtio esta vista en una fuga entre inquilinos hasta que el guion de
+-- validacion post-migracion lo detecto.
+create or replace view public.v_latest_batch_recycled
+with (security_invoker = true) as
 select distinct on (c.output_batch_id)
   c.organization_id,
   c.id                     as calculation_id,

@@ -23,7 +23,8 @@ export type DossierBundle = {
   gaps: SupportGapRow[];
   history: {
     id: string;
-    recycled_percent: number;
+    /** PT-02A · NULL cuando el cálculo salió incompleto. No es un cero. */
+    recycled_percent: number | null;
     defensibility_level: string;
     risk_flag: boolean;
     calculated_at: string;
@@ -52,6 +53,10 @@ async function buildDossierBundle(
       components,
       evidences,
       gaps,
+      // PT-02A · El expediente enseña el HISTÓRICO de cálculos, y un cálculo
+      // incompleto forma parte de él: es la prueba de que se intentó y de qué
+      // faltaba. Se transporta con su porcentaje nulo; quien lo pinte decide
+      // cómo se dice, pero no puede recibir un cero que no existió.
       history: history.map((h) => ({
         id: h.id,
         recycled_percent: h.recycled_percent,

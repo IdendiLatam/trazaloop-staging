@@ -356,7 +356,7 @@ export function EvidenceLinkForm({
             esFechaDeOperacion
               ? `en la fecha de la operación (${referenceDate})`
               : `a día de hoy (${referenceDate})`
-          }, y ese registro no cambiará después aunque la evidencia sí lo haga.`
+          }, y ese registro no cambiará después aunque la evidencia sí lo haga. Una vez confirmada, la asociación queda como hecho histórico: no se elimina.`
         }
         confirmLabel="Confirmar asociación"
         cancelLabel="Cancelar"

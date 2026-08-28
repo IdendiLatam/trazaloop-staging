@@ -8,6 +8,7 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { explainReason, explainReasons } from "@/lib/domain/recycled-incomplete";
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -221,6 +222,74 @@ check("G1. Las dos migraciones documentan su reversión", () => {
   for (const [n, m] of [["0144", MIG], ["0145", INV]] as const) {
     assert(/REVERSI[ÓO]N/i.test(m), `${n} debía documentar su vuelta atrás`);
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// H · §0.A · Cómo se le cuenta a una persona que no se puede calcular
+// ---------------------------------------------------------------------------
+
+check("H1. El incompleto se presenta como falta de datos, no como avería", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  assert(pag.includes("INCOMPLETE_TITLE"), "debía haber un titular propio para el incompleto");
+  assert(pag.includes("explainReasons"), "y los motivos traducidos");
+  assert(/result_state === "incomplete"/.test(pag), "la pantalla debía distinguir el estado");
+  assert(!/Error al calcular|falló el cálculo/i.test(pag),
+    "un incompleto no es un fallo técnico y no se presenta como tal");
+  const dom = read("lib/domain/recycled-incomplete.ts");
+  assert(/No es un error del sistema/.test(dom), "el copy debía decirlo explícitamente");
+});
+
+check("H2. NUNCA sale un cero donde no se sabe", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  // Las cifras solo se pintan en la rama 'calculated'. Y en el histórico y en
+  // el flujo guiado, un porcentaje nulo se dice con palabras.
+  const guiado = read("app/(app)/(shell)/(cpr)/guided-flow/output-batches/[id]/page.tsx");
+  assert(/recycled_percent === null[\s\S]{0,80}sin calcular/.test(guiado),
+    "el flujo guiado debía decir «sin calcular», no 0,00 %");
+  assert(/c\.recycled_percent === null[\s\S]{0,60}incompleto/.test(pag),
+    "el histórico debía distinguir un incompleto de un cero");
+  // Y el tipo lo impone: si alguien vuelve a poner `num()`, el compilador
+  // deja de avisar y esto se pierde.
+  const db = read("lib/db/recycled.ts");
+  assert(/recycled_percent: numOrNull/.test(db),
+    "el porcentaje debía leerse como nulable: num() colapsaría «no sé» en cero");
+});
+
+check("H3. Se identifican los lotes y campos que faltan", () => {
+  const r = explainReasons(["fraction_unknown:LE-001", "fraction_unknown:LE-002", "no_applicable_support:LE-003"]);
+  const fraccion = r.find((x) => x.code === "fraction_unknown")!;
+  assert(fraccion.batchCodes.length === 2, "debía agrupar los dos lotes bajo un solo consejo");
+  assert(fraccion.batchCodes.includes("LE-001") && fraccion.batchCodes.includes("LE-002"),
+    "y nombrarlos: «falta información» sin decir dónde deja a la persona buscándola");
+  assert(r.length === 2, "dos motivos distintos, no cuatro párrafos");
+  const soporte = r.find((x) => x.code === "no_applicable_support")!;
+  assert(soporte.batchCodes[0] === "LE-003", "cada motivo con su lote");
+});
+
+check("H4. Un motivo desconocido se enseña tal cual", () => {
+  const r = explainReason("motivo_que_nadie_ha_visto:LE-9");
+  assert(r.what.includes("motivo_que_nadie_ha_visto"),
+    "inventarle una explicación escondería que apareció uno nuevo");
+});
+
+check("H5. v2 NO vuelve a pedir la composición", () => {
+  const boton = read("components/domain/recycled/calculate-button.tsx");
+  assert(boton.includes("calculateRecycledContentV2Action"), "debía existir el camino a v2");
+  // El botón de v2 se pinta también cuando v1 está deshabilitado por falta de
+  // composición: pedirla otra vez es lo que PT-F10 vino a quitar.
+  assert(/if \(disabled\)[\s\S]{0,400}\{botonV2\}/.test(boton),
+    "el botón de v2 debía seguir disponible sin composición");
+  assert(/No pide composición/.test(boton), "y decirlo");
+});
+
+check("H6. v1 sigue visible como histórico", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  assert(/metodología v\{c\.methodology_version\}/.test(pag),
+    "el histórico debía distinguir con qué metodología se calculó cada fila");
+  const acc = read("server/actions/recycled.ts");
+  assert(acc.includes("calculateRecycledContentAction"), "v1 debía seguir siendo invocable");
+  assert(acc.includes("calculateRecycledContentV2Action"), "y v2 también");
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);
