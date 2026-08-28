@@ -1,8 +1,8 @@
 # QUALITY-12.2D · Validación con el proveedor real
 
-> **Estado: las tres pruebas humanas PASARON.**
-> Faltan los números reales de consumo, que salen de una consulta de solo
-> lectura sobre Staging: `QUALITY_12_2D_CLOSING_QUERY.sql`.
+> **Estado: CERRADA.** Las tres pruebas humanas pasaron y los números reales de
+> Staging están abajo. Cinco operaciones en total: tres finales y dos de la
+> primera ronda, que se conservan porque enseñan algo.
 
 ---
 
@@ -369,48 +369,225 @@ Después hay que pulsar Guardar, como siempre.
 
 ---
 
-## F · Los números reales · pendientes de una consulta
+## F · Los números reales
 
-No tengo acceso de lectura a los datos de Staging, y no voy a buscar
-credenciales para conseguirlo. La forma limpia es una consulta de **solo
-lectura**, en `QUALITY_12_2D_CLOSING_QUERY.sql`, que devuelve una sola fila
-con un JSON y **no toca el texto de nadie**: ni la pregunta, ni los hallazgos,
-ni un dato personal. Solo metadatos, consumo y recuentos.
+Cinco operaciones `document.contextual_review` en Staging. **Tres finales** —las
+que cuentan para las métricas— y **dos de la primera ronda**, que no entran en
+los promedios pero se conservan porque cada una demuestra una cosa.
 
-| # | run id | módulo | sección | entrada | caché | salida | razona | total | ms | consultas | hechos |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | | quality | responsibilities | | | | | | | | |
-| 2 | | quality | responsibilities | | | | | | | | |
-| 3 | | cpr | responsables | | | | | | | | |
+### Los tres runs finales
 
-Y con ellos:
+| | A · Quality falta info | B · Quality conflicto | C · PCR conflicto |
+|---|---|---|---|
+| run | `67538fbd…` | `d202ef94…` | `7d5f4e26…` |
+| módulo · sección | quality · responsibilities | quality · responsibilities | **cpr** · responsables |
+| **entrada** | **1 072** | **1 092** | **1 055** |
+| caché | 0 | 0 | 0 |
+| salida | 695 | 493 | 667 |
+| razonamiento | 387 | 256 | 297 |
+| total | 1 767 | 1 585 | 1 722 |
+| latencia | 7 791 ms | 6 484 ms | 7 648 ms |
+| **consultas** | **5** | **5** | **7** |
+| contexto resuelto | `position` | `position` | `process` + `position` |
+| hallazgos | 2 | 1 | 2 |
+| tipos | `ambiguous_reference`, `guidance_gap` | **`confirmed_conflict`** | **`confirmed_conflict`**, `guidance_gap` |
+| fuentes citadas | 1 | 2 | 2 |
+| guía | section_role rev. 1 | section_role rev. 1 | **blueprint_section rev. 2** |
 
-- entrada media, mediana, mínimo y máximo;
-- el **coste fijo real** deducido, contra los 838 estimados y los 1 664 del
-  Copilot;
-- la reducción frente a los 2 514–2 886 del Copilot;
-- **consultas** por revisión, contra los 19 adaptadores del Copilot;
-- latencia, contra los 17–20 s del Context Pack global;
-- si el prefijo se sirvió desde caché a partir de la segunda revisión —en
-  12.2D es idéntico en todas, cosa que 12.2C no podía tener—;
-- y la comprobación contra la base de que los cargos y procesos citados
-  proceden del alcance estructural y de la revisión de guía canónica vigente,
-  no del conocimiento libre del modelo.
+Los tres: `openai` · `gpt-5.4-mini` · `provider_called = true` · `succeeded`.
+
+En los tres, `entrada + salida = total` exactamente. El razonamiento va dentro
+de la salida.
+
+### Promedios
+
+| | |
+|---|---|
+| Entrada | **1 073** · mediana 1 072 · mín 1 055 · máx 1 092 |
+| Salida | 618,33 |
+| Razonamiento | 313,33 |
+| Total | 1 691,33 |
+| Latencia | **7 307,67 ms ≈ 7,31 s** · de 6,48 a 7,79 |
+| Consultas | **5,67** · máximo 7 |
+| Hallazgos | 1,67 |
 
 ---
 
-## G · Un incidente de esta sesión, para que quede escrito
+## G · El consumo, comparado
 
-Al preparar el Preview ejecuté `vercel --prod=false --yes` creyendo que
-`--prod=false` significaba «no producción». El CLI lee `--prod` como bandera
-booleana: la presencia manda y el `=false` se ignora. **Desplegó a producción.**
+| | Entrada media | |
+|---|---|---|
+| Copilot global | 2 514 – 2 886 | |
+| **Revisión contextual** | **1 073** | **−57,3 %** vs 2 514 · **−62,8 %** vs 2 886 |
+| Quick Edit (12.2C) | 727 | la revisión cuesta **+47,6 %** |
 
-`trazaloop.com` pasó a servir el commit `65cfba9` —código que espera hasta la
-migración **0139**— sobre una base de datos que está en **0111**, en lugar del
-build del 18 de agosto (`0289a8d4`, que esperaba hasta 0110).
+Ese +47,6 % es lo que vale traer hechos y citarlos. Es exactamente lo que se
+compró: 12.2C mira un párrafo, 12.2D lo contrasta con la base.
 
-La base de datos de Production **no se tocó**: sigue en 0111 y ninguna
-migración se aplicó allí. Lo que cambió fue la aplicación servida.
+### Contra el presupuesto congelado
 
-Queda registrado aquí y se informó de inmediato. La regla que se saca: para un
-despliegue de vista previa, `--target=preview` explícito; nunca `--prod=false`.
+| | |
+|---|---|
+| Tope normal | **≤ 1 400** |
+| Peor caso humano | **1 092** |
+| **Margen** | **308 tokens** |
+
+**PASS**, y con holgura. Los criterios se escribieron antes de ver los datos y
+no se han movido.
+
+La estimación del presupuesto daba 1 277–1 382 para una revisión normal y lo
+real fue 1 073: una razón de **0,84**, dentro de la banda 0,76–0,92 que dio
+12.2C con la misma regla de 3,6 caracteres por token. La regla sigue siendo
+conservadora, que es como debe ser.
+
+### El coste fijo NO se deduce de aquí
+
+El proveedor informa de la entrada **total**; no la separa entre política,
+esquema y contenido. El coste fijo sigue siendo el **medido estáticamente por
+las suites de presupuesto: 838 tokens**, y se mantiene como tal.
+
+Inventar una medición «en vivo» de algo que el uso reportado no separa sería
+justo la clase de número que este sprint no produce.
+
+### La latencia subió, y se sabe por qué
+
+**7,31 s** de media, frente a los **2,8 s** de 12.2C. No es el contexto —de
+cinco a siete consultas— sino la respuesta: 618 tokens de salida de media con
+313 de razonamiento, contra los ~171 y ~80 de Quick Edit. Producir hallazgos
+razonados cuesta más que reescribir un párrafo.
+
+Sigue muy por debajo de los **17–20 s** del Context Pack global.
+
+### El caché no entró, y mi predicción era optimista
+
+`cached_input_tokens = 0` en los tres.
+
+El presupuesto de este sprint decía que, al ser el prefijo idéntico en todas las
+revisiones, a partir de la segunda debería servirse desde caché. **Los datos no
+lo respaldan** en esta muestra: las tres operaciones se repartieron a lo largo
+de más de media hora —02:19, 02:21 y 02:51—, y los cachés de prefijo de los
+proveedores duran minutos, no decenas de minutos.
+
+Se corrige la predicción en vez de dejarla escrita como si se hubiera cumplido.
+Medirlo de verdad exige uso continuado, y optimizarlo es **trabajo diferido**,
+no un hueco de 12.2D.
+
+---
+
+## H · El presupuesto de consultas, confirmado al dedillo
+
+Esto es lo que más limpio salió. Las consultas reales coinciden **exactamente**
+con el modelo escrito antes de medirlas:
+
+| | Adaptadores | Cuenta prevista | Real |
+|---|---|---|---|
+| Quality (sin procesos ligados) | alcance 1 + catálogo cargos 1 + catálogo procesos 1 + cargos 2 | **5** | **5** ✔ |
+| PCR (con proceso ligado) | lo anterior + procesos 2 | **7** | **7** ✔ |
+
+**No se ejecutaron diecinueve adaptadores.** Se ejecutaron los que la guía
+declaró y que tenían algo que traer:
+
+- **Quality** → `position`. La guía declara `{position, process}`, pero esos
+  documentos no están ligados a ningún proceso, así que el adaptador de
+  procesos no trajo nada. `related_context_types` guarda lo que **se trajo**,
+  no lo que se pidió.
+- **PCR** → `process` + `position`, que es la cadena entera del caso
+  transversal.
+
+---
+
+## I · La verdad del proveedor
+
+| | |
+|---|---|
+| Tres finales | `openai` · `gpt-5.4-mini` · `provider_called=true` · consumo > 0 |
+| PCR sin contexto (`5328446b…`) | **`provider_called=false`** · entrada 0 · salida 0 · total 0 · 1 consulta · 514 ms |
+
+El segundo es evidencia positiva, no un fallo: **sin hechos relacionados no se
+llama al modelo y no se gasta un token.** Se conserva a propósito.
+
+---
+
+## J · Los dos runs de la primera ronda
+
+No entran en los promedios. Se guardan porque cada uno prueba algo.
+
+### `7c17eb0d…` · Quality antes de completar el fixture
+
+entrada 1 079 · salida 515 · razonamiento 111 · total 1 594 · 5 consultas ·
+1 fuente · `provider_called=true` · **0 confirmados**
+tipos: `possible_conflict`, `missing_information`, `guidance_gap`
+
+«Coordinador de Calidad» **no existía** todavía como cargo registrado, así que
+`possible_conflict` era **la respuesta correcta**. No es un defecto del
+algoritmo: es la regla de los dos lados funcionando.
+
+Puesto al lado de `d202ef94…` —el mismo texto, el mismo documento, con el cargo
+ya creado— se ve el ascenso determinista ocurriendo:
+
+| | primera ronda | final |
+|---|---|---|
+| cargo «Coordinador de Calidad» | no existe | existe |
+| fuentes | 1 | 2 |
+| resultado | `possible_conflict` | **`confirmed_conflict`** |
+
+### `5328446b…` · PCR antes de asociar el documento al proceso
+
+1 consulta · 0 hallazgos · 0 fuentes · entrada 0 · salida 0 · total 0 ·
+**`provider_called=false`** · 514 ms
+
+El alcance estaba vacío porque faltaba la relación documento↔proceso. La
+revisión lo dijo y **no llamó a nadie**.
+
+---
+
+## K · Lo que NO cambió en la base
+
+**El agregado global de tres días no sirve para esto y no se usa como prueba.**
+La ventana contiene actividad de QA —33 casos, 35 indicadores, 18 acciones, 16
+revisiones de documento y más— que no es atribuible a la revisión contextual.
+Un recuento global no demuestra causalidad, y presentarlo como «cero
+escrituras» sería falso.
+
+Lo que sí demuestra algo son las marcas de tiempo de **los documentos que se
+revisaron**:
+
+| Documento | Creado | Actualizado | Runs |
+|---|---|---|---|
+| **PCR** | 02:17:11.990 | **02:17:11.990** (idéntico) | 02:22:59 · 02:53:22 |
+| **Quality** | 02:15:21.979 | 02:15:22.302 | 02:19:39 · 02:21:48 · 02:51:50 |
+
+El de PCR **no se tocó nunca** desde que se creó, y sus dos revisiones fueron
+después. El de Quality se actualizó 0,3 segundos después de crearse —la
+preparación del fixture— y **las tres revisiones ocurrieron más tarde**. Las
+secciones, igual.
+
+Los dos siguen en **borrador**. No hubo aprobación automática. Que uno tenga
+revisión vigente es estado anterior a los runs, no obra de la IA.
+
+La conclusión defendible, y la única:
+
+> Las revisiones contextuales no modificaron los documentos ni sus secciones.
+> Las escrituras globales de la ventana de QA no son atribuibles por esta
+> consulta y no se usan como prueba de causalidad.
+
+Y se apoya en tres cosas más, que sí son demostraciones: **la arquitectura no
+tiene camino de escritura de negocio** —comprobado leyendo el código en
+`C6`/`C7`—, las suites de base real cuentan objetos antes y después
+(`E1`, `E2`, `E3`, `E4`), y la persona vio que nada se guardaba.
+
+---
+
+## L · La separación del consumo
+
+| Caso de uso | Operaciones (3 días) |
+|---|---|
+| `ask` | 48 |
+| `customer_themes` | 5 |
+| `document.quick_edit` | 4 |
+| **`document.contextual_review`** | **5** |
+| `root_cause` | 1 |
+
+Cinco, que son exactamente los tres finales más los dos de la primera ronda.
+La capacidad nueva se cuenta aparte del Copilot y de la asistencia de
+redacción, que es lo que 12.2F necesitará para costearla.

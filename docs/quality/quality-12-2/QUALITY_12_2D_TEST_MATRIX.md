@@ -332,3 +332,23 @@ documento le falta una relación», y que el segundo diga qué enlazar.
 `npm run check:122d-fixture -- "<empresa>"` · solo lee, no crea nada. Verifica
 las seis condiciones de §4 y, cuando algo falta, dice **dónde crearlo**. Su
 razón de ser es que una prueba humana no vuelva a gastarse en un dato ausente.
+
+
+---
+
+## O · Lo que confirmaron los datos reales
+
+Tres operaciones humanas contra el proveedor real, y el modelo de consultas
+salió clavado:
+
+| | Previsto por las suites | Real en Staging |
+|---|---|---|
+| Quality, sin procesos ligados | 5 | **5** |
+| PCR, con proceso ligado | 7 | **7** |
+
+`B3` mide 7 contra base real con el doble; la operación humana con el proveedor
+real midió 7. La estimación de tokens quedó en 0,84 de lo real, dentro de la
+banda que ya había dado 12.2C.
+
+Que una suite con un doble determinístico prediga el coste de una llamada real
+es la razón de que exista: **permite presupuestar sin gastar.**

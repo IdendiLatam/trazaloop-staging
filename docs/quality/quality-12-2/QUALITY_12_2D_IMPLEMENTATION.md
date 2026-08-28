@@ -3,6 +3,15 @@
 > Segunda capacidad documental de Trazaloop Intelligence.
 > Rama `feature/quality-12-2d-contextual-document-review`
 > **Local 0139 · Staging 0139 · Production 0111 — sin tocar**
+>
+> **Validada con el proveedor real:** tres pruebas humanas, entrada media
+> **1 073 tokens** —un 57–63 % menos que el Copilot—, 5–7 consultas frente a
+> 19 adaptadores, y discrepancias confirmadas en Quality y en PCR.
+> Detalle en `QUALITY_12_2D_LIVE_VALIDATION.md`.
+>
+> El incidente de producción del 27 de agosto es **ajeno a esta
+> funcionalidad**: fue un error mío de despliegue, está cerrado y se cuenta
+> aparte en `QUALITY_12_2D_PRODUCTION_INCIDENT.md`.
 
 ---
 

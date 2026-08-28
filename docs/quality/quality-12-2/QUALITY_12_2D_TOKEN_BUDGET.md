@@ -172,43 +172,89 @@ importa: ¿esta capacidad se mantuvo pequeña?
 
 ---
 
-## H · Los números reales · pendientes de la consulta de cierre
+## H · Los números reales · MEDIDOS
 
-Las tres pruebas humanas se hicieron y pasaron. El consumo real sale de
-`QUALITY_12_2D_CLOSING_QUERY.sql` —solo lectura, sin el texto de nadie— y se
-comparará, sin mover los criterios después de verlos, contra:
+Tres operaciones humanas contra `gpt-5.4-mini`.
 
-| | Referencia |
+| | Entrada | Salida | Razona | Total | Latencia | Consultas |
+|---|---|---|---|---|---|---|
+| Quality · falta info | 1 072 | 695 | 387 | 1 767 | 7 791 ms | 5 |
+| Quality · conflicto | 1 092 | 493 | 256 | 1 585 | 6 484 ms | 5 |
+| PCR · conflicto | 1 055 | 667 | 297 | 1 722 | 7 648 ms | 7 |
+| **Media** | **1 073** | 618,3 | 313,3 | 1 691,3 | **7 307,7 ms** | **5,67** |
+
+Mediana 1 072 · mínimo 1 055 · máximo 1 092.
+
+### Contra el presupuesto
+
+| | |
 |---|---|
-| Presupuesto normal de 12.2D | **≤ 1 400** · diseñado en 1 277–1 382 |
-| Presupuesto complejo de 12.2D | **≤ 2 000** · diseñado en 1 952 |
-| Quick Edit real (12.2C) | **727** de entrada media |
-| Copilot global | **2 514 – 2 886** |
-| Consultas · Copilot | 19 adaptadores |
-| Consultas · 12.2D esperado | **7** en Quality y PCR, 4 en Textiles |
+| Tope normal congelado | **≤ 1 400** |
+| Peor caso real | **1 092** |
+| Margen | **308 tokens** |
 
-Y una limitación que conviene decir antes de mirar los datos: se registra la
-**latencia total** de la operación, no separada entre construir el contexto y
-esperar al proveedor. Con los topes de consultas que hay —de cuatro a siete—
-la parte de contexto es pequeña, pero afirmarlo sin medirlo sería justo lo que
-este sprint no hace. Separarlas es trabajo de 12.2F, donde hace falta para
-costear.
+**PASS.** Los criterios se fijaron antes de medir y no se han tocado.
+
+Lo estimado para una revisión normal era 1 277–1 382 y lo real fue 1 073:
+razón **0,84**, dentro de la banda **0,76–0,92** que dio 12.2C con la misma
+regla. La regla de 3,6 caracteres por token sigue siendo conservadora en la
+misma medida, que es la señal de que sirve.
+
+### Comparado
+
+| | Entrada | |
+|---|---|---|
+| Copilot global | 2 514 – 2 886 | |
+| **Revisión contextual** | **1 073** | **−57,3 %** / **−62,8 %** |
+| Quick Edit | 727 | **+47,6 %** |
+
+El aumento frente a Quick Edit es lo que cuesta traer hechos y citarlos. Es lo
+que se compró, no un desvío.
+
+### El coste fijo no se mide aquí
+
+El proveedor informa de la entrada total y no la separa. El coste fijo sigue
+siendo el **medido estáticamente: 838 tokens**, y así se mantiene. Deducir una
+cifra «en vivo» de un dato que no distingue las partes sería exactamente el
+tipo de número que este documento existe para no producir.
+
+### La latencia
+
+**7,31 s** frente a los 2,8 s de 12.2C. No es el contexto —5 a 7 consultas—
+sino la salida: 618 tokens de media con 313 de razonamiento, contra ~171 y ~80
+de Quick Edit. Razonar hallazgos cuesta más que reescribir. Sigue muy por
+debajo de los 17–20 s del Context Pack global.
+
+### El caché: mi predicción no se cumplió
+
+`cached_input_tokens = 0` en las tres.
+
+Este documento predijo que, al ser el prefijo idéntico en todas las revisiones
+—cosa que 12.2C no podía tener—, a partir de la segunda se serviría desde
+caché. **No ocurrió.** Las tres operaciones se repartieron en más de media hora
+(02:19, 02:21, 02:51) y los cachés de prefijo duran minutos.
+
+La predicción se corrige en vez de dejarla escrita como si se hubiera cumplido.
+Medirla exige uso continuado; optimizarla es **diferido**, no un hueco.
+
+### El presupuesto de consultas, confirmado exactamente
+
+| | Cuenta prevista | Real |
+|---|---|---|
+| Quality, sin procesos ligados | 1 + 1 + 1 + 2 = **5** | **5** ✔ |
+| PCR, con proceso ligado | 1 + 1 + 1 + 2 + 2 = **7** | **7** ✔ |
+
+Contra los **19 adaptadores** del Copilot. Contexto realmente resuelto:
+`position` en Quality —la guía declara también `process`, pero esos documentos
+no están ligados a ninguno— y `process` + `position` en PCR.
 
 ---
 
-## I · Lo que falta medir
+## I · Lo que queda por medir
 
-Los números de arriba son **estimaciones** con la regla de 3,6 caracteres por
-token. Faltan los reales del proveedor, que llegarán con la validación humana:
-entrada, entrada cacheada, salida, razonamiento y latencia.
+Solo dos cosas, y las dos son de 12.2F:
 
-Basándose en 12.2C, donde lo real quedó un 8 %–24 % por debajo de lo estimado,
-cabe esperar un fijo real en torno a **640–770** y una revisión normal en torno
-a **1 050–1 270**. Se confirmará con datos, no con esta frase.
-
-**Sobre el caché de entrada:** en 12.2D el prefijo —política más esquema— es
-idéntico en **todas** las revisiones, porque no hay acciones que lo cambien
-como en 12.2C. Es la condición que el caché del proveedor necesita, así que a
-partir de la segunda revisión seguida debería servirse desde caché la mayor
-parte de esos 838 tokens. Es una mejora estructural que 12.2C no podía tener;
-medirla exige uso continuado.
+- **el caché de entrada** en uso continuado;
+- **la latencia separada** entre construir el contexto y esperar al proveedor.
+  Hoy se registra la total. Con 5–7 consultas la parte de contexto tiene que
+  ser pequeña, pero afirmarlo sin medirlo sería justo lo que aquí no se hace.
