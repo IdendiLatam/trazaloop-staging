@@ -152,6 +152,29 @@ check("D2. Contextual Review dice «Revisar con Intelligence»", () => {
   assert(!/Revisar consistencia/.test(stripComments(REVIEW)), "queda la etiqueta antigua");
 });
 
+check("D2b. y NINGÚN botón la nombra de otra forma", () => {
+  // La validación humana de 12.2F encontró un botón que decía «Revisar contra
+  // Trazaloop»: describía bien lo que hace y no era como se llama la
+  // capacidad. Se escapó porque D2 solo miraba la etiqueta que sí se cambió.
+  //
+  // Esto mira TODAS las cadenas visibles de los dos paneles y del orquestador
+  // de la revisión, y prohíbe cualquier otra forma de nombrarla.
+  const superficies = [
+    ["contextual-review.tsx", REVIEW],
+    ["quick-edit.tsx", QUICK],
+    ["contextual-review.ts", read("lib/intelligence/document-review/contextual-review.ts")],
+    ["quick-edit.ts", read("lib/intelligence/document-authoring/quick-edit.ts")],
+  ] as const;
+  for (const [nombre, fuente] of superficies) {
+    const codigo = stripComments(fuente);
+    for (const alias of [/Revisar contra Trazaloop/, /revisión contra Trazaloop/i,
+                         /Revisar consistencia/, /Mejorar con IA/i,
+                         /asistente de redacción/i]) {
+      assert(!alias.test(codigo), `${nombre} nombra la capacidad como ${alias}`);
+    }
+  }
+});
+
 check("D3. y siguen siendo DOS cosas distintas", () => {
   // Cambiar el nombre no puede fundir los dos flujos ni sugerir que hacen lo
   // mismo: mejorar mira el texto, revisar lo contrasta con la base.

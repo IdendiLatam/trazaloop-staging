@@ -43,9 +43,10 @@ Detalle en `QUALITY_12_2F_COST_MODEL.md` y `QUALITY_12_2F_USAGE_LIMITS.md`.
 
 ---
 
-## B · Tres defectos que aparecieron por el camino
+## B · Cuatro defectos, y quién encontró cada uno
 
-Los tres se encontraron con pruebas, y los tres eran reales.
+Tres los encontraron las pruebas. **El cuarto lo encontró una persona mirando
+una pantalla**, y es el que más enseña.
 
 ### 1 · `provider_called` nacía en `true`
 
@@ -82,7 +83,23 @@ run todavía abierto y pasaba por otro motivo.
 Una sola función con el cuarto parámetro por defecto se llama de las dos formas
 y no hay nada que adivinar. La versión de tres argumentos se elimina.
 
-### 3 · Los límites estaban calibrados para una persona
+### 3 · La consola de plataforma no veía nada
+
+Lo encontró la validación humana: `/platform/intelligence` decía «todavía no hay
+consumo registrado» con 282 operaciones en la base.
+
+Las vistas eran `security_invoker`, la RLS de `quality_ai_runs` exige
+`is_org_member`, y **`platform_staff` no pertenece a ninguna empresa**. Cero
+filas, sin error, con éxito.
+
+Ninguna prueba lo vio porque todas comprobaban lo contrario —que una empresa
+**no** viera la consola—, y eso se cumple igual cuando la vista está ciega para
+todos. Arreglado en la **0141**, con el precedente de la 0055.
+
+La lección que queda escrita: **una comprobación de aislamiento no demuestra
+visibilidad.** Hacen falta las dos.
+
+### 4 · Los límites estaban calibrados para una persona
 
 El primer intento: 12 por minuto, 120 por hora, 5 000 al mes. Números
 razonables… para **una persona** escribiendo documentos.

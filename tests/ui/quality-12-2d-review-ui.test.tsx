@@ -180,7 +180,7 @@ async function main() {
       action: async (_p, f) => { recibido = f; return REVISION; },
     });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     assert(recibido !== null, "la acción no llegó a llamarse: el botón no hace nada");
     const f = recibido as unknown as FormData;
     assert(f.get("document_id") === "doc-1", "no viajó el documento");
@@ -199,7 +199,7 @@ async function main() {
       action: () => new Promise<DocumentReviewState>((r) => { resolver = r; }),
     });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     assert(v.host.querySelector("[data-testid=\"review-pending\"]") !== null,
       "no se ve nada mientras trabaja: eso es un botón que parece roto");
     await act(async () => { resolver!(REVISION); });
@@ -208,7 +208,7 @@ async function main() {
   await check("B2. los hallazgos se pintan, uno por uno", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     const n = v.host.querySelectorAll("[data-testid=\"review-finding\"]").length;
     assert(n === 3, `se pintaron ${n} hallazgos de 3`);
   });
@@ -216,7 +216,7 @@ async function main() {
   await check("B3. cada hallazgo enseña los DOS lados", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     const t = v.texto();
     assert(t.includes("Tu texto dice"), "no se enseña lo que dice el texto");
     assert(t.includes("Trazaloop tiene registrado"), "no se enseña lo registrado");
@@ -229,7 +229,7 @@ async function main() {
       action: async () => ({ error: "La revisión no está disponible ahora." }),
     });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     assert(v.texto().includes("no está disponible"), "el error no se ve");
     assert(v.aplicado === null, "se aplicó algo pese al error");
   });
@@ -241,7 +241,7 @@ async function main() {
   await check("C1. «Aplicar redacción» solo cambia el editor", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Aplicar redacción");
     assert(v.aplicado === "El Coordinador de Compras revisará los proveedores aprobados.",
       `se aplicó «${v.aplicado}»`);
@@ -250,7 +250,7 @@ async function main() {
   await check("C2. solo ofrece aplicar donde hay redacción que aplicar", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     const botones = [...v.host.querySelectorAll("button")]
       .filter((b) => (b.textContent ?? "").includes("Aplicar redacción"));
     assert(botones.length === 1,
@@ -260,7 +260,7 @@ async function main() {
   await check("C3. ignorar un hallazgo lo esconde y no toca el resto", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Ignorar");
     const n = v.host.querySelectorAll("[data-testid=\"review-finding\"]").length;
     assert(n === 2, `quedaron ${n} hallazgos tras ignorar uno`);
@@ -271,7 +271,7 @@ async function main() {
     let llamadas = 0;
     const v = await montar({ action: async () => { llamadas += 1; return REVISION; } });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     await v.click("Aplicar redacción");
     await v.click("Ignorar");
     assert(llamadas === 1, `la acción se llamó ${llamadas} veces: aplicar o ignorar llaman al servidor`);
@@ -284,7 +284,7 @@ async function main() {
   await check("D1. avisa de que esto no es una auditoría", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     const t = v.texto();
     assert(/no es una auditoría ni una no conformidad/.test(t),
       "la pantalla no aclara qué NO es");
@@ -294,7 +294,7 @@ async function main() {
   await check("D2. dice lo que NO pudo mirar", async () => {
     const v = await montar({ action: async () => REVISION });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     assert(v.texto().includes("no ha podido mirar todo"), "no declara sus límites");
     assert(v.texto().includes("Objetivos"), "no dice qué tipo quedó sin revisar");
   });
@@ -308,7 +308,7 @@ async function main() {
       }),
     });
     await v.click(INTELLIGENCE_ACTIONS.review);
-    await v.click("Revisar contra Trazaloop");
+    await v.click(INTELLIGENCE_ACTIONS.review);
     assert(v.texto().includes("sin llamada al modelo"),
       "no se distingue una respuesta determinista de una del modelo");
     assert(v.texto().includes("No hay nada que señalar"),

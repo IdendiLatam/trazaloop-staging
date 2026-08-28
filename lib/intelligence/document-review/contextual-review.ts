@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { AuthoringGuidance } from "@/lib/db/authoring-guidance";
 import type { OrganizationAuthoringContext } from "@/lib/domain/organization-profile";
 import type { RelatedContextType } from "@/lib/domain/document-review";
+import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
 import { buildReviewContext, type EmptyReason } from "./routing";
 import { reviewPrompt } from "./policy";
 import { REVIEW_SCHEMA, REVIEW_SCHEMA_NAME, validateReview, type DocumentReview } from "./schema";
@@ -114,7 +115,8 @@ export async function runContextualReview(
   if (!live && cfg.provider !== "fake") {
     return {
       ok: false, runId: null, reason: "not_configured",
-      message: "La revisión contra Trazaloop no está configurada en este entorno.",
+      message: `La revisión con ${INTELLIGENCE_SHORT_NAME} no está configurada en `
+        + "este entorno.",
     };
   }
 
@@ -145,7 +147,8 @@ export async function runContextualReview(
   if (!p?.allowed) {
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
-      message: p?.message ?? "No se puede revisar esta sección contra Trazaloop.",
+      message: p?.message
+        ?? `No se puede revisar esta sección con ${INTELLIGENCE_SHORT_NAME}.`,
     };
   }
   const runId = String(p.run_id);

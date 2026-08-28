@@ -130,7 +130,13 @@ export function ContextualReviewPanel({
           disabled={trabajando || !hayTexto}
           className="!w-auto px-3 py-1.5 text-xs"
         >
-          {trabajando ? "Revisando…" : review ? "Revisar otra vez" : "Revisar contra Trazaloop"}
+          {/* QUALITY-12.2E congeló la identidad visible y esta etiqueta se
+              quedó atrás: decía «Revisar contra Trazaloop», que describe bien
+              lo que hace y no es como se llama la capacidad. Sale de la
+              identidad compartida, como todas las demás. */}
+          {trabajando ? "Revisando…"
+            : review ? "Revisar otra vez"
+            : INTELLIGENCE_ACTIONS.review}
         </Button>
         <button
           type="button"
