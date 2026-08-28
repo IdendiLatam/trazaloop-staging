@@ -58,6 +58,67 @@ corren contra el doble determinístico.
 
 ---
 
+## C · Primera validación humana · qué pasó
+
+| | |
+|---|---|
+| Prueba 1 · Quality, conflicto | **PARCIAL** — «Podría no coincidir» en vez de confirmado |
+| Prueba 2 · Quality, falta información | **PASS** |
+| Prueba 3 · PCR transversal | **FALLO** — «no encontré registros relacionados», 0 hechos, 1 consulta |
+
+**Ninguna de las dos incidencias era un defecto del código.** Las dos se
+reprodujeron exactamente contra base real, con el doble determinístico y sin
+gastar una sola llamada al proveedor:
+
+### Prueba 1 · faltaba el segundo cargo
+
+| Configuración | Hechos | Observación | Resultado |
+|---|---|---|---|
+| «Coordinador de Calidad» **no existe** | `[1]` solo el responsable | `position_none_named` | «podría no coincidir» |
+| «Coordinador de Calidad» **sí existe** | `[1]` y `[2]` | `position_differs` | **discrepancia CONFIRMADA** |
+
+Lo que se vio en la validación —un único hecho `[1]` y «podría no coincidir»—
+es la primera fila. La confirmación exige los **dos** lados registrados, y esa
+regla es deliberada: sin el segundo cargo, Trazaloop no sabe si el texto nombra
+otro cargo o al mismo con otras palabras. **El algoritmo no se ha tocado.**
+
+### Prueba 3 · faltaba la relación documento↔proceso
+
+| Configuración | Relación | Proceso | Hechos | Consultas |
+|---|---|---|---|---|
+| **sin** la relación | 0 filas | no | 0 | **1** |
+| **con** la relación | 1 fila | sí | 3 | 7 |
+
+«0 hechos · 1 consulta» es exactamente la primera fila: el alcance quedó vacío
+y la revisión respondió sin llamar al modelo. Con la relación, la cadena
+completa funciona y emite el hecho con la semántica correcta:
+
+```
+Cargo dueño del proceso «Gestión de compras»: «Coordinador de Compras».
+```
+
+**No «Responsable de este documento»**, porque PCR no tiene ese dato.
+
+### Lo que sí se ha corregido
+
+**El mensaje no distinguía dos problemas distintos.** «No encontré registros
+relacionados» se decía igual cuando la guía de la sección no señala ningún
+contexto —que no tiene arreglo— y cuando al documento le falta una relación
+—que sí—. Esa ambigüedad es la que hizo que una relación ausente pareciera un
+defecto de la funcionalidad. Ahora el segundo caso dice qué enlazar.
+
+**Y aparecieron dos huecos en las pruebas, los dos reales:**
+
+- la suite construía su fixture sin comprobarlo, y su propia revisión de
+  proceso llevaba tiempo sin insertarse —el `CHECK` exige `published_at` y
+  nadie miraba el error del `insert`—;
+- `C3` comprobaba que con Quality en Demo la revisión de PCR «no fallaba»,
+  no que **siguiera resolviendo contexto**. Un alcance vacío habría pasado.
+
+Los dos cerrados. Y hay un comprobador de fixture: `npm run check:122d-fixture`.
+
+---
+
 ## C · Preparación · cinco minutos
 
 **Empresa:** «QUALITY-12.1 en vivo 41721770» · Staging QA

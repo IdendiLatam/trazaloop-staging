@@ -6,7 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import type { AuthoringGuidance } from "@/lib/db/authoring-guidance";
 import type { OrganizationAuthoringContext } from "@/lib/domain/organization-profile";
 import type { RelatedContextType } from "@/lib/domain/document-review";
-import { buildReviewContext } from "./routing";
+import { buildReviewContext, type EmptyReason } from "./routing";
 import { reviewPrompt } from "./policy";
 import { REVIEW_SCHEMA, REVIEW_SCHEMA_NAME, validateReview, type DocumentReview } from "./schema";
 import {
@@ -179,7 +179,7 @@ export async function runContextualReview(
   if (ruta.writer.isEmpty()) {
     await db.rpc("quality_ai_complete_run", {
       p_run_id: runId,
-      p_answer: { summary: sinContexto(ruta.limits), findings: [] },
+      p_answer: { summary: sinContexto(ruta.emptyReason, ruta.limits), findings: [] },
       p_evidence_level: "missing",
       p_input_tokens: 0, p_output_tokens: 0, p_tool_calls: 0,
       p_cached_input_tokens: null, p_reasoning_tokens: null, p_total_tokens: 0,
@@ -187,7 +187,7 @@ export async function runContextualReview(
     });
     return {
       ok: true, runId, providerCalled: false,
-      review: { summary: sinContexto(ruta.limits), findings: [] },
+      review: { summary: sinContexto(ruta.emptyReason, ruta.limits), findings: [] },
       used, sources: [], findingSources: [], provider: provider.name, model: cfg.model,
       latencyMs: Date.now() - t0,
     };
@@ -298,12 +298,27 @@ function promoteConfirmed(
   };
 }
 
-/** El resumen cuando no hubo nada contra qué contrastar. Lo escribe el código:
- *  es lo que hace honesto no llamar al proveedor. */
-function sinContexto(limits: ReviewLimit[]): string {
-  const base = "No encontré en Trazaloop registros relacionados con esta sección, así "
-    + "que no hay nada con lo que contrastar tu texto. Eso no significa que esté mal: "
-    + "significa que Trazaloop todavía no tiene esos datos.";
+/**
+ * El resumen cuando no hubo nada contra qué contrastar. Lo escribe el código:
+ * es lo que hace honesto no llamar al proveedor.
+ *
+ * Y dice CUÁL de las dos cosas pasó. La primera versión daba el mismo texto
+ * para «la guía de esta sección no señala ningún registro» y para «este
+ * documento no está atado a nada», que son problemas distintos: el segundo
+ * tiene arreglo y el primero no. Durante la validación humana de 12.2D esa
+ * ambigüedad hizo pasar por defecto de la funcionalidad lo que era una
+ * relación que faltaba en los datos.
+ */
+function sinContexto(reason: EmptyReason, limits: ReviewLimit[]): string {
+  const base = reason === "no_types"
+    ? "La guía de esta sección no señala ningún registro de Trazaloop con el que "
+      + "contrastar, así que no hay nada que revisar aquí. No falta ningún dato: "
+      + "esta sección se redacta sin contraste."
+    : "Este documento no está relacionado con ningún proceso y no tiene un cargo "
+      + "responsable registrado, así que no hay nada con lo que contrastar tu texto. "
+      + "Si lo relacionas con su proceso —o le asignas un cargo responsable— la "
+      + "revisión podrá comparar. Que falte esa relación no significa que el texto "
+      + "esté mal.";
   return limits.length > 0
     ? `${base} Además, algunos tipos de contexto que la guía señala no se han podido revisar.`
     : base;

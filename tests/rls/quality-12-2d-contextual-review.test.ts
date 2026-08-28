@@ -111,12 +111,17 @@ async function main() {
   if (ep) throw new Error(`proceso: ${ep.message}`);
   const PROC = proc!.id as string;
 
-  await admin.from("quality_process_revisions").insert({
+  // `published_at` no es opcional: hay un CHECK que exige que una revisión no
+  // borrador lo tenga. Sin él el `insert` falla en silencio si nadie mira el
+  // error —y así estuvo, dejando al proceso sin propósito en el contexto—.
+  const { error: erev } = await admin.from("quality_process_revisions").insert({
     organization_id: A, process_id: PROC, revision_number: 1, status: "published",
     purpose: "Asegurar que los materiales que entran cumplen lo acordado con el proveedor.",
     scope: "Aplica a todas las compras de materia prima.",
     effective_from: "2020-01-01", effective_to: null,
+    published_at: new Date().toISOString(),
   });
+  if (erev) throw new Error(`revisión del proceso: ${erev.message}`);
 
   const { data: ctrl, error: ec } = await admin.from("quality_controls").insert({
     organization_id: A, code: "CTR-09", title: "Evaluación de proveedores aprobados",
@@ -218,6 +223,42 @@ async function main() {
   });
 
   // =========================================================================
+  console.log("0 · EL FIXTURE ESTÁ COMPLETO");
+  // -------------------------------------------------------------------------
+  // Va primero y a propósito. En la primera validación humana de 12.2D dos de
+  // las tres pruebas fallaron y ninguna era un defecto del código: faltaba un
+  // cargo y faltaba la relación documento↔proceso. Una suite que construye su
+  // fixture y no lo comprueba puede pasar entera sobre datos a medias y dejar
+  // que el hueco lo encuentre una persona.
+  // =========================================================================
+
+  await check("0A. los DOS cargos existen: sin ambos no se puede confirmar nada", async () => {
+    const { data } = await admin.from("quality_positions")
+      .select("name").eq("organization_id", A);
+    const nombres = (data ?? []).map((c) => String(c.name));
+    for (const n of ["Coordinador de Compras", "Coordinador de Calidad"]) {
+      assert(nombres.includes(n), `falta el cargo «${n}»`);
+    }
+  });
+
+  await check("0B. el proceso tiene cargo dueño y revisión publicada vigente", async () => {
+    const { data: p } = await admin.from("quality_processes")
+      .select("owner_position_id").eq("id", PROC).single();
+    assert(p!.owner_position_id === posId["Coordinador de Compras"],
+      "el proceso no tiene el cargo dueño esperado");
+    const { data: r } = await admin.from("quality_process_revisions")
+      .select("id").eq("process_id", PROC).is("effective_to", null).eq("status", "published");
+    assert((r ?? []).length === 1, "el proceso no tiene revisión publicada vigente");
+  });
+
+  await check("0C. el documento de Quality tiene cargo responsable", async () => {
+    const { data } = await admin.from("trazadoc_documents")
+      .select("owner_position_id").eq("id", RESP.documentId).single();
+    assert(data!.owner_position_id === posId["Coordinador de Compras"],
+      "el documento de Quality no tiene cargo responsable registrado");
+  });
+
+  // =========================================================================
   console.log("A · LOS SEIS CASOS DEL ENCARGO");
   // =========================================================================
 
@@ -291,8 +332,11 @@ async function main() {
     assert(r.ok, `falló: ${!r.ok ? r.message : ""}`);
     assert(r.ok && !r.providerCalled, "se llamó al proveedor sin un solo hecho");
     assert(r.ok && r.review.findings.length === 0, "inventó hallazgos sin hechos");
-    assert(r.ok && /no significa que esté mal/.test(r.review.summary),
+    assert(r.ok && /no significa que el texto esté mal/.test(r.review.summary),
       "el resumen sin contexto podría leerse como un incumplimiento");
+    // Y dice CUÁL de los dos vacíos es, que es lo que costó una prueba humana.
+    assert(r.ok && /no está relacionado con ningún proceso/.test(r.review.summary),
+      "el resumen no distingue «falta una relación» de «esta sección no se contrasta»");
   });
 
   // =========================================================================
@@ -359,6 +403,21 @@ async function main() {
     ownerPositionId: null, ligarProceso: PROC, contenido: "Pendiente.",
   });
 
+  await check("C0. el documento de PCR está ligado al proceso, y sin cargo propio", async () => {
+    // Es la relación que faltaba en la validación humana. Sin ella el alcance
+    // queda vacío, la revisión responde sin llamar al modelo, y el resultado
+    // es indistinguible de un defecto si nadie mira la base.
+    const { data: doc } = await admin.from("trazadoc_documents")
+      .select("owner_position_id, blueprint_id").eq("id", PCR.documentId).single();
+    assert(doc!.owner_position_id === null,
+      "el documento de PCR tiene cargo propio: no probaría el camino por el proceso");
+    assert(doc!.blueprint_id !== null, "el documento de PCR no viene de una estructura");
+    const { data: rel } = await admin.from("quality_process_documents")
+      .select("process_id").eq("organization_id", A).eq("document_id", PCR.documentId);
+    assert((rel ?? []).some((r) => r.process_id === PROC),
+      "el documento de PCR NO está ligado al proceso «Gestión de compras»");
+  });
+
   await check("C1. PCR revisa sin cargo propio, por el dueño del proceso", async () => {
     const r = await revisar({ ...PCR, org: A, cliente: J, moduleKey: "cpr",
       texto: "El Coordinador de Calidad autoriza la liberación de cada lote "
@@ -388,8 +447,18 @@ async function main() {
     await plan(A, MODULOS.quality, "demo");
     try {
       const p = await revisar({ ...PCR, org: A, cliente: J, moduleKey: "cpr",
-        texto: "El Coordinador de Compras autoriza la liberación de cada lote producido." });
+        texto: "El Coordinador de Calidad autoriza la liberación de cada lote producido." });
       assert(p.ok, `PCR falló sin Quality: ${!p.ok ? p.message : ""}`);
+      // Y no basta con que «no falle»: tiene que SEGUIR RESOLVIENDO contexto.
+      // Comprobar solo `ok` dejaba pasar el caso en que Quality en Demo
+      // vaciara el alcance y la revisión respondiera sin nada, que se parece
+      // demasiado a funcionar.
+      assert(p.ok && p.used.types.includes("process"),
+        `sin Quality el alcance se quedó en ${p.ok ? p.used.types.join(", ") || "nada" : "?"}`);
+      assert(p.ok && p.used.types.includes("position"),
+        "sin Quality no se resolvió el cargo dueño del proceso");
+      assert(p.ok && p.review.findings.some((f) => f.type === "confirmed_conflict"),
+        "sin Quality no se detectó la discrepancia que sí se detecta con Quality");
       const t = await revisar({ ...TEX, org: A, cliente: J, moduleKey: "textiles",
         texto: "Este procedimiento aplica a la fabricación de prendas en todas las sedes." });
       assert(t.ok, `Textiles falló sin Quality: ${!t.ok ? t.message : ""}`);

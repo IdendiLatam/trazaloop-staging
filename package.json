@@ -170,6 +170,7 @@
     "test:quality122c-budget": "tsx tests/unit/quality-12-2c-budget.test.ts",
     "test:quality122c-ui": "tsx --tsconfig tsconfig.test.json tests/ui/quality-12-2c-quick-edit-ui.test.tsx",
     "test:deploy-safety": "tsx tests/unit/deploy-safety.test.ts",
+    "check:122d-fixture": "tsx scripts/check-12-2d-fixture.ts",
     "test:quality122d": "tsx --conditions=react-server tests/unit/quality-12-2d-contextual-review.test.ts",
     "test:quality122d-budget": "tsx --conditions=react-server tests/unit/quality-12-2d-budget.test.ts",
     "test:quality122d-ui": "tsx --tsconfig tsconfig.test.json tests/ui/quality-12-2d-review-ui.test.tsx",

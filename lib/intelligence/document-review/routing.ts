@@ -61,9 +61,25 @@ const ORDEN: RelatedContextType[] = [
   "objective", "supplier", "customer_feedback", "case", "evidence",
 ];
 
+/**
+ * Por qué no hubo nada que contrastar. Son dos cosas muy distintas y hasta
+ * ahora se contaban igual:
+ *
+ *   `no_types`    la guía de la sección no señala ningún tipo de registro.
+ *                 No falta nada en la empresa; esta sección no se contrasta.
+ *   `empty_scope` la guía sí señala, pero el documento no está atado a nada:
+ *                 ni cargo responsable, ni procesos. Falta una relación.
+ *
+ * La diferencia importa porque la segunda es accionable —hay algo que
+ * enlazar— y la primera no. Decir «no encontré registros relacionados» en los
+ * dos casos deja a quien lee sin saber si tiene que hacer algo.
+ */
+export type EmptyReason = "no_types" | "empty_scope" | null;
+
 export type RoutingResult = {
   writer: FactWriter;
   scope: ReviewScope;
+  emptyReason: EmptyReason;
   /** Los tipos que la guía pidió y que se intentaron. */
   requested: RelatedContextType[];
   /** Los que aportaron al menos un hecho. */
@@ -137,7 +153,10 @@ export async function buildReviewContext(params: {
   if (requested.length === 0 || scopeIsEmpty(scope)) {
     // Sin tipos que resolver, o sin nada a lo que engancharse: no se consulta
     // más y no se llama a nadie. Lo decide quien llama, con `isEmpty()`.
-    return { writer: w, scope, requested, resolved: [], observations, limits };
+    return {
+      writer: w, scope, requested, resolved: [], observations, limits,
+      emptyReason: requested.length === 0 ? "no_types" : "empty_scope",
+    };
   }
 
   // ---- 2 · Lo que la persona nombró, si ya existe ------------------------
@@ -229,6 +248,7 @@ export async function buildReviewContext(params: {
   return {
     writer: w, scope: scopeAmpliado, requested,
     resolved: w.resolvedTypes(), observations, limits,
+    emptyReason: w.isEmpty() ? "empty_scope" : null,
   };
 }
 

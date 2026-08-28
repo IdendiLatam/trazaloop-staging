@@ -391,8 +391,22 @@ check("H3. sin proveedor real no se finge uno", () => {
 
 check("H4. el resumen del caso sin contexto lo escribe el código", () => {
   assert(/function sinContexto/.test(ORQ), "no hay resumen determinista");
-  assert(/no significa que esté mal/.test(ORQ),
+  // El texto va partido en varias líneas del fuente, así que se compara
+  // aplanado: si no, la comprobación depende de dónde caiga el salto.
+  const plano = ORQ.replace(/"\s*\n\s*\+ "/g, "").replace(/\s+/g, " ");
+  assert(/no significa que el texto esté mal/.test(plano),
     "el resumen sin contexto podría leerse como un incumplimiento");
+});
+
+check("H5. y distingue los DOS vacíos, que no son el mismo problema", () => {
+  // «La guía no señala nada» no tiene arreglo; «este documento no está atado a
+  // nada» sí. Contarlos igual hizo pasar por defecto de la funcionalidad una
+  // relación que faltaba en los datos, durante la validación humana.
+  assert(/reason === "no_types"/.test(ORQ), "el resumen no distingue los dos vacíos");
+  assert(/emptyReason/.test(RUTA), "el enrutado no dice por qué quedó vacío");
+  const plano = ORQ.replace(/"\s*\n\s*\+ "/g, "").replace(/\s+/g, " ");
+  assert(/Si lo relacionas con su proceso/.test(plano),
+    "el caso accionable no dice qué hacer");
 });
 
 // ===========================================================================
