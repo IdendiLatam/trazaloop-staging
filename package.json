@@ -172,6 +172,7 @@
     "test:deploy-safety": "tsx tests/unit/deploy-safety.test.ts",
     "test:quality122f": "tsx tests/unit/quality-12-2f-usage.test.ts",
     "test:quality122f-cost": "tsx tests/unit/quality-12-2f-cost.test.ts",
+    "test:quality122f-platform": "tsx --conditions=react-server tests/rls/quality-12-2f-platform.test.ts",
     "test:quality122f-rls": "tsx --conditions=react-server tests/rls/quality-12-2f-limits.test.ts",
     "test:quality122e": "tsx tests/unit/quality-12-2e-identity.test.ts",
     "check:122d-fixture": "tsx scripts/check-12-2d-fixture.ts",

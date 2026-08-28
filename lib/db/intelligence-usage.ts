@@ -77,23 +77,42 @@ export type PlatformUsageRow = {
   estimatedCostUsd: number;
 };
 
-/** El consumo de todas las empresas, para la plataforma. La autorización la
- *  hace la vista: si esto se llama sin ser personal de plataforma, devuelve
- *  cero filas en vez de fallar, que es como se comporta una RLS. */
+/**
+ * Lo que devuelve una lectura de consumo.
+ *
+ * NO es un array. Y esa es la lección de la primera validación humana de
+ * 12.2F: la consola decía «todavía no hay consumo registrado» mientras había
+ * 282 operaciones en la base. La lectura devolvía cero filas —por permisos— y
+ * el código la trataba igual que a un «no hay datos».
+ *
+ * Una consola de observabilidad no puede convertir un fallo de lectura en un
+ * cero. Un cero es una afirmación sobre el mundo; un fallo es una afirmación
+ * sobre nosotros, y hay que poder distinguirlas.
+ */
+export type UsageRead<T> =
+  | { ok: true; rows: T[] }
+  | { ok: false; error: string };
+
+/** El consumo de todas las empresas, para la plataforma.
+ *
+ *  La autorización la hace la vista, que filtra por `is_platform_staff()` por
+ *  dentro. Quien no lo sea recibe cero filas, y eso SÍ es un cero legítimo. */
 export async function listPlatformUsage(
   params: { months?: number } = {}, client?: Db
-): Promise<PlatformUsageRow[]> {
+): Promise<UsageRead<PlatformUsageRow>> {
   const db = client ?? await createServerClient();
   const desde = new Date();
   desde.setUTCMonth(desde.getUTCMonth() - (params.months ?? 3));
-  const { data } = await db
+  const { data, error } = await db
     .from("v_intelligence_usage_platform")
     .select("*")
     .gte("month_utc", desde.toISOString().slice(0, 10))
     .order("estimated_cost_usd", { ascending: false })
     .limit(200);
 
-  return (Array.isArray(data) ? data : []).map((r) => {
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (Array.isArray(data) ? data : []).map((r) => {
     const x = r as Record<string, unknown>;
     return {
       organizationId: String(x.organization_id),
@@ -112,6 +131,7 @@ export async function listPlatformUsage(
       estimatedCostUsd: Number(x.estimated_cost_usd ?? 0),
     };
   });
+  return { ok: true, rows };
 }
 
 export type UseCaseUsageRow = {
@@ -133,18 +153,30 @@ export type UseCaseUsageRow = {
   estimatedCostUsd: number;
 };
 
-/** El desglose por capacidad. Es la tabla que hace falta para decidir, más
- *  adelante, qué se incluye en qué plan: sin ella esa decisión sería a ojo. */
+/**
+ * El desglose por capacidad. Es la tabla que hace falta para decidir, más
+ * adelante, qué se incluye en qué plan: sin ella esa decisión sería a ojo.
+ *
+ * Dos vistas y no una. La de empresa lleva `security_invoker`, así que una
+ * empresa ve la suya; la de plataforma filtra por `is_platform_staff()` por
+ * dentro. Una sola vista que sirviera a los dos casos tendría que decidir por
+ * dentro quién pregunta, y ahí es donde se cuelan los fallos de aislamiento.
+ */
 export async function listUsageByUseCase(
-  params: { organizationId?: string; months?: number } = {}, client?: Db
-): Promise<UseCaseUsageRow[]> {
+  params: { organizationId?: string; months?: number; platform?: boolean } = {},
+  client?: Db
+): Promise<UsageRead<UseCaseUsageRow>> {
   const db = client ?? await createServerClient();
   const desde = new Date();
   desde.setUTCMonth(desde.getUTCMonth() - (params.months ?? 3));
-  let q = db.from("v_intelligence_usage_by_use_case").select("*")
+  const vista = params.platform
+    ? "v_intelligence_usage_platform_by_use_case"
+    : "v_intelligence_usage_by_use_case";
+  let q = db.from(vista).select("*")
     .gte("month_utc", desde.toISOString().slice(0, 10));
   if (params.organizationId) q = q.eq("organization_id", params.organizationId);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) return { ok: false, error: error.message };
 
   const acc = new Map<string, UseCaseUsageRow>();
   for (const r of Array.isArray(data) ? data : []) {
@@ -171,11 +203,12 @@ export async function listUsageByUseCase(
     };
     acc.set(k, fila);
   }
-  return [...acc.values()].map((f) => ({
+  const rows = [...acc.values()].map((f) => ({
     ...f,
     avgInput: f.providerCalls > 0 ? Math.round(f.inputTokens / f.providerCalls) : null,
     avgOutput: f.providerCalls > 0 ? Math.round(f.outputTokens / f.providerCalls) : null,
   })).sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd);
+  return { ok: true, rows };
 }
 
 /** Las tarifas vigentes, para poder prever. Solo las ve la plataforma. */

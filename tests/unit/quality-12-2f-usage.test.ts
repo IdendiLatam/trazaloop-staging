@@ -32,6 +32,7 @@ const DB = read("lib/db/intelligence-usage.ts");
 const COSTE = read("lib/domain/intelligence-cost.ts");
 const TARJETA = read("components/domain/settings/intelligence-usage-card.tsx");
 const CONSOLA = read("app/(app)/platform/intelligence/page.tsx");
+const MIG141 = read("supabase/migrations/0141_intelligence_platform_visibility.sql");
 
 console.log("\nQUALITY-12.2F · consumo, límites y coste\n");
 
@@ -382,13 +383,22 @@ check("K4. y las clases de coste son internas, no producto", () => {
 console.log("\nL · LA MIGRACIÓN");
 // ===========================================================================
 
-check("L1. es la 0140 y no toca ninguna anterior", () => {
+check("L1. la 0140 va detrás de la 0139 y nadie la ha reescrito", () => {
+  // Decía «la 0140 es la última». Duró hasta que la validación humana obligó a
+  // añadir la 0141, que es lo que se supone que pasa con las migraciones.
   const m = readdirSync(join(ROOT, "supabase/migrations"))
     .filter((f) => f.endsWith(".sql")).sort();
-  assert(m[m.length - 1] === "0140_intelligence_usage_and_cost.sql",
-    `la última es ${m[m.length - 1]}`);
-  assert(m[m.length - 2] === "0139_document_contextual_review.sql",
+  const i = m.indexOf("0140_intelligence_usage_and_cost.sql");
+  assert(i > 0, "la 0140 no está");
+  assert(m[i - 1] === "0139_document_contextual_review.sql",
     "algo se coló entre la 0139 y la 0140");
+  for (const f of m.slice(i + 1)) {
+    const sql = read(`supabase/migrations/${f}`);
+    assert(!/create or replace function public\.intelligence_usage_guard/.test(sql),
+      `${f} reescribe el guardián de presupuesto`);
+    assert(!/drop table[^;]*intelligence_/i.test(sql),
+      `${f} borra una tabla de 12.2F`);
+  }
   for (const f of ["0138_document_authoring_runs.sql", "0139_document_contextual_review.sql"]) {
     assert(!/intelligence_usage_guard/.test(read(`supabase/migrations/${f}`)),
       `${f} fue editada con contenido de 12.2F`);
@@ -416,12 +426,62 @@ check("L3. todas las tablas nuevas tienen RLS", () => {
   }
 });
 
-check("L4. y todas las vistas heredan la RLS de quien pregunta", () => {
+check("L4. las vistas DE EMPRESA heredan la RLS de quien pregunta", () => {
   const vistas = [...MIG.matchAll(/create or replace view public\.(\w+)\s*\nwith \(([^)]*)\)/g)];
-  assert(vistas.length >= 4, "no se encontraron las vistas");
+  assert(vistas.length >= 3, "no se encontraron las vistas de empresa");
   for (const [, nombre, opciones] of vistas) {
     assert(/security_invoker = true/.test(opciones), `${nombre} no tiene security_invoker`);
   }
+});
+
+// ===========================================================================
+console.log("\nM · LA CONSOLA DE PLATAFORMA TIENE QUE VER ALGO");
+// ===========================================================================
+
+check("M1. las vistas de plataforma NO son security_invoker, y se explica", () => {
+  // Con `security_invoker` la RLS de quality_ai_runs se evalúa como quien
+  // pregunta, y `platform_staff` no pertenece a ninguna empresa: la consola
+  // devolvía cero filas sin error. Lo encontró una persona mirando la pantalla.
+  for (const v of ["v_intelligence_usage_platform",
+                   "v_intelligence_usage_platform_by_use_case"]) {
+    const def = new RegExp(`create (or replace )?view public\\.${v}[\\s\\S]*?;`).exec(MIG141)?.[0] ?? "";
+    assert(def.length > 0, `no se encontró ${v} en la 0141`);
+    assert(!/security_invoker/.test(def.split("as\n")[0] ?? def),
+      `${v} volvió a ser security_invoker y dejaría la consola en cero`);
+    assert(/where public\.is_platform_staff\(\)/.test(def),
+      `${v} no filtra por personal de plataforma: sería una fuga de todas las empresas`);
+  }
+});
+
+check("M2. y siguen sin exponer el texto de nadie", () => {
+  for (const c of ["r.question", "r.answer", "context_snapshot"]) {
+    assert(!MIG141.includes(c), `la 0141 expone ${c}`);
+  }
+});
+
+check("M3. la consola pide la vista de PLATAFORMA, no la de empresa", () => {
+  assert(/platform: true/.test(CONSOLA),
+    "la consola pide el desglose de empresa, que le devolvería cero");
+});
+
+check("M4. un fallo de lectura NO se pinta como cero consumo", () => {
+  assert(/data-testid="usage-read-error"/.test(CONSOLA), "no hay estado de error");
+  assert(/no es cero consumo/.test(CONSOLA),
+    "el aviso no aclara que lo de abajo no es un cero real");
+  const db = read("lib/db/intelligence-usage.ts");
+  assert(/export type UsageRead</.test(db),
+    "la capa de lectura devuelve arrays: un error se confundiría con cero");
+  assert(/if \(error\) return \{ ok: false/.test(db),
+    "los errores de lectura se siguen tragando");
+});
+
+check("M5. la 0141 no toca ninguna política de escritura", () => {
+  // El arreglo es de VISIBILIDAD. Ampliar de paso lo que support puede
+  // cambiar sería justo el error que §40 previene.
+  assert(!/create policy|alter policy|drop policy/i.test(MIG141),
+    "la 0141 toca políticas: el arreglo era de visibilidad, no de autoridad");
+  assert(!/grant (insert|update|delete|all)/i.test(MIG141),
+    "la 0141 concede permisos de escritura");
 });
 
 console.log(`\n${passed} conformes · ${failed} fallos\n`);

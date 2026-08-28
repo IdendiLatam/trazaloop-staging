@@ -380,6 +380,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0138_document_authoring_runs.sql",
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
+    "0141_intelligence_platform_visibility.sql",
   ]);
   const after = dir.filter((f) => /^01(0[5-9]|[1-9][0-9])/.test(f) && !knownLater.has(f));
   assert(after.length === 0, `no debe existir 0106+ ni 0105 desconocida: ${after.join(", ")}`);

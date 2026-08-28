@@ -38,11 +38,21 @@ const num = (n: number) => n.toLocaleString("es-CO");
 export default async function IntelligenceUsagePage() {
   await requirePlatformStaff();
 
-  const [porEmpresa, porCapacidad, tarifas] = await Promise.all([
+  const [lecturaEmpresa, lecturaCapacidad, tarifas] = await Promise.all([
     listPlatformUsage({ months: 3 }),
-    listUsageByUseCase({ months: 3 }),
+    // `platform: true` · la vista de empresa devolvería cero a alguien de
+    // plataforma, que no pertenece a ninguna. Ver la 0141.
+    listUsageByUseCase({ months: 3, platform: true }),
     getCurrentRates(),
   ]);
+
+  // Un fallo de lectura NO se pinta como «no hay consumo». Es la lección de la
+  // primera validación humana: la consola decía cero mientras la base tenía
+  // 282 operaciones, y no había forma de notar la diferencia.
+  const fallo = !lecturaEmpresa.ok ? lecturaEmpresa.error
+    : !lecturaCapacidad.ok ? lecturaCapacidad.error : null;
+  const porEmpresa = lecturaEmpresa.ok ? lecturaEmpresa.rows : [];
+  const porCapacidad = lecturaCapacidad.ok ? lecturaCapacidad.rows : [];
 
   const tarifa = tarifas["openai:gpt-5.4-mini"];
   const paraPrevision: Record<string, ModelRate> = tarifa
@@ -69,6 +79,22 @@ export default async function IntelligenceUsagePage() {
         </p>
       </header>
 
+      {fallo ? (
+        <section
+          role="alert"
+          data-testid="usage-read-error"
+          className="rounded-lg border border-red-500/40 bg-red-500/10 p-4"
+        >
+          <p className="text-sm font-semibold text-ink">
+            No se pudo leer el consumo.
+          </p>
+          <p className="mt-1 text-xs text-ink-soft">
+            Lo que se ve abajo <strong>no es cero consumo</strong>: es una lectura
+            que falló. {fallo}
+          </p>
+        </section>
+      ) : null}
+
       <section className="grid gap-3 sm:grid-cols-3">
         <Dato titulo="Operaciones" valor={num(totalRuns)} pie="observado · 3 meses" />
         <Dato titulo="Coste estimado" valor={formatUsd(Math.round(totalCoste * USD))}
@@ -84,7 +110,11 @@ export default async function IntelligenceUsagePage() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-ink">Observado · por empresa</h2>
         {porEmpresa.length === 0 ? (
-          <p className="text-sm text-ink-soft">Todavía no hay consumo registrado.</p>
+          <p className="text-sm text-ink-soft">
+            {fallo
+              ? "No se pudo leer: ver el aviso de arriba."
+              : "Todavía no hay consumo registrado."}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-hairline">
             <table className="w-full text-xs">
@@ -132,7 +162,9 @@ export default async function IntelligenceUsagePage() {
           decida qué se incluye en cada plan.
         </p>
         {porCapacidad.length === 0 ? (
-          <p className="text-sm text-ink-soft">Sin datos todavía.</p>
+          <p className="text-sm text-ink-soft">
+            {fallo ? "No se pudo leer: ver el aviso de arriba." : "Sin datos todavía."}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-hairline">
             <table className="w-full text-xs">
