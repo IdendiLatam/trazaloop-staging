@@ -413,6 +413,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0145_textile_material_inventory.sql",
+    "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
     // QUALITY-12.2A: la guía de autoría canónica, con historia. No toca el
@@ -424,6 +426,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0145_textile_material_inventory.sql",
+    "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
   ]);

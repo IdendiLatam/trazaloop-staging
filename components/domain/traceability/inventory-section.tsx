@@ -85,11 +85,23 @@ export async function MaterialInventorySection({
 
   return (
     <section id="inventario" className="rounded-lg border border-hairline bg-surface p-5">
-      <h2 className="mb-1 text-sm font-semibold">Inventario de materiales</h2>
+      <h2 className="mb-1 text-sm font-semibold">Saldo trazado de materiales</h2>
+      {/* PT-F12 · El alcance se declara, no se deja adivinar.
+          Decía «saldo derivado de los movimientos reales», que suena a
+          inventario completo. Los únicos movimientos que existen son la
+          entrada y el consumo en producción: no hay merma, ni devolución a
+          proveedor, ni ajuste por recuento. Llamar «inventario» a eso sin
+          decirlo es la clase de precisión que engaña. */}
+      <p className="mb-1 text-xs text-ink-soft">
+        Todas las cantidades en <strong>kilogramos</strong>. Saldo trazado ={" "}
+        cantidad recibida en los lotes de entrada − consumido por las órdenes /
+        corridas de producción. Selecciona un material para ver su saldo por lote.
+      </p>
       <p className="mb-4 text-xs text-ink-soft">
-        Saldo derivado de los movimientos reales: cantidad recibida de los
-        lotes de entrada menos lo consumido por las órdenes / corridas de
-        producción. Selecciona un material para ver su saldo por lote.
+        No contempla mermas, devoluciones a proveedor ni ajustes por recuento
+        físico: esos movimientos no existen como hecho registrable en Trazaloop,
+        así que este saldo es lo que aún no se ha consumido en producción, no un
+        inventario físico.
       </p>
 
       {/* Búsqueda server-side del inventario (independiente de la lista) */}

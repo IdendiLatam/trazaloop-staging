@@ -186,6 +186,7 @@ export const TEXTILES_GESTION_GROUP: ModuleNavGroup = {
     { label: "Productos y referencias", href: "/textiles/products" },
     { label: "Evidencias", href: "/textiles/evidences" },
     { label: "Trazabilidad", href: "/textiles/traceability" },
+    { label: "Saldo de materia prima", href: "/textiles/traceability/inventory" },
     { label: "Circularidad", href: "/textiles/circularity" },
   ],
 };

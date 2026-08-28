@@ -673,3 +673,98 @@ export async function getOrderTraceabilityEvaluation(
 
   return { evaluation, consumptions, steps, outputLots, evidenceRows };
 }
+
+// ===========================================================================
+// PT-02A · SALDO TRAZADO DE MATERIA PRIMA
+// ---------------------------------------------------------------------------
+// Espejo de `lib/db/inventory.ts` (PCR), con la diferencia que impone el
+// modelo textil: la unidad forma parte de la identidad de la fila. Un mismo
+// material puede haber llegado en metros y en kilos, y esas dos filas no se
+// suman ni se pueden sumar.
+// ===========================================================================
+
+export type TextileInventoryRow = {
+  itemId: string;
+  itemType: "material" | "component";
+  itemName: string;
+  unitCode: string | null;
+  /** El texto original, solo cuando no se pudo normalizar. */
+  unitRaw: string | null;
+  received: number;
+  consumed: number;
+  available: number;
+  lotsWithBalance: number;
+  lotsTotal: number;
+  /** Consumos que no se pudieron restar por no ser comparables. */
+  unmatchedConsumptions: number;
+  /** Lotes con saldo negativo. Se muestran; jamás se recortan a cero. */
+  lotsNegative: number;
+};
+
+const mapInventory = (r: Record<string, unknown>): TextileInventoryRow => ({
+  itemId: r.item_id as string,
+  itemType: r.item_type as "material" | "component",
+  itemName: (r.item_name as string | null) ?? "—",
+  unitCode: (r.unit_code as string | null) ?? null,
+  unitRaw: (r.unit_raw as string | null) ?? null,
+  received: Number(r.received ?? 0),
+  consumed: Number(r.consumed ?? 0),
+  available: Number(r.available ?? 0),
+  lotsWithBalance: Number(r.lots_with_balance ?? 0),
+  lotsTotal: Number(r.lots_total ?? 0),
+  unmatchedConsumptions: Number(r.unmatched_consumptions ?? 0),
+  lotsNegative: Number(r.lots_negative ?? 0),
+});
+
+/** UNA página del saldo por (material, unidad), con búsqueda en servidor. */
+export async function searchTextileMaterialInventory(
+  organizationId: string, query: TraceQuery = {}
+): Promise<Page<TextileInventoryRow>> {
+  const supabase = await createServerClient();
+  const term = sanitizeSearchTerm(query.q ?? "");
+  const page = await readPage<Record<string, unknown>>(({ from, to }) => {
+    let req = supabase.from("v_textile_material_inventory")
+      .select("item_id, item_type, item_name, unit_code, unit_raw, received, consumed, available, lots_with_balance, lots_total, unmatched_consumptions, lots_negative",
+        { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (term) req = req.ilike("item_name", `%${term}%`);
+    return req.order("item_name", { ascending: true })
+      .order("unit_code", { ascending: true, nullsFirst: false })
+      .range(from, to);
+  }, query);
+  return { ...page, rows: page.rows.map(mapInventory) };
+}
+
+/** El detalle por lote de un material EN UNA UNIDAD concreta. */
+export async function listTextileLotBalances(
+  organizationId: string, itemId: string, unitCode: string | null
+): Promise<Array<{ lotCode: string; received: number | null; consumed: number; remaining: number | null; unit: string | null }>> {
+  const supabase = await createServerClient();
+  const rows = await readAllStrict<Record<string, unknown>>(() => {
+    let req = supabase.from("v_textile_input_lot_balance")
+      .select("input_lot_id, lot_code, quantity_received, quantity_consumed, quantity_remaining, unit, unit_code")
+      .eq("organization_id", organizationId);
+    // El filtro por unidad es parte de la identidad de la fila del inventario:
+    // sin él, el detalle mezclaría metros con kilos bajo un mismo total.
+    req = unitCode === null ? req.is("unit_code", null) : req.eq("unit_code", unitCode);
+    return req.order("lot_code", { ascending: true }).order("input_lot_id", { ascending: true });
+  }, "saldos por lote");
+  const ids = rows.map((r) => r.input_lot_id as string);
+  if (ids.length === 0) return [];
+  const lotes = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("textile_input_lots").select("id, material_id, component_id")
+      .eq("organization_id", organizationId).in("id", ids).order("id")
+  , "lotes de entrada textiles");
+  const delItem = new Set(
+    lotes.filter((l) => (l.material_id ?? l.component_id) === itemId).map((l) => l.id as string)
+  );
+  return rows
+    .filter((r) => delItem.has(r.input_lot_id as string))
+    .map((r) => ({
+      lotCode: r.lot_code as string,
+      received: r.quantity_received === null ? null : Number(r.quantity_received),
+      consumed: Number(r.quantity_consumed ?? 0),
+      remaining: r.quantity_remaining === null ? null : Number(r.quantity_remaining),
+      unit: (r.unit as string | null) ?? null,
+    }));
+}

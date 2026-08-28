@@ -133,6 +133,8 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0145_textile_material_inventory.sql",
+    "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
 ]);
@@ -1200,6 +1202,8 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0145_textile_material_inventory.sql",
+    "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
   ]);

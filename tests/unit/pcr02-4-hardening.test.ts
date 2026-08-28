@@ -290,6 +290,8 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0145_textile_material_inventory.sql",
+    "0144_recycled_content_v2.sql",
     "0143_textile_unit_codes_and_concurrency.sql",
     "0142_evidence_catalog_and_historical_truth.sql",
   ]);
