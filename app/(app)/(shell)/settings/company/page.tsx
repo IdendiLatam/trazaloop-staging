@@ -14,8 +14,19 @@ import { getOrganizationUsageStatus } from "@/lib/db/intelligence-usage";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { LogoUploadForm } from "@/components/domain/settings/logo-upload-form";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import {
+  activeShellModuleFrom,
+  moduleAwareHref,
+} from "@/lib/modules/registry";
 
-export default async function CompanySettingsPage() {
+export default async function CompanySettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // PT-03A · Los tres enlaces de esta cabecera son transversales y estaban
+  // escritos a mano: llevaban al shell de PCR a quien venía de otro módulo.
+  const activeModule = activeShellModuleFrom("/settings/company", await searchParams);
   const org = await requireActiveOrg();
   const [{ data: company, canManage }, perfil, usoIntelligence] = await Promise.all([
     getCompanySettingsAction(),
@@ -30,7 +41,7 @@ export default async function CompanySettingsPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
         <p className="eyebrow">
-          <Link href="/settings/profile" className="hover:underline">
+          <Link href={moduleAwareHref("/settings/profile", activeModule.key)} className="hover:underline">
             Configuración
           </Link>
         </p>
@@ -43,13 +54,13 @@ export default async function CompanySettingsPage() {
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Link
-            href="/settings/profile"
+            href={moduleAwareHref("/settings/profile", activeModule.key)}
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >
             Ir a Mi perfil
           </Link>
           <Link
-            href="/team"
+            href={moduleAwareHref("/team", activeModule.key)}
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >
             Ir a Equipo

@@ -427,7 +427,14 @@ check("15. Los enlaces principales de crear ticket van a /support/new (nunca a /
 
 check("Extra: /support/new admite ?module= para preseleccionar el módulo relacionado", () => {
   const pageSource = readSource("../../app/(app)/(shell)/support/new/page.tsx");
-  assert(pageSource.includes("searchParams") && pageSource.includes("isTicketModule(module)"), "/support/new debía leer el parámetro module de la URL y validarlo");
+  // La comprobación miraba la cadena literal `isTicketModule(module)`. PT-03A
+  // tuvo que renombrar esa variable —`module` está prohibido como nombre en
+  // Next— y la prueba se puso en rojo sin que el comportamiento cambiara.
+  // Se reescribe sobre lo que de verdad importa: que la página lea el
+  // parámetro de la URL y lo VALIDE antes de usarlo.
+  assert(pageSource.includes("searchParams"), "/support/new debía leer searchParams");
+  assert(/params\.module/.test(pageSource), "/support/new debía leer el parámetro `module` de la URL");
+  assert(/isTicketModule\(/.test(pageSource), "/support/new debía validar el módulo recibido");
   const formSource = readSource("../../components/domain/support/new-support-ticket-form.tsx");
   assert(formSource.includes("defaultModule"), "NewSupportTicketForm debía aceptar un módulo por defecto");
 });

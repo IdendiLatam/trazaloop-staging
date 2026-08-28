@@ -43,12 +43,15 @@
  *
  * NO SE MODIFICÓ NINGÚN COMPORTAMIENTO PRODUCTIVO PARA ESCRIBIRLA.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   resolveShellModuleForPath,
   moduleAwareHref,
   SHELL_MODULE_PARAM,
+  SHELL_MODULES,
+  SISTEMA_GROUP,
+  type ShellModuleKey,
 } from "@/lib/modules/registry";
 
 const ROOT = process.cwd();
@@ -101,39 +104,50 @@ check("A4. moduleAwareHref decora el enlace transversal y no toca los demás", (
 });
 
 /**
- * EL ACTA. Cada línea es una pantalla transversal que enlaza a otra pantalla
- * transversal con un `href` literal, perdiendo el módulo activo.
+ * Toda página bajo `(shell)` que no pertenezca a un módulo es TRANSVERSAL:
+ * se llega a ella desde cualquier módulo y debe conservar el que traía.
  *
- * PT-03 · Al arreglar una, BORRA su línea. Esta prueba falla si la lista no
- * coincide exactamente, en cualquiera de los dos sentidos.
+ * Se descubren recorriendo el árbol, no enumerándolas: así una pantalla nueva
+ * entra sola en la comprobación.
  */
-const PIERDEN_EL_MODULO = [
-  "app/(app)/(shell)/support/page.tsx",
-  "app/(app)/(shell)/support/new/page.tsx",
-  "app/(app)/(shell)/support/[id]/page.tsx",
-  "app/(app)/(shell)/settings/company/page.tsx",
-  "app/(app)/settings/profile/page.tsx",
-  "app/(app)/modules/page.tsx",
-];
+const SHELL_DIR = "app/(app)/(shell)";
+const PREFIJOS_DE_MODULO = ["(cpr)", "textiles", "quality"];
 
-/** La única transversal ya corregida (QUALITY-01.2). Sirve de patrón. */
-const YA_CORREGIDAS = ["app/(app)/(shell)/team/page.tsx"];
+function paginasTransversalesDelShell(): string[] {
+  const salida: string[] = [];
+  const recorrer = (rel: string) => {
+    for (const entrada of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+      const hijo = `${rel}/${entrada.name}`;
+      if (entrada.isDirectory()) recorrer(hijo);
+      else if (entrada.name === "page.tsx") salida.push(hijo);
+    }
+  };
+  for (const entrada of readdirSync(join(ROOT, SHELL_DIR), { withFileTypes: true })) {
+    if (!entrada.isDirectory()) continue;
+    if (PREFIJOS_DE_MODULO.includes(entrada.name)) continue;
+    recorrer(`${SHELL_DIR}/${entrada.name}`);
+  }
+  return salida.sort();
+}
 
-check("B1. El acta de pantallas que pierden el módulo es exacta", () => {
-  for (const f of PIERDEN_EL_MODULO) {
+check("B1. Toda pantalla transversal del shell conserva el módulo activo", () => {
+  const paginas = paginasTransversalesDelShell();
+  assert(paginas.length >= 5, `se esperaban al menos 5 pantallas transversales, hay ${paginas.length}`);
+  for (const f of paginas) {
     const src = read(f);
-    assert(!src.includes("moduleAwareHref"),
-      `${f} ya usa moduleAwareHref: bórralo del acta`);
-    assert(/href="\//.test(src),
-      `${f} ya no tiene enlaces literales: bórralo del acta`);
+    assert(src.includes("activeShellModuleFrom") || src.includes("resolveShellModuleForPath"),
+      `${f} no resuelve el módulo activo: sus enlaces devolverán el shell a PCR`);
+    assert(src.includes("moduleAwareHref"),
+      `${f} resuelve el módulo pero no decora sus enlaces con moduleAwareHref`);
   }
 });
 
-check("B2. /team sigue conservando el módulo (el patrón a replicar)", () => {
-  for (const f of YA_CORREGIDAS) {
-    const src = read(f);
-    assert(src.includes("moduleAwareHref"), `${f} perdió la corrección de QUALITY-01.2`);
-    assert(src.includes("SHELL_MODULE_PARAM"), `${f} debía leer el módulo de la URL`);
+check("B2. Ningún enlace transversal quedó escrito a mano en esas pantallas", () => {
+  // Un href literal a otra pantalla transversal es exactamente el fallo.
+  const TRANSVERSAL = /href="\/(support|team|settings)(\/[a-z-]+)?"/;
+  for (const f of paginasTransversalesDelShell()) {
+    const m = TRANSVERSAL.exec(read(f));
+    assert(m === null, `${f} conserva el enlace literal ${m?.[0]}`);
   }
 });
 
@@ -147,20 +161,50 @@ check("B3. La barra lateral sí decora sus enlaces transversales", () => {
  * La cadena concreta, escrita como la vive una persona. Es la prueba que PT-03
  * tendrá que invertir: hoy afirma la pérdida, mañana afirmará su ausencia.
  */
-check("C1. REPRODUCCIÓN · Textiles → /support → «Crear ticket» → shell PCR", () => {
+check("C1. La cadena reproducida en Fase 1 ya no pierde el módulo", () => {
+  // Fase 1: barra lateral → /support?m=textiles → «Crear ticket» → shell PCR.
   const desdeLaBarra = moduleAwareHref("/support", "textiles");
+  assert(desdeLaBarra.includes(`${SHELL_MODULE_PARAM}=textiles`), "la barra lateral marca el módulo");
   assert(resolveShellModuleForPath("/support", "textiles").key === "textiles",
     "el primer salto conserva Textiles");
-  assert(desdeLaBarra.includes(`${SHELL_MODULE_PARAM}=textiles`), "la barra lateral marca el módulo");
 
-  // El enlace interno de esa pantalla, tal y como está escrito hoy.
   const src = read("app/(app)/(shell)/support/page.tsx");
-  assert(src.includes('href="/support/new"'),
-    "se esperaba el href literal que provoca la pérdida");
+  assert(!src.includes('href="/support/new"'),
+    "el href literal de «Crear ticket» ha vuelto: la cadena se rompe otra vez");
+  assert(src.includes('moduleAwareHref("/support/new"'),
+    "«Crear ticket» debía decorarse con el módulo activo");
 
-  // Y el destino, sin parámetro, cae en PCR.
-  assert(resolveShellModuleForPath("/support/new", null).key === "cpr",
-    "el segundo salto debía caer en el shell de PCR");
+  // El formulario de filtros es un GET: solo envía sus campos. Sin el campo
+  // oculto, filtrar perdía el módulo igual que un enlace sin decorar.
+  assert(src.includes(`name={SHELL_MODULE_PARAM}`),
+    "el formulario de filtros debía arrastrar el módulo en un campo oculto");
+
+  // Y el segundo salto llega ya con el módulo puesto.
+  assert(resolveShellModuleForPath("/support/new", "textiles").key === "textiles",
+    "el segundo salto debía seguir en Textiles");
+});
+
+check("C1b. El salto al ticket recién creado tampoco lo pierde", () => {
+  const form = read("components/domain/support/new-support-ticket-form.tsx");
+  assert(!form.includes("router.push(`/support/${state.ticketId}?created=1`)"),
+    "el salto tras crear el ticket volvía a soltar el módulo");
+  assert(form.includes("moduleAwareHref(`/support/${state.ticketId}?created=1`"),
+    "el salto debía conservar el módulo");
+});
+
+check("C1c. Las pantallas FUERA del shell no necesitan el patrón", () => {
+  // /settings/profile, /modules y /select-org no pintan barra lateral: por
+  // ahí no puede escaparse ninguna identidad. Que no lleven el patrón es
+  // correcto, y esta comprobación impide que alguien se lo añada «por
+  // simetría» y luego crea que ahí también había un fallo.
+  const fuera = ["app/(app)/settings/profile/page.tsx", "app/(app)/modules/page.tsx",
+                 "app/(app)/select-org/page.tsx"];
+  const dentro = paginasTransversalesDelShell();
+  for (const f of fuera) {
+    assert(existsSync(join(ROOT, f)), `${f} no existe: la comprobación quedó obsoleta`);
+    assert(!f.startsWith(SHELL_DIR), `${f} está bajo el shell y sí necesitaría el patrón`);
+    assert(!dentro.includes(f), `${f} apareció entre las transversales del shell`);
+  }
 });
 
 check("C2. Ninguna transversal aparece como prefijo de un módulo", () => {
@@ -170,6 +214,64 @@ check("C2. Ninguna transversal aparece como prefijo de un módulo", () => {
     const conTextil = resolveShellModuleForPath(p, "textiles").key;
     assert(conTextil === "textiles",
       `${p} dejó de ser transversal: ahora la reclama ${conTextil}`);
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// D · Las cinco combinaciones de módulos contratados
+// ---------------------------------------------------------------------------
+/**
+ * Lo que estas comprobaciones pueden y no pueden demostrar, dicho antes de
+ * leerlas: el registro es lógica PURA y no sabe qué tiene contratado nadie.
+ * La barrera de entitlement es `requireCprModule()` y ya tiene sus pruebas
+ * (`t9f1-module-operational-enforcement`). Lo que se comprueba aquí es lo
+ * otro: que NAVEGANDO normalmente no aparezca una ruta de otro módulo.
+ *
+ * Es la mitad que faltaba. El guard impedía ENTRAR a PCR; no impedía que a
+ * una empresa sin PCR se le enseñara el menú de PCR y todas sus opciones
+ * la devolvieran al selector.
+ */
+const COMBINACIONES: Array<{ nombre: string; modulos: ShellModuleKey[] }> = [
+  { nombre: "solo Textiles",       modulos: ["textiles"] },
+  { nombre: "solo Quality",        modulos: ["quality"] },
+  { nombre: "Textiles + Quality",  modulos: ["textiles", "quality"] },
+  { nombre: "PCR + Textiles",      modulos: ["cpr", "textiles"] },
+  { nombre: "todos",               modulos: ["cpr", "textiles", "quality"] },
+];
+
+check("D1. Ningún menú de módulo enlaza a una ruta de otro módulo", () => {
+  for (const mod of SHELL_MODULES) {
+    const enlaces = [...mod.topLevel, ...mod.groups.flatMap((g) => g.items)];
+    for (const l of enlaces) {
+      const duenno = resolveShellModuleForPath(l.href, null).key;
+      assert(duenno === mod.key,
+        `el menú de ${mod.key} enlaza a ${l.href}, que pertenece a ${duenno}`);
+    }
+  }
+});
+
+check("D2. Desde cualquier módulo, toda transversal conserva la identidad", () => {
+  for (const { nombre, modulos } of COMBINACIONES) {
+    for (const key of modulos) {
+      if (key === "cpr") continue;  // CPR es el defecto: no hay identidad que perder
+      for (const p of TRANSVERSALES) {
+        const destino = moduleAwareHref(p, key);
+        const param = new URLSearchParams(destino.split("?")[1] ?? "").get(SHELL_MODULE_PARAM);
+        assert(resolveShellModuleForPath(p, param).key === key,
+          `${nombre}: ${p} perdió ${key}`);
+      }
+    }
+  }
+});
+
+check("D3. El grupo transversal no contiene ninguna ruta de módulo", () => {
+  for (const item of SISTEMA_GROUP.items) {
+    assert(resolveShellModuleForPath(item.href, null).key === "cpr",
+      `«${item.label}» (${item.href}) pertenece a un módulo: no es transversal`);
+    // Y por tanto DEBE poder decorarse.
+    assert(moduleAwareHref(item.href, "textiles").includes(`${SHELL_MODULE_PARAM}=textiles`),
+      `«${item.label}» no admite el módulo: se perdería al pulsarlo`);
   }
 });
 

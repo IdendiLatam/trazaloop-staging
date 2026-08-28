@@ -7,18 +7,29 @@ import { listSupportTicketsAction, type SupportFilters } from "@/server/actions/
 import { TICKET_STATUSES, TICKET_STATUS_LABEL, TICKET_CATEGORIES, TICKET_CATEGORY_LABEL, TICKET_PRIORITIES, TICKET_PRIORITY_LABEL, FIRST_RESPONSE_TARGET_MESSAGE } from "@/lib/domain/support";
 import { SupportTicketTable } from "@/components/domain/support/support-ticket-table";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import {
+  activeShellModuleFrom,
+  moduleAwareHref,
+  SHELL_MODULE_PARAM,
+} from "@/lib/modules/registry";
 
 export default async function SupportCenterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; category?: string; priority?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  // PT-03A · El Centro de soporte es TRANSVERSAL: se llega desde cualquier
+  // módulo y sus enlaces internos estaban escritos a mano, así que soltaban
+  // el módulo activo y el shell volvía al de PCR. La persona no había pedido
+  // cambiar de módulo.
+  const activeModule = activeShellModuleFrom("/support", params);
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const filters: SupportFilters = {
-    search: params.q,
-    status: params.status,
-    category: params.category,
-    priority: params.priority,
+    search: one(params.q),
+    status: one(params.status),
+    category: one(params.category),
+    priority: one(params.priority),
   };
   const tickets = await listSupportTicketsAction(filters);
 
@@ -36,7 +47,7 @@ export default async function SupportCenterPage({
         <p className="text-sm font-medium text-loop-deep">{FIRST_RESPONSE_TARGET_MESSAGE}</p>
         <div className="pt-2">
           <Link
-            href="/support/new"
+            href={moduleAwareHref("/support/new", activeModule.key)}
             className="rounded-md bg-loop px-3 py-1.5 text-sm font-semibold text-white hover:bg-loop-deep"
           >
             Nuevo ticket
@@ -45,19 +56,24 @@ export default async function SupportCenterPage({
       </header>
 
       <form method="get" className="grid gap-3 rounded-lg border border-hairline bg-surface p-4 sm:grid-cols-4">
+        {/* Un submit GET envía SOLO sus propios campos: sin esto, filtrar
+            perdía el módulo igual que pulsar un enlace sin decorar. */}
+        {activeModule.key !== "cpr" ? (
+          <input type="hidden" name={SHELL_MODULE_PARAM} value={activeModule.key} />
+        ) : null}
         <label className="block sm:col-span-1">
           <span className="mb-1.5 block text-sm font-medium text-ink">Buscar</span>
           <input
             type="text"
             name="q"
-            defaultValue={params.q ?? ""}
+            defaultValue={one(params.q) ?? ""}
             placeholder="Asunto…"
             className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop"
           />
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">Estado</span>
-          <select name="status" defaultValue={params.status ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
+          <select name="status" defaultValue={one(params.status) ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
             <option value="">Todos</option>
             {TICKET_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -68,7 +84,7 @@ export default async function SupportCenterPage({
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">Categoría</span>
-          <select name="category" defaultValue={params.category ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
+          <select name="category" defaultValue={one(params.category) ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
             <option value="">Todas</option>
             {TICKET_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -79,7 +95,7 @@ export default async function SupportCenterPage({
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">Prioridad</span>
-          <select name="priority" defaultValue={params.priority ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
+          <select name="priority" defaultValue={one(params.priority) ?? ""} className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-loop">
             <option value="">Todas</option>
             {TICKET_PRIORITIES.map((p) => (
               <option key={p} value={p}>
@@ -92,13 +108,13 @@ export default async function SupportCenterPage({
           <button type="submit" className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop">
             Filtrar
           </button>
-          <Link href="/support" className="text-sm text-ink-soft hover:underline">
+          <Link href={moduleAwareHref("/support", activeModule.key)} className="text-sm text-ink-soft hover:underline">
             Limpiar filtros
           </Link>
         </div>
       </form>
 
-      <SupportTicketTable tickets={tickets} />
+      <SupportTicketTable tickets={tickets} moduleKey={activeModule.key} />
     </div>
   );
 }

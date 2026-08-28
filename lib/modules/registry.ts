@@ -470,6 +470,27 @@ export function resolveShellModuleForPath(
 }
 
 /**
+ * Módulo activo de una pantalla TRANSVERSAL renderizada en servidor.
+ *
+ * Existe porque el patrón de QUALITY-01.2 —leer `SHELL_MODULE_PARAM` de los
+ * searchParams, desempaquetar el array que Next entrega cuando el parámetro
+ * viene repetido, y resolver— estaba escrito a mano en `/team` y había que
+ * repetirlo en seis pantallas más. Seis copias de cinco líneas es donde una
+ * de ellas se escribe mal y nadie lo nota: la pantalla se ve bien y solo
+ * cambia de identidad.
+ *
+ * PURA. No lee la sesión ni la base: el módulo activo es presentación, y la
+ * ruta siempre manda sobre el parámetro (ver `resolveShellModuleForPath`).
+ */
+export function activeShellModuleFrom(
+  pathname: string,
+  searchParams: Record<string, string | string[] | undefined> | null | undefined
+): ShellModuleDefinition {
+  const raw = searchParams?.[SHELL_MODULE_PARAM];
+  return resolveShellModuleForPath(pathname, Array.isArray(raw) ? raw[0] : raw);
+}
+
+/**
  * Decora un enlace TRANSVERSAL con el módulo desde el que se navega, para que
  * el shell no cambie de identidad al pulsarlo.
  *

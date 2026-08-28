@@ -11,16 +11,24 @@ import { SupportTicketThread } from "@/components/domain/support/support-ticket-
 import { ReplySupportTicketForm, ReopenSupportTicketButton } from "@/components/domain/support/support-ticket-reply-forms";
 import { InfoAlert } from "@/components/ui/alert";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import {
+  activeShellModuleFrom,
+  moduleAwareHref,
+} from "@/lib/modules/registry";
 
 export default async function SupportTicketDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ created?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  const { created } = await searchParams;
+  const sp = await searchParams;
+  const created = Array.isArray(sp.created) ? sp.created[0] : sp.created;
+  // PT-03A · Pantalla transversal: el enlace de vuelta conserva el módulo
+  // desde el que se llegó, en vez de devolver el shell a PCR.
+  const activeModule = activeShellModuleFrom(`/support/${id}`, sp);
   const { ticket, messages, canReopen } = await getSupportTicketAction(id);
   if (!ticket) notFound();
 
@@ -28,7 +36,7 @@ export default async function SupportTicketDetailPage({
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="eyebrow">
-          <Link href="/support" className="hover:underline">
+          <Link href={moduleAwareHref("/support", activeModule.key)} className="hover:underline">
             Centro de soporte
           </Link>
         </p>

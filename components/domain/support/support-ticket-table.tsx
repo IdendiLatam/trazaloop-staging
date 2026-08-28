@@ -3,8 +3,21 @@ import type { SupportTicketSummaryRow } from "@/lib/db/support";
 import { TICKET_CATEGORY_LABEL, TICKET_MODULE_LABEL, type TicketCategory, type TicketModule } from "@/lib/domain/support";
 import { TicketStatusBadge, TicketPriorityBadge, SlaStatusBadge } from "./ticket-badges";
 import { EmptyState } from "@/components/ui/empty-state";
+import { moduleAwareHref, type ShellModuleKey } from "@/lib/modules/registry";
 
-export function SupportTicketTable({ tickets }: { tickets: SupportTicketSummaryRow[] }) {
+/**
+ * PT-03A · `moduleKey` viaja como propiedad y no se resuelve aquí dentro: la
+ * tabla no sabe en qué ruta la han puesto, y adivinarlo por `usePathname()`
+ * la convertiría en cliente sin necesidad. La pantalla, que sí lo sabe, lo
+ * pasa.
+ */
+export function SupportTicketTable({
+  tickets,
+  moduleKey = "cpr",
+}: {
+  tickets: SupportTicketSummaryRow[];
+  moduleKey?: ShellModuleKey;
+}) {
   if (tickets.length === 0) {
     return (
       <EmptyState
@@ -48,7 +61,7 @@ export function SupportTicketTable({ tickets }: { tickets: SupportTicketSummaryR
                 <SlaStatusBadge status={t.slaStatus} />
               </td>
               <td className="px-3 py-2 text-right text-xs">
-                <Link href={`/support/${t.ticketId}`} className="text-loop hover:underline">
+                <Link href={moduleAwareHref(`/support/${t.ticketId}`, moduleKey)} className="text-loop hover:underline">
                   Abrir
                 </Link>
               </td>
