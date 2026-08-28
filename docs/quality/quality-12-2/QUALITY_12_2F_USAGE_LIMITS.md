@@ -166,10 +166,22 @@ Se emiten en `work_events` con `source_domain = 'ai'`, que es donde ya conviven
 `ai.run_completed` y `ai.suggestion_accepted`. **No se ha construido un segundo
 bus ni un motor de correos.**
 
-| Evento | Cuándo |
-|---|---|
-| `ai.usage_threshold_reached` | se cruza el umbral blando |
-| `ai.usage_hard_limit_reached` | se alcanza el techo |
+| Evento | Cuándo | Estado |
+|---|---|---|
+| `ai.usage_threshold_reached` | se cruza el umbral blando | **se emite** |
+| `ai.usage_hard_limit_reached` | se alcanza el techo | **definido, todavía sin emisor** |
+
+> **El segundo no se emite, y conviene decirlo.** El tipo existe, la función
+> emisora lo soporta y el vocabulario del bus lo acepta, pero las dos puertas
+> llaman al emisor solo en el caso blando: cuando el tope duro deniega, la
+> función retorna **antes** de llegar a esa línea, que es justamente lo que
+> hace que no se cree una fila de operación para registrar un rechazo.
+>
+> No afecta al bloqueo, que funciona y está validado. Afecta a la
+> **observabilidad**: alcanzar el techo se ve en la consola y en el estado de
+> la empresa, pero no deja un hecho en el bus para que la automatización
+> reaccione. Emitirlo exige tocar las dos funciones, o sea una migración, y
+> este cierre no la lleva.
 
 Se llaman `ai.*` y no `intelligence.*` porque esa es la convención del bus: la
 identidad visible es una cosa y el espacio técnico es otra, que es exactamente
