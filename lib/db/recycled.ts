@@ -22,6 +22,23 @@ export const EXCLUSION_LABEL: Record<string, string> = {
   invalid_reclassification_support: "Reclasificación sin soporte completo y validado",
   missing_origin_support: "Sin evidencia de soporte de origen",
   origin_support_not_valid: "El soporte de origen no está validado",
+
+  // 0147 · El vocabulario del motor vigente. Son `phi_basis`, no razones de
+  // exclusión: dicen POR QUÉ la fracción vale lo que vale, y cuando vale cero
+  // o no se pudo determinar, eso es exactamente la explicación que la columna
+  // «por qué no cuenta» necesita. Sin estas entradas la pantalla enseñaba el
+  // identificador técnico en crudo.
+  declared_fraction: "Cuenta con la fracción reciclada declarada en el lote de entrada",
+  same_process_not_counted:
+    "Recuperado en el mismo proceso: suma a la masa total pero nunca cuenta como reciclado",
+  demonstrably_non_recycled:
+    "Material no reciclado (virgen, aditivo, pigmento, carga o masterbatch)",
+  classification_other_not_demonstrable:
+    "Clasificación «otro»: no demuestra ni que cuenta ni que no",
+  no_applicable_support:
+    "Sin soporte aplicable en la fecha del lote: no se puede defender que sea reciclado",
+  recycled_fraction_not_declared:
+    "El lote de entrada no declara qué fracción suya es reciclada",
 };
 
 export const WARNING_LABEL: Record<string, string> = {
@@ -38,10 +55,23 @@ export const WARNING_LABEL: Record<string, string> = {
     "Hay evidencia pendiente o rechazada asociada a materiales reciclados",
 };
 
+/**
+ * Un componente del cálculo, en UNA sola forma.
+ *
+ * 0147 · Los snapshots antiguos escribían `mass_kg`, `counted` y
+ * `exclusion_reason`; el motor vigente escribe `consumed_kg`, `phi` y
+ * `phi_basis`. Las pantallas leían solo la primera forma, así que un cálculo
+ * de la metodología vigente enseñaba la masa vacía y «no cuenta» en cada fila.
+ * La normalización se hace AQUÍ, al leer, en vez de en cada pantalla: había
+ * tres —ficha, dossier y PDF— y la cuarta habría vuelto a olvidarse.
+ */
 export type CalculationComponent = {
   material_id: string;
   material_name: string;
   mass_kg: number;
+  /** La fracción reciclada aplicada. `null` = no se pudo determinar. */
+  phi: number | null;
+  input_batch_code: string | null;
   classification_code: string;
   effective_classification: string;
   is_same_process: boolean;
@@ -104,6 +134,29 @@ export type LatestBatchRecycled = {
 };
 
 const num = (v: unknown): number => Number(v);
+
+/** Las dos formas de componente, leídas como una. Ver CalculationComponent. */
+function normalizeComponent(c: Record<string, unknown>): CalculationComponent {
+  const phi = numOrNull(c.phi);
+  const counted = "counted" in c ? Boolean(c.counted) : phi !== null && phi > 0;
+  return {
+    ...(c as unknown as CalculationComponent),
+    mass_kg: num(c.mass_kg ?? c.consumed_kg),
+    phi,
+    input_batch_code: (c.input_batch_code as string | null) ?? null,
+    counted,
+    exclusion_reason:
+      (c.exclusion_reason as string | null) ??
+      (counted ? null : ((c.phi_basis as string | null) ?? null)),
+    origin_support_status:
+      (c.origin_support_status as string | null) ??
+      (c.evidence_basis as string | null) ??
+      null,
+    is_same_process:
+      Boolean(c.is_same_process) || c.phi_basis === "same_process_not_counted",
+    warning_codes: (c.warning_codes as string[]) ?? [],
+  };
+}
 const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
 function mapCalculation(r: Record<string, unknown>): Calculation {
@@ -123,10 +176,7 @@ function mapCalculation(r: Record<string, unknown>): Calculation {
     risk_flag: Boolean(r.risk_flag),
     defensibility_level: r.defensibility_level as DefensibilityLevel,
     warnings: (r.warnings as string[]) ?? [],
-    components: ((r.components as CalculationComponent[]) ?? []).map((c) => ({
-      ...c,
-      mass_kg: num(c.mass_kg),
-    })),
+    components: ((r.components as Record<string, unknown>[]) ?? []).map(normalizeComponent),
     calculated_at: r.calculated_at as string,
   };
 }

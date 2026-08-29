@@ -186,7 +186,12 @@ export function DossierBody({
             <thead>
               <tr className="border-b border-hairline text-left text-xs text-ink-soft">
                 <th className="py-2 pr-3 font-medium">Material</th>
+                <th className="py-2 pr-3 font-medium">Lote de entrada</th>
                 <th className="py-2 pr-3 font-medium">Masa kg</th>
+                {/* 0147 · La fracción reciclada declarada del lote es el
+                    factor del numerador. Sin ella, la columna «¿cuenta?» es
+                    una afirmación sin aritmética detrás. */}
+                <th className="py-2 pr-3 font-medium">Fracción φ</th>
                 <th className="py-2 pr-3 font-medium">Clasif. base</th>
                 <th className="py-2 pr-3 font-medium">Clasif. efectiva</th>
                 <th className="py-2 pr-3 font-medium">Mismo proceso</th>
@@ -200,7 +205,11 @@ export function DossierBody({
               {bundle.components.map((c) => (
                 <tr key={c.component_index} className="border-b border-hairline align-top last:border-0">
                   <td className="py-2 pr-3">{c.material_name ?? "—"}</td>
+                  <td className="code py-2 pr-3 text-xs">{c.input_batch_code ?? "—"}</td>
                   <td className="code py-2 pr-3 text-xs">{c.mass_kg ?? "—"}</td>
+                  <td className="code py-2 pr-3 text-xs">
+                    {c.phi === null ? "—" : `${(c.phi * 100).toFixed(2)} %`}
+                  </td>
                   <td className="code py-2 pr-3 text-xs">{c.classification_code ?? "—"}</td>
                   <td className="code py-2 pr-3 text-xs">{c.effective_classification ?? "—"}</td>
                   <td className="py-2 pr-3 text-xs">{c.is_same_process ? "Sí" : "No"}</td>

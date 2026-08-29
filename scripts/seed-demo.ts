@@ -155,7 +155,10 @@ async function main() {
     },
     "Producto: Envase DEMO (declara 60%)"
   ).then(async (productId) => {
-    // 3. Cadena de trazabilidad balanceada (consumo 100 kg = composición 100 kg).
+    // 3. Cadena de trazabilidad. 0147 · El cálculo sale de los CONSUMOS, así
+    //    que la demostración se arma con dos lotes de entrada —uno reciclado
+    //    con su fracción declarada, otro virgen— en vez de con una composición
+    //    tecleada aparte, que ya no existe.
     const inputBatchId = await insert(
       "input_batches",
       {
@@ -164,8 +167,22 @@ async function main() {
         material_id: materialPcrId,
         received_date: new Date().toISOString().slice(0, 10),
         quantity_kg: 200,
+        // La etiqueta «postconsumo» no implica 100 %: la fracción se declara.
+        recycled_fraction: 100,
+        recycled_fraction_basis: "Certificado de origen del proveedor (demostración)",
       },
-      "Lote de entrada DEMO-LE-001 (200 kg)"
+      "Lote de entrada DEMO-LE-001 (200 kg, 100 % reciclado declarado)"
+    );
+    const inputVirginId = await insert(
+      "input_batches",
+      {
+        batch_code: `${TAG}-LE-002`,
+        supplier_id: supplierId,
+        material_id: materialVirginId,
+        received_date: new Date().toISOString().slice(0, 10),
+        quantity_kg: 100,
+      },
+      "Lote de entrada DEMO-LE-002 (resina virgen)"
     );
     const orderId = await insert(
       "production_orders",
@@ -174,8 +191,13 @@ async function main() {
     );
     await insert(
       "batch_consumption",
-      { production_order_id: orderId, input_batch_id: inputBatchId, mass_kg: 100 },
-      "Consumo: 100 kg de DEMO-LE-001"
+      { production_order_id: orderId, input_batch_id: inputBatchId, mass_kg: 70 },
+      "Consumo: 70 kg de DEMO-LE-001 (reciclado)"
+    );
+    await insert(
+      "batch_consumption",
+      { production_order_id: orderId, input_batch_id: inputVirginId, mass_kg: 30 },
+      "Consumo: 30 kg de DEMO-LE-002 (virgen)"
     );
     const outputBatchId = await insert(
       "output_batches",
@@ -188,19 +210,8 @@ async function main() {
       },
       "Lote de salida DEMO-LS-001"
     );
-    await insert(
-      "batch_composition",
-      { output_batch_id: outputBatchId, material_id: materialPcrId, mass_kg: 70 },
-      "Composición: 70 kg PCR DEMO"
-    );
-    await insert(
-      "batch_composition",
-      { output_batch_id: outputBatchId, material_id: materialVirginId, mass_kg: 30 },
-      "Composición: 30 kg resina virgen"
-    );
-
     // 4. Cálculo por la MISMA RPC de la app (nada de lógica duplicada).
-    const { data: calc, error: calcErr } = await supabase.rpc("calculate_recycled_content", {
+    const { data: calc, error: calcErr } = await supabase.rpc("calculate_recycled_content_v2", {
       p_output_batch_id: outputBatchId,
     });
     if (calcErr) {

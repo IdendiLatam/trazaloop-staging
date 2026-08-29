@@ -25,7 +25,7 @@
  * jamás forma parte del flujo de la aplicación.
  */
 import { config as loadEnv } from "dotenv";
-import { resolveNextStep } from "../../lib/domain/guided-flow";
+import { resolveNextStep, operativeNextStep } from "../../lib/domain/guided-flow";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
 
@@ -694,10 +694,9 @@ async function main() {
     assert(!obErr && ob, `B no pudo crear lote de salida: ${obErr?.message}`);
     obB = ob!.id;
 
-    const { error: cpErr } = await userB.client.from("batch_composition").insert({
-      organization_id: orgB, output_batch_id: obB, material_id: matB!.id, mass_kg: 50,
-    });
-    assert(!cpErr, `B no pudo registrar composición: ${cpErr?.message}`);
+    // 0147 · Aquí B tecleaba la composición de su lote. La composición ya no
+    // se escribe por ninguna ruta de cliente; su cadena de consumo, que es de
+    // donde sale el cálculo, ya está completa arriba.
 
     for (const table of ["input_batches", "production_orders", "batch_consumption", "output_batches", "batch_composition"] as const) {
       const { data } = await userA.client.from(table).select("id").eq("organization_id", orgB);
@@ -765,6 +764,10 @@ async function main() {
     assert(ob, "A no pudo crear su lote de salida");
     obA1 = ob!.id;
 
+    // 0147 · La composición manual ya no se escribe por NINGUNA ruta de
+    // cliente: sin política de insert y sin privilegio de tabla. Se comprueban
+    // las dos, la ajena y la propia, porque cerrar solo la cruzada dejaría
+    // abierta la que de verdad se usaba.
     const { data: matB2 } = await userB.client
       .from("materials").select("id").eq("organization_id", orgB).limit(1).single();
     const { data: c3, error: e3 } = await userA.client
@@ -772,6 +775,12 @@ async function main() {
       .insert({ organization_id: orgA, output_batch_id: obA1, material_id: matB2!.id, mass_kg: 10 })
       .select();
     assert(e3 || (c3 ?? []).length === 0, "se aceptó composición en A con material de B");
+    const { data: cPropia, error: ePropia } = await userA.client
+      .from("batch_composition")
+      .insert({ organization_id: orgA, output_batch_id: obA1, material_id: matA3, mass_kg: 10 })
+      .select();
+    assert(ePropia || (cPropia ?? []).length === 0,
+      "un cliente sigue pudiendo escribir composición en su propia empresa");
   });
 
   await check("26. organization_id inmutable en las 5 tablas de trazabilidad", async () => {
@@ -780,10 +789,11 @@ async function main() {
       .from("batch_consumption")
       .insert({ organization_id: orgA, production_order_id: poA1, input_batch_id: ibA1, mass_kg: 100 })
       .select("id").single();
-    const { data: cp } = await userA.client
-      .from("batch_composition")
-      .insert({ organization_id: orgA, output_batch_id: obA1, material_id: matA3, mass_kg: 100 })
-      .select("id").single();
+    // 0147 · La composición ya no se escribe desde un cliente, pero las filas
+    // históricas existen y el trigger que impide moverlas de empresa las sigue
+    // protegiendo. Se siembra por la conexión privilegiada, que es como
+    // llegaron a existir las que hay.
+    const cp = await seedComposicionHistorica(obA1, matA3, 100);
     assert(bc && cp, "no se pudieron crear consumo/composición de prueba");
 
     const attempts: { table: string; id: string }[] = [
@@ -858,28 +868,42 @@ async function main() {
     assert(!e4 && ob, `consultant no pudo crear lote de salida: ${e4?.message}`);
     obA2 = ob!.id;
 
-    const { error: e5 } = await userC.client.from("batch_composition").insert({
-      organization_id: orgA, output_batch_id: obA2, material_id: matA3, mass_kg: 80,
-    });
-    assert(!e5, `consultant no pudo registrar composición: ${e5?.message}`);
+    // 0147 · El consultor escribe consumos y lotes, que es lo que alimenta el
+    // cálculo. Composición no escribe NADIE: el cierre no depende del rol.
+    const { data: c5, error: e5 } = await userC.client
+      .from("batch_composition")
+      .insert({ organization_id: orgA, output_batch_id: obA2, material_id: matA3, mass_kg: 80 })
+      .select();
+    assert(e5 || (c5 ?? []).length === 0,
+      "el consultor pudo escribir composición: el cierre debe ser para todos");
+
+    // Y se siembra la fila histórica por vía privilegiada: la vista de
+    // completitud (0104) sigue leyéndola y el caso 30 comprueba su aritmética,
+    // incluida la advertencia de balance. Esa vista es legado vivo y su
+    // comportamiento no cambia porque haya dejado de escribirse desde la app.
+    await seedComposicionHistorica(obA2, matA3, 80);
   });
 
   await check("29. Solo admin/quality eliminan registros de trazabilidad", async () => {
-    // Fila desechable: composición extra con el segundo material.
+    // 0147 · La fila desechable era una composición. Esa tabla ya no admite
+    // escritura de nadie, así que probar el reparto de roles sobre ella no
+    // probaría el reparto: probaría el cierre. Se usa un consumo, que es una
+    // tabla de trazabilidad que sí se sigue escribiendo, y el cierre de la
+    // composición se comprueba aparte (casos 25 y 28).
     const { data: extra, error: exErr } = await userA.client
-      .from("batch_composition")
-      .insert({ organization_id: orgA, output_batch_id: obA2, material_id: matA3b, mass_kg: 5 })
+      .from("batch_consumption")
+      .insert({ organization_id: orgA, production_order_id: poA2, input_batch_id: ibA1, mass_kg: 5 })
       .select("id").single();
     assert(!exErr && extra, `no se pudo crear la fila desechable: ${exErr?.message}`);
 
     // Consultant intenta eliminar → RLS deja 0 filas.
     const { data: delC } = await userC.client
-      .from("batch_composition").delete().eq("id", extra!.id).select("id");
-    assert((delC ?? []).length === 0, "consultant pudo eliminar composición");
+      .from("batch_consumption").delete().eq("id", extra!.id).select("id");
+    assert((delC ?? []).length === 0, "consultant pudo eliminar un consumo");
 
     // Admin sí puede.
     const { data: delA, error: delErr } = await userA.client
-      .from("batch_composition").delete().eq("id", extra!.id).select("id");
+      .from("batch_consumption").delete().eq("id", extra!.id).select("id");
     assert(!delErr && (delA ?? []).length === 1, `admin no pudo eliminar: ${delErr?.message}`);
 
     // Y el lote de entrada consumido NO se puede eliminar (FK restrict).
@@ -991,18 +1015,19 @@ async function main() {
       .eq("code", "RC-6632-15343")
       .order("version");
     assert((meths ?? []).length >= 1, "no se pudo leer la metodología RC-6632-15343");
-    // PT-02A · Esta comprobación decía «la metodología seed está activa» y leía
-    // `meths[0]` de una consulta SIN orden. Desde 0144 hay DOS versiones, así
-    // que además de ser falsa era no determinista: acertaba o fallaba según el
-    // orden que devolviera la base. Se comprueba lo que ahora es cierto, y con
-    // más fuerza: exactamente una activa, la v2, y la v1 conservada e inactiva.
-    const activas = (meths ?? []).filter((m) => m.is_active);
-    assert(activas.length === 1,
-      `debía haber exactamente una metodología activa, hay ${activas.length}`);
-    assert(Number(activas[0].version) === 2, "la activa debía ser la v2");
-    const v1 = (meths ?? []).find((m) => Number(m.version) === 1);
-    assert(v1 && v1.is_active === false,
-      "la v1 debía conservarse e inactiva: borrarla haría irreproducibles sus cálculos");
+    // 0147 · Hay UNA metodología de contenido reciclado. La comprobación decía
+    // «la seed está activa» y leía `meths[0]` de una consulta SIN orden: con
+    // dos versiones en la tabla era además no determinista.
+    assert((meths ?? []).length === 1,
+      `debía quedar UNA sola metodología de contenido reciclado, hay ${(meths ?? []).length}`);
+    assert(Number(meths![0].version) === 2, `la única debía ser la 2, es la ${meths![0].version}`);
+
+    // Y el algoritmo NO se elige por `is_active`: se elige por un puntero
+    // explícito. Es la diferencia entre decidir y dejarse llevar.
+    const { data: canon, error: canonErr } = await userA.client
+      .rpc("recycled_content_canonical_methodology");
+    assert(!canonErr && canon, `no se pudo leer la metodología canónica: ${canonErr?.message}`);
+    assert(canon.id === meths![0].id, "la canónica no es la que está en el catálogo");
 
     const { data: ins, error: insErr } = await userA.client
       .from("calculation_methodologies")
@@ -1025,21 +1050,57 @@ async function main() {
   const obS4: Record<string, string> = {};
   const orderS4: Record<string, string> = {};
 
-  async function makeChain(tag: string, consumeKg: number, extra: Record<string, unknown> = {}) {
+  /**
+   * 0147 · La cadena de prueba se arma con CONSUMOS.
+   *
+   * Antes esto creaba un consumo genérico y luego `compose()` tecleaba la
+   * composición del lote producido, que era de donde el motor retirado sacaba
+   * sus números. El motor único lee los consumos reales de la orden y la
+   * fracción reciclada declarada en cada lote de ENTRADA, así que cada
+   * componente de un escenario es ahora su propio lote de entrada.
+   *
+   * `phi` es el porcentaje declarado en el lote. Se deja sin declarar a
+   * propósito cuando el escenario quiere provocar un incompleto: una
+   * clasificación elegible NO implica 100 %.
+   */
+  type Feed = { material: string; kg: number; phi?: number };
+
+  async function makeChain(tag: string, feed: Feed[], extra: Record<string, unknown> = {}) {
     const { data: po } = await userA.client
       .from("production_orders")
       .insert({ organization_id: orgA, order_code: `A-OP-${tag}`, order_date: "2026-07-05" })
       .select("id").single();
-    const { data: ib } = await userA.client
-      .from("input_batches")
-      .insert({
-        organization_id: orgA, batch_code: `A-LE-${tag}`, supplier_id: supA3,
-        material_id: matA3, received_date: "2026-07-04", quantity_kg: consumeKg * 2,
-      })
-      .select("id").single();
-    await userA.client.from("batch_consumption").insert({
-      organization_id: orgA, production_order_id: po!.id, input_batch_id: ib!.id, mass_kg: consumeKg,
-    });
+
+    let total = 0;
+    let n = 0;
+    for (const f of feed) {
+      n += 1;
+      total += f.kg;
+      const { data: ib, error: ibErr } = await userA.client
+        .from("input_batches")
+        .insert({
+          organization_id: orgA,
+          batch_code: `A-LE-${tag}-${n}`,
+          supplier_id: supA3,
+          material_id: f.material,
+          received_date: "2026-07-04",
+          quantity_kg: f.kg * 2,
+          ...(f.phi === undefined
+            ? {}
+            : {
+                recycled_fraction: f.phi,
+                recycled_fraction_basis: "Declarado por el proveedor (fixture)",
+              }),
+        })
+        .select("id").single();
+      assert(!ibErr && ib, `no se pudo crear el lote de entrada ${tag}-${n}: ${ibErr?.message}`);
+      const { error: bcErr } = await userA.client.from("batch_consumption").insert({
+        organization_id: orgA, production_order_id: po!.id,
+        input_batch_id: ib!.id, mass_kg: f.kg,
+      });
+      assert(!bcErr, `no se pudo registrar el consumo ${tag}-${n}: ${bcErr?.message}`);
+    }
+
     const { data: ob } = await userA.client
       .from("output_batches")
       .insert({
@@ -1047,13 +1108,11 @@ async function main() {
         batch_code: `A-LS-${tag}`,
         production_order_id: po!.id,
         // Q0.3H · produced_quantity_kg es OBLIGATORIA (NOT NULL) desde 0105.
-        // El valor correcto es consumeKg, no una constante: estas son cadenas
-        // BALANCEADAS y la composición que añade compose() suma esa misma masa.
-        // 0104 marca mass_balance_warning cuando producido y composición
-        // difieren más de un 5 %, y esa advertencia degrada el cálculo de
-        // 'defensible' a 'with_warnings'. Se declara ANTES de ...extra para que
-        // un caso concreto pueda sobrescribirlo si quiere provocar el desbalance.
-        produced_quantity_kg: consumeKg,
+        // Se declara igual a lo consumido: el motor avisa cuando producido y
+        // consumido se separan más del 5 %, y esa advertencia degrada el nivel
+        // de 'defensible' a 'with_warnings'. Va ANTES de ...extra para que un
+        // caso concreto pueda provocar el desbalance a propósito.
+        produced_quantity_kg: total,
         ...extra,
       })
       .select("id").single();
@@ -1062,13 +1121,33 @@ async function main() {
     return ob!.id;
   }
 
-  async function compose(obId: string, materialId: string, mass: number, sameProcess = false) {
-    const { error } = await userA.client.from("batch_composition").insert({
-      organization_id: orgA, output_batch_id: obId, material_id: materialId,
-      mass_kg: mass, is_same_process: sameProcess,
-    });
-    assert(!error, `no se pudo componer: ${error?.message}`);
+  /**
+   * Siembra una fila de composición por la vía privilegiada.
+   *
+   * 0147 dejó `batch_composition` de solo lectura para cualquier cliente. Las
+   * filas históricas existen en las bases reales y varias vistas de legado las
+   * leen, así que las pruebas que ejercitan esas vistas necesitan sembrarlas
+   * como llegaron a existir: por debajo de la RLS, no por la aplicación.
+   */
+  async function seedComposicionHistorica(
+    outputBatchId: string, materialId: string, massKg: number
+  ) {
+    // Con la clave de servicio, que no es un cliente: es la misma vía por la
+    // que una migración o una reparación tocan la base. Lo que 0147 cierra es
+    // la escritura desde una SESIÓN de usuario, y eso se comprueba aparte
+    // (casos 25 y 28).
+    const { data, error } = await admin
+      .from("batch_composition")
+      .insert({ organization_id: orgA, output_batch_id: outputBatchId,
+                material_id: materialId, mass_kg: massKg })
+      .select("id").single();
+    assert(!error && data, `no se pudo sembrar la composición histórica: ${error?.message}`);
+    return data as { id: string };
   }
+
+  /** El único camino de cálculo que queda. */
+  const calcular = (obId: string) =>
+    userA.client.rpc("calculate_recycled_content_v2", { p_output_batch_id: obId });
 
   await check("32. Fixtures de cálculo: evidencias validadas y materiales por clasificación", async () => {
     async function makeEvidence(name: string, validate: boolean) {
@@ -1135,76 +1214,84 @@ async function main() {
     prodP41 = p1!.id; prodP42 = p2!.id;
   });
 
-  await check("33. Casos de cálculo 1-6: reglas por material, soporte y riesgo declarado", async () => {
-    const rpc = (obId: string) =>
-      userA.client.rpc("calculate_recycled_content", { p_output_batch_id: obId });
-
-    // Caso 1 — postconsumo válido cuenta; virgen no.
-    await makeChain("41", 100, { product_id: prodP41, produced_date: "2026-07-10", produced_quantity_kg: 100 });
-    await compose(obS4["41"], matPC, 70);
-    await compose(obS4["41"], matVirgin, 30);
-    const { data: c1, error: e1 } = await rpc(obS4["41"]);
+  await check("33. Casos de cálculo 1-6: reglas por material, soporte y fracción declarada", async () => {
+    // Caso 1 — postconsumo con fracción declarada cuenta; virgen no.
+    await makeChain("41",
+      [{ material: matPC, kg: 70, phi: 100 }, { material: matVirgin, kg: 30 }],
+      { product_id: prodP41, produced_date: "2026-07-10" });
+    const { data: c1, error: e1 } = await calcular(obS4["41"]);
     assert(!e1 && c1, `caso 1 falló: ${e1?.message}`);
+    assert(c1.result_state === "calculated", `caso 1: esperado calculated, fue ${c1.result_state}`);
     assert(close(c1.total_mass_kg, 100) && close(c1.recycled_mass_kg, 70) && close(c1.recycled_percent, 70),
       `caso 1: esperado 70/100=70%, fue ${c1.recycled_mass_kg}/${c1.total_mass_kg}=${c1.recycled_percent}`);
     assert(c1.defensibility_level === "defensible", `caso 1: esperado defensible, fue ${c1.defensibility_level}`);
-    const comps1 = c1.components as { material_id: string; counted: boolean; exclusion_reason: string | null }[];
-    assert(comps1.find((x) => x.material_id === matPC)?.counted === true, "caso 1: PC no contó");
-    assert(comps1.find((x) => x.material_id === matVirgin)?.exclusion_reason === "non_recycled_material",
-      "caso 1: virgen sin razón non_recycled_material");
+    const comps1 = c1.components as { material_id: string; phi: number | null; phi_basis: string }[];
+    assert(comps1.find((x) => x.material_id === matPC)?.phi === 1, "caso 1: el postconsumo no contó al 100 %");
+    assert(comps1.find((x) => x.material_id === matVirgin)?.phi_basis === "demonstrably_non_recycled",
+      "caso 1: el virgen debía ser un cero DEMOSTRABLE, no un cero por desconocimiento");
 
     // Caso 2 — mismo proceso suma denominador pero no numerador.
-    await makeChain("42", 100);
-    await compose(obS4["42"], matPC, 60);
-    await compose(obS4["42"], matSame, 40, true);
-    const { data: c2, error: e2 } = await rpc(obS4["42"]);
+    await makeChain("42",
+      [{ material: matPC, kg: 60, phi: 100 }, { material: matSame, kg: 40 }]);
+    const { data: c2, error: e2 } = await calcular(obS4["42"]);
     assert(!e2 && close(c2.recycled_percent, 60) && close(c2.total_mass_kg, 100),
       `caso 2: esperado 60%, fue ${c2?.recycled_percent}`);
-    const comps2 = c2.components as { material_id: string; exclusion_reason: string | null }[];
-    assert(comps2.find((x) => x.material_id === matSame)?.exclusion_reason === "same_process_or_never_counts",
-      "caso 2: mismo proceso sin razón same_process_or_never_counts");
+    const comps2 = c2.components as { material_id: string; phi_basis: string }[];
+    assert(comps2.find((x) => x.material_id === matSame)?.phi_basis === "same_process_not_counted",
+      "caso 2: el mismo proceso debía ser un cero de regla");
 
     // Caso 3 — postindustrial sin reclasificar no cuenta.
-    await makeChain("43", 100);
-    await compose(obS4["43"], matPI, 50);
-    await compose(obS4["43"], matVirgin, 50);
-    const { data: c3, error: e3 } = await rpc(obS4["43"]);
+    await makeChain("43",
+      [{ material: matPI, kg: 50 }, { material: matVirgin, kg: 50 }]);
+    const { data: c3, error: e3 } = await calcular(obS4["43"]);
     assert(!e3 && close(c3.recycled_percent, 0), `caso 3: esperado 0%, fue ${c3?.recycled_percent}`);
     assert(c3.defensibility_level === "preliminary", `caso 3: esperado preliminary, fue ${c3.defensibility_level}`);
-    const comps3 = c3.components as { material_id: string; exclusion_reason: string | null }[];
-    assert(comps3.find((x) => x.material_id === matPI)?.exclusion_reason === "postindustrial_not_reclassified",
-      "caso 3: falta razón postindustrial_not_reclassified");
+    const comps3 = c3.components as { material_id: string; phi_basis: string }[];
+    assert(comps3.find((x) => x.material_id === matPI)?.phi_basis === "postindustrial_not_reclassified",
+      "caso 3: falta el motivo postindustrial_not_reclassified");
 
     // Caso 4 — postindustrial reclasificado con soporte válido cuenta.
-    await makeChain("44", 200, { product_id: prodP41, produced_date: "2026-07-15", produced_quantity_kg: 200 });
-    await compose(obS4["44"], matPIre, 100);
-    await compose(obS4["44"], matVirgin, 100);
-    const { data: c4, error: e4 } = await rpc(obS4["44"]);
+    await makeChain("44",
+      [{ material: matPIre, kg: 100, phi: 100 }, { material: matVirgin, kg: 100 }],
+      { product_id: prodP41, produced_date: "2026-07-15" });
+    const { data: c4, error: e4 } = await calcular(obS4["44"]);
     assert(!e4 && close(c4.recycled_percent, 50) && close(c4.total_mass_kg, 200),
       `caso 4: esperado 50%, fue ${c4?.recycled_percent}`);
     assert(c4.defensibility_level === "defensible", `caso 4: esperado defensible, fue ${c4.defensibility_level}`);
 
-    // Caso 5 — evidencia pendiente no cuenta.
-    await makeChain("45", 100);
-    await compose(obS4["45"], matPCpend, 100);
-    const { data: c5, error: e5 } = await rpc(obS4["45"]);
-    assert(!e5 && close(c5.recycled_percent, 0), `caso 5: esperado 0%, fue ${c5?.recycled_percent}`);
-    const comps5 = c5.components as { exclusion_reason: string | null }[];
-    assert(comps5[0]?.exclusion_reason === "origin_support_not_valid",
-      `caso 5: razón fue ${comps5[0]?.exclusion_reason}`);
-    assert((c5.warnings as string[]).includes("related_evidence_not_valid"),
-      "caso 5: falta advertencia related_evidence_not_valid");
+    // Caso 5 — evidencia PENDIENTE: el resultado es INCOMPLETO, no cero.
+    //
+    // Aquí está el cambio de fondo respecto de la metodología retirada, que
+    // devolvía 0 %. Que el soporte no esté validado no demuestra que el
+    // material sea virgen; demuestra que no se puede defender. Un cero habría
+    // sido una afirmación que nadie puede sostener.
+    await makeChain("45", [{ material: matPCpend, kg: 100, phi: 100 }]);
+    const { data: c5, error: e5 } = await calcular(obS4["45"]);
+    assert(!e5 && c5, `caso 5 falló: ${e5?.message}`);
+    assert(c5.result_state === "incomplete", `caso 5: esperado incomplete, fue ${c5.result_state}`);
+    assert(c5.recycled_percent === null, "caso 5: un incompleto NO puede llevar porcentaje");
+    assert((c5.incomplete_reasons as string[]).some((r) => r.startsWith("no_applicable_support:")),
+      `caso 5: motivos fueron ${JSON.stringify(c5.incomplete_reasons)}`);
 
     // Caso 6 — declarado (80) mayor que calculado (60) genera riesgo.
-    await makeChain("46", 100, { product_id: prodP42, produced_date: "2026-06-20" });
-    await compose(obS4["46"], matPC, 60);
-    await compose(obS4["46"], matVirgin, 40);
-    const { data: c6, error: e6 } = await rpc(obS4["46"]);
+    await makeChain("46",
+      [{ material: matPC, kg: 60, phi: 100 }, { material: matVirgin, kg: 40 }],
+      { product_id: prodP42, produced_date: "2026-06-20" });
+    const { data: c6, error: e6 } = await calcular(obS4["46"]);
     assert(!e6 && close(c6.recycled_percent, 60), `caso 6: esperado 60%, fue ${c6?.recycled_percent}`);
     assert(c6.risk_flag === true, "caso 6: risk_flag debería ser true");
     assert((c6.warnings as string[]).includes("declared_above_calculated"),
-      "caso 6: falta advertencia declared_above_calculated");
+      "caso 6: falta la advertencia declared_above_calculated");
     assert(c6.defensibility_level !== "defensible", "caso 6: no puede ser defensible");
+
+    // Caso 7 — elegible, con soporte, pero SIN fracción declarada: incompleto.
+    //   La etiqueta «postconsumo» no implica 100 %. Este es el caso que la
+    //   metodología retirada resolvía inventándose el 100.
+    await makeChain("41B", [{ material: matPC, kg: 100 }]);
+    const { data: c7 } = await calcular(obS4["41B"]);
+    assert(c7.result_state === "incomplete", `caso 7: esperado incomplete, fue ${c7?.result_state}`);
+    assert((c7.incomplete_reasons as string[]).some((r) => r.startsWith("fraction_unknown:")),
+      `caso 7: motivos fueron ${JSON.stringify(c7?.incomplete_reasons)}`);
   });
 
   await check("34. Recalcular crea un snapshot nuevo y v_latest muestra el último", async () => {
@@ -1215,7 +1302,7 @@ async function main() {
       .order("calculated_at", { ascending: true });
     const firstRow = first.data![0];
 
-    const { error } = await userA.client.rpc("calculate_recycled_content", {
+    const { error } = await userA.client.rpc("calculate_recycled_content_v2", {
       p_output_batch_id: obS4["41"],
     });
     assert(!error, `recalcular falló: ${error?.message}`);
@@ -1280,7 +1367,7 @@ async function main() {
 
   await check("36. Multiempresa: A no ve ni calcula lotes de B; consultant sí calcula en su empresa", async () => {
     // B calcula su propio lote (tiene composición del caso 24).
-    const { error: bErr } = await userB.client.rpc("calculate_recycled_content", {
+    const { error: bErr } = await userB.client.rpc("calculate_recycled_content_v2", {
       p_output_batch_id: obB,
     });
     assert(!bErr, `B no pudo calcular su lote: ${bErr?.message}`);
@@ -1298,13 +1385,13 @@ async function main() {
     assert((viewLeak ?? []).length === 0, "la vista filtró cálculos de B hacia A");
 
     // A no puede calcular un lote de B (nota: userA solo es miembro de A).
-    const { error: crossErr } = await userA.client.rpc("calculate_recycled_content", {
+    const { error: crossErr } = await userA.client.rpc("calculate_recycled_content_v2", {
       p_output_batch_id: obB,
     });
     assert(crossErr !== null, "A pudo calcular un lote de B");
 
     // Consultant C calcula un lote de A (obA2 tiene composición del caso 28).
-    const { data: cCalc, error: cErr } = await userC.client.rpc("calculate_recycled_content", {
+    const { data: cCalc, error: cErr } = await userC.client.rpc("calculate_recycled_content_v2", {
       p_output_batch_id: obA2,
     });
     assert(!cErr && cCalc, `consultant no pudo calcular: ${cErr?.message}`);
@@ -1368,7 +1455,7 @@ async function main() {
 
   await check("38. Sprint 4.1: agregados transparentes (sin cálculos ≠ defendible; parcial = preliminar)", async () => {
     // Orden con un lote de salida SIN cálculo: nivel null, jamás 'defensible'.
-    await makeChain("47", 100, { produced_date: "2026-08-10" });
+    await makeChain("47", [{ material: matPC, kg: 100, phi: 100 }], { produced_date: "2026-08-10" });
     const ob47a = obS4["47"];
     const order47 = orderS4["47"];
 
@@ -1390,47 +1477,33 @@ async function main() {
       && Number(agg.uncalculated_batches_count) === 1 && agg.has_uncalculated_batches === true,
       `orden sin cálculos: conteos 1/0/1 esperados, fueron ${agg.output_batches_count}/${agg.calculated_batches_count}/${agg.uncalculated_batches_count}`);
 
-    // Segundo lote en la MISMA orden, este sí calculado → agregado PARCIAL:
-    // 'preliminary' aunque el lote calculado sea defendible, porcentaje solo
-    // sobre lo calculado, y conteos 2/1/1.
+    const { error: e47a } = await calcular(ob47a);
+    assert(!e47a, `no se pudo calcular el lote: ${e47a?.message}`);
+    agg = await read47();
+    assert(agg.defensibility_level === "defensible",
+      `orden calculada: esperado defensible, fue ${agg.defensibility_level}`);
+    assert(close(agg.recycled_percent, 100), `esperado 100%, fue ${agg.recycled_percent}`);
+    assert(Number(agg.uncalculated_batches_count) === 0 && agg.has_uncalculated_batches === false,
+      "orden completa: no deberían quedar pendientes");
+
+    // 0147 · Aquí había un segundo lote de salida en la MISMA orden, para
+    // construir un agregado «parcialmente calculado». Con la metodología única
+    // ese escenario ya no existe: una orden con varias salidas y sin
+    // atribución de consumos no se prorratea, se declara incompleta (PT-H05).
+    // Se comprueba, porque es la razón por la que el escenario anterior
+    // desapareció y no una omisión.
     const { data: ob47b } = await userA.client
       .from("output_batches")
       .insert({
         organization_id: orgA, batch_code: "A-LS-47B", production_order_id: order47,
-        produced_date: "2026-08-15",
-        produced_quantity_kg: 100, // Q0.3H · obligatoria (NOT NULL) desde 0105
+        produced_date: "2026-08-15", produced_quantity_kg: 100,
       })
       .select("id").single();
-    await compose(ob47b!.id, matPC, 70);
-    await compose(ob47b!.id, matVirgin, 30);
-    const { data: calc47b, error: e47b } = await userA.client.rpc("calculate_recycled_content", {
-      p_output_batch_id: ob47b!.id,
-    });
-    assert(!e47b && calc47b.defensibility_level === "defensible",
-      `el lote calculado debía ser defendible, fue ${calc47b?.defensibility_level} (${e47b?.message ?? ""})`);
-
-    agg = await read47();
-    assert(agg.defensibility_level === "preliminary",
-      `orden parcialmente calculada: esperado preliminary, fue ${agg.defensibility_level}`);
-    assert(close(agg.recycled_percent, 70) && close(agg.total_mass_kg, 100),
-      `porcentaje parcial: esperado 70% sobre 100 kg calculados, fue ${agg.recycled_percent} sobre ${agg.total_mass_kg}`);
-    assert(Number(agg.output_batches_count) === 2 && Number(agg.calculated_batches_count) === 1
-      && Number(agg.uncalculated_batches_count) === 1 && agg.has_uncalculated_batches === true,
-      "orden parcial: conteos 2/1/1 esperados");
-
-    // Calculado el lote restante → aplica la regla normal (ambos defendibles).
-    await compose(ob47a, matPC, 100);
-    const { error: e47a } = await userA.client.rpc("calculate_recycled_content", {
-      p_output_batch_id: ob47a,
-    });
-    assert(!e47a, `no se pudo calcular el lote restante: ${e47a?.message}`);
-    agg = await read47();
-    assert(agg.defensibility_level === "defensible",
-      `orden completamente calculada: esperado defensible, fue ${agg.defensibility_level}`);
-    assert(close(agg.recycled_percent, 85),
-      `ponderado (100+70)/200 = 85%, fue ${agg.recycled_percent}`);
-    assert(Number(agg.uncalculated_batches_count) === 0 && agg.has_uncalculated_batches === false,
-      "orden completa: no deberían quedar pendientes");
+    const { data: c47b } = await calcular(ob47b!.id);
+    assert(c47b.result_state === "incomplete",
+      `dos salidas en una orden: esperado incomplete, fue ${c47b?.result_state}`);
+    assert((c47b.incomplete_reasons as string[]).includes("multiple_output_batches_without_allocation"),
+      `motivos fueron ${JSON.stringify(c47b?.incomplete_reasons)}`);
 
     // Producto / familia / periodo con lote pendiente dentro del alcance:
     // nunca 'defensible'; se informan totales y pendientes.
@@ -1443,13 +1516,10 @@ async function main() {
       .insert({ organization_id: orgA, code: "S41-P1", name: "Producto parcial S41", family_id: famNew!.id })
       .select("id").single();
 
-    await makeChain("48", 100, {
+    await makeChain("48", [{ material: matPC, kg: 100, phi: 100 }], {
       product_id: prodNew!.id, produced_date: "2026-09-05",
     });
-    await compose(obS4["48"], matPC, 100);
-    const { error: e48 } = await userA.client.rpc("calculate_recycled_content", {
-      p_output_batch_id: obS4["48"],
-    });
+    const { error: e48 } = await calcular(obS4["48"]);
     assert(!e48, `no se pudo calcular OB48: ${e48?.message}`);
     // Lote hermano del MISMO producto y periodo, sin cálculo.
     await userA.client.from("output_batches").insert({
@@ -1506,8 +1576,8 @@ async function main() {
     assert(dossier !== null, "no se pudo leer el dossier");
     assert(close(dossier!.recycled_percent, 70) && close(dossier!.total_mass_kg, 100),
       `dossier: snapshot esperado 70%/100kg, fue ${dossier!.recycled_percent}/${dossier!.total_mass_kg}`);
-    assert(dossier!.methodology_code === "RC-6632-15343" && Number(dossier!.methodology_version) === 1,
-      "dossier: metodología incorrecta");
+    assert(dossier!.methodology_code === "RC-6632-15343" && Number(dossier!.methodology_version) === 2,
+      `dossier: metodología incorrecta (${dossier!.methodology_code} v${dossier!.methodology_version})`);
     assert(dossier!.product_name === "Producto S4-1" && dossier!.family_name === "Familia calculo S4",
       `dossier: producto/familia incorrectos (${dossier!.product_name} / ${dossier!.family_name})`);
     assert(dossier!.calculated_by === userA.id, "dossier: calculated_by incorrecto");
@@ -1525,8 +1595,16 @@ async function main() {
     const vgRow = comps!.find((r) => r.material_id === matVirgin);
     assert(pcRow?.counted === true && close(pcRow?.mass_kg, 70),
       "componentes: el PC no expandió counted/mass correctamente");
-    assert(vgRow?.counted === false && vgRow?.exclusion_reason === "non_recycled_material",
-      "componentes: el virgen no expandió la razón de exclusión");
+    // 0147 · El motor vigente nombra este cero `demonstrably_non_recycled`: es
+    // un cero DEMOSTRABLE, no una exclusión por falta de datos. La vista sabe
+    // leer las dos formas, así que se acepta cualquiera de los dos nombres y
+    // lo que se comprueba es lo que importa: que no cuenta y que dice por qué.
+    assert(vgRow?.counted === false, "componentes: el virgen no debía contar");
+    assert(["non_recycled_material", "demonstrably_non_recycled"].includes(
+      String(vgRow?.exclusion_reason)),
+      `componentes: el virgen no expandió la razón (${vgRow?.exclusion_reason})`);
+    assert(vgRow?.phi === 0, "componentes: el virgen debía llevar una fracción de cero explícita");
+    assert(pcRow?.phi === 1, "componentes: el postconsumo debía llevar su fracción declarada");
 
     // Matriz OB41: la evidencia de ORIGEN aparece como soporte requerido y
     // válido AUNQUE no exista evidence_link explícito.
@@ -1559,15 +1637,22 @@ async function main() {
       .from("v_output_batch_support_gaps")
       .select("gap_code, gap_severity, suggested_action")
       .eq("output_batch_id", obA2);
-    assert((gapsA2 ?? []).some((g) => g.gap_code === "missing_origin_support" && g.gap_severity === "critical"),
-      "brechas: falta missing_origin_support para obA2");
+    // 0147 · El motor vigente nombra esta brecha `no_applicable_support`: cubre
+    // tanto «no hay soporte» como «el que hay no aplica en la fecha del lote».
+    // Se acepta cualquiera de los dos nombres para que la comprobación siga
+    // valiendo sobre cálculos históricos, y se exige que sea crítica en ambos.
+    assert((gapsA2 ?? []).some(
+      (g) => ["missing_origin_support", "no_applicable_support"].includes(String(g.gap_code))
+             && g.gap_severity === "critical"),
+      `brechas: falta la de soporte de origen para obA2 (${JSON.stringify((gapsA2 ?? []).map((g) => g.gap_code))})`);
 
     const { data: gaps45 } = await userA.client
       .from("v_output_batch_support_gaps")
       .select("gap_code")
       .eq("output_batch_id", obS4["45"]);
-    assert((gaps45 ?? []).some((g) => g.gap_code === "origin_support_not_valid"),
-      "brechas: falta origin_support_not_valid para OB45");
+    assert((gaps45 ?? []).some(
+      (g) => ["origin_support_not_valid", "no_applicable_support"].includes(String(g.gap_code))),
+      `brechas: falta la de soporte sin validar para OB45 (${JSON.stringify((gaps45 ?? []).map((g) => g.gap_code))})`);
 
     const { data: gaps46 } = await userA.client
       .from("v_output_batch_support_gaps")
@@ -1630,20 +1715,42 @@ async function main() {
         `pura=${expected.code}/${expected.readiness}`);
     }
 
-    // Filas concretas: OB41 defendible sin riesgo → calculated_ready/open_dossier;
-    // OB46 con riesgo → calculated_with_gaps/review_gaps; OB45 preliminar tras
-    // cálculo → review_gaps.
+    // Filas concretas. 0147 · La VISTA sigue exigiendo composición: es de 0106,
+    // es histórica y no se toca. Lo que gobierna la pantalla es la cadena
+    // OPERATIVA, que salta ese paso porque la composición ya no se registra.
+    // Aquí se comprueban las dos cosas por separado, que es justo la
+    // divergencia que la aplicación traduce al leer cada fila.
     const byId = new Map(rowsA!.map((r) => [r.output_batch_id, r]));
+    const operativo = (r: Record<string, unknown>) =>
+      operativeNextStep({
+        hasProductionOrder: Boolean(r.has_production_order),
+        hasConsumption: Boolean(r.has_consumption),
+        hasComposition: true,
+        anySupportMissing: Boolean(r.has_missing_required_evidence),
+        anySupportPending: Boolean(r.has_pending_required_evidence),
+        hasCalculation: Boolean(r.has_calculation),
+        latestDefensibilityLevel: r.latest_defensibility_level as
+          "preliminary" | "with_warnings" | "defensible" | null,
+        latestRiskFlag: Boolean(r.latest_risk_flag),
+      });
+
     const r41 = byId.get(obS4["41"]);
-    assert(r41?.readiness_level === "calculated_ready" && r41?.next_step_code === "open_dossier"
-      && r41?.next_step_href === `/audit-support/calculations/${r41?.latest_calculation_id}`,
-      `OB41: esperado calculated_ready/open_dossier, fue ${r41?.readiness_level}/${r41?.next_step_code}`);
+    assert(r41 && !r41.has_composition,
+      "OB41 no debería tener composición: ya no se registra por ninguna vía");
+    assert(r41!.next_step_code === "add_composition",
+      `la vista histórica debía seguir pidiendo composición, dijo ${r41!.next_step_code}`);
+    const op41 = operativo(r41!);
+    assert(op41.code === "open_dossier" && op41.readiness === "calculated_ready",
+      `OB41 operativo: esperado calculated_ready/open_dossier, fue ${op41.readiness}/${op41.code}`);
+
     const r46 = byId.get(obS4["46"]);
-    assert(r46?.readiness_level === "calculated_with_gaps" && r46?.next_step_code === "review_gaps",
-      `OB46 (riesgo): esperado calculated_with_gaps/review_gaps, fue ${r46?.readiness_level}/${r46?.next_step_code}`);
+    const op46 = operativo(r46!);
+    assert(op46.readiness === "calculated_with_gaps" && op46.code === "review_gaps",
+      `OB46 (riesgo): esperado calculated_with_gaps/review_gaps, fue ${op46.readiness}/${op46.code}`);
+
     const r45 = byId.get(obS4["45"]);
-    assert(r45?.next_step_code === "review_gaps",
-      `OB45 (preliminar): esperado review_gaps, fue ${r45?.next_step_code}`);
+    assert(operativo(r45!).code === "review_gaps",
+      `OB45 (preliminar): esperado review_gaps, fue ${operativo(r45!).code}`);
 
     // Aislamiento: A no ve readiness ni dashboard de B; B sí ve lo suyo.
     const { data: leakReadiness } = await userA.client
@@ -1658,9 +1765,23 @@ async function main() {
       `dashboard A: output_batches_count=${dashA!.output_batches_count} ≠ ${rowsA!.length}`);
     assert(Number(dashA!.calculated_batches_count) > 0, "dashboard A: sin lotes calculados");
     const { data: rowsB } = await userB.client
-      .from("v_output_batch_readiness").select("readiness_level").eq("output_batch_id", obB);
-    assert((rowsB ?? []).length === 1 && rowsB![0].readiness_level === "calculated_with_gaps",
-      `obB: esperado calculated_with_gaps, fue ${rowsB?.[0]?.readiness_level}`);
+      .from("v_output_batch_readiness").select("*").eq("output_batch_id", obB);
+    assert((rowsB ?? []).length === 1, "B debería ver la preparación de su lote");
+    // Igual que arriba: la vista histórica pide composición, la cadena
+    // operativa no. Lo que se comprueba es el veredicto que llega a la
+    // pantalla.
+    const opB = operativeNextStep({
+      hasProductionOrder: Boolean(rowsB![0].has_production_order),
+      hasConsumption: Boolean(rowsB![0].has_consumption),
+      hasComposition: true,
+      anySupportMissing: Boolean(rowsB![0].has_missing_required_evidence),
+      anySupportPending: Boolean(rowsB![0].has_pending_required_evidence),
+      hasCalculation: Boolean(rowsB![0].has_calculation),
+      latestDefensibilityLevel: rowsB![0].latest_defensibility_level,
+      latestRiskFlag: Boolean(rowsB![0].latest_risk_flag),
+    });
+    assert(opB.readiness === "calculated_with_gaps",
+      `obB: esperado calculated_with_gaps, fue ${opB.readiness}`);
   });
 
 
@@ -1673,17 +1794,23 @@ async function main() {
       .from("materials")
       .insert({ organization_id: orgA, name: "Posconsumo Opaco S5C", classification_code: "postconsumer_valid" })
       .select("id").single();
-    await makeChain("50", 100);
-    await compose(obS4["50"], matNoSup!.id, 100);
+    // El lote de entrada declara su fracción: así el ÚNICO factor que se mueve
+    // en toda la comprobación es el soporte, que es lo que se está probando.
+    await makeChain("50", [{ material: matNoSup!.id, kg: 100, phi: 100 }]);
 
     const rpc = () =>
-      userA.client.rpc("calculate_recycled_content", { p_output_batch_id: obS4["50"] });
+      userA.client.rpc("calculate_recycled_content_v2", { p_output_batch_id: obS4["50"] });
 
-    // (i) Sin soporte → 0% con missing_origin_support (estado del bug).
+    // (i) Sin soporte → INCOMPLETO, no cero.
+    //
+    // 0147 · La metodología retirada devolvía 0 %. Que falte el soporte no
+    // demuestra que el material sea virgen: demuestra que no se puede
+    // defender. El cero era una afirmación que nadie podía sostener.
     const { data: c0 } = await rpc();
-    assert(close(c0.recycled_percent, 0), `esperado 0%, fue ${c0.recycled_percent}`);
-    assert((c0.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "missing_origin_support",
-      "esperada razón missing_origin_support");
+    assert(c0.result_state === "incomplete", `esperado incomplete, fue ${c0.result_state}`);
+    assert(c0.recycled_percent === null, "un incompleto no puede llevar porcentaje");
+    assert((c0.incomplete_reasons as string[]).some((r) => r.startsWith("no_applicable_support:")),
+      `motivos fueron ${JSON.stringify(c0.incomplete_reasons)}`);
 
     // (ii) REGLA 9: un evidence_link genérico al material NO hace contar.
     //
@@ -1708,8 +1835,8 @@ async function main() {
     assert(matAfterLink!.origin_support_evidence_id === null,
       "el link genérico NO debe modificar origin_support_evidence_id");
     const { data: c1 } = await rpc();
-    assert(close(c1.recycled_percent, 0)
-      && (c1.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "missing_origin_support",
+    assert(c1.result_state === "incomplete"
+      && (c1.incomplete_reasons as string[]).some((r) => r.startsWith("no_applicable_support:")),
       "el link genérico no debe sustituir silenciosamente al soporte de origen");
 
     // (iii) Soporte de origen con evidencia PENDIENTE: queda asociado pero no
@@ -1718,17 +1845,18 @@ async function main() {
       .from("materials").update({ origin_support_evidence_id: evPending }).eq("id", matNoSup!.id);
     assert(!updPend, `no se pudo asociar evidencia pendiente: ${updPend?.message}`);
     const { data: c2 } = await rpc();
-    assert(close(c2.recycled_percent, 0)
-      && (c2.components as { exclusion_reason: string | null }[])[0]?.exclusion_reason === "origin_support_not_valid",
-      "con evidencia pendiente el material no debe contar (origin_support_not_valid)");
+    assert(c2.result_state === "incomplete"
+      && (c2.incomplete_reasons as string[]).some((r) => r.startsWith("no_applicable_support:")),
+      "con evidencia pendiente el material no debe contar, y no contar es incompleto");
 
     // (iv) Soporte de origen VÁLIDO → recalcular hace que cuente (100%).
     const { error: updValid } = await userA.client
       .from("materials").update({ origin_support_evidence_id: evValid }).eq("id", matNoSup!.id);
     assert(!updValid, `no se pudo asociar evidencia válida: ${updValid?.message}`);
     const { data: c3 } = await rpc();
+    assert(c3.result_state === "calculated", `esperado calculated, fue ${c3.result_state}`);
     assert(close(c3.recycled_percent, 100), `esperado 100%, fue ${c3.recycled_percent}`);
-    assert((c3.components as { counted: boolean }[])[0]?.counted === true, "el material debía contar");
+    assert((c3.components as { phi: number | null }[])[0]?.phi === 1, "el material debía contar entero");
     assert(c3.defensibility_level === "defensible", `esperado defensible, fue ${c3.defensibility_level}`);
 
     // (v) Cross-tenant: evidencia de la empresa B como soporte en material de

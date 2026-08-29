@@ -75,6 +75,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0147_recycled_content_methodology_consolidation.sql",
     "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",
     "0144_recycled_content_v2.sql",

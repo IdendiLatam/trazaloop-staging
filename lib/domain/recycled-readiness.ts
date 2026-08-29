@@ -1,12 +1,11 @@
 /**
- * Trazaloop · PT-02A · El estado operativo de un lote producido.
+ * Trazaloop · PT-02A / 0147 · El estado operativo de un lote producido.
  *
  * LA DECISIÓN QUE ESTE MÓDULO IMPLEMENTA
  *
- * v2 es la ÚNICA metodología operativa. v1 queda como histórico interno:
- * su esquema, sus filas, sus snapshots y sus cálculos se conservan intactos
- * y siguen siendo reproducibles, pero deja de ser una opción de cálculo, un
- * requisito de completitud y un formulario activo.
+ * Hay UNA metodología de contenido reciclado. No hay selector, no hay «v1» ni
+ * «v2» de cara a quien usa el producto, y no hay una segunda fórmula
+ * esperando su turno: 0147 retiró el motor anterior de la base.
  *
  *
  * LO QUE DEJA DE EXISTIR
@@ -171,11 +170,7 @@ export const COMPOSITION_RETIRED_NOTE =
   "antes se conservan y siguen siendo consultables.";
 
 export const V1_HISTORICAL_ONLY_NOTE =
-  "Metodología anterior. Se conserva para consulta y no se puede usar para " +
-  "cálculos nuevos.";
-
-export const V1_CALCULATION_BLOCKED =
-  "La metodología anterior es solo histórica: no se pueden generar cálculos nuevos con ella.";
+  "Dato histórico. Se conserva para consulta y no interviene en el cálculo.";
 
 export const COMPOSITION_WRITE_BLOCKED =
   "La composición del lote ya no se registra a mano. El contenido reciclado se " +

@@ -534,9 +534,13 @@ check("8. Suspended no puede agregar composición", () => {
 });
 
 check("9. Suspended no puede calcular contenido reciclado (sin cambiar la RPC ni la metodología)", () => {
-  assertMutateGuard("../../server/actions/recycled.ts", "calculateRecycledContentAction");
+  // 0147 · La acción se llamaba `calculateRecycledContentAction` y era la
+  // puerta al motor retirado. Queda una sola, con el mismo guardián.
+  assertMutateGuard("../../server/actions/recycled.ts", "calculateRecycledContentV2Action");
   const recycledSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/recycled.ts"), "utf8");
-  assert(recycledSource.includes("calculate_recycled_content"), "seguía llamando la misma RPC de cálculo, sin cambiarla");
+  assert(recycledSource.includes("calculate_recycled_content_v2"), "seguía llamando la misma RPC de cálculo, sin cambiarla");
+  assert(!/rpc\("calculate_recycled_content"/.test(recycledSource),
+    "quedaba una llamada al motor retirado");
 });
 
 check("10-11. Suspended no puede crear feedback/ticket ni cambiar su estado", () => {
@@ -598,7 +602,7 @@ check("Extra: el barrido cubrió las 35 acciones de escritura listadas, ninguna 
     ["../../server/actions/traceability.ts", "addBatchCompositionAction"],
     ["../../server/actions/traceability.ts", "updateBatchCompositionAction"],
     ["../../server/actions/traceability.ts", "deleteBatchCompositionAction"],
-    ["../../server/actions/recycled.ts", "calculateRecycledContentAction"],
+    ["../../server/actions/recycled.ts", "calculateRecycledContentV2Action"],
     ["../../server/actions/implementation.ts", "createImplementationFeedbackAction"],
     ["../../server/actions/implementation.ts", "updateImplementationFeedbackAction"],
     ["../../server/actions/implementation.ts", "updateImplementationFeedbackStatusAction"],

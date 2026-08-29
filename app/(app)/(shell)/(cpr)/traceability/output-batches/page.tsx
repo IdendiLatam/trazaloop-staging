@@ -413,7 +413,7 @@ export default async function OutputBatchesPage({
                         <h3 className="text-sm font-semibold">
                           Composición del lote
                           <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
-                            histórico · metodología anterior
+                            histórico
                           </span>
                         </h3>
                         <span className="code text-sm text-ink-soft">

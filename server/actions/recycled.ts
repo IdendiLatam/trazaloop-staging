@@ -16,14 +16,7 @@ import {
 } from "@/lib/db/recycled";
 import { listOutputBatches, getCompleteness } from "@/lib/db/traceability";
 import { normalizeVisibleText } from "@/lib/domain/nomenclature";
-import { V1_CALCULATION_BLOCKED } from "@/lib/domain/recycled-readiness";
 
-/**
- * Una constante y no un `return` suelto, para que el bloqueo se lea como una
- * decisión de producto reversible y no como código muerto que alguien borrará
- * por limpieza.
- */
-const ALLOW_V1_CALCULATION = false;
 
 /**
  * Mensajes que la RPC lanza a propósito (validaciones de negocio): se
@@ -38,79 +31,27 @@ const KNOWN_RPC_MESSAGES = [
   "El lote de salida no existe",
   "No eres miembro activo",
   "Tu rol no permite calcular",
-  "La metodología indicada no existe",
-  "No hay una metodología activa",
-  "El lote no tiene composición registrada",
+  "Solo se puede calcular con la metodología canónica",
+  "No existe la metodología canónica",
 ];
 
-/**
- * PT-02A · La metodología anterior deja de emitir cálculos NUEVOS.
- *
- * La acción no se borra y la función de la base tampoco: `calculate_recycled_content`
- * sigue siendo lo que hace reproducible cada snapshot ya emitido, y quitarla
- * convertiría en inexplicables cálculos que alguien pudo haber declarado. Lo
- * que se retira es la posibilidad de crear filas nuevas con ella desde la
- * aplicación, que es lo que la convertía en una segunda metodología viva.
- *
- * El bloqueo va ARRIBA DEL TODO, antes de tocar la sesión o la base: una
- * puerta que primero trabaja y luego niega es una puerta que en algún refactor
- * se queda abierta.
- */
-export async function calculateRecycledContentAction(
-  outputBatchId: string
-): Promise<{ error: string | null }> {
-  if (!ALLOW_V1_CALCULATION) return { error: V1_CALCULATION_BLOCKED };
-  const org = await requireActiveOrg();
-
-  // Sprint 10A (corrección final): empresa suspended/cancelled puede ver
-  // cálculos existentes, pero no generar nuevos. No cambia la RPC
-  // calculate_recycled_content ni la metodología: solo agrega esta
-  // barrera antes de invocarla.
-  const mutateCheck = await checkCprCanMutate();
-  if (!mutateCheck.allowed) return { error: mutateCheck.error };
-
-  const supabase = await createServerClient();
-
-  // Defensa previa: el lote debe pertenecer a la empresa activa (la RPC
-  // valida membresía de nuevo; organization_id jamás viaja desde el cliente).
-  const { data: batch } = await supabase
-    .from("output_batches")
-    .select("id")
-    .eq("id", outputBatchId)
-    .eq("organization_id", org.organizationId)
-    .maybeSingle();
-  if (!batch) {
-    return { error: "El lote producido / lote final no pertenece a tu empresa activa." };
-  }
-
-  const { error } = await supabase.rpc("calculate_recycled_content", {
-    p_output_batch_id: outputBatchId,
-  });
-
-  if (error) {
-    const known = KNOWN_RPC_MESSAGES.find((m) => error.message?.includes(m));
-    return {
-      error: known
-        ? // Terminología visible (Sprint 5D; RH-01.3 la centraliza en
-          // lib/domain/nomenclature.ts) sin tocar los mensajes de la RPC.
-          normalizeVisibleText(error.message)
-        : "No fue posible calcular. Revisa la composición, los consumos y las evidencias del lote.",
-    };
-  }
-
-  revalidatePath("/recycled-content");
-  revalidatePath("/recycled-content/output-batches");
-  revalidatePath(`/recycled-content/output-batches/${outputBatchId}`);
-  return { error: null };
-}
+// ===========================================================================
+// 0147 · Aquí vivía `calculateRecycledContentAction`, la puerta al segundo
+// motor. PT-02A la había cerrado con una bandera; 0147 borra la función de la
+// base que llamaba, así que la acción no tendría ya a quién llamar. Se retira
+// entera en vez de dejarla como muñón: una acción de servidor exportada que no
+// hace nada es una invitación a que alguien la vuelva a cablear.
+//
+// Los cálculos que aquella metodología emitió eran fixtures de desarrollo y
+// QA. Ninguna empresa real la usó, y Production nunca recibió la convivencia.
+// ===========================================================================
 
 /**
- * PT-02A · Calcular con la metodología v2.
+ * Calcular el contenido reciclado de un lote producido.
  *
- * Convive con la de arriba a propósito. v1 no se retira todavía: hasta que las
- * empresas declaren la fracción reciclada de sus lotes, v2 devolverá
- * `incomplete` a menudo, y quitarles el cálculo que tienen antes de darles el
- * que va a sustituirlo sería dejarlos sin ninguno.
+ * El ÚNICO camino de cálculo. El nombre conserva el sufijo `V2` porque nombra
+ * la versión de la metodología que ejecuta, y renombrarlo obligaría a tocar la
+ * RPC de la base para no ganar nada. Lo que ya no existe es la otra.
  *
  * Un `incomplete` NO es un error: la RPC devuelve una fila con su estado y sus
  * motivos, y la pantalla los explica. Por eso aquí solo se traduce el fallo de

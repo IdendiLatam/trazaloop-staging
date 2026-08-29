@@ -529,9 +529,13 @@ check("20. Tablas, RPC, códigos y rutas técnicas sin cambio", () => {
     readRepoFile("lib/db/audit-support.ts").includes("suggested_action"),
     "la columna suggested_action no debía renombrarse"
   );
+  // 0147 · RH-01 prohíbe renombrar nombres TÉCNICOS por motivos de
+  // nomenclatura visible, y eso sigue en pie: `calculate_recycled_content_v2`
+  // conserva su nombre exacto. Lo que desapareció no es un renombrado: es la
+  // función del motor retirado, borrada por una decisión de producto.
   assert(
-    readRepoFile("server/actions/recycled.ts").includes('supabase.rpc("calculate_recycled_content"'),
-    "la RPC calculate_recycled_content no debía renombrarse"
+    readRepoFile("server/actions/recycled.ts").includes('supabase.rpc("calculate_recycled_content_v2"'),
+    "la RPC calculate_recycled_content_v2 no debía renombrarse"
   );
   assert(
     readRepoFile("lib/db/plans.ts").includes('supabase.rpc("get_organization_effective_plan"'),
@@ -797,6 +801,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0147_recycled_content_methodology_consolidation.sql",
     "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",
     "0144_recycled_content_v2.sql",

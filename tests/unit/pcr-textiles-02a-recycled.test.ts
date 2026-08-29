@@ -293,11 +293,18 @@ check("H5. El único camino de cálculo es el vigente", () => {
     "el botón no puede volver a nombrar la composición fuera de los comentarios");
 });
 
-check("H6. La metodología anterior sigue visible como histórico", () => {
-  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
-  assert(/metodología v\{c\.methodology_version\}/.test(pag),
-    "el histórico debía distinguir con qué metodología se calculó cada fila");
-  assert(/histórica/.test(pag), "y marcar cuáles son de la retirada");
+check("H6. La palabra «v2» desapareció de la experiencia normal", () => {
+  // 0147 · Con una sola metodología, «metodología v2» en pantalla solo servía
+  // para hacer preguntarse cuál era la otra. La versión sigue estando donde un
+  // auditor la necesita: dentro del dossier técnico.
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const t of ["Metodología v", "metodología v", "metodología v1", "metodología v2"]) {
+    assert(!pag.includes(t), `la ficha sigue nombrando la metodología en pantalla: «${t}»`);
+  }
+  const dossier = read("components/domain/audit-support/dossier-body.tsx");
+  assert(/methodology_code\} · v\{d\.methodology_version\}/.test(dossier),
+    "el dossier técnico SÍ debe seguir identificando código y versión");
 });
 
 
@@ -402,15 +409,17 @@ check("F. Las tres escrituras de composición están cerradas en el servidor", (
     "la lectura del histórico debía conservarse");
 });
 
-check("G. La metodología anterior no emite cálculos nuevos, pero sigue reproduciendo", () => {
+check("G. Queda un solo camino de cálculo, y es el canónico", () => {
+  // PT-02A cerró la acción de la metodología anterior con una bandera. 0147 la
+  // retiró entera, junto con la función de la base a la que llamaba: ninguna
+  // empresa real la usó y Production nunca recibió la convivencia, así que
+  // conservarla habría sido pagar compatibilidad con nadie.
   const acc = read("server/actions/recycled.ts");
-  assert(/const ALLOW_V1_CALCULATION = false/.test(acc), "debía cerrarse el camino");
-  const cuerpo = acc.slice(acc.indexOf("export async function calculateRecycledContentAction("));
-  assert(cuerpo.indexOf("ALLOW_V1_CALCULATION") < cuerpo.indexOf("requireActiveOrg"),
-    "el cierre debe ir antes de tocar la sesión");
+  assert(!/export async function calculateRecycledContentAction/.test(acc),
+    "la acción del motor retirado seguía exportada");
   assert(acc.includes("calculateRecycledContentV2Action"), "el camino vigente debe seguir");
-  // La función de la base NO se toca: es lo que hace reproducible cada
-  // snapshot ya emitido.
+  // Y las cinco migraciones del sprint anterior no la habían tocado: el
+  // retiro es una decisión de 0147, fechada y sola.
   for (const f of ["0142_evidence_catalog_and_historical_truth.sql",
                    "0143_textile_unit_codes_and_concurrency.sql",
                    "0144_recycled_content_v2.sql",
@@ -418,7 +427,7 @@ check("G. La metodología anterior no emite cálculos nuevos, pero sigue reprodu
                    "0146_output_batch_movements.sql"]) {
     const sql = read(`supabase/migrations/${f}`).replace(/--.*$/gm, "");
     assert(!/drop function[^;]*calculate_recycled_content\s*\(/.test(sql),
-      `${f} borra la función de la metodología anterior`);
+      `${f} borra la función del motor anterior: eso lo decide 0147`);
   }
 });
 
@@ -524,6 +533,182 @@ check("M. La vista de completitud de la metodología anterior NO se tocó", () =
   // Y no apareció una migración nueva para esto: la decisión es de producto.
   assert(!existsSync(join(ROOT, "supabase/migrations/0147_remove_v1_from_active_ux.sql")),
     "el cambio debía ser solo de código");
+});
+
+
+// ---------------------------------------------------------------------------
+// 0147 · UNA SOLA METODOLOGÍA
+//
+// La invariante ya NO es «la función antigua ejecuta la metodología antigua».
+// Es más simple y más fuerte: EXISTE EXACTAMENTE UN CAMINO OPERATIVO DE
+// CÁLCULO. Doce comprobaciones, A a L.
+// ---------------------------------------------------------------------------
+
+const MIG147 = read("supabase/migrations/0147_recycled_content_methodology_consolidation.sql");
+/** El SQL sin comentarios: lo único que llega a ejecutarse. Los comentarios de
+ *  0147 nombran a propósito lo que retira —incluida la receta de reversión— y
+ *  confundirlos con el código haría fallar por lo contrario de lo que se busca. */
+const SQL147 = MIG147
+  .replace(/--.*$/gm, "")
+  // Y sin los `comment on … is '…'`: son texto para quien lea el esquema, no
+  // lógica. Uno de ellos dice literalmente «nunca por is_active», y tomarlo por
+  // código haría fallar la comprobación por decir lo correcto.
+  .replace(/comment on [\s\S]*?';/gi, "");
+
+check("0147-A. Solo la metodología canónica puede crear un cálculo nuevo", () => {
+  // El motor apunta al puntero canónico…
+  assert(/v_meth := public\.recycled_content_canonical_methodology\(\)/.test(MIG147),
+    "el motor debía resolver por la función canónica");
+  // …y rechaza que le pidan otra por argumento, que era la puerta abierta.
+  assert(/p_methodology_id is not null and p_methodology_id <> v_meth\.id[\s\S]{0,200}raise exception/.test(MIG147),
+    "el argumento de metodología seguía permitiendo elegir algoritmo");
+  // …y la base lo garantiza aunque alguien inserte la fila a mano.
+  assert(/create trigger t_recycled_calc_canonical_methodology[\s\S]{0,160}before insert/.test(MIG147),
+    "faltaba el guardián en la tabla de cálculos");
+  assert(/new\.methodology_id <> \(public\.recycled_content_canonical_methodology\(\)\)\.id/.test(MIG147),
+    "el guardián no compara contra la canónica");
+});
+
+check("0147-B. No existe ruta de ejecución de la metodología retirada", () => {
+  assert(/drop function if exists public\.calculate_recycled_content\(uuid, uuid\)/.test(MIG147),
+    "el segundo motor debía retirarse de la base");
+  assert(!/cascade/i.test(MIG147.slice(MIG147.indexOf("drop function if exists public.calculate_recycled_content"),
+                                       MIG147.indexOf("drop function if exists public.calculate_recycled_content") + 200)),
+    "un drop con cascade arrastraría dependientes sin decirlo");
+  // Y nada en el código la invoca.
+  for (const f of ["server/actions/recycled.ts", "scripts/seed-demo.ts"]) {
+    assert(!/rpc\("calculate_recycled_content"/.test(read(f)),
+      `${f} sigue llamando al motor retirado`);
+  }
+  assert(!/export async function calculateRecycledContentAction/.test(read("server/actions/recycled.ts")),
+    "la acción de servidor del motor retirado debía desaparecer, no quedar como muñón");
+});
+
+check("0147-C. No hay escritura nueva de composición por ninguna ruta", () => {
+  for (const p of ["batch_composition_insert", "batch_composition_update", "batch_composition_delete"]) {
+    assert(new RegExp(`drop policy if exists ${p} on public\\.batch_composition`).test(MIG147),
+      `seguía existiendo la política ${p}`);
+  }
+  assert(/revoke insert, update, delete on public\.batch_composition from anon, authenticated/.test(MIG147),
+    "las políticas sin los privilegios dejan la puerta a medio cerrar");
+  // La tabla y las filas se conservan: seis vistas las leen.
+  assert(!/drop table[^;]*batch_composition/i.test(MIG147), "la tabla no debía borrarse");
+  assert(!/delete from public\.batch_composition/i.test(MIG147), "las filas históricas no debían borrarse");
+});
+
+check("0147-D. φ = 0,60 sobre 100 kg da 60 %", () => {
+  // La aritmética vive en la base y se demuestra en test:pcr-textiles-02a-rls
+  // (caso D, contra datos reales). Aquí se comprueba que la FÓRMULA congelada
+  // en la metodología sigue siendo la que dice ser.
+  const mig144 = read("supabase/migrations/0144_recycled_content_v2.sql");
+  assert(/'formula', 'sum\(consumed_i \* phi_i\) \/ sum\(consumed_i\) \* 100'/.test(mig144),
+    "la fórmula canónica cambió");
+  assert(/'denominator', 'consumption'/.test(mig144), "el denominador debía ser el consumo");
+  assert(!MIG147.includes("'formula'"), "0147 no debía tocar la fórmula: solo consolida");
+});
+
+check("0147-E. Una fracción desconocida da CÁLCULO INCOMPLETO, no un cero", () => {
+  const mig144 = read("supabase/migrations/0144_recycled_content_v2.sql");
+  assert(/recycled_fraction is null[\s\S]{0,200}fraction_unknown/.test(mig144),
+    "sin fracción declarada el resultado debe ser incompleto");
+  assert(/'phi_requires_declared_fraction', true/.test(mig144),
+    "la regla debía seguir congelada en la metodología");
+  // Y la base lo impide aunque el código se equivocara.
+  assert(/recycled_calc_state_consistent/.test(mig144), "faltaba el CHECK que lo garantiza");
+});
+
+check("0147-F. Un resultado nulo se escribe con palabras, nunca como 0 %", () => {
+  assert(formatRecycledPercent(null) === "sin resultado", "null no es cero");
+  assert(formatRecycledPercent(0) === "0.00%", "pero un cero real sí es un cero");
+  const db = read("lib/db/recycled.ts");
+  assert(/recycled_percent: numOrNull/.test(db.slice(db.indexOf("listLatestCalculations"))),
+    "la lectura volvía a colapsar «no sé» en cero");
+});
+
+check("0147-G. La ausencia de composición es IRRELEVANTE para el cálculo", () => {
+  const mig144 = read("supabase/migrations/0144_recycled_content_v2.sql");
+  const fn = mig144.slice(mig144.indexOf("function public.calculate_recycled_content_v2"));
+  assert(!/from public\.batch_composition/.test(fn), "el motor volvió a leer la composición");
+  // Y no puede reaparecer como carencia operativa.
+  assert(operativeMissing(["composición del lote"]).length === 0,
+    "la composición volvía a contar como algo que falta");
+  assert(operativeStatus("incomplete", ["composición del lote"]) === "complete",
+    "un lote al que solo le falta la composición está completo");
+  // Ni como brecha de soporte técnico.
+  assert(/array_remove\(coalesce\(b\.missing_items, '\{\}'\), 'composición del lote'\)/.test(MIG147),
+    "la brecha «trazabilidad incompleta» seguía contando la composición");
+});
+
+check("0147-H. La evidencia y la defendibilidad siguen funcionando", () => {
+  // El motor no se toca: 0147 solo cambia cómo se elige la metodología.
+  const mig144 = read("supabase/migrations/0144_recycled_content_v2.sql");
+  for (const regla of ["'recycled_requires_origin_support', true", "no_applicable_support",
+                       "input_batch_confirmed_link", "material_support_no_snapshot"]) {
+    assert(mig144.includes(regla), `la regla de evidencia ${regla} desapareció`);
+  }
+  // Y las tres pantallas de soporte técnico entienden el vocabulario vigente,
+  // que es lo que estaba roto: sin esto salían en blanco.
+  assert(/comp\.value ->> 'consumed_kg'/.test(MIG147),
+    "la vista de componentes no leía la masa de los snapshots vigentes");
+  assert(/'no_applicable_support', 'recycled_fraction_not_declared'/.test(MIG147),
+    "las brechas no conocían el vocabulario vigente");
+  assert(/v_output_batch_materials/.test(MIG147),
+    "la matriz de evidencias seguía buscando los materiales en la composición");
+  const labels = read("lib/db/recycled.ts");
+  for (const code of ["declared_fraction", "same_process_not_counted", "demonstrably_non_recycled",
+                      "no_applicable_support", "recycled_fraction_not_declared"]) {
+    assert(labels.includes(`${code}:`), `falta la traducción de ${code}`);
+  }
+});
+
+check("0147-I. Una v3 futura NO cambia el algoritmo en silencio", () => {
+  // ESTA ES LA LECCIÓN DEL SPRINT. La función retirada resolvía su metodología
+  // con `is_active`; cuando 0144 activó la 2, pasó a ejecutar su propio código
+  // estampando reglas ajenas. El puntero es ahora explícito.
+  const fn = MIG147.slice(MIG147.indexOf("function public.recycled_content_canonical_methodology"));
+  const cuerpo = fn.slice(0, fn.indexOf("$$;")).replace(/--.*$/gm, "");
+  assert(/where code = 'RC-6632-15343' and version = 2/.test(cuerpo),
+    "la canónica debía resolverse por código y versión explícitos");
+  assert(!/is_active/.test(cuerpo), "la canónica volvía a resolverse por is_active");
+  assert(!/order by version|max\(version\)/i.test(cuerpo),
+    "la canónica volvía a resolverse por «la última»");
+  // Y el motor tampoco tiene otra vía: ninguna de las tres formas de dejarse
+  // llevar aparece en el SQL ejecutable de la migración.
+  assert(!/\bis_active\b/.test(SQL147), "0147 volvía a resolver algo por is_active");
+});
+
+check("0147-J. El aislamiento entre empresas no se relaja", () => {
+  // Las cuatro vistas que 0147 crea o recrea llevan `security_invoker`. Sin
+  // él se ejecutan como su propietario, que tiene bypassrls: es exactamente
+  // la fuga que costó tres vistas en 0143/0144/0145.
+  for (const m of SQL147.matchAll(/create\s+(or\s+replace\s+)?view\s+public\.(\w+)([\s\S]{0,260}?)\bas\b/gi)) {
+    assert(/security_invoker\s*=\s*true/.test(m[3]),
+      `la vista ${m[2]} no declara security_invoker`);
+  }
+  // Y ninguna política de lectura se ensancha.
+  assert(!/create policy[^;]*batch_composition/i.test(SQL147),
+    "0147 no debía crear políticas nuevas sobre la composición");
+  assert(!/grant select on public\.batch_composition to anon/i.test(SQL147),
+    "0147 no debía abrir la composición a anónimos");
+});
+
+check("0147-K. El plan Full conserva lo que tenía; nada se le quita", () => {
+  // 0147 no toca planes, límites ni módulos. Se comprueba en negativo, que es
+  // como se comprueba que algo NO se movió.
+  for (const t of ["organization_subscriptions", "module_plans", "plan_limits",
+                   "organization_modules", "module_catalog"]) {
+    assert(!new RegExp(`(alter|update|delete|insert)[^;]*\\b${t}\\b`, "i").test(SQL147),
+      `0147 toca ${t}, y no debía`);
+  }
+});
+
+check("0147-L. Demo queda exactamente como estaba", () => {
+  assert(!/\bdemo\b/i.test(SQL147), "0147 menciona el plan demo en código ejecutable");
+  // Y el guion de demostración se rehizo sobre consumos, sin composición.
+  const seed = read("scripts/seed-demo.ts");
+  assert(!/batch_composition/.test(seed), "el seed de demostración seguía tecleando composición");
+  assert(/recycled_fraction: 100/.test(seed), "el seed debía declarar la fracción del lote");
+  assert(/calculate_recycled_content_v2/.test(seed), "el seed debía usar el motor único");
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);

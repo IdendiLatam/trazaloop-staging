@@ -346,20 +346,24 @@ async function main() {
     assert(r.recycled_percent === null, "ni 0 % ni 100 %");
   });
 
-  await check("P4-d. Registrar composición manual NO altera el resultado de v2", async () => {
-    // La otra mitad: si alguien teclea la composición «por si acaso», v2 tiene
-    // que dar exactamente lo mismo. Si cambiara, es que la estaría leyendo.
+  await check("P4-d. La composición manual ya no se puede escribir, y el cálculo no la mira", async () => {
+    // Antes esta comprobación tecleaba una composición absurda —999 kg— y
+    // exigía que el resultado no se moviera. 0147 cierra la escritura, así que
+    // ahora se comprueban las dos mitades: que la puerta está cerrada y que el
+    // número sigue saliendo del consumo.
     const b = await corrida("P4D", [{ materialId: post, kg: 100, fraccion: 40 }]);
     const antes = await calcular(b);
     assert(Number(antes.recycled_percent) === 40, `antes: ${antes.recycled_percent}`);
-    const { error } = await cli.from("batch_composition").insert({
-      organization_id: org, output_batch_id: b, material_id: post, mass_kg: 999 });
-    assert(!error, `composición: ${error?.message}`);
+    const { data: escrita, error } = await cli.from("batch_composition")
+      .insert({ organization_id: org, output_batch_id: b, material_id: post, mass_kg: 999 })
+      .select();
+    assert(error || (escrita ?? []).length === 0,
+      "un cliente pudo escribir composición: 0147 debía cerrar esa ruta");
     const despues = await calcular(b);
     assert(Number(despues.recycled_percent) === 40,
-      `v2 leyó la composición: pasó de 40 a ${despues.recycled_percent}`);
+      `el resultado se movió sin que cambiaran los consumos: ${despues.recycled_percent}`);
     assert(Number(despues.total_mass_kg) === 100,
-      `el denominador salió de la composición (999) en vez del consumo (100): ${despues.total_mass_kg}`);
+      `el denominador no salió del consumo: ${despues.total_mass_kg}`);
   });
 
   // -------------------------------------------------------------------------
@@ -394,19 +398,23 @@ async function main() {
   // -------------------------------------------------------------------------
   // PT-H01 y PT-H03 · el pasado
   // -------------------------------------------------------------------------
-  await check("O. v1 sigue existiendo, calcula igual y queda marcada como v1", async () => {
-    // Se le da a v1 lo que v1 necesita: composición tecleada.
+  await check("O. No queda un segundo motor: hay UN camino de cálculo", async () => {
+    // La comprobación decía «v1 sigue existiendo y calcula igual». 0147 retiró
+    // ese motor: ninguna empresa real lo usó y Production nunca recibió la
+    // convivencia, así que perpetuarlo habría sido pagar compatibilidad con
+    // nadie. Lo que se comprueba ahora es que NO se puede llamar.
     const b = await corrida("O", [{ materialId: post, kg: 100, fraccion: 100 }]);
-    const { error } = await cli.from("batch_composition").insert({
-      organization_id: org, output_batch_id: b, material_id: post, mass_kg: 100 });
-    assert(!error, `composición: ${error?.message}`);
-    const { data, error: e1 } = await cli.rpc("calculate_recycled_content", { p_output_batch_id: b });
-    assert(!e1, `v1 debía seguir funcionando: ${e1?.message}`);
-    const r = data as unknown as Calc;
-    assert(r.methodology_version === 1, `v1 debía marcarse como v1, marcó ${r.methodology_version}`);
-    assert(r.result_state === "calculated", "v1 nunca produce incompletos");
-    // v1 cuenta la etiqueta como 100 %: es su regla y se conserva.
-    assert(Number(r.recycled_percent) === 100, `v1 debía dar 100 %, dio ${r.recycled_percent}`);
+    const { error: e1 } = await cli.rpc("calculate_recycled_content", { p_output_batch_id: b });
+    assert(e1 !== null, "la función del motor retirado sigue siendo invocable");
+
+    // Y el que queda apunta a la metodología canónica, no a «la activa».
+    const { data: canon, error: eCanon } = await cli.rpc("recycled_content_canonical_methodology");
+    assert(!eCanon && canon, `no se pudo leer la metodología canónica: ${eCanon?.message}`);
+    assert(Number((canon as { version: number }).version) === 2,
+      `la canónica debía ser la 2, es la ${(canon as { version: number }).version}`);
+    const r = await calcular(b);
+    assert(r.methodology_version === 2, `el cálculo debía estampar la 2, estampó ${r.methodology_version}`);
+    assert(Number(r.recycled_percent) === 100, `esperado 100 %, dio ${r.recycled_percent}`);
   });
 
   await check("P. Un cálculo emitido es INMUTABLE (PT-H01)", async () => {

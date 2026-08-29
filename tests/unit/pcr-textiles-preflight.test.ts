@@ -36,17 +36,21 @@ function codigoDe(fichero: string): string {
 
 const TODAS = readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort();
 /** Las de este sprint. */
-const DEL_SPRINT = TODAS.filter((f) => f >= "0142" && f < "0147");
+const DEL_SPRINT = TODAS.filter((f) => f >= "0142" && f < "0148");
 
 console.log("\nPCR/TEXTILES · preflight de migraciones\n");
 
-check("A1. Las cinco migraciones del sprint están, y no hay una sexta", () => {
-  assert(DEL_SPRINT.length === 5, `se esperaban 5, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
-  for (const n of ["0142", "0143", "0144", "0145", "0146"]) {
+check("A1. Las seis migraciones del sprint están, y no hay una séptima", () => {
+  // La 0147 se sumó por una decisión de producto posterior al cierre previsto:
+  // consolidar el contenido reciclado en una sola metodología antes de que
+  // exista tráfico. El guardián no se relaja —sigue habiendo una lista
+  // cerrada— se amplía con la que se decidió añadir.
+  assert(DEL_SPRINT.length === 6, `se esperaban 6, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
+  for (const n of ["0142", "0143", "0144", "0145", "0146", "0147"]) {
     assert(DEL_SPRINT.some((f) => f.startsWith(n)), `falta ${n}`);
   }
-  assert(!TODAS.some((f) => f.startsWith("0147")),
-    "apareció una 0147: este sprint cierra en 0146");
+  assert(!TODAS.some((f) => f.startsWith("0148")),
+    "apareció una 0148: este sprint cierra en 0147");
 });
 
 check("A2. Las del sprint son contiguas y arrancan justo tras 0141", () => {
@@ -171,7 +175,22 @@ check("C1. Ninguna migración del sprint modifica filas existentes", () => {
       assert(esBackfill || esMetodologia || esCorreccion,
         `${f} actualiza public.${tabla} fuera del backfill: ${u[0].slice(0, 80)}`);
     }
-    assert(!/\bdelete\s+from\s+public\./i.test(c), `${f} borra filas`);
+    // 0147 · UNA excepción, y se nombra entera: retira del catálogo la fila de
+    // la metodología de contenido reciclado versión 1, y SOLO cuando ningún
+    // cálculo la apunta. La condición está en el propio SQL, así que en una
+    // base con cálculos históricos la fila sobrevive y la integridad
+    // referencial también. Cualquier otro `delete from public.` sigue
+    // prohibido, incluido otro sobre esta misma tabla.
+    const borrados = [...c.matchAll(/delete\s+from\s+public\.(\w+)[\s\S]*?;/gi)];
+    for (const d of borrados) {
+      const autorizado =
+        f.startsWith("0147")
+        && d[1] === "calculation_methodologies"
+        && /version = 1/.test(d[0])
+        && /not exists/.test(d[0])
+        && /recycled_content_calculations/.test(d[0]);
+      assert(autorizado, `${f} borra filas de public.${d[1]}: ${d[0].slice(0, 90)}`);
+    }
     assert(!/\btruncate\b/i.test(c), `${f} trunca una tabla`);
   }
 });

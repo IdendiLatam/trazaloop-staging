@@ -205,7 +205,8 @@ const CPR_MUTATION_MATRIX: Record<string, { guarded: string[]; delegating?: Reco
     guarded: ["downloadImportTemplateAction", "validateImportCsvAction", "commitImportAction"],
   },
   "server/actions/recycled.ts": {
-    guarded: ["calculateRecycledContentAction"],
+    // 0147 · Una sola acción de cálculo: la del motor retirado ya no existe.
+    guarded: ["calculateRecycledContentV2Action"],
   },
   "server/actions/traceability.ts": {
     guarded: [

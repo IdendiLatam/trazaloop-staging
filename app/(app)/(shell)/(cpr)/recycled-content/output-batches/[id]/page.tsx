@@ -216,7 +216,7 @@ export default async function CalculationDetailPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">{INCOMPLETE_TITLE}</h2>
             <span className="rounded-full border border-amber/40 bg-surface px-2 py-0.5 text-[11px] font-medium text-amber">
-              Metodología v{latest.methodology_version} · sin resultado
+              Sin resultado
             </span>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-ink-soft">{INCOMPLETE_LEAD}</p>
@@ -246,12 +246,7 @@ export default async function CalculationDetailPage({
       {latest && latest.result_state === "calculated" ? (
         <section className="rounded-lg border border-loop/30 bg-surface p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">
-              Último cálculo
-              <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
-                metodología v{latest.methodology_version}
-              </span>
-            </h2>
+            <h2 className="text-sm font-semibold">Último cálculo</h2>
             <DefensibilityBadge level={latest.defensibility_level} />
           </div>
           {latest.defensibility_level === "preliminary" ? (
@@ -414,10 +409,11 @@ export default async function CalculationDetailPage({
                     ? "incompleto"
                     : `${c.recycled_percent.toFixed(2)}%`}
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-ink-soft">
-                  metodología v{c.methodology_version}
-                  {c.methodology_version === 1 ? " · histórica" : ""}
-                </span>
+                {/* 0147 · Aquí se decía «metodología vN». Con una sola
+                    metodología operativa, la etiqueta solo servía para hacer
+                    preguntarse cuál era la otra. La versión sigue estando
+                    donde importa: en el dossier técnico, que es el documento
+                    que un auditor lee. */}
                 {c.recycled_percent === null ? null : (
                   <DefensibilityBadge level={c.defensibility_level} />
                 )}
@@ -426,8 +422,6 @@ export default async function CalculationDetailPage({
           </ul>
           <p className="mt-2 text-xs text-ink-soft">
             Los snapshots anteriores se conservan intactos: nada se sobrescribe.
-            Los de la metodología anterior siguen siendo consultables y
-            reproducibles, aunque ya no se generen nuevos.
           </p>
         </section>
       ) : null}

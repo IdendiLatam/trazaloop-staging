@@ -53,6 +53,13 @@ export type ComponentRow = {
   counted: boolean;
   exclusion_reason: string | null;
   warning_codes: string[];
+  // 0147 · La fracción reciclada declarada del lote consumido es AHORA el dato
+  // que explica el número. Un dossier que no la enseñe no se sostiene solo.
+  phi: number | null;
+  phi_basis: string | null;
+  input_batch_code: string | null;
+  declared_fraction: number | null;
+  declared_fraction_basis: string | null;
 };
 
 export type EvidenceMatrixRow = {
@@ -154,6 +161,8 @@ export async function listComponentRows(
   return (data ?? []).map((r) => ({
     ...r,
     mass_kg: numOrNull(r.mass_kg),
+    phi: numOrNull(r.phi),
+    declared_fraction: numOrNull(r.declared_fraction),
     warning_codes: (r.warning_codes as string[]) ?? [],
   })) as ComponentRow[];
 }
