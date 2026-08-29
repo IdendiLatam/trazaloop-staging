@@ -1,0 +1,248 @@
+# QUALITY-12.3A · Partes interesadas · MODELO DE DATOS CANDIDATO
+
+> **Diseño, no implementación.** Ninguna migración. Los nombres son
+> candidatos; lo que se congela es la responsabilidad de cada tabla y por qué
+> no puede resolverse con algo que ya existe.
+
+---
+
+## 0 · Antes de proponer: qué se resuelve SIN tabla nueva
+
+| Se necesita | Se resuelve con | Tabla nueva |
+|---|---|---|
+| Identidad de una entidad externa | `quality_external_parties` | **no** |
+| Contactos y sedes | `quality_external_party_contacts` / `_sites` | **no** |
+| Colectivo interno | `quality_org_units` | **no** |
+| Vínculo a riesgo / oportunidad | `work_references` | **no** |
+| Vínculo a objetivo / indicador | `work_references` | **no** |
+| Vínculo a acción / caso | `work_references` | **no** |
+| Vínculo a documento o evidencia | `work_references` | **no** |
+| Encuesta de satisfacción | `quality_survey_*` | **no** |
+| Evaluación de proveedor | `quality_supplier_evaluations` | **no** |
+| Medición de un indicador | `quality_measurements` | **no** |
+| Entrada de Revisión por la Dirección | fila en `quality_management_review_input_catalog` | **no** |
+| Evento de automatización | fila en `quality_automation_event_catalog` | **no** |
+| Fuente de Intelligence | fila en `quality_ai_sources` | **no** |
+
+**Seis tablas** se proponen. Todo lo demás son filas de catálogo y dos CHECK
+ampliados.
+
+---
+
+## 1 · `quality_stakeholder_categories`
+
+**Propósito.** Taxonomía 4.2 configurable por organización. NO es
+`quality_external_party_roles`: aquel dice qué papel comercial juega una
+entidad externa; este dice por qué una parte importa para el SGC, e incluye
+partes internas y colectivas.
+
+| | |
+|---|---|
+| Identidad | estable (`id`), única por `(organization_id, code)` |
+| Temporal | ninguno; `is_active` para retirar sin borrar |
+| Columnas | `code` · `name` · `description` · `sort_order` · `is_active` |
+| Semilla | 15 categorías no sectoriales, todas editables |
+| Borrado | **no se borra**; se desactiva (PI-07) |
+| RLS | lectura miembro · escritura `quality_manages_interested_parties` |
+| Precedente | `quality_process_categories` |
+
+---
+
+## 2 · `quality_stakeholder_groups`
+
+**Propósito.** Grupos genéricos sin entidad jurídica concreta: la comunidad del
+entorno, la academia, «los entes reguladores» como colectivo.
+
+**Por qué no va en `quality_external_parties`:** esa tabla exige `legal_name` y
+la apuntan nueve claves foráneas de proveedores, clientes y alcance de
+auditoría. Meter «Comunidad» allí contaminaría el registro de entidades
+externas con algo que no es una entidad, y lo vería PCR y Textiles.
+
+| | |
+|---|---|
+| Identidad | estable, única por `(organization_id, code)` |
+| Columnas | `code` · `name` · `description` · `is_active` |
+| Borrado | desactivación |
+| RLS | igual que el resto |
+
+---
+
+## 3 · `quality_stakeholder_assessments` ← **el núcleo**
+
+**Propósito.** El análisis fechado de un sujeto: quién es para nosotros, en qué
+periodo, con qué prioridad y si es pertinente.
+
+**Sujeto polimórfico (PI-02):**
+
+```sql
+subject_kind ∈ {external_party, org_unit, group}
+external_party_id  uuid null → quality_external_parties(organization_id, id)
+org_unit_id        uuid null → quality_org_units(organization_id, id)
+group_id           uuid null → quality_stakeholder_groups(organization_id, id)
+
+CHECK: exactamente UNA no nula, y la que sea debe corresponder a subject_kind
+```
+
+| | |
+|---|---|
+| Identidad | estable por análisis; el **sujeto** es la identidad de negocio |
+| Temporal | **evaluación fechada** — `assessed_on`, `effective_from`, `effective_to` |
+| Columnas | `category_id` · `subject_*` · `assessed_on` · `assessed_by` · `relevance_status` · `relevance_rationale` · `priority_label` · `priority_score` · `priority_derivation` jsonb · `methodology_version_id` null · `owner_position_id` · `effective_from` · `effective_to` · `supersedes_id` · `status` |
+| Unicidad | como mucho **un** análisis vigente por `(sujeto, category_id)` — índice parcial sobre `effective_to is null` |
+| Pertinencia | `relevant` / `not_relevant` / `under_review`; `relevance_rationale` **obligatorio** si `not_relevant` (PI-11) |
+| Prioridad | `priority_label` cualitativo **o** `priority_score` + `derivation` con metodología (PI-26/27). Nunca obligatoria |
+| Borrado | **prohibido**. Se cierra vigencia y se sucede con `supersedes_id` |
+| RLS | lectura miembro · escritura gestor |
+| Precedente | `quality_risk_assessments` (evaluación fechada con derivación y justificación) |
+
+**Por qué evaluación y no revisión publicada:** un proceso se publica y su
+versión anterior queda derogada; un juicio sobre una parte interesada se emite
+y el siguiente lo **sucede** sin negarlo. Elegir `quality_process_revisions`
+aquí obligaría a un `revision_number` y a un `published_at` que no significan
+nada para esto.
+
+---
+
+## 4 · `quality_stakeholder_requirements`
+
+**Propósito.** Necesidad, expectativa y requisito. **Una tabla, tres tipos**,
+porque el ciclo de vida es el mismo y la conversión debe conservar el origen
+(PI-13). Tres tablas obligarían a copiar la fila al convertir, que es
+exactamente perder la trazabilidad.
+
+| | |
+|---|---|
+| Identidad | estable |
+| Pertenencia | `assessment_id` → el análisis del que salió |
+| Tipo | `entry_kind ∈ {need, expectation, requirement}` |
+| Subtipo | `requirement_kind ∈ {legal, regulatory, contractual, standard, internal_commitment, other}` — **obligatorio si** `entry_kind = requirement`, **nulo si no** (CHECK) |
+| Conversión | `derived_from_id` → la necesidad/expectativa de origen · `converted_at` · `converted_by` · `conversion_rationale` |
+| Pertinencia | `relevance_status` + `relevance_rationale` + `effective_from/to` (PI-15) |
+| Evidencia | por `work_references` con `relation = 'evidence'`; los cuatro subtipos duros la exigen (PI-14) |
+| Borrado | **prohibido**. Se cierra vigencia |
+| Unicidad | `(organization_id, code)` cuando la organización usa códigos |
+| RLS | lectura miembro · escritura gestor |
+| Precedente | `quality_supplier_requirements` (identidad estable + asignación con vigencia) |
+
+**Frontera con `quality_supplier_requirements`:** aquel es lo que la
+organización **exige** a sus proveedores; este es aquello a lo que la
+organización **queda sujeta**. Direcciones opuestas. Un requisito de 4.2 puede
+referenciar uno de proveedor, nunca sustituirlo (PI-16).
+
+---
+
+## 5 · `quality_stakeholder_requirement_processes`
+
+**Propósito.** Qué procesos gestionan un requisito. **Requisito↔proceso, no
+parte↔proceso** (PI-17); la relación parte↔proceso se deriva (PI-18).
+
+| | |
+|---|---|
+| Identidad | estable |
+| FK | `requirement_id` · `process_id` → `quality_processes(organization_id, id)` |
+| Instantánea | `process_revision_id` null → contra qué revisión se juzgó (PI-19) |
+| Temporal | `effective_from` / `effective_to` |
+| Unicidad | un vínculo **vigente** por `(requirement_id, process_id)` |
+| Relación | `link_kind ∈ {addressed_by, affects, monitored_by}` |
+| Borrado | se cierra vigencia; se admite `delete` solo de un vínculo **creado por error y sin historia**, y se decide en 12.3B |
+| RLS | igual |
+
+**Por qué tabla y no `work_references`:** este vínculo tiene vigencia propia,
+instantánea de revisión y un vocabulario de relación específico.
+`work_references` tiene tres relaciones genéricas y ningún periodo: forzarlo
+aquí convertiría su `snapshot` en un almacén de reglas.
+
+---
+
+## 6 · `quality_stakeholder_strategies`
+
+**Propósito.** Qué hará la organización: comprender, relacionarse, satisfacer,
+vigilar (PI-20).
+
+| | |
+|---|---|
+| Identidad | estable |
+| Alcance | `assessment_id` (la parte) y opcionalmente `requirement_id` (una estrategia puede ser de la parte o de un requisito concreto) |
+| Temporal | `effective_from` / `effective_to` · `status ∈ {draft, active, superseded, cancelled}` |
+| Columnas | `title` · `purpose` · `approach` · `owner_position_id` · `monitoring_method` · `monitoring_note` · `review_cadence_months` null · `next_review_on` · `supersedes_id` |
+| Seguimiento | `monitoring_method` del vocabulario de PI-24 |
+| Enlaces | **todos por `work_references`**: indicadores, objetivos, riesgos, oportunidades, acciones, campañas, evaluaciones, documentos (PI-21) |
+| Dueño | **cargo**, nunca persona (PI-22, T-02) |
+| Borrado | **prohibido**; se cancela o se sucede |
+| Unicidad | como mucho una `active` por `(assessment_id, requirement_id)` — índice parcial |
+| RLS | igual |
+
+---
+
+## 7 · `quality_stakeholder_reviews`
+
+**Propósito.** Dejar constancia de que se revisó, **incluso cuando no cambió
+nada** (PI-29).
+
+| | |
+|---|---|
+| Identidad | estable, append-only |
+| Alcance | `assessment_id`, o `strategy_id`, o los dos |
+| Columnas | `reviewed_on` · `reviewed_by` · `owner_position_id` · `verdict ∈ {no_changes, changes_applied, escalated}` · `note` · `next_review_on` |
+| Temporal | punto en el tiempo; no tiene vigencia |
+| Borrado | **prohibido** |
+| Efecto | actualiza `last_reviewed_at` / `next_review_due` de su objeto; no crea versión nueva si el veredicto es `no_changes` |
+| RLS | igual |
+
+**Por qué existe:** sin ella, «lo revisamos y sigue igual» exigiría crear una
+versión falsa, o no podría decirse. Las dos salidas son peores que una tabla de
+seis columnas.
+
+---
+
+## 8 · Ampliaciones de catálogos existentes (sin tablas nuevas)
+
+| Objeto | Qué se añade |
+|---|---|
+| `work_references.owner_kind` | `stakeholder_assessment` · `stakeholder_requirement` · `stakeholder_strategy` · `stakeholder_review` |
+| `work_references.ref_kind` | `quality_stakeholder_assessment` · `quality_stakeholder_requirement` · `quality_stakeholder_strategy` |
+| `quality_management_review_input_catalog` | fila `interested_parties`, `source_domain = 'interested_parties'` |
+| `quality_automation_event_catalog` | 6 eventos, dominio `context` (ver arquitectura §10) |
+| `quality_automation_event_contracts` | su `subject_type` y `resolver` |
+| `quality_ai_sources` | `interested_party` y `interested_party_strategy`, `open` / `as_of` |
+
+Todo es **append-only**: insertar filas y ampliar CHECK. Ninguna migración
+histórica se toca, ningún dato existente se reescribe.
+
+---
+
+## 9 · Diagrama
+
+```
+quality_external_parties ──┐
+quality_org_units ─────────┼─→ quality_stakeholder_assessments ──→ quality_stakeholder_categories
+quality_stakeholder_groups ┘            │
+                                        ├─→ quality_stakeholder_requirements
+                                        │        │        └─ derived_from_id (auto-referencia)
+                                        │        └─→ quality_stakeholder_requirement_processes ──→ quality_processes
+                                        │                                                          (+ revisión)
+                                        ├─→ quality_stakeholder_strategies ──→ quality_positions
+                                        └─→ quality_stakeholder_reviews
+
+                       todo lo demás ──→ work_references ──→ indicadores · objetivos · riesgos ·
+                                                             oportunidades · acciones · documentos ·
+                                                             campañas · evaluaciones
+```
+
+---
+
+## 10 · Invariantes que la base debe garantizar
+
+1. Exactamente **un** sujeto no nulo por análisis, coherente con `subject_kind`.
+2. `requirement_kind` **no nulo** si y solo si `entry_kind = 'requirement'`.
+3. `relevance_rationale` **obligatorio** cuando `relevance_status = 'not_relevant'`.
+4. Como mucho **un** análisis vigente por `(sujeto, categoría)`.
+5. Como mucho **una** estrategia `active` por `(análisis, requisito)`.
+6. **Sin borrado** en análisis, requisitos, estrategias ni revisiones — como
+   `output_batch_movements` y `recycled_content_calculations`.
+7. `effective_to >= effective_from` en las cuatro tablas con vigencia.
+8. `derived_from_id` solo puede apuntar a una fila de la **misma organización**
+   y de tipo `need` o `expectation`.
+9. FK **compuestas** por `(organization_id, id)`, como el resto de Quality:
+   el aislamiento es estructural, no solo RLS.
+10. RLS en las seis tablas; escritura por `quality_manages_interested_parties`.
