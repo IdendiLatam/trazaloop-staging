@@ -219,6 +219,27 @@ export const TEXTILES_SHELL_MODULE: ShellModuleDefinition = {
 // Trazaloop Quality (module_code "quality") · QUALITY-01
 // ---------------------------------------------------------------------------
 
+/**
+ * QUALITY-12.3 · Contexto. El grupo va PRIMERO y con ese nombre.
+ *
+ * Primero porque es lo primero de la norma y lo primero del trabajo real:
+ * quién importa y qué exige se decide antes de dibujar procesos. Colgarlo del
+ * sistema de gestión lo habría convertido en una pantalla de configuración, y
+ * la 4.2 no es configuración: es la entrada de la que salen requisitos que
+ * después atienden procesos, objetivos y riesgos.
+ *
+ * Se llama «Contexto» —no «Partes interesadas»— porque aquí entrará también el
+ * contexto de la empresa (4.1) cuando se construya. Hoy tiene una sola
+ * entrada, y un grupo de uno es el precio de no tener que renombrar el menú
+ * dentro de dos sprints.
+ */
+export const QUALITY_CONTEXTO_GROUP: ModuleNavGroup = {
+  title: "Contexto",
+  items: [
+    { label: "Partes interesadas", href: "/quality/context/interested-parties" },
+  ],
+};
+
 export const QUALITY_SGC_GROUP: ModuleNavGroup = {
   title: "Sistema de gestión",
   items: [
@@ -406,7 +427,8 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
     // primero que abre quien entra a trabajar, no una sección de consulta.
     { label: "Mis tareas", href: "/quality/tasks" },
   ],
-  groups: [QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP, QUALITY_PROVEEDORES_GROUP,
+  groups: [QUALITY_CONTEXTO_GROUP, QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP,
+           QUALITY_PROVEEDORES_GROUP,
            QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
            QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP,
            QUALITY_REVISION_DIRECCION_GROUP, QUALITY_AUTOMATIZACION_GROUP,

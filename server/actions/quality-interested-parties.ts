@@ -5,7 +5,8 @@ import { requireQualityForAction } from "@/lib/auth/require-quality-module";
 import { checkQualityCanMutate } from "@/server/actions/module-plans";
 import {
   attachRequirementToProcess, attachStrategyRequirement, convertToRequirement,
-  createAssessment, createCategory, createGroup, createRequirement, createStrategy,
+  createAssessment, createCategory, createExternalParty, createGroup,
+  createRequirement, createStrategy,
   detachRequirementFromProcess, detachStrategyRequirement, linkPeripheral,
   recordReview, retireRequirement, seedCategories, setCategoryActive,
   setGroupActive, setRequirementRelevance, setStrategyStatus, supersedeAssessment,
@@ -194,6 +195,39 @@ export async function setGroupActiveAction(
   return state(
     await setGroupActive(g.ok.organizationId, id, activa),
     activa ? "Colectivo activado." : "Colectivo desactivado."
+  );
+}
+
+// ---------------------------------------------------------------------------
+// La identidad externa
+// ---------------------------------------------------------------------------
+
+/**
+ * Registrar una entidad externa que todavía no existe.
+ *
+ * Escribe en la MISMA tabla de identidad que usan Proveedores y Voz del
+ * cliente: no hay ficha local ni copia. Lo que no hace es asignarle un papel
+ * comercial, porque una alcaldía o una comunidad no son ni lo uno ni lo otro.
+ *
+ * Cuando sí es un cliente o un proveedor, la pantalla lo dice antes: allí nace
+ * con la ficha que le corresponde, y aquí se elige la que ya existe.
+ */
+export async function createExternalPartyAction(
+  _prev: IpActionState, formData: FormData
+): Promise<IpActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  const legalName = text(formData, "legal_name");
+  if (legalName.length < 2) return { error: "Escribe el nombre de la entidad." };
+  return state(
+    await createExternalParty(g.ok.organizationId, {
+      legalName,
+      tradeName: optional(formData, "trade_name"),
+      taxId: optional(formData, "tax_id"),
+      country: optional(formData, "country"),
+      city: optional(formData, "city"),
+    }),
+    "Entidad registrada. Ahora puedes analizarla."
   );
 }
 

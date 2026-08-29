@@ -357,3 +357,165 @@ export const INTERESTED_PARTIES_MANAGER_ROLES = ["admin", "quality", "consultant
 export function canManageInterestedParties(roleCode: string | null | undefined): boolean {
   return (INTERESTED_PARTIES_MANAGER_ROLES as readonly string[]).includes(roleCode ?? "");
 }
+
+// ===========================================================================
+// QUALITY-12.3B3A · EL VOCABULARIO QUE VE UNA PERSONA
+// ---------------------------------------------------------------------------
+// Vive aquí y no en los componentes por la misma razón que el resto de este
+// archivo: si cada pantalla escribe sus propias etiquetas, dentro de tres
+// sprints la misma cosa se llama de dos maneras según por dónde se entre.
+// React consume; no decide.
+// ===========================================================================
+
+export const SUBJECT_KIND_LABEL: Record<SubjectKind, string> = {
+  external_party: "Entidad externa",
+  group: "Colectivo",
+};
+
+export const STRATEGY_STATUS_LABEL: Record<StrategyStatus, string> = {
+  draft: "Borrador",
+  active: "Vigente",
+  superseded: "Sucedida",
+  cancelled: "Cerrada",
+};
+
+/**
+ * El alcance de una estrategia, deducido de CUÁNTOS requisitos atiende.
+ *
+ * No hay un campo «tipo de estrategia» y no debe haberlo: sería un dato que
+ * puede contradecir a los vínculos reales. Cero enlaces es una estrategia
+ * general para la parte; uno es específica; varios, multi-requisito. La
+ * pregunta se responde contando, no consultando una etiqueta que alguien pudo
+ * olvidar cambiar.
+ */
+export type StrategyScope = "general" | "specific" | "multi";
+
+export function strategyScope(requirementCount: number): StrategyScope {
+  if (requirementCount <= 0) return "general";
+  return requirementCount === 1 ? "specific" : "multi";
+}
+
+export const STRATEGY_SCOPE_LABEL: Record<StrategyScope, string> = {
+  general: "General para esta parte",
+  specific: "Atiende un requisito",
+  multi: "Atiende varios requisitos",
+};
+
+/**
+ * Lo que se puede relacionar como contexto periférico, dicho en lenguaje de
+ * producto.
+ *
+ * A la izquierda lo que guarda `work_references`; a la derecha lo que lee una
+ * persona. En pantalla nunca aparece `ref_kind` ni `owner_kind`: son nombres
+ * de columna, no palabras de nadie.
+ *
+ * Las dos relaciones centrales —requisito→proceso y estrategia→requisito— NO
+ * están en esta lista y no pueden estarlo: tienen tabla propia porque tienen
+ * vigencia, y la base rechaza el intento desde 0150.
+ */
+export const PERIPHERAL_REF_KINDS = [
+  "quality_indicator", "quality_objective", "quality_risk", "quality_opportunity",
+  "work_case", "work_action", "trazadoc_document", "quality_survey_campaign",
+  "quality_supplier_evaluation", "quality_customer_feedback",
+] as const;
+export type PeripheralRefKind = (typeof PERIPHERAL_REF_KINDS)[number];
+
+export const PERIPHERAL_REF_LABEL: Record<PeripheralRefKind, string> = {
+  quality_indicator: "Indicador",
+  quality_objective: "Objetivo",
+  quality_risk: "Riesgo",
+  quality_opportunity: "Oportunidad",
+  work_case: "Caso",
+  work_action: "Acción",
+  trazadoc_document: "Documento",
+  quality_survey_campaign: "Campaña de escucha",
+  quality_supplier_evaluation: "Evaluación de proveedor",
+  quality_customer_feedback: "Retroalimentación de cliente",
+};
+
+export const RELATION_LABEL: Record<"origin" | "evidence" | "related", string> = {
+  origin: "De aquí nació",
+  evidence: "Lo respalda",
+  related: "Relacionado",
+};
+
+/** Las dos parejas que la base rechaza. Existe para que una prueba compruebe
+ *  que la interfaz tampoco las ofrece. */
+export const CORE_RELATION_PAIRS = [
+  { ownerKind: "stakeholder_strategy", refKind: "quality_stakeholder_requirement" },
+  { ownerKind: "stakeholder_requirement", refKind: "quality_process" },
+  { ownerKind: "stakeholder_requirement", refKind: "quality_process_revision" },
+] as const;
+
+/**
+ * ¿Se puede tocar lo que se está mirando?
+ *
+ * Una sola función para las dos condiciones que apagan los botones: no tener
+ * permiso, y estar mirando el pasado. Repartirlas por los componentes acabaría
+ * con una pantalla que respeta el modo histórico y otra que no.
+ */
+export function canMutate(input: { canManage: boolean; asOf?: string | null }): boolean {
+  return input.canManage && !input.asOf;
+}
+
+/** El aviso del modo histórico, escrito una vez. */
+export function historicalNotice(asOf: string): string {
+  return `Estás viendo el estado del ${asOf}. Es una vista de solo lectura: `
+    + "nada de lo que aparece aquí se puede modificar.";
+}
+
+// ===========================================================================
+// AYUDA CONTEXTUAL · el botón «i», con contenido mínimo
+// ---------------------------------------------------------------------------
+// Reutiliza el componente de ayuda que ya existe, y NO la infraestructura de
+// guías administradas de TrazaDocs: aquel contenido lo escribe la plataforma,
+// se guarda en la base y está sujeto a la regla comercial de Demo. Esto son
+// textos de producto, escritos aquí, iguales para todo el mundo.
+//
+// La distinción importa porque decide quién los ve: una guía administrada es
+// parte de lo que se paga; explicar qué es una expectativa, no.
+//
+// El endurecimiento global de la ayuda —ejemplos, respaldo normativo y
+// tutoriales en todos los botones «i»— es un sprint transversal posterior.
+// Esto es el mínimo para que la pantalla se entienda sola.
+// ===========================================================================
+
+export const INTERESTED_PARTIES_HELP = {
+  overview:
+    "Una parte interesada es quien puede afectar al sistema de gestión o verse afectado por "
+    + "él: clientes, personal, entes reguladores, proveedores, la comunidad del entorno.\n\n"
+    + "Aquí se registran tres cosas y conviene no mezclarlas:\n"
+    + "· si es PERTINENTE para el sistema de gestión, y por qué;\n"
+    + "· qué NECESITA, qué ESPERA y qué OBLIGA;\n"
+    + "· qué hace la empresa al respecto, y cada cuánto lo vuelve a mirar.\n\n"
+    + "Priorizar es opcional. Y la prioridad no decide la pertinencia: una parte de prioridad "
+    + "baja puede ser perfectamente pertinente.",
+  entries:
+    "NECESIDAD es lo que la parte requiere para funcionar. EXPECTATIVA es lo que espera aunque "
+    + "nadie se lo haya prometido. REQUISITO es lo único que obliga: por ley, por contrato, por "
+    + "una norma o porque la empresa se comprometió.\n\n"
+    + "Convertir una necesidad en requisito no la borra ni la reetiqueta: crea un requisito que "
+    + "apunta a ella y guarda por qué pasó a obligar. Dentro de un año esa es la diferencia "
+    + "entre saber de dónde salió una obligación y suponerlo.",
+  strategies:
+    "Una estrategia dice qué hace la empresa con esta parte interesada. Puede ser general, o "
+    + "atender requisitos concretos: lo que se guarda son los vínculos, así que el alcance se "
+    + "cuenta y nunca contradice a la realidad.\n\n"
+    + "El responsable es un CARGO, no una persona. Y la cadencia de revisión la decide la "
+    + "empresa: sin cadencia y sin fecha prevista, nada se declara vencido.",
+  history:
+    "Un análisis no se edita: se sustituye. El anterior se conserva entero con su fecha y su "
+    + "justificación, y el nuevo pasa a regir.\n\n"
+    + "«Ver estado en fecha» reconstruye qué regía ese día —el análisis, sus requisitos y sus "
+    + "estrategias— en modo de solo lectura. Es la pregunta que hace una auditoría.",
+} as const;
+
+export type InterestedPartiesHelpKey = keyof typeof INTERESTED_PARTIES_HELP;
+
+/** El hint ya resuelto, con la forma que espera el componente compartido. Sin
+ *  puerta comercial: esto no es contenido administrado. */
+export function interestedPartiesHint(
+  key: InterestedPartiesHelpKey
+): { restricted: false; title: null; text: string } {
+  return { restricted: false, title: null, text: INTERESTED_PARTIES_HELP[key] };
+}

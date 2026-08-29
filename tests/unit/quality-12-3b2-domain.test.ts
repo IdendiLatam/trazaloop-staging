@@ -176,20 +176,27 @@ check("N. La capa de datos es server-only y el dominio NO", () => {
     "el dominio no debe ser server-only: lo comparten pantalla y servidor");
 });
 
-check("O. B2 no creó una sola pantalla", () => {
-  const rutas = [
-    "app/(app)/(shell)/(quality)/quality/interested-parties",
-    "app/(app)/(shell)/(quality)/quality/context",
-    "components/domain/quality/interested-parties",
-  ];
-  for (const r of rutas) {
-    assert(!existsSync(join(raiz, r)), `B2 creó ${r}, y no debía: no hay UI en esta fase`);
+check("O. Las tres capas de B2 no saben que existe una pantalla", () => {
+  // ESTA COMPROBACIÓN CAMBIÓ EN B3A, Y CONVIENE DECIR POR QUÉ.
+  //
+  // En B2 decía «no existe ninguna página de partes interesadas», y era la
+  // comprobación correcta entonces: el encargo prohibía construir interfaz y
+  // eso había que poder demostrarlo. B3A construyó la interfaz a propósito, así
+  // que aquella forma caducó: mantenerla obligaría a borrar la pantalla para
+  // que la prueba pasara, que es el termómetro mandando sobre el enfermo.
+  //
+  // Lo que NO caduca es la separación que protegía: la capa de datos y las
+  // acciones no importan React ni componentes, y por tanto siguen siendo
+  // utilizables sin pantalla —desde una prueba, desde un constructor de
+  // Revisión por la Dirección, desde lo que venga—.
+  for (const [n, src] of [["db", DB], ["dominio", DOM], ["acciones", ACC]] as const) {
+    assert(!/from "react"|from "@\/components\//.test(src),
+      `${n} importa React o un componente: la capa de aplicación no debe saber de pantallas`);
+    assert(!/\.tsx"/.test(src), `${n} importa un archivo .tsx`);
   }
-  const comps = join(raiz, "components/domain/quality");
-  if (existsSync(comps)) {
-    const sueltos = readdirSync(comps).filter((f) => /interested|stakeholder/i.test(f));
-    assert(sueltos.length === 0, `aparecieron componentes: ${sueltos.join(", ")}`);
-  }
+  // Y el dominio sigue siendo compartible: si fuera server-only, la pantalla
+  // no podría usar sus etiquetas y acabaría copiándolas.
+  assert(!DOM.includes('import "server-only"'), "el dominio se volvió server-only");
 });
 
 check("P. Las dos relaciones centrales NO viven en work_references", () => {

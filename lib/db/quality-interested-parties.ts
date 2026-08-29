@@ -8,8 +8,9 @@ import {
 import { readAllStrict } from "@/lib/db/paged-read";
 import {
   done, fail, mapDbError, reviewState, today,
-  type DomainResult, type EntryKind, type LinkKind, type RelevanceState,
-  type ReviewState, type SubjectKind,
+  PERIPHERAL_REF_KINDS,
+  type DomainResult, type EntryKind, type LinkKind, type PeripheralRefKind,
+  type RelevanceState, type ReviewState, type SubjectKind,
 } from "@/lib/domain/quality-interested-parties";
 
 /**
@@ -134,6 +135,11 @@ export type StrategyRow = {
   effectiveFrom: string;
   effectiveTo: string | null;
   requirementIds: string[];
+  /** El vínculo, no solo el requisito: para terminarlo hace falta SU
+   *  identificador. Cerrar por `requirement_id` cerraría todos los que
+   *  hubiera, y una estrategia puede haber atendido el mismo requisito en dos
+   *  periodos distintos. */
+  requirementLinks: { linkId: string; requirementId: string }[];
   reviewState: ReviewState;
 };
 
@@ -370,6 +376,11 @@ export async function searchAssessments(
     q?: string; page?: string; pageSize?: number;
     categoryId?: string; relevance?: RelevanceState; subjectKind?: SubjectKind;
     priority?: string; onlyCurrent?: boolean; asOf?: string;
+    /** Estado de revisión de la parte, o «sin estrategia», que NO es un estado
+     *  de revisión sino su ausencia. Se resuelve contra las estrategias antes
+     *  de pedir la página: filtrar la página ya cargada daría resultados
+     *  distintos según en cuál estuvieras. */
+    reviewState?: ReviewState | "no_strategy";
   } = {},
   client?: Db
 ): Promise<PageResult<AssessmentRow>> {
@@ -414,6 +425,13 @@ export async function searchAssessments(
     request = request.or(`external_party_id.in.(${lista}),stakeholder_group_id.in.(${lista})`);
   }
 
+  if (params.reviewState) {
+    const ids = await assessmentIdsByReviewState(
+      orgId, params.reviewState, params.asOf ?? today(), supabase);
+    if (ids.length === 0) return { rows: [], total: 0, page, pageSize };
+    request = request.in("id", ids);
+  }
+
   const { data, count } = await request
     .order("assessed_on", { ascending: false })
     .order("id", { ascending: false })
@@ -425,6 +443,109 @@ export async function searchAssessments(
     page,
     pageSize,
   };
+}
+
+/**
+ * Los análisis cuyo estado de revisión es el pedido.
+ *
+ * El estado de una PARTE es el peor de sus estrategias vigentes: si una está
+ * vencida, la parte está vencida, aunque las otras dos estén al día. Y una
+ * parte sin ninguna estrategia no tiene estado de revisión —no hay nada que
+ * revisar todavía—, que es distinto de tenerla sin revisar.
+ *
+ * Se resuelve leyendo solo tres columnas de las estrategias vigentes y
+ * aplicando `reviewState` del dominio, que es el mismo que pinta la insignia.
+ * Reimplementar el umbral aquí en SQL habría creado una segunda verdad que se
+ * separaría de la primera en cuanto alguien tocara los 30 días.
+ */
+async function assessmentIdsByReviewState(
+  orgId: string, wanted: ReviewState | "no_strategy", onDate: string, supabase: Db
+): Promise<string[]> {
+  const vigentes = await readAllStrict<Record<string, unknown>>(() =>
+    supabase.from("quality_stakeholder_strategies")
+      .select("assessment_id, last_reviewed_on, next_review_on, review_cadence_months")
+      .eq("organization_id", orgId).eq("status", "active")
+      .lte("effective_from", onDate).or(`effective_to.is.null,effective_to.gt.${onDate}`)
+      .order("assessment_id").order("id") as never,
+    "estrategias vigentes");
+
+  const ORDEN: Record<ReviewState, number> = {
+    overdue: 3, due_soon: 2, never_reviewed: 1, up_to_date: 0,
+  };
+  const peor = new Map<string, ReviewState>();
+  for (const e of vigentes) {
+    const estado = reviewState({
+      lastReviewedOn: (e.last_reviewed_on as string | null) ?? null,
+      nextReviewOn: (e.next_review_on as string | null) ?? null,
+      cadenceMonths: num(e.review_cadence_months),
+      onDate,
+    });
+    const id = e.assessment_id as string;
+    const previo = peor.get(id);
+    if (previo === undefined || ORDEN[estado] > ORDEN[previo]) peor.set(id, estado);
+  }
+
+  if (wanted === "no_strategy") {
+    const todos = await readAllStrict<{ id: string }>(() =>
+      supabase.from("quality_stakeholder_assessments").select("id")
+        .eq("organization_id", orgId)
+        .lte("effective_from", onDate).or(`effective_to.is.null,effective_to.gt.${onDate}`)
+        .order("id") as never,
+      "analisis vigentes");
+    return todos.map((a) => a.id).filter((id) => !peor.has(id));
+  }
+  return [...peor.entries()].filter(([, e]) => e === wanted).map(([id]) => id);
+}
+
+/**
+ * El resumen de seguimiento de cada fila de la lista.
+ *
+ * Una consulta más, acotada a los identificadores de LA PÁGINA. No se pide por
+ * fila —serían veinte viajes— ni se trae la tabla entera para filtrarla luego.
+ */
+export type ListRowMonitoring = {
+  activeStrategies: number;
+  reviewState: ReviewState | null;
+  monitoringMethods: string[];
+};
+
+export async function monitoringForAssessments(
+  orgId: string, assessmentIds: string[], onDate?: string, client?: Db
+): Promise<Map<string, ListRowMonitoring>> {
+  const mapa = new Map<string, ListRowMonitoring>();
+  if (assessmentIds.length === 0) return mapa;
+  const supabase = await db(client);
+  const hoy = onDate ?? today();
+
+  const { data } = await supabase
+    .from("quality_stakeholder_strategies")
+    .select("assessment_id, last_reviewed_on, next_review_on, review_cadence_months, monitoring_method")
+    .eq("organization_id", orgId).in("assessment_id", assessmentIds)
+    .eq("status", "active")
+    .lte("effective_from", hoy).or(`effective_to.is.null,effective_to.gt.${hoy}`);
+
+  const ORDEN: Record<ReviewState, number> = {
+    overdue: 3, due_soon: 2, never_reviewed: 1, up_to_date: 0,
+  };
+  for (const e of (data ?? []) as unknown as Record<string, unknown>[]) {
+    const id = e.assessment_id as string;
+    const previo = mapa.get(id) ?? { activeStrategies: 0, reviewState: null, monitoringMethods: [] };
+    const estado = reviewState({
+      lastReviewedOn: (e.last_reviewed_on as string | null) ?? null,
+      nextReviewOn: (e.next_review_on as string | null) ?? null,
+      cadenceMonths: num(e.review_cadence_months),
+      onDate: hoy,
+    });
+    const metodo = (e.monitoring_method as string | null) ?? null;
+    mapa.set(id, {
+      activeStrategies: previo.activeStrategies + 1,
+      reviewState: previo.reviewState === null || ORDEN[estado] > ORDEN[previo.reviewState]
+        ? estado : previo.reviewState,
+      monitoringMethods: metodo && !previo.monitoringMethods.includes(metodo)
+        ? [...previo.monitoringMethods, metodo] : previo.monitoringMethods,
+    });
+  }
+  return mapa;
 }
 
 // ===========================================================================
@@ -928,7 +1049,7 @@ export async function listStrategies(
 
   const [vinculos, puestos] = await Promise.all([
     supabase.from("quality_stakeholder_strategy_requirements")
-      .select("strategy_id, requirement_id, effective_to")
+      .select("id, strategy_id, requirement_id, effective_to")
       .eq("organization_id", orgId).in("strategy_id", ids),
     posIds.length === 0
       ? Promise.resolve({ data: [] as { id: string; name: string }[] })
@@ -936,14 +1057,14 @@ export async function listStrategies(
           .eq("organization_id", orgId).in("id", posIds),
   ]);
 
-  const porEstrategia = new Map<string, string[]>();
+  const porEstrategia = new Map<string, { linkId: string; requirementId: string }[]>();
   for (const v of vinculos.data ?? []) {
     const vigente = opts.asOf
       ? (v.effective_to === null || (v.effective_to as string) > opts.asOf)
       : v.effective_to === null;
     if (!vigente && !opts.includeEnded) continue;
     const lista = porEstrategia.get(v.strategy_id as string) ?? [];
-    lista.push(v.requirement_id as string);
+    lista.push({ linkId: v.id as string, requirementId: v.requirement_id as string });
     porEstrategia.set(v.strategy_id as string, lista);
   }
   const nombrePuesto = new Map((puestos.data ?? []).map((p) => [p.id as string, p.name as string]));
@@ -964,7 +1085,8 @@ export async function listStrategies(
     status: r.status as string,
     effectiveFrom: r.effective_from as string,
     effectiveTo: (r.effective_to as string | null) ?? null,
-    requirementIds: porEstrategia.get(r.id as string) ?? [],
+    requirementIds: (porEstrategia.get(r.id as string) ?? []).map((v) => v.requirementId),
+    requirementLinks: porEstrategia.get(r.id as string) ?? [],
     reviewState: reviewState({
       lastReviewedOn: (r.last_reviewed_on as string | null) ?? null,
       nextReviewOn: (r.next_review_on as string | null) ?? null,
@@ -1373,10 +1495,14 @@ export type InterestedPartiesSummary = {
   current: number;
   relevant: number;
   notRelevant: number;
+  underReview: number;
   requirements: number;
   strategiesActive: number;
   strategiesOverdue: number;
   neverReviewed: number;
+  /** Pertinentes sin ninguna estrategia vigente. El hueco real del 4.2: la
+   *  parte importa y nadie ha decidido qué se hace con ella. */
+  relevantWithoutStrategy: number;
 };
 
 export async function getSummary(
@@ -1390,11 +1516,13 @@ export async function getSummary(
   const cuenta = (tabla: string) =>
     supabase.from(tabla).select("id", { count: "exact", head: true }).eq("organization_id", orgId);
 
-  const [total, pertinentes, noPertinentes, requisitos, estrategias, vencidas, sinRevisar] =
+  const [total, pertinentes, noPertinentes, enEvaluacion,
+         requisitos, estrategias, vencidas, sinRevisar] =
     await Promise.all([
       vigente(cuenta("quality_stakeholder_assessments")),
       vigente(cuenta("quality_stakeholder_assessments").eq("relevance_status", "relevant")),
       vigente(cuenta("quality_stakeholder_assessments").eq("relevance_status", "not_relevant")),
+      vigente(cuenta("quality_stakeholder_assessments").eq("relevance_status", "under_review")),
       vigente(cuenta("quality_stakeholder_requirements").eq("entry_kind", "requirement")),
       vigente(cuenta("quality_stakeholder_strategies").eq("status", "active")),
       vigente(cuenta("quality_stakeholder_strategies").eq("status", "active"))
@@ -1407,11 +1535,50 @@ export async function getSummary(
     current: total.count ?? 0,
     relevant: pertinentes.count ?? 0,
     notRelevant: noPertinentes.count ?? 0,
+    underReview: enEvaluacion.count ?? 0,
     requirements: requisitos.count ?? 0,
     strategiesActive: estrategias.count ?? 0,
     strategiesOverdue: vencidas.count ?? 0,
     neverReviewed: sinRevisar.count ?? 0,
+    relevantWithoutStrategy: await relevantWithoutStrategy(orgId, hoy, supabase),
   };
+}
+
+/**
+ * Pertinentes sin estrategia vigente.
+ *
+ * No hay forma de contar esto con un `count` de PostgREST: es una diferencia
+ * de conjuntos entre dos tablas, y PostgREST no hace `not exists`. Se
+ * resuelve leyendo SOLO los identificadores —dos columnas, sin datos— y
+ * restando en memoria.
+ *
+ * La alternativa era una vista, y una vista es una migración. Añadir esquema
+ * para una tarjeta del resumen sería mover la base por comodidad de una
+ * pantalla; si el día de mañana esta cifra pesa, esa es la conversación que
+ * habrá que tener, con medidas delante.
+ *
+ * `readAllStrict` y no una consulta suelta: contar mil de mil doscientas y
+ * enseñarlo como el total sería peor que no enseñar la tarjeta.
+ */
+async function relevantWithoutStrategy(
+  orgId: string, hoy: string, supabase: Db
+): Promise<number> {
+  const pertinentes = await readAllStrict<{ id: string }>(() =>
+    supabase.from("quality_stakeholder_assessments").select("id")
+      .eq("organization_id", orgId).eq("relevance_status", "relevant")
+      .lte("effective_from", hoy).or(`effective_to.is.null,effective_to.gt.${hoy}`)
+      .order("id") as never,
+    "analisis pertinentes vigentes");
+  if (pertinentes.length === 0) return 0;
+
+  const conEstrategia = await readAllStrict<{ assessment_id: string }>(() =>
+    supabase.from("quality_stakeholder_strategies").select("assessment_id")
+      .eq("organization_id", orgId).eq("status", "active")
+      .lte("effective_from", hoy).or(`effective_to.is.null,effective_to.gt.${hoy}`)
+      .order("assessment_id").order("id") as never,
+    "estrategias vigentes");
+  const cubiertos = new Set(conEstrategia.map((r) => r.assessment_id));
+  return pertinentes.filter((a) => !cubiertos.has(a.id)).length;
 }
 
 // ===========================================================================
@@ -1560,4 +1727,169 @@ export async function loadIntelligenceContext(
     });
   }
   return items;
+}
+
+// ===========================================================================
+// QUALITY-12.3B3A · LO QUE NECESITAN LOS SELECTORES DE LA PANTALLA
+// ---------------------------------------------------------------------------
+// Tres lecturas más, todas acotadas. Están aquí y no en un componente porque
+// un `select` que consulta la base desde React sería exactamente la segunda
+// arquitectura que este sprint no quiere.
+// ===========================================================================
+
+export type ExternalPartyOption = {
+  id: string;
+  label: string;
+  legalName: string;
+  isSupplier: boolean;
+  isCustomer: boolean;
+  hasAssessment: boolean;
+};
+
+/**
+ * Buscar una entidad externa YA EXISTENTE.
+ *
+ * La identidad no se duplica: se elige. Y se devuelve si ya es proveedor o
+ * cliente para que la pantalla lo diga —«esta empresa ya está en
+ * Proveedores»— en vez de dejar que alguien la registre dos veces creyendo que
+ * no estaba.
+ *
+ * `hasAssessment` marca las que ya tienen análisis vigente: el índice único de
+ * 0149 rechazaría el segundo, y es mejor avisar antes que fallar después.
+ */
+export async function searchExternalParties(
+  orgId: string, q: string, limit = 20, client?: Db
+): Promise<ExternalPartyOption[]> {
+  const supabase = await db(client);
+  const term = sanitizeSearchTerm(q);
+  let query = supabase
+    .from("quality_external_parties")
+    .select("id, legal_name, trade_name")
+    .eq("organization_id", orgId);
+  if (term) query = query.or(`legal_name.ilike.%${term}%,trade_name.ilike.%${term}%`);
+  const { data } = await query.order("legal_name").limit(Math.min(limit, 50));
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.id as string);
+  const [prov, cli, vigentes] = await Promise.all([
+    supabase.from("quality_supplier_profiles").select("party_id")
+      .eq("organization_id", orgId).in("party_id", ids),
+    supabase.from("quality_customer_profiles").select("party_id")
+      .eq("organization_id", orgId).in("party_id", ids),
+    supabase.from("quality_stakeholder_assessments").select("external_party_id")
+      .eq("organization_id", orgId).in("external_party_id", ids).is("effective_to", null),
+  ]);
+  const esProv = new Set((prov.data ?? []).map((r) => r.party_id as string));
+  const esCli = new Set((cli.data ?? []).map((r) => r.party_id as string));
+  const conAnalisis = new Set((vigentes.data ?? []).map((r) => r.external_party_id as string));
+
+  return rows.map((r) => {
+    const comercial = (r.trade_name as string | null)?.trim();
+    return {
+      id: r.id as string,
+      label: comercial && comercial.length > 0 ? comercial : (r.legal_name as string),
+      legalName: r.legal_name as string,
+      isSupplier: esProv.has(r.id as string),
+      isCustomer: esCli.has(r.id as string),
+      hasAssessment: conAnalisis.has(r.id as string),
+    };
+  });
+}
+
+/**
+ * Registrar una identidad externa que todavía no existe en ningún módulo.
+ *
+ * Escribe en `quality_external_parties`, que es LA tabla de identidad desde
+ * GP-02: no se crea una tabla paralela ni una ficha local. Lo que no hace es
+ * darle un papel comercial —ni proveedor ni cliente—, porque un ente regulador
+ * o una comunidad vecina no son ninguna de las dos cosas, y forzarlas por el
+ * alta de Proveedores les colgaría una ficha que nadie va a evaluar.
+ *
+ * Cuando SÍ es un cliente o un proveedor, la pantalla dice que se dé de alta
+ * en su módulo, para que nazca con la ficha que allí le corresponde.
+ */
+export async function createExternalParty(
+  orgId: string,
+  input: { legalName: string; tradeName?: string | null; taxId?: string | null;
+           country?: string | null; city?: string | null },
+  client?: Db
+): Promise<DomainResult<string>> {
+  const supabase = await db(client);
+  const { data, error } = await supabase
+    .from("quality_external_parties")
+    .insert({
+      organization_id: orgId,
+      legal_name: input.legalName,
+      trade_name: input.tradeName ?? null,
+      tax_id: input.taxId ?? null,
+      country: input.country ?? null,
+      city: input.city ?? null,
+    })
+    .select("id").single();
+  if (error || !data) return fail(mapDbError(error) ?? "permission_denied");
+  return done(data.id as string);
+}
+
+/**
+ * El nombre de lo que se referenció.
+ *
+ * `work_references` guarda un tipo y un identificador, y enseñar un UUID en
+ * pantalla es no enseñar nada. Esto resuelve el nombre por tipo, en una
+ * consulta por tipo presente —no una por fila—, y lo que no sepa resolver lo
+ * deja sin nombre en vez de inventarlo.
+ */
+const PERIPHERAL_SOURCE: Record<PeripheralRefKind, { table: string; column: string }> = {
+  quality_indicator: { table: "quality_indicators", column: "name" },
+  quality_objective: { table: "quality_objectives", column: "name" },
+  quality_risk: { table: "quality_risks", column: "title" },
+  quality_opportunity: { table: "quality_opportunities", column: "title" },
+  work_case: { table: "work_cases", column: "title" },
+  work_action: { table: "work_actions", column: "title" },
+  trazadoc_document: { table: "trazadoc_documents", column: "title" },
+  quality_survey_campaign: { table: "quality_survey_campaigns", column: "name" },
+  quality_supplier_evaluation: { table: "quality_supplier_evaluations", column: "period_label" },
+  quality_customer_feedback: { table: "quality_customer_feedback", column: "title" },
+};
+
+export async function resolvePeripheralLabels(
+  orgId: string, refs: { refKind: string; refId: string }[], client?: Db
+): Promise<Map<string, string>> {
+  const supabase = await db(client);
+  const mapa = new Map<string, string>();
+  const porTipo = new Map<string, string[]>();
+  for (const r of refs) {
+    if (!(PERIPHERAL_REF_KINDS as readonly string[]).includes(r.refKind)) continue;
+    const lista = porTipo.get(r.refKind) ?? [];
+    lista.push(r.refId);
+    porTipo.set(r.refKind, lista);
+  }
+  await Promise.all([...porTipo.entries()].map(async ([kind, ids]) => {
+    const fuente = PERIPHERAL_SOURCE[kind as PeripheralRefKind];
+    const { data } = await supabase
+      .from(fuente.table).select(`id, ${fuente.column}`)
+      .eq("organization_id", orgId).in("id", [...new Set(ids)]);
+    for (const fila of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const nombre = fila[fuente.column];
+      if (typeof nombre === "string") mapa.set(`${kind}:${fila.id as string}`, nombre);
+    }
+  }));
+  return mapa;
+}
+
+/** Las opciones de un tipo periférico, acotadas, para el selector de
+ *  «Relacionar». Sin recorrer la tabla entera: veinte y a buscar. */
+export async function searchPeripheralOptions(
+  orgId: string, refKind: PeripheralRefKind, q: string, limit = 20, client?: Db
+): Promise<{ id: string; label: string }[]> {
+  const supabase = await db(client);
+  const fuente = PERIPHERAL_SOURCE[refKind];
+  const term = sanitizeSearchTerm(q);
+  let query = supabase
+    .from(fuente.table).select(`id, ${fuente.column}`)
+    .eq("organization_id", orgId);
+  if (term) query = query.ilike(fuente.column, `%${term}%`);
+  const { data } = await query.order(fuente.column).limit(Math.min(limit, 50));
+  return ((data ?? []) as unknown as Record<string, unknown>[])
+    .map((r) => ({ id: r.id as string, label: String(r[fuente.column] ?? "Sin nombre") }));
 }
