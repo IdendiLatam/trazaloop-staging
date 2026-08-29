@@ -3,6 +3,11 @@
 > **Diseño, no implementación.** Ninguna migración. Los nombres son
 > candidatos; lo que se congela es la responsabilidad de cada tabla y por qué
 > no puede resolverse con algo que ya existe.
+>
+> Corregido por la revisión humana 12.3A.1: **ocho** tablas (la versión
+> anterior decía «seis» y enumeraba siete), el sujeto pasa a **dos** tipos y
+> la relación estrategia↔requisito se hace core. Ver
+> [ARCHITECTURE_REVIEW](./QUALITY_12_3_ARCHITECTURE_REVIEW.md).
 
 ---
 
@@ -12,7 +17,7 @@
 |---|---|---|
 | Identidad de una entidad externa | `quality_external_parties` | **no** |
 | Contactos y sedes | `quality_external_party_contacts` / `_sites` | **no** |
-| Colectivo interno | `quality_org_units` | **no** |
+| Colectivo interno | tabla 2 (**no** `quality_org_units`: el organigrama no es una parte interesada, PI-38) | sí |
 | Vínculo a riesgo / oportunidad | `work_references` | **no** |
 | Vínculo a objetivo / indicador | `work_references` | **no** |
 | Vínculo a acción / caso | `work_references` | **no** |
@@ -24,8 +29,22 @@
 | Evento de automatización | fila en `quality_automation_event_catalog` | **no** |
 | Fuente de Intelligence | fila en `quality_ai_sources` | **no** |
 
-**Seis tablas** se proponen. Todo lo demás son filas de catálogo y dos CHECK
+**Ocho tablas** se proponen. Todo lo demás son filas de catálogo y dos CHECK
 ampliados.
+
+**Y `work_references` NO sirve para todo.** Comprobado contra el esquema real:
+
+```sql
+work_references
+  FOREIGN KEY (organization_id) REFERENCES organizations(id)
+  FOREIGN KEY (created_by)      REFERENCES profiles(id)
+  UNIQUE (owner_kind, owner_id, ref_kind, ref_id, relation)
+  relation ∈ {origin, evidence, related}
+```
+
+`owner_id` y `ref_id` son **uuid sin clave foránea**. No hay integridad
+referencial, ni vigencia, ni vocabulario tipado. Es el mecanismo correcto para
+lo periférico y el equivocado para la semántica de dominio (PI-37).
 
 ---
 
@@ -50,13 +69,24 @@ partes internas y colectivas.
 
 ## 2 · `quality_stakeholder_groups`
 
-**Propósito.** Grupos genéricos sin entidad jurídica concreta: la comunidad del
-entorno, la academia, «los entes reguladores» como colectivo.
+**Propósito.** Colectivos, internos y externos, sin entidad jurídica concreta:
+trabajadores, dirección, propietarios y accionistas, la comunidad del entorno,
+la academia, «los entes reguladores» como colectivo.
 
 **Por qué no va en `quality_external_parties`:** esa tabla exige `legal_name` y
 la apuntan nueve claves foráneas de proveedores, clientes y alcance de
 auditoría. Meter «Comunidad» allí contaminaría el registro de entidades
-externas con algo que no es una entidad, y lo vería PCR y Textiles.
+externas con algo que no es una entidad, y lo verían PCR y Textiles.
+
+**Por qué no va en `quality_org_units` (PI-38):** el organigrama es la
+estructura sobre la que cuelgan cargos y personas. «Trabajadores» atraviesa
+varias unidades, y «Dirección» como parte interesada no es la unidad de la que
+dependen tres cargos. Atar los sujetos del análisis 4.2 al organigrama haría
+que cada reorganización interna moviera las partes interesadas.
+
+**Diferido:** anclar un grupo a una unidad —«trabajadores de planta 2»— sería
+una FK nulable `org_unit_id` **en esta tabla**, append-only, no un tercer tipo
+de sujeto.
 
 | | |
 |---|---|
@@ -72,25 +102,30 @@ externas con algo que no es una entidad, y lo vería PCR y Textiles.
 **Propósito.** El análisis fechado de un sujeto: quién es para nosotros, en qué
 periodo, con qué prioridad y si es pertinente.
 
-**Sujeto polimórfico (PI-02):**
+**Sujeto de dos tipos, con FK compuestas reales (PI-02):**
 
 ```sql
-subject_kind ∈ {external_party, org_unit, group}
+subject_kind ∈ {external_party, group}
 external_party_id  uuid null → quality_external_parties(organization_id, id)
-org_unit_id        uuid null → quality_org_units(organization_id, id)
 group_id           uuid null → quality_stakeholder_groups(organization_id, id)
 
-CHECK: exactamente UNA no nula, y la que sea debe corresponder a subject_kind
+CHECK: exactamente UNA no nula, y coherente con subject_kind
 ```
+
+**No es `subject_type` / `subject_id`.** Un par genérico perdería la clave
+foránea, y con ella el aislamiento estructural por `(organization_id, id)` que
+en esta casa es la primera barrera —la RLS es la segunda—. Dos columnas
+nulables con FK compuesta cuestan una columna más y garantizan que un análisis
+no pueda apuntar a una fila inexistente ni de otra empresa.
 
 | | |
 |---|---|
 | Identidad | estable por análisis; el **sujeto** es la identidad de negocio |
 | Temporal | **evaluación fechada** — `assessed_on`, `effective_from`, `effective_to` |
-| Columnas | `category_id` · `subject_*` · `assessed_on` · `assessed_by` · `relevance_status` · `relevance_rationale` · `priority_label` · `priority_score` · `priority_derivation` jsonb · `methodology_version_id` null · `owner_position_id` · `effective_from` · `effective_to` · `supersedes_id` · `status` |
+| Columnas | `category_id` · `subject_kind` · `external_party_id` · `group_id` · `assessed_on` · `assessed_by` · `relevance_status` · `relevance_rationale` · `priority_label` · `priority_score` · `priority_derivation` jsonb · `methodology_version_id` null · `owner_position_id` · `effective_from` · `effective_to` · `supersedes_id` · `status` |
 | Unicidad | como mucho **un** análisis vigente por `(sujeto, category_id)` — índice parcial sobre `effective_to is null` |
 | Pertinencia | `relevant` / `not_relevant` / `under_review`; `relevance_rationale` **obligatorio** si `not_relevant` (PI-11) |
-| Prioridad | `priority_label` cualitativo **o** `priority_score` + `derivation` con metodología (PI-26/27). Nunca obligatoria |
+| Prioridad | **Opcional siempre** (PI-26). `priority_label` cualitativo **o** `priority_score` + `derivation` con la metodología y su versión (PI-27). Un número nunca se enseña sin su origen (PI-39) |
 | Borrado | **prohibido**. Se cierra vigencia y se sucede con `supersedes_id` |
 | RLS | lectura miembro · escritura gestor |
 | Precedente | `quality_risk_assessments` (evaluación fechada con derivación y justificación) |
@@ -162,19 +197,58 @@ vigilar (PI-20).
 | | |
 |---|---|
 | Identidad | estable |
-| Alcance | `assessment_id` (la parte) y opcionalmente `requirement_id` (una estrategia puede ser de la parte o de un requisito concreto) |
+| Alcance | `assessment_id` (la parte). Los requisitos atendidos van en la tabla 7, **no** en una columna: tenerlo en dos sitios permitiría que se contradijeran (PI-20) |
 | Temporal | `effective_from` / `effective_to` · `status ∈ {draft, active, superseded, cancelled}` |
 | Columnas | `title` · `purpose` · `approach` · `owner_position_id` · `monitoring_method` · `monitoring_note` · `review_cadence_months` null · `next_review_on` · `supersedes_id` |
 | Seguimiento | `monitoring_method` del vocabulario de PI-24 |
 | Enlaces | **todos por `work_references`**: indicadores, objetivos, riesgos, oportunidades, acciones, campañas, evaluaciones, documentos (PI-21) |
 | Dueño | **cargo**, nunca persona (PI-22, T-02) |
 | Borrado | **prohibido**; se cancela o se sucede |
-| Unicidad | como mucho una `active` por `(assessment_id, requirement_id)` — índice parcial |
+| Unicidad | como mucho una `active` **general** por `assessment_id` (sin requisitos enlazados) — índice parcial. Las específicas conviven: una parte puede tener varias estrategias, cada una para requisitos distintos |
 | RLS | igual |
 
 ---
 
-## 7 · `quality_stakeholder_reviews`
+## 7 · `quality_stakeholder_strategy_requirements` ← **core, añadida en 12.3A.1**
+
+**Propósito.** Qué requisitos atiende una estrategia. Es la relación que hace
+que el alcance sea inequívoco.
+
+**Por qué NO puede ser `work_references`** — las tres razones, comprobadas
+contra el esquema:
+
+1. **No hay relación tipada.** Solo `origin`, `evidence`, `related`. «Esta
+   estrategia atiende este requisito» no es ninguna de las tres, y meterla en
+   `related` haría indistinguible «lo atiende» de «tiene algo que ver con él».
+2. **No hay integridad referencial.** `ref_id` es un uuid sin FK: una estrategia
+   podría decir atender un requisito borrado, o de otra empresa.
+3. **No hay vigencia.** Una estrategia puede dejar de atender un requisito sin
+   que ninguno de los dos desaparezca, y eso hay que poder fecharlo.
+
+| | |
+|---|---|
+| Identidad | estable |
+| FK | `strategy_id` y `requirement_id`, ambas **compuestas** por `(organization_id, id)` |
+| Temporal | `effective_from` / `effective_to` |
+| Unicidad | un enlace **vigente** por `(strategy_id, requirement_id)` |
+| Columnas | `coverage_note` — qué parte del requisito atiende, cuando no lo atiende entero |
+| Borrado | se cierra vigencia |
+| RLS | igual |
+
+Las dos consultas que exigía la revisión quedan resueltas por FK, no por
+convención:
+
+```
+¿Qué requisitos atiende esta estrategia?   strategy_id   → enlaces → requisitos
+¿Qué estrategias atienden este requisito?  requirement_id → enlaces → estrategias
+```
+
+Y el alcance se lee del conteo de enlaces: cero = general de la parte, uno =
+específica, N = varias.
+
+---
+
+## 8 · `quality_stakeholder_reviews`
 
 **Propósito.** Dejar constancia de que se revisó, **incluso cuando no cambió
 nada** (PI-29).
@@ -195,7 +269,7 @@ seis columnas.
 
 ---
 
-## 8 · Ampliaciones de catálogos existentes (sin tablas nuevas)
+## 9 · Ampliaciones de catálogos existentes (sin tablas nuevas)
 
 | Objeto | Qué se añade |
 |---|---|
@@ -211,33 +285,42 @@ histórica se toca, ningún dato existente se reescribe.
 
 ---
 
-## 9 · Diagrama
+## 10 · Diagrama
 
 ```
 quality_external_parties ──┐
-quality_org_units ─────────┼─→ quality_stakeholder_assessments ──→ quality_stakeholder_categories
+                           ├─→ quality_stakeholder_assessments ──→ quality_stakeholder_categories
 quality_stakeholder_groups ┘            │
                                         ├─→ quality_stakeholder_requirements
-                                        │        │        └─ derived_from_id (auto-referencia)
+                                        │        │   └─ derived_from_id (auto-referencia: la conversión)
                                         │        └─→ quality_stakeholder_requirement_processes ──→ quality_processes
-                                        │                                                          (+ revisión)
+                                        │                              (core: vigencia + revisión)      (+ revisión)
                                         ├─→ quality_stakeholder_strategies ──→ quality_positions
+                                        │            └─→ quality_stakeholder_strategy_requirements ──┐
+                                        │                       (core: vigencia + tipada)            │
+                                        │                                                            ▼
+                                        │                                    quality_stakeholder_requirements
                                         └─→ quality_stakeholder_reviews
 
-                       todo lo demás ──→ work_references ──→ indicadores · objetivos · riesgos ·
-                                                             oportunidades · acciones · documentos ·
-                                                             campañas · evaluaciones
+           lo PERIFÉRICO ──→ work_references ──→ indicadores · objetivos · riesgos · oportunidades ·
+                                                 acciones · documentos · campañas · evaluaciones
 ```
+
+**Ocho tablas.** Dos de ellas —las marcadas «core»— son relaciones tipadas que
+`work_references` no puede expresar sin perder integridad, vigencia o
+significado (PI-36, PI-37).
 
 ---
 
-## 10 · Invariantes que la base debe garantizar
+## 11 · Invariantes que la base debe garantizar
 
-1. Exactamente **un** sujeto no nulo por análisis, coherente con `subject_kind`.
+1. Exactamente **un** sujeto no nulo por análisis (`external_party_id` o
+   `group_id`), coherente con `subject_kind`, y **con FK compuesta real**.
 2. `requirement_kind` **no nulo** si y solo si `entry_kind = 'requirement'`.
 3. `relevance_rationale` **obligatorio** cuando `relevance_status = 'not_relevant'`.
 4. Como mucho **un** análisis vigente por `(sujeto, categoría)`.
-5. Como mucho **una** estrategia `active` por `(análisis, requisito)`.
+5. Como mucho **una** estrategia `active` **general** por análisis. Y como
+   mucho **un** enlace vigente por `(estrategia, requisito)`.
 6. **Sin borrado** en análisis, requisitos, estrategias ni revisiones — como
    `output_batch_movements` y `recycled_content_calculations`.
 7. `effective_to >= effective_from` en las cuatro tablas con vigencia.
@@ -245,4 +328,7 @@ quality_stakeholder_groups ┘            │
    y de tipo `need` o `expectation`.
 9. FK **compuestas** por `(organization_id, id)`, como el resto de Quality:
    el aislamiento es estructural, no solo RLS.
-10. RLS en las seis tablas; escritura por `quality_manages_interested_parties`.
+10. RLS en las **ocho** tablas; escritura por `quality_manages_interested_parties`.
+11. Un enlace estrategia↔requisito solo puede unir filas de la **misma**
+    organización, y la estrategia y el requisito deben colgar del **mismo**
+    análisis: una estrategia de la parte A no puede atender un requisito de B.

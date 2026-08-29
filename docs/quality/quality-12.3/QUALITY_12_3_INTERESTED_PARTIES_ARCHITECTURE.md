@@ -1,6 +1,8 @@
 # QUALITY-12.3A · Partes interesadas · ARQUITECTURA
 
-> Congelación de decisiones **PI-01 … PI-32**. Sin implementación.
+> Congelación de decisiones **PI-01 … PI-39**. Sin implementación.
+> Corregida por la revisión humana: ver
+> [ARCHITECTURE_REVIEW](./QUALITY_12_3_ARCHITECTURE_REVIEW.md).
 > Base: `a1bfd53` · Local 0148. Ver
 > [DISCOVERY](./QUALITY_12_3_INTERESTED_PARTIES_DISCOVERY.md).
 
@@ -35,23 +37,41 @@ ESTRATEGIA         qué haremos, quién responde, cómo lo vigilamos
 apuntan nueve claves foráneas, incluidas PCR y Textiles. Crear una identidad
 propia sería el tercer proveedor de la casa.
 
-**PI-02 · El sujeto del análisis es POLIMÓRFICO.** La 4.2 incluye partes que no
-son entidades externas. El análisis apunta a uno de tres sujetos, y **solo uno**:
+**PI-02 · El sujeto del análisis tiene DOS tipos, ambos con clave foránea
+compuesta real.** *(modificada en 12.3A.1: eran tres)*
 
 | `subject_kind` | Apunta a | Ejemplo |
 |---|---|---|
-| `external_party` | `quality_external_parties` | Cliente ABC, Proveedor XYZ, ente certificador |
-| `org_unit` | `quality_org_units` | Trabajadores de planta, la dirección |
-| `group` | catálogo de grupos genéricos | La comunidad del entorno, la academia |
+| `external_party` | `quality_external_parties(organization_id, id)` | Cliente ABC, Proveedor XYZ, ente certificador |
+| `group` | `quality_stakeholder_groups(organization_id, id)` | Trabajadores, Dirección, la comunidad del entorno, la academia |
 
-Un CHECK obliga a que exactamente una de las tres referencias esté presente.
+Un CHECK obliga a que exactamente una de las dos referencias esté presente y
+sea coherente con `subject_kind`. **No es un `subject_type` / `subject_id`
+genérico:** eso perdería la clave foránea y con ella el aislamiento
+estructural por `(organization_id, id)`, que en esta casa es la primera
+barrera y no la RLS.
+
 Inventar una fila «Comunidad» en el registro de entidades externas sería meter
-en él algo que no es una entidad.
+en él algo que no es una entidad, y lo verían PCR y Textiles.
 
-**PI-03 · Los grupos genéricos son un catálogo de la organización**, no texto
-libre. Mismo patrón que `quality_process_categories`: `code`, `name`,
-`description`, `is_active`. Texto libre haría que «Comunidad» y «comunidad
+**PI-03 · Los grupos son un catálogo de la organización**, no texto libre, y
+cubren tanto lo genérico externo —la comunidad, la academia— como los
+**colectivos internos** —trabajadores, dirección, propietarios—. *(modificada
+en 12.3A.1: antes solo lo genérico.)* Mismo patrón que
+`quality_process_categories`. Texto libre haría que «Comunidad» y «comunidad
 local» fueran dos partes distintas en el mismo informe.
+
+**PI-38 · El organigrama NO es una parte interesada.** *(nueva en 12.3A.1.)*
+`quality_org_units` es la estructura sobre la que cuelgan cargos y personas. Un
+colectivo con intereses no es una casilla del organigrama: «Trabajadores»
+atraviesa varias unidades, y «Dirección» como parte interesada no es la misma
+cosa que la unidad de la que dependen tres cargos. Usarlo como sujeto habría
+sido elegirlo por existir, y habría atado los sujetos del análisis 4.2 a cada
+reorganización interna.
+
+**Diferido:** si hace falta anclar un grupo a una unidad concreta
+—«trabajadores de planta 2»—, se añade una FK nulable `org_unit_id` **al
+grupo**, no un tercer tipo de sujeto. Append-only, sin tocar consultas.
 
 **PI-04 · Una entidad puede ser parte interesada por varias razones**, y eso no
 la duplica: son varias filas de análisis sobre el **mismo** sujeto, cada una
@@ -181,17 +201,49 @@ Las dos preguntas quedan respondidas:
 
 ## 6 · Estrategia de gestión · PI-20 … PI-23
 
-**PI-20 · La estrategia es una entidad de primera clase, y es lo que convierte
-el registro en gestión.** Sin ella, 4.2 es una lista.
+**PI-20 · La estrategia es una entidad de primera clase, y su ALCANCE se
+expresa por enlaces.** *(modificada en 12.3A.1.)* Sin ella, 4.2 es una lista.
 
 Campos: `purpose` · `approach` · `owner_position_id` **(cargo, T-02)** ·
 `status` · `effective_from/to` · `review_cadence_months` · `next_review_on` ·
-`monitoring_note`.
+`monitoring_method` · `monitoring_note`.
 
-**PI-21 · La estrategia NO recrea ningún motor.** Enlaza, por
-`work_references`, a: indicadores · objetivos · riesgos · oportunidades ·
-acciones · campañas de voz del cliente · evaluaciones de proveedor ·
-documentos. Cero tablas de enlace nuevas.
+El alcance **no** es una columna:
+
+| Alcance | Se expresa como |
+|---|---|
+| General de la parte | estrategia con **cero** requisitos enlazados |
+| Específica de un requisito | **un** enlace |
+| Específica de varios | **N** enlaces |
+
+Tener el alcance en dos sitios —una columna `requirement_id` y una tabla de
+enlace— permitiría que se contradijeran. Un solo motor de estrategia, un solo
+sitio donde vive su alcance.
+
+**PI-36 · La relación estrategia ↔ requisito es CORE y TIPADA.** *(nueva en
+12.3A.1.)* No cabe en `work_references`, comprobado contra el esquema real:
+esa tabla solo admite `origin`, `evidence` y `related` —«lo atiende» no es
+ninguna de las tres—, sus `owner_id` y `ref_id` **no tienen clave foránea**, y
+no tiene vigencia. Una estrategia podría decir atender un requisito borrado o
+de otra empresa sin que nada chirriara.
+
+**PI-21 · La estrategia NO recrea ningún motor.** *(enunciado corregido en
+12.3A.1.)* Enlaza, por `work_references`, a: indicadores · objetivos · riesgos ·
+oportunidades · acciones · campañas de voz del cliente · evaluaciones de
+proveedor · documentos.
+
+El principio **no** es «cero tablas de enlace» —eso era falso ya en 12.3A, con
+`_requirement_processes` en la misma propuesta—. Es:
+
+**PI-37 · ZERO REDUNDANT LINK TABLES.** *(nueva en 12.3A.1.)*
+
+| La relación… | Va en |
+|---|---|
+| define el dominio y necesita integridad referencial, vigencia o vocabulario propio | **tabla core tipada** |
+| es transversal o periférica: evidencia, origen, «relacionado con» | **`work_references`** |
+
+Reducir tablas a costa de la semántica de negocio no es simplificar: es perder
+integridad para que un recuento salga más bonito.
 
 **PI-22 · La dueña es un CARGO, nunca una persona.** T-02. Si el cargo cambia
 de ocupante, la estrategia sigue teniendo dueño.
@@ -229,16 +281,29 @@ evaluaciones paralelas.
 
 ## 8 · Priorización · PI-26 … PI-27
 
-**PI-26 · Configurable, y opcional.** Se sigue el precedente de riesgos y de
-criticidad de proveedor: metodología versionada, factores, escala, y
-`derivation` en JSONB con el rastro del cálculo. La plataforma **sugiere** una
-metodología —influencia × impacto— y la organización puede cambiarla o no usar
-ninguna.
+**PI-26 · La plataforma FUNCIONA SIN PUNTUACIÓN.** *(reescrita en 12.3A.1.)*
+No hay metodología obligatoria, ni cuadrícula poder/interés impuesta. Una
+organización puede trabajar la 4.2 entera sin asignar un solo número, y eso no
+es un uso degradado: es el uso normal.
 
-**PI-27 · Sin metodología también se puede trabajar.** Se admite una prioridad
-cualitativa declarada (`high`/`medium`/`low`) con justificación. La norma no
-exige una cuadrícula poder/interés, y convertirla en obligatoria sería
-inventarse un requisito.
+**PI-27 · Se ofrece UNA plantilla sugerida, configurable.** *(reescrita en
+12.3A.1.)* Influencia × impacto, con los ejes definidos —porque un eje sin
+definición se rellena a ojo y luego se defiende como si fuera medida—:
+
+| Eje | Qué mide |
+|---|---|
+| **Influencia** | capacidad de la parte para **afectar** a la organización, al sistema de gestión o al logro de los resultados previstos |
+| **Impacto** | consecuencia potencial **para la organización** de no atender sus requisitos pertinentes |
+
+Se sigue el precedente de riesgos y de criticidad de proveedor: metodología
+versionada, factores, escala y `derivation` en JSONB con el rastro del cálculo.
+La organización puede cambiarla o no usar ninguna.
+
+**PI-39 · Un número no es una verdad objetiva, y la interfaz no lo presenta
+como tal.** *(nueva en 12.3A.1.)* La puntuación se enseña **siempre** junto a
+su metodología, su versión y su justificación. Sin metodología se admite una
+prioridad cualitativa declarada (`high`/`medium`/`low`) con justificación, que
+es más honesta que un 7,4 sin origen.
 
 ---
 
@@ -272,9 +337,14 @@ nulable, `last_reviewed_at`, `next_review_due` derivado. La 4.2 no dice
 
 ## 10 · Integración con el resto · PI-31 … PI-32
 
-**PI-31 · Todo lo que ya tiene motor se enlaza por `work_references`.** Se
-añaden valores a dos CHECK —`owner_kind` y `ref_kind`— y no se crea ninguna
-tabla de enlace. Sin esto harían falta al menos seis.
+**PI-31 · Lo PERIFÉRICO se enlaza por `work_references`.** *(acotada en
+12.3A.1: antes decía «todo».)* Indicadores, objetivos, riesgos, oportunidades,
+acciones, campañas, evaluaciones y documentos. Se añaden valores a dos CHECK
+—`owner_kind` y `ref_kind`— y no se crea una tabla por pareja: sin esto harían
+falta al menos seis tablas más.
+
+Lo **core** —requisito↔proceso y estrategia↔requisito— no va aquí (PI-36,
+PI-37).
 
 **PI-32 · Un hallazgo de revisión de partes interesadas puede originar una
 acción; NUNCA una no conformidad automática.** Coherente con AC: hallazgo ≠ no
@@ -341,11 +411,14 @@ para cualquier miembro; escritura para
 array['admin','quality','consultant'])`. Sin lectura restringida: una parte
 interesada no es un dato sensible de persona. **Entitlement ≠ autorización**:
 tener el módulo Quality y poder escribir son dos comprobaciones distintas y las
-dos aplican. RLS multiinquilino en las seis tablas, con FK compuestas por
+dos aplican. RLS multiinquilino en las **ocho** tablas, con FK compuestas por
 `(organization_id, id)` para que el aislamiento sea estructural y no solo de
 política. **Sin `service_role` en runtime.**
 
-**PI-35 · La interfaz es de profundidad, no una hoja de cálculo.** El detalle
+**PI-35 · La interfaz es de profundidad, no una hoja de cálculo, y vive en un
+grupo «Contexto».** *(ampliada en 12.3A.1.)* El grupo se llama **Contexto**
+porque 4.1 —contexto de la organización— compartirá sitio con 4.2 cuando
+exista: son la entrada del sistema, no un apéndice de desempeño. El detalle
 de una parte se recorre por capas —análisis, necesidades, requisitos, procesos,
 estrategia, seguimiento, evidencias, historia—. Y el tablero **no llama
 «desempeño» a que un formulario esté completo**: que una estrategia esté
@@ -353,31 +426,35 @@ redactada no dice si funciona; eso lo dicen sus indicadores.
 
 ---
 
-## 12 · Matriz de decisiones PI-01 … PI-35
+## 12 · Matriz de decisiones PI-01 … PI-39
+
+Las marcadas ▲ cambiaron en 12.3A.1; las ★ son nuevas. El detalle del delta
+está en [ARCHITECTURE_REVIEW](./QUALITY_12_3_ARCHITECTURE_REVIEW.md).
 
 | Tema | Decisiones |
 |---|---|
-| Identidad | PI-01 · PI-02 · PI-03 · PI-04 · PI-05 |
+| Identidad y sujeto | PI-01 · **PI-02 ▲** · **PI-03 ▲** · PI-04 · PI-05 · **PI-38 ★** |
 | Categorías | PI-06 · PI-07 · PI-08 |
 | Identidad vs análisis | PI-09 · PI-10 |
 | Pertinencia | PI-11 · PI-15 |
 | Necesidades y expectativas | PI-12 · PI-13 |
 | Requisitos | PI-12 · PI-14 · PI-16 |
 | Vínculo con procesos | PI-17 · PI-18 · PI-19 |
-| Estrategias | PI-20 · PI-21 · PI-22 · PI-23 |
+| Estrategias | **PI-20 ▲** · **PI-21 ▲** · PI-22 · PI-23 · **PI-36 ★** |
+| Frontera core / periférico | **PI-37 ★** |
 | Seguimiento y satisfacción | PI-24 · PI-25 |
-| Priorización | PI-26 · PI-27 |
+| Priorización | **PI-26 ▲** · **PI-27 ▲** · **PI-39 ★** |
 | Historia | PI-28 |
 | Revisiones | PI-29 · PI-30 |
 | Evidencia | PI-14 · PI-33 |
-| Riesgos y oportunidades | PI-21 · PI-31 |
-| Objetivos e indicadores | PI-21 · PI-31 |
-| Acciones | PI-31 · PI-32 |
-| Revisión por la dirección | PI-31 |
-| Automatización | PI-31 |
-| Intelligence | PI-31 |
+| Riesgos y oportunidades | PI-31 ▲ |
+| Objetivos e indicadores | PI-31 ▲ |
+| Acciones | PI-31 ▲ · PI-32 |
+| Revisión por la dirección | PI-31 ▲ |
+| Automatización | PI-31 ▲ |
+| Intelligence | PI-31 ▲ |
 | Autorización | PI-34 |
-| Forma de la interfaz | PI-35 |
+| Forma de la interfaz | **PI-35 ▲** |
 
 ---
 
@@ -404,13 +481,15 @@ decisión anterior y este dominio se acomoda.
 ## 14 · Interfaz propuesta · PI-35
 
 Grupo nuevo **«Contexto»**, junto a «Sistema de gestión» y antes de
-«Desempeño»: 4.1 y 4.2 son la entrada del sistema, no un apéndice.
+«Desempeño»: 4.1 y 4.2 son la entrada del sistema, no un apéndice. **Aprobado
+en la revisión humana**, con 4.1 compartiendo el grupo cuando exista.
 
 ```
 Contexto
 ├── Partes interesadas        lista con categoría, prioridad, pertinencia, estado de revisión
 ├── Requisitos                transversal, filtrable por pertinencia, tipo y proceso
-└── Estrategias               con dueño, vigencia, próxima revisión
+├── Estrategias               con dueño, vigencia, próxima revisión
+└── (futuro) Contexto de la organización        ← 4.1, mismo grupo
 ```
 
 **Detalle de una parte, con profundidad en vez de rejilla:**

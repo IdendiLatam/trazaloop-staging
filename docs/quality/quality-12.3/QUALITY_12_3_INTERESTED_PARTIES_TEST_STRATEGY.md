@@ -1,6 +1,9 @@
 # QUALITY-12.3A · Partes interesadas · ESTRATEGIA DE PRUEBAS
 
 > **Diseño de pruebas, no implementación.** Ninguna se escribe en 12.3A.
+> Actualizado por la revisión humana 12.3A.1: K7 pasa de «seis» a **ocho**
+> —decía un número que contradecía al propio modelo de datos que acompañaba— y
+> entran las familias M y N.
 > Cada decisión PI-xx que pueda romperse en silencio necesita una prueba que
 > falle con nombre propio. Las que no pueden romperse en silencio no la
 > necesitan.
@@ -168,8 +171,8 @@ que una bitácora técnica se convierta en la memoria de la empresa.
 
 | # | Qué demuestra | Capa |
 |---|---|---|
-| J1 | Las seis tablas tienen RLS activa | base |
-| J2 | La organización A no lee ni escribe nada de B, en las seis | base |
+| J1 | Las **ocho** tablas tienen RLS activa | base |
+| J2 | La organización A no lee ni escribe nada de B, en las **ocho** | base |
 | J3 | Un miembro sin rol de gestión **lee** y **no escribe** | base |
 | J4 | Las FK son **compuestas** por `(organization_id, id)`: el aislamiento es estructural | estática + base |
 | J5 | Ninguna política concede a `service_role` en runtime | base |
@@ -189,15 +192,60 @@ La familia que protege el principio más caro de romper:
 | K4 | No existe tabla de riesgos propia del dominio |
 | K5 | No existe tabla de indicadores ni de mediciones propia del dominio |
 | K6 | No existen ficheros propios del dominio: los documentos son TrazaDocs |
-| K7 | El número de tablas nuevas es **exactamente seis**, y cada una está justificada en el modelo de datos |
+| K7 | El número de tablas nuevas es **exactamente ocho**, y cada una está justificada en el modelo de datos |
 
-**K7 es deliberadamente rígida.** Si en 12.3B hacen falta siete, la prueba
+**K7 es deliberadamente rígida.** Si en 12.3B hacen falta nueve, la prueba
 falla y obliga a escribir por qué — que es exactamente el momento en que hay
 que pensarlo, no seis meses después.
 
+Y es la prueba que **ya falló una vez**: en 12.3A decía «exactamente seis»
+mientras el modelo de datos enumeraba siete. La revisión humana lo encontró
+antes de que existiera una sola migración. Su valor no es el número: es que un
+recuento equivocado no pueda sobrevivir a la implementación.
+
 ---
 
-## 12 · Cómo se demuestra que la reutilización es real
+## 12 · Frontera core / periférico (PI-36, PI-37)
+
+Añadida en 12.3A.1. La familia que impide que la simplificación se coma la
+semántica de negocio.
+
+| # | Qué demuestra | Capa |
+|---|---|---|
+| M1 | «¿Qué requisitos atiende esta estrategia?» se responde por **FK**, no recorriendo `work_references` | base |
+| M2 | «¿Qué estrategias atienden este requisito?» devuelve exactamente el inverso de M1 | base |
+| M3 | Un enlace estrategia↔requisito a **otra organización** se rechaza | base |
+| M4 | Un enlace a un requisito de **otro análisis** se rechaza | base |
+| M5 | Cerrar la vigencia de un enlace **no** borra ni el requisito ni la estrategia | base |
+| M6 | La estrategia **no** tiene columna `requirement_id`: el alcance vive en un solo sitio | estática |
+| M7 | Una estrategia con **cero** enlaces es válida y significa «general de la parte» | base |
+| M8 | Ninguna relación **core** —requisito↔proceso, estrategia↔requisito— se guarda además en `work_references`: sería una segunda verdad | estática + base |
+| M9 | Ninguna relación **periférica** —indicador, objetivo, riesgo, acción, documento— tiene tabla propia | estática |
+
+**M8 es la que protege el principio en los dos sentidos:** ni core en
+`work_references`, ni periférico en tabla propia.
+
+---
+
+## 13 · Sujeto del análisis (PI-02, PI-38)
+
+Añadida en 12.3A.1.
+
+| # | Qué demuestra | Capa |
+|---|---|---|
+| N1 | El sujeto tiene **dos** tipos, no tres: no existe columna `org_unit_id` en el análisis | estática |
+| N2 | Las dos referencias del sujeto son **FK compuestas** por `(organization_id, id)`, no uuid sueltos | base |
+| N3 | Un análisis que apunta a una parte de **otra** organización se rechaza en la base, no solo por RLS | base |
+| N4 | No existe ningún par `subject_type` / `subject_id` genérico en el esquema del dominio | estática |
+| N5 | Un colectivo interno —«Trabajadores»— se representa como grupo, y el análisis funciona igual que con una entidad externa | base |
+| N6 | Reorganizar `quality_org_units` **no** altera ningún análisis 4.2 | base |
+
+**N6 es la prueba de la decisión PI-38:** si algún día alguien ata el sujeto al
+organigrama, esa prueba falla.
+
+---
+
+## 14 · Cómo se demuestra que la reutilización es real
 
 No basta con no crear tablas: hay que probar que las existentes **se usan**.
 
@@ -213,7 +261,7 @@ Cinco pruebas que fallan si alguien copia un dato en vez de enlazarlo.
 
 ---
 
-## 13 · Lo que NO se prueba, y por qué
+## 15 · Lo que NO se prueba, y por qué
 
 - **Que la interfaz sea agradable.** Eso lo dice la validación humana.
 - **Que la clasificación sea correcta.** Que una parte sea pertinente es un

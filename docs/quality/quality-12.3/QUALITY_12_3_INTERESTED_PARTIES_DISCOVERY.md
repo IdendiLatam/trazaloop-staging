@@ -2,6 +2,9 @@
 
 > Inspección del repositorio real. Sin migraciones, sin esquema, sin código.
 > Base: rama `feature/pcr-textiles-pre-integration`, commit `a1bfd53`, Local 0148.
+>
+> Corregido en 12.3A.1 tras la revisión humana: §2.1 y §6. Ver
+> [ARCHITECTURE_REVIEW](./QUALITY_12_3_ARCHITECTURE_REVIEW.md).
 
 ---
 
@@ -65,12 +68,21 @@ incluye además:
   «los entes reguladores» como categoría, la academia.
 
 Para lo interno existe `quality_org_units` (`code`, `name`, `parent_id`,
-`is_active`). Para lo genérico no existe nada, y es correcto que no exista:
-inventar una fila en `quality_external_parties` llamada «Comunidad» sería
-meter en el registro de entidades externas algo que no es una entidad.
+`is_active`), **pero es el organigrama**: la estructura sobre la que cuelgan
+cargos y personas. No es lo mismo que un colectivo con intereses.
+«Trabajadores» atraviesa varias unidades, y «Dirección» como parte interesada
+no es la unidad de la que dependen tres cargos.
 
-**Este es el hueco real del descubrimiento**, y lo resuelve la arquitectura con
-un sujeto polimórfico, no con una identidad nueva.
+Para lo genérico no existe nada, y es correcto que no exista: inventar una fila
+en `quality_external_parties` llamada «Comunidad» sería meter en el registro de
+entidades externas algo que no es una entidad.
+
+**Este es el hueco real del descubrimiento.** *(Corregido en 12.3A.1: la
+primera versión proponía `quality_org_units` como tercer sujeto. Se descartó —
+habría sido elegirlo por existir, y habría atado los sujetos del análisis 4.2 a
+cada reorganización interna. PI-38.)* Lo resuelve un sujeto de **dos** tipos,
+ambos con clave foránea compuesta real, y los colectivos internos van como
+grupos.
 
 ---
 
@@ -169,8 +181,30 @@ Ampliarlo es **añadir valores a dos CHECK**, y eso es una migración
 append-only: no toca datos ni rompe filas existentes.
 
 **Sin esto**, este dominio necesitaría al menos seis tablas de enlace
-(parte↔riesgo, parte↔oportunidad, requisito↔documento, estrategia↔indicador,
-estrategia↔objetivo, revisión↔evidencia). Con esto, ninguna.
+periféricas (parte↔riesgo, parte↔oportunidad, requisito↔documento,
+estrategia↔indicador, estrategia↔objetivo, revisión↔evidencia). Con esto,
+ninguna.
+
+### 6.1 · Pero tiene un límite, y hay que decirlo
+
+*(Añadido en 12.3A.1.)* Las únicas claves foráneas de la tabla son a
+`organizations` y a `profiles`:
+
+```sql
+FOREIGN KEY (organization_id) REFERENCES organizations(id)
+FOREIGN KEY (created_by)      REFERENCES profiles(id)
+UNIQUE (owner_kind, owner_id, ref_kind, ref_id, relation)
+```
+
+**`owner_id` y `ref_id` son uuid desnudos.** No hay integridad referencial:
+nada impide un `ref_id` colgando, ni que apunte a una fila de otro inquilino
+—la RLS filtra la lectura, no la escritura del uuid—. Tampoco hay vigencia, y
+`relation` solo admite `origin`, `evidence` y `related`.
+
+Es el mecanismo correcto para lo **periférico** y el equivocado para la
+semántica de dominio. La primera versión de esta arquitectura decía «cero
+tablas de enlace», que además de ser falso —proponía una— habría llevado a
+meter en `work_references` relaciones que necesitan integridad y vigencia.
 
 ---
 
