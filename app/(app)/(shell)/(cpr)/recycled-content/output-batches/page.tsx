@@ -4,21 +4,35 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { listOutputBatches, getCompleteness } from "@/lib/db/traceability";
+import { listOutputBatches } from "@/lib/db/traceability";
 import { listLatestCalculations } from "@/lib/db/recycled";
-import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
-import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
+// PT-02A · El estado que se enseña es el del CÁLCULO, no el de la completitud
+// histórica: aquella exigía composición manual y pintaba en rojo lotes que
+// calculan perfectamente.
+import {
+  calculationState,
+  structuralBlockers,
+  type Defensibility,
+} from "@/lib/domain/recycled-readiness";
+import { CalculationStateBadge } from "@/components/domain/recycled/calculation-state-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
 
 export default async function RecycledOutputBatchesPage() {
   const org = await requireActiveOrg();
-  const [batches, completeness, latest] = await Promise.all([
+  // PT-02A · Sin `getCompleteness`: medía la completitud de la metodología
+  // anterior y aquí solo servía para pintar en rojo lotes calculables.
+  const [batches, latest] = await Promise.all([
     listOutputBatches(org.organizationId),
-    getCompleteness(org.organizationId),
     listLatestCalculations(org.organizationId),
   ]);
-  const completenessByBatch = new Map(completeness.map((c) => [c.output_batch_id, c]));
   const latestByBatch = new Map(latest.map((l) => [l.output_batch_id, l]));
+  // Cuántos lotes finales salieron de cada orden: es el único impedimento
+  // estructural que no se ve mirando el lote solo.
+  const lotesPorOrden = new Map<string, number>();
+  for (const b of batches) {
+    if (!b.production_order_id) continue;
+    lotesPorOrden.set(b.production_order_id, (lotesPorOrden.get(b.production_order_id) ?? 0) + 1);
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -44,10 +58,11 @@ export default async function RecycledOutputBatchesPage() {
       ) : (
         <ul className="space-y-3">
           {batches.map((b) => {
-            const comp = completenessByBatch.get(b.id);
-            const calc = latestByBatch.get(b.id);
-            const hasComposition = comp?.has_composition ?? false;
-            const incomplete = comp?.traceability_status === "incomplete";
+            const calc = latestByBatch.get(b.id) ?? null;
+            const estado = calculationState(calc);
+            const hermanos = b.production_order_id
+              ? lotesPorOrden.get(b.production_order_id) ?? 1
+              : 1;
             return (
               <li key={b.id} className="rounded-lg border border-hairline bg-surface p-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -55,32 +70,31 @@ export default async function RecycledOutputBatchesPage() {
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <span className="code text-xs text-loop-deep">{b.batch_code}</span>
                       {b.product_label ?? "Sin producto asociado"}
-                      {comp ? <TraceabilityStatusBadge status={comp.traceability_status} /> : null}
+                      <CalculationStateBadge
+                        state={estado}
+                        defensibility={(calc?.defensibility_level ?? null) as Defensibility | null}
+                        percent={calc?.recycled_percent ?? null}
+                      />
                     </p>
                     <p className="text-xs text-ink-soft">orden {b.production_order_code}</p>
                     {calc ? (
-                      <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-                        <span className="code">{calc.recycled_percent.toFixed(2)}%</span>
-                        <DefensibilityBadge level={calc.defensibility_level} />
-                        {calc.defensibility_level === "preliminary" ? (
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+                        {estado === "incomplete" ? (
+                          <Link
+                            href={`/recycled-content/output-batches/${b.id}`}
+                            className="text-loop hover:underline"
+                          >
+                            Ver qué falta
+                          </Link>
+                        ) : calc.defensibility_level === "preliminary" ? (
                           <Link
                             href={`/audit-support/output-batches/${b.id}/evidence-matrix`}
-                            className="text-xs text-loop hover:underline"
+                            className="text-loop hover:underline"
                           >
                             Ver causas en Soporte técnico
                           </Link>
                         ) : null}
-                        <span className="text-xs text-ink-soft">
-                          {new Date(calc.calculated_at).toLocaleDateString("es-CO")}
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-xs text-ink-soft">Sin cálculo todavía.</p>
-                    )}
-                    {incomplete && hasComposition ? (
-                      <p className="mt-1 inline-block rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 text-xs text-amber">
-                        La trazabilidad está incompleta: puedes calcular, pero el
-                        resultado quedará como preliminar o con advertencias.
+                        <span>{new Date(calc.calculated_at).toLocaleDateString("es-CO")}</span>
                       </p>
                     ) : null}
                   </div>
@@ -88,8 +102,18 @@ export default async function RecycledOutputBatchesPage() {
                     <CalculateButton
                       outputBatchId={b.id}
                       hasCalculation={Boolean(calc)}
-                      disabled={!hasComposition}
-                      disabledReason="Sin composición registrada no se puede calcular. Regístrala en Trazabilidad."
+                      blockers={
+                        b.production_order_id && hermanos <= 1
+                          ? []
+                          : structuralBlockers({
+                              hasOrder: Boolean(b.production_order_id),
+                              // La lista no trae los consumos de cada orden y
+                              // traerlos sería una consulta por fila: que lo
+                              // conteste el motor, que ya lo sabe.
+                              hasConsumption: true,
+                              outputBatchesInOrder: hermanos,
+                            })
+                      }
                     />
                     <Link
                       href={`/recycled-content/output-batches/${b.id}`}

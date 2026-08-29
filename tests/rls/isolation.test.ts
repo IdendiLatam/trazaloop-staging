@@ -988,9 +988,21 @@ async function main() {
     const { data: meths } = await userC.client
       .from("calculation_methodologies")
       .select("id, code, version, is_active, rules")
-      .eq("code", "RC-6632-15343");
+      .eq("code", "RC-6632-15343")
+      .order("version");
     assert((meths ?? []).length >= 1, "no se pudo leer la metodología RC-6632-15343");
-    assert(meths![0].is_active === true, "la metodología seed no está activa");
+    // PT-02A · Esta comprobación decía «la metodología seed está activa» y leía
+    // `meths[0]` de una consulta SIN orden. Desde 0144 hay DOS versiones, así
+    // que además de ser falsa era no determinista: acertaba o fallaba según el
+    // orden que devolviera la base. Se comprueba lo que ahora es cierto, y con
+    // más fuerza: exactamente una activa, la v2, y la v1 conservada e inactiva.
+    const activas = (meths ?? []).filter((m) => m.is_active);
+    assert(activas.length === 1,
+      `debía haber exactamente una metodología activa, hay ${activas.length}`);
+    assert(Number(activas[0].version) === 2, "la activa debía ser la v2");
+    const v1 = (meths ?? []).find((m) => Number(m.version) === 1);
+    assert(v1 && v1.is_active === false,
+      "la v1 debía conservarse e inactiva: borrarla haría irreproducibles sus cálculos");
 
     const { data: ins, error: insErr } = await userA.client
       .from("calculation_methodologies")
@@ -1674,9 +1686,21 @@ async function main() {
       "esperada razón missing_origin_support");
 
     // (ii) REGLA 9: un evidence_link genérico al material NO hace contar.
-    const { error: linkErr } = await userA.client.from("evidence_links").insert({
+    //
+    // PT-01 · El enlace se creaba con un INSERT directo. Desde 0142 la
+    // política de insert no existe y la única vía es `evidence_link_confirm`,
+    // que comprueba empresa, aceptación, vigencia y confirmación humana. Se
+    // aprovecha para comprobar ADEMÁS que la puerta de atrás sigue cerrada:
+    // la prueba dice ahora más que antes, no menos.
+    const { error: directoErr } = await userA.client.from("evidence_links").insert({
       organization_id: orgA, evidence_id: evValid, target_type: "material",
-      target_id: matNoSup!.id, link_role: "soporte general",
+      target_id: matNoSup!.id, link_role: "por la puerta de atrás",
+    });
+    assert(directoErr !== null,
+      "el INSERT directo en evidence_links debía estar cerrado desde 0142");
+    const { error: linkErr } = await userA.client.rpc("evidence_link_confirm", {
+      p_evidence_id: evValid, p_target_type: "material",
+      p_target_id: matNoSup!.id, p_link_role: "soporte general", p_confirmed: true,
     });
     assert(!linkErr, `no se pudo crear el link genérico: ${linkErr?.message}`);
     const { data: matAfterLink } = await userA.client
@@ -2636,6 +2660,10 @@ async function main() {
       await pg.query(`update organization_subscriptions set plan_code = 'full', status = 'active' where organization_id = $1`, [orgA]);
 
       const outsider = await newUser("s10a-invite-outsider");
+      // El token es fijo, así que una ejecución interrumpida deja la fila
+      // puesta y la siguiente choca contra el índice único: la prueba fallaba
+      // por su propio residuo, no por lo que mide. Se limpia antes de sembrar.
+      await pg.query(`delete from team_invitations where token = $1`, ["s10a-old-invite-token"]);
       const { rows } = await pg.query(
         `insert into team_invitations (organization_id, email, role_code, token, status, expires_at, invited_by)
          values ($1, $2, 'quality', $3, 'pending', now() + interval '7 days', $4) returning token`,
@@ -2691,6 +2719,10 @@ async function main() {
 
     await check("81. Suspender la empresa bloquea aceptar cualquier invitación pendiente", async () => {
       const outsider = await newUser("s10a-suspended-invite");
+      // El token es fijo, así que una ejecución interrumpida deja la fila
+      // puesta y la siguiente choca contra el índice único: la prueba fallaba
+      // por su propio residuo, no por lo que mide. Se limpia antes de sembrar.
+      await pg.query(`delete from team_invitations where token = $1`, ["s10a-suspended-token"]);
       const { rows } = await pg.query(
         `insert into team_invitations (organization_id, email, role_code, token, status, expires_at, invited_by)
          values ($1, $2, 'consultant', $3, 'pending', now() + interval '7 days', $4) returning token`,

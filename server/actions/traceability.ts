@@ -28,6 +28,7 @@ import {
   serializeProcessVariableRows,
   type ProcessVariableRow,
 } from "@/lib/domain/process-variables";
+import { COMPOSITION_WRITE_BLOCKED } from "@/lib/domain/recycled-readiness";
 
 export type TraceActionState = { error: string | null; success?: string | null };
 
@@ -1110,12 +1111,31 @@ export async function deleteOutputBatchAction(
 }
 
 // ---------------------------------------------------------------------------
-// Composición por lote producido / lote final
+// Composición por lote producido / lote final · SOLO HISTÓRICO
 // ---------------------------------------------------------------------------
+/**
+ * PT-02A · Las tres acciones de escritura quedan cerradas.
+ *
+ * La composición manual era la entrada de la metodología anterior. El cálculo
+ * vigente sale de los consumos trazados de la orden y no la mira. Mientras
+ * siguió siendo escribible, la aplicación pedía teclear masas que ninguna
+ * fórmula usaba, y su ausencia se leía como «trazabilidad incompleta».
+ *
+ * No se borra la tabla, ni las filas, ni estas funciones: `batch_composition`
+ * es lo que hace reproducibles los cálculos de la metodología anterior ya
+ * emitidos, y las acciones conservan su forma para que el bloqueo se vea en el
+ * sitio donde alguien vendría a buscarlo. Lo que se cierra es la escritura.
+ *
+ * El bloqueo va ANTES de la sesión y de la base: una puerta que primero
+ * trabaja y luego niega es una puerta que en algún refactor se queda abierta.
+ */
+const ALLOW_COMPOSITION_WRITES = false;
+
 export async function addBatchCompositionAction(
   _prev: TraceActionState,
   formData: FormData
 ): Promise<TraceActionState> {
+  if (!ALLOW_COMPOSITION_WRITES) return { error: COMPOSITION_WRITE_BLOCKED };
   const org = await requireActiveOrg();
   const outputBatchId = String(formData.get("output_batch_id") ?? "");
   const materialId = String(formData.get("material_id") ?? "");
@@ -1169,6 +1189,7 @@ export async function updateBatchCompositionAction(
   _prev: TraceActionState,
   formData: FormData
 ): Promise<TraceActionState> {
+  if (!ALLOW_COMPOSITION_WRITES) return { error: COMPOSITION_WRITE_BLOCKED };
   const org = await requireActiveOrg();
   const id = String(formData.get("id") ?? "");
   const mass = Number(String(formData.get("mass_kg") ?? ""));
@@ -1210,6 +1231,7 @@ export async function deleteBatchCompositionAction(
   _prev: TraceActionState,
   formData: FormData
 ): Promise<TraceActionState> {
+  if (!ALLOW_COMPOSITION_WRITES) return { error: COMPOSITION_WRITE_BLOCKED };
   const org = await requireActiveOrg();
   const mutateCheck = await checkCprCanMutate();
   if (!mutateCheck.allowed) return { error: mutateCheck.error };

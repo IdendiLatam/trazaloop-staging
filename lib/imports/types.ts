@@ -51,7 +51,14 @@ export const ENTITY_LABEL: Record<ImportEntityType, string> = {
 };
 
 /** Orden recomendado de importación (Parte 2, priorización del sprint):
- *  cada entidad depende de que las anteriores ya existan. */
+ *  cada entidad depende de que las anteriores ya existan.
+ *
+ *  PT-02A · `batch_composition` sale de esta lista y NO del tipo. El tipo lo
+ *  necesitan los trabajos de importación ya ejecutados —hay filas de
+ *  `import_jobs` que lo llevan y deben seguir leyéndose con su etiqueta—; lo
+ *  que se retira es la posibilidad de iniciar uno nuevo. Dejarlo ofrecido
+ *  habría sido una puerta trasera al mismo dato que el formulario ya no
+ *  escribe. */
 export const IMPORT_ORDER: ImportEntityType[] = [
   "supplier",
   "material",
@@ -62,7 +69,6 @@ export const IMPORT_ORDER: ImportEntityType[] = [
   "production_order",
   "batch_consumption",
   "output_batch",
-  "batch_composition",
 ];
 
 /** Mismos valores que el enum residue_type (0002_enums_core.sql) — no se

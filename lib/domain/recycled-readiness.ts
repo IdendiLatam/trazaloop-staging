@@ -1,121 +1,191 @@
 /**
- * Trazaloop · PT-02A · Dos preguntas que la interfaz estaba respondiendo como
- * si fueran una.
+ * Trazaloop · PT-02A · El estado operativo de un lote producido.
  *
- * EL DEFECTO QUE ESTE MÓDULO EXISTE PARA CERRAR
+ * LA DECISIÓN QUE ESTE MÓDULO IMPLEMENTA
  *
- * `v_output_batch_completeness` —de la migración 0104, muy anterior a v2—
- * define UNA sola idea de «trazabilidad completa», y dentro de ella exige
- * `batch_composition`. Dos pantallas la presentaban como el estado del lote:
- *
- *     «Trazabilidad incompleta · Falta: composición del lote»
- *
- * junto al formulario de composición. Para la metodología v1 eso es cierto y
- * sigue siéndolo. Para v2 es falso: v2 deriva el cálculo de los consumos
- * reales y no lee `batch_composition` en ninguna parte (PT-F10).
- *
- * Comprobado antes de escribir esto, sobre un lote sin composición, sin
- * producto asociado y con un consumo de 100 kg al 60 %: v2 devuelve
- * `calculated` con 60 %. El motor nunca estuvo roto; lo que fallaba era que la
- * pantalla le pedía a la persona un dato que el cálculo no usa.
+ * v2 es la ÚNICA metodología operativa. v1 queda como histórico interno:
+ * su esquema, sus filas, sus snapshots y sus cálculos se conservan intactos
+ * y siguen siendo reproducibles, pero deja de ser una opción de cálculo, un
+ * requisito de completitud y un formulario activo.
  *
  *
- * LO QUE AQUÍ SE SEPARA
+ * LO QUE DEJA DE EXISTIR
  *
- *     COMPLETITUD v1     lo que la metodología histórica necesita, incluida
- *                        la composición tecleada. NO se toca: v1 sigue viva y
- *                        sus cálculos siguen siendo reproducibles (PT-H03).
+ *     ausencia de batch_composition  →  «trazabilidad incompleta»
  *
- *     CALCULABILIDAD v2  orden y consumos. Nada más. La composición no
- *                        aparece, y su ausencia no puede bloquear nada.
+ * Esa regla la escribía `v_output_batch_completeness` (migración 0104), muy
+ * anterior a v2. La vista NO se toca —v1 la necesita, y 0104 es histórica—
+ * pero deja de gobernar el estado operativo: aquí se le retira ese elemento
+ * antes de que llegue a ninguna pantalla.
  *
- * La vista de la base no se modifica: sigue diciendo lo que siempre dijo, que
- * es lo correcto para v1. Lo que cambia es que la interfaz deja de tomar esa
- * respuesta por la única.
+ *
+ * DOS PREGUNTAS QUE NO SON LA MISMA
+ *
+ *     CALCULABILIDAD   ¿sale el número?      calculated | incomplete
+ *     DEFENDIBILIDAD   ¿está sustentado?     defensible | with_warnings | preliminary
+ *
+ * Mezclarlas es lo que producía «Trazabilidad incompleta» sobre un lote que
+ * calculaba perfectamente. Un 60 % puede ser calculable y poco defendible; lo
+ * que no puede es aparecer como incalculable por un dato que nadie usa.
+ *
+ * Ninguno de los dos vocabularios se inventa: `result_state` y
+ * `defensibility_level` ya existen en `recycled_content_calculations`.
  */
 
+// ===========================================================================
+// 1 · LO QUE YA NO CUENTA COMO CARENCIA OPERATIVA
+// ===========================================================================
+
 /**
- * Los elementos que `v_output_batch_completeness.missing_items` puede emitir,
- * EN SU DENOMINACIÓN OFICIAL.
+ * Elementos de `missing_items` que pertenecen SOLO a la metodología histórica.
  *
- * Las funciones de aquí esperan la lista ya pasada por
- * `normalizeVisibleTexts` (lib/domain/nomenclature.ts). La vista de la base
- * emite todavía la nomenclatura histórica —«orden de producción»— y el helper
- * central la traduce a la vigente. Comparar contra la histórica habría metido
- * esa cadena en un fichero de dominio, que es justo lo que RH-01 prohíbe: una
- * segunda copia del vocabulario, lista para desincronizarse.
+ * Se comparan en su denominación OFICIAL: la lista debe venir pasada por
+ * `normalizeVisibleTexts` (lib/domain/nomenclature.ts). La vista emite todavía
+ * la histórica, y duplicar ese vocabulario aquí crearía una segunda copia
+ * lista para desincronizarse — que es justo lo que RH-01 prohíbe.
  */
 export const V1_ONLY_MISSING = ["composición del lote"] as const;
 
-/**
- * Lo que la metodología v2 necesita de verdad, y por qué solo esto.
- *
- *   orden / corrida       los consumos cuelgan de ella.
- *   consumos de la orden  son el denominador entero.
- *
- * `información de proveedor` no entra: v2 no lee el proveedor en ningún
- * término de la fórmula —lo usaba v1 para graduar la defendibilidad—.
- * `información de material` tampoco hace falta comprobarla aquí:
- * `input_batches.material_id` es NOT NULL desde 0025, así que un consumo sin
- * material no puede existir.
- */
-const V2_REQUIERE = ["orden / corrida de producción", "consumos de la orden"] as const;
+/** Lo que falta DE VERDAD, una vez retirado lo que solo interesaba a v1. */
+export function operativeMissing(missingItems: readonly string[]): string[] {
+  return missingItems.filter((m) => !(V1_ONLY_MISSING as readonly string[]).includes(m));
+}
 
-export type Readiness = {
-  /** ¿Puede v2 intentar el cálculo? */
-  ready: boolean;
-  /** Lo que le falta a v2, si algo. */
-  missing: string[];
-  /** Lo que le falta SOLO a v1 y que v2 no necesita. */
-  v1Only: string[];
+export type TraceabilityStatus = "incomplete" | "complete_with_warnings" | "complete";
+
+/**
+ * El estado de trazabilidad SIN la exigencia de composición.
+ *
+ * La derivación es fiel a la propia vista: su `traceability_status` vale
+ * `incomplete` exactamente cuando alguno de los cinco elementos falta, así que
+ * si al retirar la composición no queda ninguno, el lote no está incompleto.
+ * Y las advertencias de balance que la vista calcula comparan CONTRA la masa
+ * de composición: sin composición no pueden dispararse.
+ */
+export function operativeStatus(
+  status: string,
+  missingItems: readonly string[]
+): TraceabilityStatus {
+  const restante = operativeMissing(missingItems);
+  if (restante.length > 0) return "incomplete";
+  if (status === "incomplete") return "complete";
+  return (status as TraceabilityStatus) ?? "complete";
+}
+
+// ===========================================================================
+// 2 · CALCULABILIDAD
+// ===========================================================================
+
+export type CalculationState = "no_calculation" | "incomplete" | "calculated";
+
+export const CALCULATION_STATE_LABEL: Record<CalculationState, string> = {
+  no_calculation: "Sin cálculo",
+  incomplete: "Cálculo incompleto",
+  calculated: "Calculado",
 };
 
+/** El estado a partir de la última fila de cálculo, si la hay. */
+export function calculationState(
+  latest: { result_state?: string | null } | null | undefined
+): CalculationState {
+  if (!latest) return "no_calculation";
+  return latest.result_state === "incomplete" ? "incomplete" : "calculated";
+}
+
 /**
- * Reparte lo que la vista de completitud dice que falta entre las dos
- * metodologías.
+ * Cómo se escribe un porcentaje que puede no existir.
  *
- * Se apoya en la lista que emite la base y no la reinterpreta: si mañana
- * aparece un elemento nuevo, cae del lado de v2 —el conservador— en vez de
- * ignorarse en silencio.
+ * `null` no es cero. La lista y los tableros hacían `Number(null).toFixed(2)`
+ * y enseñaban «0,00 %» sobre un lote cuyo cálculo había salido incompleto:
+ * un número inventado, y encima el peor posible de cara a una declaración.
  */
-export function splitMissing(missingItems: readonly string[]): Readiness {
-  // `missingItems` debe venir de `normalizeVisibleTexts`. Si llegara en crudo,
-  // «orden de producción» no coincidiría con ningún requisito y v2 se
-  // declararía lista sin estarlo — por eso la comprobación de abajo.
-  const v1Only = missingItems.filter((m) =>
-    (V1_ONLY_MISSING as readonly string[]).includes(m));
-  const paraV2 = missingItems.filter((m) =>
-    (V2_REQUIERE as readonly string[]).includes(m));
-  return { ready: paraV2.length === 0, missing: paraV2, v1Only };
+export function formatRecycledPercent(percent: number | null | undefined): string {
+  return percent === null || percent === undefined ? "sin resultado" : `${percent.toFixed(2)}%`;
 }
 
-/** ¿Necesita v1 algo que v2 no? Sirve para decidir si hay algo que aclarar. */
-export function hasV1OnlyGap(missingItems: readonly string[]): boolean {
-  return splitMissing(missingItems).v1Only.length > 0;
-}
+// ===========================================================================
+// 3 · DEFENDIBILIDAD
+// ===========================================================================
 
-/** Cómo se dice el estado de v2 en pantalla. */
-export function v2ReadinessLabel(r: Readiness): string {
-  if (r.ready) return "La metodología v2 puede calcular con lo registrado";
-  return `La metodología v2 necesita: ${r.missing.join(", ")}`;
-}
+export type Defensibility = "preliminary" | "with_warnings" | "defensible";
 
 /**
- * La aclaración que se enseña cuando v1 pide composición y v2 no.
+ * Cómo se dice el sustento de un número que SÍ existe.
  *
- * Es el texto que faltaba: sin él, «Falta: composición del lote» en rojo se
- * lee como «no puedes calcular», que es justo lo contrario de lo que ocurre.
+ * «Sustento incompleto» y no «trazabilidad incompleta»: el número está, lo que
+ * flojea es lo que lo respalda. Confundir las dos frases es lo que hacía que
+ * un cálculo correcto pareciera un fallo.
  */
-export const V1_COMPOSITION_NOTE =
-  "La composición del lote la necesita la metodología v1, que es la histórica. " +
-  "La v2 no la usa: deriva el cálculo de los consumos registrados en la orden.";
+export const DEFENSIBILITY_LABEL: Record<Defensibility, string> = {
+  defensible: "Defendible",
+  with_warnings: "Defendible con advertencias",
+  preliminary: "Sustento incompleto",
+};
+
+export const DEFENSIBILITY_HELP: Record<Defensibility, string> = {
+  defensible: "El cálculo se apoya en consumos trazados y soportes aplicables.",
+  with_warnings: "El número está calculado, pero hay avisos que conviene revisar.",
+  preliminary: "El número está calculado, pero el respaldo todavía no es suficiente para defenderlo.",
+};
+
+// ===========================================================================
+// 4 · LO QUE SE PUEDE SABER ANTES DE CALCULAR
+// ===========================================================================
 
 /**
- * Por qué el producto asociado no entra aquí.
+ * Impedimentos ESTRUCTURALES, los únicos que se pueden afirmar sin ejecutar el
+ * cálculo.
+ *
+ * No se replican aquí las reglas de φ ni de evidencia: eso lo decide el motor,
+ * y una segunda implementación acabaría discrepando de la primera. Lo que
+ * falte por esos motivos lo dirá `incomplete_reasons` cuando se calcule, con
+ * el código del lote concreto.
+ */
+export function structuralBlockers(input: {
+  hasOrder: boolean;
+  hasConsumption: boolean;
+  outputBatchesInOrder: number;
+}): string[] {
+  const out: string[] = [];
+  if (!input.hasOrder) out.push("La orden / corrida de producción no está registrada.");
+  else if (!input.hasConsumption)
+    out.push(
+      "La orden / corrida de producción no tiene consumos registrados: " +
+      "no hay de dónde salir el cálculo."
+    );
+  if (input.outputBatchesInOrder > 1)
+    out.push(
+      "La orden produjo varios lotes finales y no se registra qué consumo fue a cada uno: " +
+      "no se puede repartir la mezcla sin inventarla."
+    );
+  return out;
+}
+
+// ===========================================================================
+// 5 · LO QUE SE RETIRÓ, DICHO PARA QUIEN LO BUSQUE
+// ===========================================================================
+
+export const COMPOSITION_RETIRED_NOTE =
+  "La composición del lote ya no se registra a mano: el contenido reciclado se " +
+  "deriva de los consumos trazados de la orden. Las composiciones registradas " +
+  "antes se conservan y siguen siendo consultables.";
+
+export const V1_HISTORICAL_ONLY_NOTE =
+  "Metodología anterior. Se conserva para consulta y no se puede usar para " +
+  "cálculos nuevos.";
+
+export const V1_CALCULATION_BLOCKED =
+  "La metodología anterior es solo histórica: no se pueden generar cálculos nuevos con ella.";
+
+export const COMPOSITION_WRITE_BLOCKED =
+  "La composición del lote ya no se registra a mano. El contenido reciclado se " +
+  "deriva de los consumos de la orden.";
+
+/**
+ * Por qué el producto asociado no entra en nada de esto.
  *
  * `products` solo aporta `declared_recycled_percent`, que v2 usa para AVISAR
  * si lo declarado supera a lo calculado. No aparece ni en el numerador ni en
- * el denominador, así que un lote sin producto calcula igual. Se deja escrito
- * para que nadie lo añada como requisito creyendo que falta algo.
+ * el denominador: un lote sin producto calcula igual.
  */
 export const PRODUCT_NOT_REQUIRED_FOR_V2 = true;

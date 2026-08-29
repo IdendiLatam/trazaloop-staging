@@ -136,7 +136,14 @@ export async function listImplementationNextActions(orgId: string): Promise<Next
     .select("*")
     .eq("organization_id", orgId)
     .order("priority", { ascending: true });
-  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+  return ((data ?? []) as Record<string, unknown>[])
+    // PT-02A · `v_implementation_next_actions` (0106) sigue emitiendo
+    // `add_composition`, y la vista no se toca: es histórica. Se descarta aquí,
+    // que es por donde las filas entran a la aplicación. Recomendar registrar
+    // una composición sería mandar a teclear datos que el cálculo vigente no
+    // lee y que ya no se pueden guardar.
+    .filter((r) => r.action_code !== "add_composition")
+    .map((r) => ({
     organizationId: r.organization_id as string,
     priority: Number(r.priority),
     actionCode: r.action_code as NextActionCode,

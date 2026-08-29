@@ -11,10 +11,13 @@ import { RiskBadge } from "@/components/domain/guided-flow/risk-badge";
 import { GuidedStep, type StepState } from "@/components/domain/guided-flow/guided-step";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
 // RH-01.3: normalización de denominación visible sobre textos de la BD.
 import { normalizeVisibleText } from "@/lib/domain/nomenclature";
+import {
+  structuralBlockers,
+  V1_HISTORICAL_ONLY_NOTE,
+} from "@/lib/domain/recycled-readiness";
 
 const linkClass = "text-loop hover:underline";
 
@@ -143,49 +146,44 @@ export default async function GuidedBatchDetailPage({
           )}
         </GuidedStep>
 
-        {/* Paso 4 — Composición */}
+        {/* PT-02A · Aquí había un «Paso 4 · Composición» que pedía teclear a
+            mano las masas del lote y bloqueaba el paso de cálculo si faltaban.
+            El cálculo vigente sale de los consumos —el paso 3— y no mira la
+            composición para nada, así que era un paso de trabajo que no llevaba
+            a ninguna parte. Lo registrado antes se sigue enseñando, pero como
+            dato histórico y fuera de la secuencia: un paso numerado afirma que
+            hay algo que hacer. */}
+        {composition.length > 0 ? (
+          <section className="rounded-lg border border-hairline bg-canvas p-4">
+            <h2 className="text-sm font-semibold">
+              Composición registrada
+              <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
+                histórico
+              </span>
+            </h2>
+            <p className="mt-1 text-xs text-ink-soft">{V1_HISTORICAL_ONLY_NOTE}</p>
+            <ul className="mt-3 space-y-1 text-sm">
+              {composition.map((c) => (
+                <li key={c.id} className="flex flex-wrap justify-between gap-2">
+                  <span>
+                    {c.material_name}
+                    {c.is_same_process ? (
+                      <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
+                    ) : null}
+                  </span>
+                  <span className="code text-xs">{c.mass_kg} kg</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-ink-soft">
+              Total: <span className="code">{totalComposition.toFixed(2)} kg</span>
+            </p>
+          </section>
+        ) : null}
+
+        {/* Paso 4 — Evidencias */}
         <GuidedStep
           number={4}
-          title="Composición"
-          state={r.has_composition ? "completo" : "advertencia"}
-          actions={
-            <Link href="/traceability/output-batches" className={linkClass}>
-              {r.has_composition ? "Editar composición" : "Agregar componente"}
-            </Link>
-          }
-        >
-          {composition.length === 0 ? (
-            <EmptyState
-              title="Este lote aún no tiene composición."
-              description="La composición es necesaria para calcular el contenido reciclado."
-              actionLabel="Agregar composición"
-              actionHref="/traceability/output-batches"
-            />
-          ) : (
-            <>
-              <ul className="space-y-1 text-sm">
-                {composition.map((c) => (
-                  <li key={c.id} className="flex flex-wrap justify-between gap-2">
-                    <span>
-                      {c.material_name}
-                      {c.is_same_process ? (
-                        <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
-                      ) : null}
-                    </span>
-                    <span className="code text-xs">{c.mass_kg} kg</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs text-ink-soft">
-                Total composición: <span className="code">{totalComposition.toFixed(2)} kg</span>
-              </p>
-            </>
-          )}
-        </GuidedStep>
-
-        {/* Paso 5 — Evidencias */}
-        <GuidedStep
-          number={5}
           title="Evidencias"
           state={evidenceState}
           actions={
@@ -212,9 +210,9 @@ export default async function GuidedBatchDetailPage({
           ) : null}
         </GuidedStep>
 
-        {/* Paso 6 — Cálculo */}
+        {/* Paso 5 — Cálculo */}
         <GuidedStep
-          number={6}
+          number={5}
           title="Cálculo"
           state={
             r.has_calculation
@@ -231,15 +229,10 @@ export default async function GuidedBatchDetailPage({
             ) : undefined
           }
         >
-          {!r.has_composition ? (
-            <EmptyState
-              title="Este lote todavía no tiene cálculo."
-              description="Cuando la composición esté registrada, podrás calcular el contenido reciclado y generar un dossier técnico."
-              actionLabel="Registrar composición"
-              actionHref="/traceability/output-batches"
-            />
-          ) : (
-            <div className="space-y-3">
+          {/* PT-02A · Antes esto decía «cuando la composición esté registrada,
+              podrás calcular», y era falso: se podía calcular igual. La
+              condición era de la metodología anterior. */}
+          <div className="space-y-3">
               {latest ? (
                 <p className="flex flex-wrap items-center gap-2 text-sm">
                   Último cálculo:{" "}
@@ -260,17 +253,26 @@ export default async function GuidedBatchDetailPage({
                 </p>
               ) : (
                 <p className="text-sm text-ink-soft">
-                  Listo para calcular: hay composición registrada.
+                  {consumption.length > 0
+                    ? "Listo para calcular: la orden tiene consumos registrados."
+                    : "Sin consumos en la orden no hay de dónde salir el cálculo."}
                 </p>
               )}
-              <CalculateButton outputBatchId={id} hasCalculation={Boolean(latest)} />
-            </div>
-          )}
+              <CalculateButton
+                outputBatchId={id}
+                hasCalculation={Boolean(latest)}
+                blockers={structuralBlockers({
+                  hasOrder: Boolean(r.has_production_order),
+                  hasConsumption: consumption.length > 0,
+                  outputBatchesInOrder: 1,
+                })}
+              />
+          </div>
         </GuidedStep>
 
-        {/* Paso 7 — Dossier técnico */}
+        {/* Paso 6 — Dossier técnico */}
         <GuidedStep
-          number={7}
+          number={6}
           title="Dossier técnico"
           state={
             r.has_dossier

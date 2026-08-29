@@ -124,9 +124,18 @@ check("5. Bloque G: decisión documentada — creación desde la orden, listado 
       OUTPUTS_PAGE.includes("OutputBatchForm"),
     "la EDICIÓN del lote se conserva en el listado"
   );
+  // PT-02A · Esta comprobación exigía que el listado conservara el FORMULARIO
+  // de composición. Lo que Bloque G decidió es que el listado es la superficie
+  // de consulta del lote, y eso sigue en pie: la composición registrada se
+  // consulta aquí. Lo que se retiró es su escritura, porque el cálculo vigente
+  // sale de los consumos de la orden y no la lee.
   assert(
-    OUTPUTS_PAGE.includes("Composición") && OUTPUTS_PAGE.includes("CompositionForm"),
-    "la composición se conserva en el listado"
+    OUTPUTS_PAGE.includes("Composición del lote") && OUTPUTS_PAGE.includes("composition.map"),
+    "la composición registrada debe seguir consultándose en el listado"
+  );
+  assert(
+    !OUTPUTS_PAGE.includes("CompositionForm"),
+    "pero ya no se escribe desde aquí"
   );
   assert(
     OUTPUTS_PAGE.includes("Consumido después en:") && OUTPUTS_PAGE.includes("Genealogía"),

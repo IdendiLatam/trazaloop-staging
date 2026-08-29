@@ -78,6 +78,72 @@ export function resolveNextStep(f: ReadinessFacts): NextStep {
   return { code: "open_dossier", readiness: "calculated_ready" };
 }
 
+/**
+ * PT-02A · La cadena OPERATIVA, que ya no pasa por la composición.
+ *
+ * POR QUÉ SON DOS FUNCIONES Y NO UNA MODIFICADA
+ *
+ * `resolveNextStep` es el espejo exacto de `v_output_batch_readiness`, y el
+ * test de integración cruza sus salidas fila a fila. Ese cruce es lo que
+ * garantiza que la vista y su especificación no diverjan en silencio, y sigue
+ * siendo valioso: la vista no se toca —es histórica y v1 la necesita—, así que
+ * su espejo tampoco.
+ *
+ * Lo que cambia es cuál de las dos gobierna la pantalla. La divergencia es
+ * DELIBERADA y está aquí, en una función con nombre propio, en vez de
+ * escondida en un `if` de una página: cuando el paso «composición» deja de
+ * existir, `add_composition` deja de poder ser la respuesta a «¿qué hago
+ * ahora?», porque la respuesta sería teclear datos que ninguna fórmula usa.
+ *
+ * Y el `readiness` que devolvía `needs_data` por ese motivo pasa a lo que
+ * corresponda al siguiente eslabón real de la cadena.
+ */
+export function operativeNextStep(f: ReadinessFacts): NextStep {
+  // Se delega en la cadena canónica declarando que la composición ya está: es
+  // la manera de no reescribir aquí las otras seis ramas y que las dos
+  // funciones no se separen por descuido.
+  return resolveNextStep({ ...f, hasComposition: true });
+}
+
+/**
+ * El mismo salto, aplicado a una fila que ya trae su veredicto de la base.
+ *
+ * La vista sigue emitiendo `add_composition`, así que la fila hay que
+ * recalcularla; los hechos que necesita la cadena vienen todos en ella.
+ */
+export function operativeStepFromRow(row: {
+  has_production_order: boolean;
+  has_consumption: boolean;
+  has_missing_required_evidence?: boolean | null;
+  has_pending_required_evidence?: boolean | null;
+  has_calculation: boolean;
+  latest_defensibility_level: "preliminary" | "with_warnings" | "defensible" | null;
+  latest_risk_flag: boolean | null;
+}): NextStep {
+  return operativeNextStep({
+    hasProductionOrder: Boolean(row.has_production_order),
+    hasConsumption: Boolean(row.has_consumption),
+    hasComposition: true,
+    anySupportMissing: Boolean(row.has_missing_required_evidence),
+    anySupportPending: Boolean(row.has_pending_required_evidence),
+    hasCalculation: Boolean(row.has_calculation),
+    latestDefensibilityLevel: row.latest_defensibility_level,
+    latestRiskFlag: Boolean(row.latest_risk_flag),
+  });
+}
+
+export const NEXT_STEP_HREF: Record<NextStepCode, string> = {
+  create_product_or_link_product: "/traceability/output-batches",
+  complete_order: "/traceability/production-orders",
+  add_consumption: "/traceability/production-orders",
+  add_composition: "/traceability/output-batches",
+  add_evidence: "/evidences",
+  validate_evidence: "/evidences",
+  calculate: "/recycled-content/output-batches",
+  review_gaps: "/audit-support",
+  open_dossier: "/audit-support",
+};
+
 export const NEXT_STEP_LABEL: Record<NextStepCode, string> = {
   create_product_or_link_product: "Asociar producto",
   complete_order: "Completar orden / corrida de producción",

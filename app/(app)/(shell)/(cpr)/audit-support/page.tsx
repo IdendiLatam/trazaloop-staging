@@ -10,6 +10,7 @@ import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
 // histórica; se normalizan aquí, en presentación, nunca en SQL.
 import { normalizeVisibleText } from "@/lib/domain/nomenclature";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
+import { formatRecycledPercent } from "@/lib/domain/recycled-readiness";
 
 export default async function AuditSupportPage() {
   await requireCprModule(); // T9F: guard de módulo CPR (regla canónica)
@@ -99,7 +100,7 @@ export default async function AuditSupportPage() {
                   <tr key={l.calculation_id} className="border-b border-hairline last:border-0">
                     <td className="code px-4 py-2 text-xs text-loop-deep">{l.output_batch_code}</td>
                     <td className="px-4 py-2">{l.product_name ?? "—"}</td>
-                    <td className="code px-4 py-2">{l.recycled_percent.toFixed(2)}%</td>
+                    <td className="code px-4 py-2">{formatRecycledPercent(l.recycled_percent)}</td>
                     <td className="px-4 py-2"><DefensibilityBadge level={l.defensibility_level} /></td>
                     <td className={`px-4 py-2 text-xs font-semibold ${l.risk_flag ? "text-danger" : "text-ink-soft"}`}>
                       {l.risk_flag ? "Sí" : "No"}

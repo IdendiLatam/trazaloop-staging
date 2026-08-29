@@ -21,6 +21,7 @@ import {
   FeedbackModuleBadge,
 } from "@/components/domain/implementation/badges";
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatRecycledPercent } from "@/lib/domain/recycled-readiness";
 
 export default async function ImplementationPage() {
   const org = await requireCprModule();
@@ -264,7 +265,7 @@ export default async function ImplementationPage() {
                   <tr key={c.calculation_id} className="border-b border-hairline last:border-0 align-top">
                     <td className="code px-4 py-2 text-xs text-loop-deep">{c.output_batch_code}</td>
                     <td className="px-4 py-2">{c.product_name ?? "—"}</td>
-                    <td className="code px-4 py-2">{c.recycled_percent.toFixed(2)}%</td>
+                    <td className="code px-4 py-2">{formatRecycledPercent(c.recycled_percent)}</td>
                     <td className="px-4 py-2">
                       <DefensibilityBadge level={c.defensibility_level} />
                     </td>

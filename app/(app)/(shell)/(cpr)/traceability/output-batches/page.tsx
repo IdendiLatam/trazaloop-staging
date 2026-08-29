@@ -18,20 +18,22 @@ import {
   listForwardUsesForOutputs,
 } from "@/lib/db/traceability";
 import { listEvidencesForTargets } from "@/lib/db/evidences";
-import { listProducts, listMaterials } from "@/lib/db/catalog";
-import {
-  deleteOutputBatchAction,
-  deleteBatchCompositionAction,
-} from "@/server/actions/traceability";
-import {
-  OutputBatchForm,
-  CompositionForm,
-} from "@/components/domain/traceability/forms";
+import { listProducts } from "@/lib/db/catalog";
+import { deleteOutputBatchAction } from "@/server/actions/traceability";
+import { OutputBatchForm } from "@/components/domain/traceability/forms";
 import {
   ActionButton,
   LinkEvidenceInline,
 } from "@/components/domain/traceability/action-button";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
+// PT-02A · La ausencia de composición manual dejó de ser una carencia: v2 no
+// la usa. Se le retira a la vista de 0104 antes de que llegue a la pantalla.
+import {
+  COMPOSITION_RETIRED_NOTE,
+  operativeMissing,
+  operativeStatus,
+  V1_HISTORICAL_ONLY_NOTE,
+} from "@/lib/domain/recycled-readiness";
 import { getOutputBatchStockByIds } from "@/lib/db/inventory";
 import { listOutputBatchMovements } from "@/lib/db/output-movements";
 import { OutputBatchMovements, type MovementRow } from "@/components/domain/traceability/output-movements";
@@ -40,7 +42,6 @@ import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
-import { splitMissing, V1_COMPOSITION_NOTE } from "@/lib/domain/recycled-readiness";
 
 export default async function OutputBatchesPage({
   searchParams,
@@ -52,12 +53,13 @@ export default async function OutputBatchesPage({
   const params = await searchParams;
 
   // PCR-01 (punto 9): paginación real + búsqueda por código de lote.
-  const [result, orders, products, materials, completeness, { data: evidenceRows }] =
+  // PT-02A · El catálogo de materiales se pedía SOLO para el selector del
+  // formulario de composición, que ya no existe. Una consulta que nadie mira.
+  const [result, orders, products, completeness, { data: evidenceRows }] =
     await Promise.all([
       searchOutputBatches(org.organizationId, { q: params.q, page: params.page }),
       listProductionOrders(org.organizationId),
       listProducts(org.organizationId),
-      listMaterials(org.organizationId),
       getCompleteness(org.organizationId),
       supabase
         // PT-01 · Solo evidencias aceptadas internamente y sin archivar. El
@@ -148,7 +150,6 @@ export default async function OutputBatchesPage({
         }
       : undefined;
   const productOptions = products.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }));
-  const materialOptions = materials.map((m) => ({ value: m.id, label: m.name }));
   const evidenceOptions = (evidenceRows ?? []).map((e) => ({
     value: e.id,
     label: e.name,
@@ -244,7 +245,7 @@ export default async function OutputBatchesPage({
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <span className="code text-xs text-loop-deep">{b.batch_code}</span>
                       {b.product_label ?? "Sin producto asociado"}
-                      {comp ? <TraceabilityStatusBadge status={comp.traceability_status} /> : null}
+                      {comp ? <TraceabilityStatusBadge status={operativeStatus(comp.traceability_status, normalizeVisibleTexts(comp.missing_items))} /> : null}
                       {highlightId === b.id ? (
                         <span className="rounded-full border border-loop/30 bg-loop/5 px-2 py-0.5 text-xs font-medium text-loop-deep">
                           Guardado correctamente
@@ -329,27 +330,17 @@ export default async function OutputBatchesPage({
                     ) : null}
                     {/* PT-02A · Antes esto decía «Falta: …» en rojo con TODO
                         mezclado, incluida la composición del lote. La
-                        composición la necesita v1; v2 no la usa. Presentarlas
-                        juntas hacía leer «no puedes calcular» donde sí se
-                        puede. */}
+                        composición ya no se registra y v2 no la usa: nombrarla
+                        aquí hacía leer «no puedes calcular» donde sí se puede.
+                        Se descuenta antes de decidir si queda algo que pedir. */}
                     {(() => {
-                      if (!comp || comp.missing_items.length === 0) return null;
-                      const r = splitMissing(normalizeVisibleTexts(comp.missing_items));
+                      if (!comp) return null;
+                      const missing = operativeMissing(normalizeVisibleTexts(comp.missing_items));
+                      if (missing.length === 0) return null;
                       return (
-                        <>
-                          {r.missing.length > 0 ? (
-                            <p className="mt-1 text-xs text-danger">
-                              Falta: {r.missing.join(", ")}.
-                            </p>
-                          ) : null}
-                          {r.v1Only.length > 0 ? (
-                            <p className="mt-1 text-xs text-ink-soft">
-                              Solo para la metodología v1:{" "}
-                              {r.v1Only.join(", ")}.{" "}
-                              {V1_COMPOSITION_NOTE}
-                            </p>
-                          ) : null}
-                        </>
+                        <p className="mt-1 text-xs text-danger">
+                          Falta: {missing.join(", ")}.
+                        </p>
                       );
                     })()}
                     {comp?.mass_balance_warning ? (
@@ -406,24 +397,33 @@ export default async function OutputBatchesPage({
                           Lote producido / lote final creado correctamente.
                         </p>
                         <p className="text-sm text-loop-deep">
-                          Ahora registre la composición de materiales del lote:
-                          es la base del cálculo de contenido reciclado.
+                          El contenido reciclado se calcula desde los consumos
+                          registrados en la orden: no hay que registrar nada más
+                          en el lote.
                         </p>
                       </div>
                     ) : null}
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">Composición del lote</h3>
-                      <p className="mb-2 text-xs text-ink-soft">
-                        La composición del lote producido define las masas
-                        consideradas en el cálculo.
-                      </p>
-                      <span className="code text-sm text-ink-soft">
-                        Total: {totalComposition.toFixed(2)} kg
-                      </span>
-                    </div>
+                    {/* PT-02A · La composición dejó de registrarse a mano: v2
+                        deriva el cálculo de los consumos de la orden. La
+                        sección se conserva SOLO para leer lo que se registró
+                        antes — borrarlo sería destruir el histórico con el que
+                        se reproducen los cálculos v1. */}
+                    {composition.length > 0 ? (
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">
+                          Composición del lote
+                          <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
+                            histórico · metodología anterior
+                          </span>
+                        </h3>
+                        <span className="code text-sm text-ink-soft">
+                          Total: {totalComposition.toFixed(2)} kg
+                        </span>
+                      </div>
+                    ) : null}
 
                     {composition.length === 0 ? (
-                      <p className="text-xs text-ink-soft">Sin composición registrada todavía.</p>
+                      <p className="text-xs text-ink-soft">{COMPOSITION_RETIRED_NOTE}</p>
                     ) : (
                       <ul className="divide-y divide-hairline rounded-md border border-hairline">
                         {composition.map((c) => (
@@ -441,34 +441,19 @@ export default async function OutputBatchesPage({
                                 {c.mass_kg} kg · {c.classification_code}
                               </p>
                             </div>
-                            {!orderMutationBlockedMessage(b.production_order_status) ? (
-                              <ActionButton
-                                action={deleteBatchCompositionAction}
-                                fields={{ id: c.id }}
-                                label="Eliminar"
-                                pendingLabel="Eliminando…"
-                              />
-                            ) : null}
+                            {/* Sin botón de eliminar: estas filas son el
+                                histórico con el que se reproducen los cálculos
+                                v1, y borrarlas los volvería inexplicables. */}
                           </li>
                         ))}
                       </ul>
                     )}
 
-                    {/* PCR-02.4 (§12): composición congelada con la orden
-                        productora cerrada — consulta y genealogía intactas. */}
-                    {orderMutationBlockedMessage(b.production_order_status) ? (
+                    {composition.length > 0 ? (
                       <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
-                        La orden productora está cerrada o cancelada: la composición se consulta en
-                        modo auditoría. Reabre la orden para corregirla.
+                        {V1_HISTORICAL_ONLY_NOTE}
                       </p>
-                    ) : materialOptions.length === 0 ? (
-                      <p className="text-xs text-ink-soft">
-                        Registra materiales en{" "}
-                        <Link href="/catalog/materials" className="text-loop underline">Catálogos</Link>.
-                      </p>
-                    ) : (
-                      <CompositionForm outputBatchId={b.id} materials={materialOptions} />
-                    )}
+                    ) : null}
 
                     <div className="space-y-3 border-t border-hairline pt-3">
                       <LinkedEvidenceList evidences={evidencesByBatch[b.id] ?? []} />

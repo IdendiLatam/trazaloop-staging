@@ -184,16 +184,17 @@ check("el listado y el detalle del lote exponen el estado de la orden productora
   assert((DB_LIB.match(/production_orders\(order_code, status\)/g) ?? []).length >= 2, "ambos selects (listado y OUTPUT_BATCH_SELECT) piden status");
   assert(DB_LIB.includes("production_order_status"), "OutputBatch expone production_order_status");
 });
-check("con la orden productora cerrada la página congela Eliminar lote, alta y borrado de composición", () => {
+check("con la orden cerrada se congela Eliminar lote, y la composición ya no se escribe nunca", () => {
   assert(PAGE.includes("orderMutationBlockedMessage(b.production_order_status)"), "condición de congelación en la página");
-  const frozenNote = "la composición se consulta en";
-  assert(PAGE.includes(frozenNote), "aviso de modo auditoría con invitación a reabrir");
   const deleteBatch = PAGE.indexOf("deleteOutputBatchAction");
   assert(deleteBatch !== -1 && PAGE.lastIndexOf("orderMutationBlockedMessage", deleteBatch) !== -1, "Eliminar lote condicionado");
-  const deleteComp = PAGE.indexOf("deleteBatchCompositionAction", PAGE.indexOf("Composición del lote"));
-  assert(deleteComp !== -1, "botón de composición localizado");
-  const guardBefore = PAGE.lastIndexOf("orderMutationBlockedMessage", deleteComp);
-  assert(guardBefore !== -1 && deleteComp - guardBefore < 400, "Eliminar composición condicionado por la congelación");
+  // PT-02A · Aquí se exigía que el alta y el borrado de composición estuvieran
+  // CONDICIONADOS por el cierre de la orden. Ahora están retirados del todo, lo
+  // que satisface §12 por una vía más fuerte: no queda escritura que congelar.
+  // La comprobación se endurece, no se relaja.
+  assert(!PAGE.includes("CompositionForm") && !PAGE.includes("deleteBatchCompositionAction"),
+    "la escritura de composición debía desaparecer de la página, no solo congelarse");
+  assert(PAGE.includes("composition.map"), "pero la consulta permanece (§12)");
   assert(PAGE.includes("Genealogía"), "consulta y genealogía permanecen (§12)");
 });
 check("mensaje de dominio: cerrada Y cancelada bloquean; abiertas no", () => {

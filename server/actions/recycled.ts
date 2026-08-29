@@ -16,6 +16,14 @@ import {
 } from "@/lib/db/recycled";
 import { listOutputBatches, getCompleteness } from "@/lib/db/traceability";
 import { normalizeVisibleText } from "@/lib/domain/nomenclature";
+import { V1_CALCULATION_BLOCKED } from "@/lib/domain/recycled-readiness";
+
+/**
+ * Una constante y no un `return` suelto, para que el bloqueo se lea como una
+ * decisión de producto reversible y no como código muerto que alguien borrará
+ * por limpieza.
+ */
+const ALLOW_V1_CALCULATION = false;
 
 /**
  * Mensajes que la RPC lanza a propósito (validaciones de negocio): se
@@ -35,9 +43,23 @@ const KNOWN_RPC_MESSAGES = [
   "El lote no tiene composición registrada",
 ];
 
+/**
+ * PT-02A · La metodología anterior deja de emitir cálculos NUEVOS.
+ *
+ * La acción no se borra y la función de la base tampoco: `calculate_recycled_content`
+ * sigue siendo lo que hace reproducible cada snapshot ya emitido, y quitarla
+ * convertiría en inexplicables cálculos que alguien pudo haber declarado. Lo
+ * que se retira es la posibilidad de crear filas nuevas con ella desde la
+ * aplicación, que es lo que la convertía en una segunda metodología viva.
+ *
+ * El bloqueo va ARRIBA DEL TODO, antes de tocar la sesión o la base: una
+ * puerta que primero trabaja y luego niega es una puerta que en algún refactor
+ * se queda abierta.
+ */
 export async function calculateRecycledContentAction(
   outputBatchId: string
 ): Promise<{ error: string | null }> {
+  if (!ALLOW_V1_CALCULATION) return { error: V1_CALCULATION_BLOCKED };
   const org = await requireActiveOrg();
 
   // Sprint 10A (corrección final): empresa suspended/cancelled puede ver

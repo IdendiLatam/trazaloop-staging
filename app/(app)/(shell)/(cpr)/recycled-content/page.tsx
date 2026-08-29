@@ -6,6 +6,7 @@ import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getRecycledDashboard } from "@/lib/db/recycled";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
+import { formatRecycledPercent } from "@/lib/domain/recycled-readiness";
 
 export default async function RecycledContentPage() {
   const org = await requireCprModule();
@@ -74,7 +75,7 @@ export default async function RecycledContentPage() {
         <p className="text-sm text-ink-soft">
           Último cálculo:{" "}
           <span className="code text-loop-deep">{d.lastCalculation.output_batch_code}</span>{" "}
-          · {d.lastCalculation.recycled_percent.toFixed(2)}% ·{" "}
+          · {formatRecycledPercent(d.lastCalculation.recycled_percent)} ·{" "}
           {new Date(d.lastCalculation.calculated_at).toLocaleString("es-CO")}
           {" · "}
           <Link
@@ -128,7 +129,7 @@ export default async function RecycledContentPage() {
                   <tr key={l.calculation_id} className="border-b border-hairline last:border-0">
                     <td className="code px-4 py-2 text-xs text-loop-deep">{l.output_batch_code}</td>
                     <td className="px-4 py-2">{l.product_name ?? "—"}</td>
-                    <td className="code px-4 py-2">{l.recycled_percent.toFixed(2)}%</td>
+                    <td className="code px-4 py-2">{formatRecycledPercent(l.recycled_percent)}</td>
                     <td className="code px-4 py-2">
                       {l.declared_percent !== null ? `${l.declared_percent.toFixed(2)}%` : "—"}
                     </td>

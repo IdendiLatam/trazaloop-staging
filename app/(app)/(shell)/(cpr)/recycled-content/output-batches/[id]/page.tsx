@@ -10,7 +10,6 @@ import {
   listOutputBatches,
   listComposition,
   listConsumption,
-  getCompleteness,
 } from "@/lib/db/traceability";
 import {
   listCalculationsForBatch,
@@ -23,12 +22,14 @@ import {
   INCOMPLETE_LEAD,
 } from "@/lib/domain/recycled-incomplete";
 import {
-  splitMissing,
-  v2ReadinessLabel,
-  V1_COMPOSITION_NOTE,
+  calculationState,
+  COMPOSITION_RETIRED_NOTE,
+  DEFENSIBILITY_HELP,
+  structuralBlockers,
+  V1_HISTORICAL_ONLY_NOTE,
+  type Defensibility,
 } from "@/lib/domain/recycled-readiness";
-import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
-import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
+import { CalculationStateBadge } from "@/components/domain/recycled/calculation-state-badge";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
@@ -42,15 +43,16 @@ export default async function CalculationDetailPage({
   const { id } = await params;
   const supabase = await createServerClient();
 
-  const [batches, completeness, calculations] = await Promise.all([
+  // PT-02A · `getCompleteness` ya no se consulta: era la vista de completitud
+  // de la metodología anterior —la que exige composición— y era la fuente del
+  // «Trazabilidad incompleta» sobre lotes que calculaban perfectamente.
+  const [batches, calculations] = await Promise.all([
     listOutputBatches(org.organizationId),
-    getCompleteness(org.organizationId),
     listCalculationsForBatch(org.organizationId, id),
   ]);
   const batch = batches.find((b) => b.id === id);
   if (!batch) notFound();
 
-  const comp = completeness.find((c) => c.output_batch_id === id) ?? null;
   const [composition, consumption, { data: evidenceLinks }] = await Promise.all([
     listComposition(org.organizationId, id),
     batch.production_order_id
@@ -64,11 +66,27 @@ export default async function CalculationDetailPage({
       .eq("target_id", id),
   ]);
 
-  // PT-02A · Lo que le falta a v1 y lo que le falta a v2 son dos cosas, y la
-  // pantalla las mezclaba en un único «Trazabilidad incompleta».
-  const readiness = splitMissing(normalizeVisibleTexts(comp?.missing_items ?? []));
   const latest = calculations[0] ?? null;
   const history = calculations.slice(1);
+
+  // PT-02A · Las dos preguntas, separadas. La de arriba —¿sale el número?— la
+  // contesta el propio cálculo; la de abajo —¿está sustentado?— su nivel de
+  // defendibilidad. Antes se fundían en un «Trazabilidad incompleta» que salía
+  // en rojo sobre lotes que calculaban perfectamente, porque medía la
+  // completitud de la metodología histórica, composición manual incluida.
+  const estado = calculationState(latest);
+  const defensibilidad = (latest?.defensibility_level ?? null) as Defensibility | null;
+
+  // Solo los impedimentos que se pueden afirmar sin ejecutar el motor. Lo demás
+  // lo dirá `incomplete_reasons`, con el lote concreto y el motivo exacto.
+  const hermanos = batch.production_order_id
+    ? batches.filter((b) => b.production_order_id === batch.production_order_id).length
+    : 1;
+  const blockers = structuralBlockers({
+    hasOrder: Boolean(batch.production_order_id),
+    hasConsumption: consumption.length > 0,
+    outputBatchesInOrder: hermanos,
+  });
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -83,30 +101,11 @@ export default async function CalculationDetailPage({
           </p>
           <h1 className="flex flex-wrap items-center gap-3 text-2xl font-semibold tracking-tight">
             <span className="code text-loop-deep">{batch.batch_code}</span>
-            {/* PT-02A · El distintivo mide la completitud de la metodología
-                HISTÓRICA, que exige composición. Sin decirlo, un lote
-                perfectamente calculable con v2 aparecía en rojo como
-                «Trazabilidad incompleta» y la persona iba a teclear una
-                composición que el cálculo no usa. */}
-            {comp ? (
-              <span className="inline-flex items-center gap-1.5">
-                <TraceabilityStatusBadge status={comp.traceability_status} />
-                <span className="text-[10px] uppercase tracking-wider text-ink-soft">
-                  metodología v1
-                </span>
-              </span>
-            ) : null}
-            {comp ? (
-              <span
-                className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-                  readiness.ready
-                    ? "border-loop/30 bg-loop/5 text-loop-deep"
-                    : "border-danger/30 bg-danger/5 text-danger"
-                }`}
-              >
-                {v2ReadinessLabel(readiness)}
-              </span>
-            ) : null}
+            <CalculationStateBadge
+              state={estado}
+              defensibility={defensibilidad}
+              percent={latest?.recycled_percent ?? null}
+            />
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
             {[
@@ -129,8 +128,7 @@ export default async function CalculationDetailPage({
           <CalculateButton
             outputBatchId={batch.id}
             hasCalculation={Boolean(latest)}
-            disabled={composition.length === 0}
-            disabledReason="La metodología v1 necesita composición registrada."
+            blockers={blockers}
           />
         </div>
       </header>
@@ -144,42 +142,13 @@ export default async function CalculationDetailPage({
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* PT-02A · Los consumos de la orden son AHORA la única entrada del
+          cálculo. Antes compartían fila con la composición manual, y ponerlas
+          lado a lado sugería que eran dos caminos igual de válidos. */}
+      <div className="grid gap-4">
         <section className="rounded-lg border border-hairline bg-surface p-4">
-          <h2 className="eyebrow mb-3">Composición · metodología v1</h2>
-          {composition.length === 0 ? (
-            <div className="space-y-1 text-sm text-ink-soft">
-              <p>Sin composición registrada.</p>
-              {/* No es una carencia que haya que subsanar para calcular: es un
-                  dato de la metodología histórica. Decirlo evita que alguien
-                  teclee cien kilos que no van a ninguna fórmula. */}
-              <p className="text-xs">{V1_COMPOSITION_NOTE}</p>
-              <p className="text-xs">
-                <Link href={`/traceability/output-batches?batch=${batch.id}`} className="text-loop underline">
-                  Registrarla de todos modos
-                </Link>{" "}
-                si necesitas calcular con la metodología v1.
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {composition.map((c) => (
-                <li key={c.id} className="flex justify-between gap-2">
-                  <span>
-                    {c.material_name}
-                    {c.is_same_process ? (
-                      <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
-                    ) : null}
-                  </span>
-                  <span className="code text-xs">{c.mass_kg} kg</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-hairline bg-surface p-4">
-          <h2 className="eyebrow mb-3">Consumos de la orden · metodología v2</h2>
+          <h2 className="eyebrow mb-3">Consumos de la orden</h2>
+          <p className="mb-3 text-xs text-ink-soft">{COMPOSITION_RETIRED_NOTE}</p>
           {consumption.length === 0 ? (
             <p className="text-sm text-ink-soft">Sin consumos registrados.</p>
           ) : (
@@ -197,6 +166,28 @@ export default async function CalculationDetailPage({
           )}
         </section>
       </div>
+
+      {/* Solo si existe. Una sección vacía titulada «histórico» sobre un lote
+          que nunca tuvo composición no informa de nada: inventa una ausencia. */}
+      {composition.length > 0 ? (
+        <section className="rounded-lg border border-hairline bg-canvas p-4">
+          <h2 className="eyebrow mb-1">Composición registrada · histórico</h2>
+          <p className="mb-3 text-xs text-ink-soft">{V1_HISTORICAL_ONLY_NOTE}</p>
+          <ul className="space-y-1 text-sm">
+            {composition.map((c) => (
+              <li key={c.id} className="flex justify-between gap-2">
+                <span>
+                  {c.material_name}
+                  {c.is_same_process ? (
+                    <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
+                  ) : null}
+                </span>
+                <span className="code text-xs">{c.mass_kg} kg</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-hairline bg-surface p-4">
         <h2 className="eyebrow mb-3">Evidencias asociadas al lote</h2>
@@ -265,7 +256,7 @@ export default async function CalculationDetailPage({
           </div>
           {latest.defensibility_level === "preliminary" ? (
             <p className="mt-2 text-sm text-ink-soft">
-              Este cálculo es preliminar.{" "}
+              {DEFENSIBILITY_HELP.preliminary}{" "}
               <Link
                 href={`/audit-support/output-batches/${batch.id}/evidence-matrix`}
                 className="font-medium text-loop hover:underline"
@@ -425,6 +416,7 @@ export default async function CalculationDetailPage({
                 </span>
                 <span className="text-[10px] uppercase tracking-wider text-ink-soft">
                   metodología v{c.methodology_version}
+                  {c.methodology_version === 1 ? " · histórica" : ""}
                 </span>
                 {c.recycled_percent === null ? null : (
                   <DefensibilityBadge level={c.defensibility_level} />
@@ -434,6 +426,8 @@ export default async function CalculationDetailPage({
           </ul>
           <p className="mt-2 text-xs text-ink-soft">
             Los snapshots anteriores se conservan intactos: nada se sobrescribe.
+            Los de la metodología anterior siguen siendo consultables y
+            reproducibles, aunque ya no se generen nuevos.
           </p>
         </section>
       ) : null}

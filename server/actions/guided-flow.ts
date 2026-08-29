@@ -4,6 +4,11 @@ import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import type { ReadinessLevel, NextStepCode } from "@/lib/domain/guided-flow";
 import {
+  operativeStepFromRow,
+  NEXT_STEP_LABEL,
+  NEXT_STEP_HREF,
+} from "@/lib/domain/guided-flow";
+import {
   listOutputBatches,
   listComposition,
   listConsumption,
@@ -135,11 +140,22 @@ export async function listOutputBatchReadinessAction(filters?: {
     .order("output_batch_code");
   if (filters?.readiness) query = query.eq("readiness_level", filters.readiness);
   const { data } = await query;
-  return ((data ?? []) as ReadinessRow[]).map((r) => ({
-    ...r,
-    latest_recycled_percent:
-      r.latest_recycled_percent === null ? null : Number(r.latest_recycled_percent),
-  }));
+  // PT-02A · La vista sigue emitiendo `add_composition` y un `needs_data` que
+  // lo acompaña: es de 0032/0106 y no se toca, porque la metodología anterior
+  // la necesita. Se traduce AQUÍ, en el único punto por el que las filas
+  // entran a la aplicación, para que ninguna pantalla tenga que acordarse.
+  return ((data ?? []) as ReadinessRow[]).map((r) => {
+    const paso = operativeStepFromRow(r);
+    return {
+      ...r,
+      latest_recycled_percent:
+        r.latest_recycled_percent === null ? null : Number(r.latest_recycled_percent),
+      next_step_code: paso.code,
+      next_step_label: NEXT_STEP_LABEL[paso.code],
+      next_step_href: NEXT_STEP_HREF[paso.code],
+      readiness_level: paso.readiness,
+    };
+  });
 }
 
 /** Detalle completo para el stepper de un lote: readiness + trazabilidad +
@@ -211,7 +227,7 @@ export async function getNextBestActionsAction(): Promise<NextBestAction[]> {
 
   for (const r of rows.filter((x) => x.readiness_level === "ready_to_calculate")) {
     push({
-      description: `El lote ${r.output_batch_code} tiene composición registrada pero aún no tiene cálculo.`,
+      description: `El lote ${r.output_batch_code} tiene sus consumos registrados pero aún no tiene cálculo.`,
       entityLabel: r.output_batch_code,
       actionLabel: "Calcular contenido reciclado",
       href: `/guided-flow/output-batches/${r.output_batch_id}`,
@@ -233,14 +249,9 @@ export async function getNextBestActionsAction(): Promise<NextBestAction[]> {
       href: "/evidences",
     });
   }
-  for (const r of rows.filter((x) => x.has_production_order && !x.has_composition)) {
-    push({
-      description: `El lote ${r.output_batch_code} aún no tiene composición registrada.`,
-      entityLabel: r.output_batch_code,
-      actionLabel: "Registrar composición",
-      href: `/guided-flow/output-batches/${r.output_batch_id}`,
-    });
-  }
+  // PT-02A · Aquí se recomendaba «Registrar composición» a todo lote que no la
+  // tuviera. Era la sugerencia menos útil del panel: mandaba a teclear masas
+  // que el cálculo vigente no lee.
   if (dashboard.withoutConsumption > 0) {
     push({
       description: `Hay ${dashboard.withoutConsumption} lote(s) de salida cuya orden no tiene consumos registrados.`,

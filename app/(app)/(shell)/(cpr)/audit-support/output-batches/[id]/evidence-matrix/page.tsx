@@ -14,6 +14,7 @@ import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-b
 import { EvidenceMatrixTable } from "@/components/domain/audit-support/evidence-matrix-table";
 import { ExportMatrixCsvButton } from "@/components/domain/audit-support/export-buttons";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { formatRecycledPercent } from "@/lib/domain/recycled-readiness";
 
 export default async function EvidenceMatrixPage({
   params,
@@ -55,7 +56,7 @@ export default async function EvidenceMatrixPage({
             {calc ? (
               <span>
                 {" "}· último cálculo{" "}
-                <span className="code">{calc.recycled_percent.toFixed(2)}%</span> del{" "}
+                <span className="code">{formatRecycledPercent(calc.recycled_percent)}</span> del{" "}
                 {new Date(calc.calculated_at).toLocaleDateString("es-CO")}
               </span>
             ) : (

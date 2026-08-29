@@ -88,13 +88,19 @@ export type LatestBatchRecycled = {
   product_name: string | null;
   family_id: string | null;
   produced_date: string | null;
-  recycled_mass_kg: number;
-  total_mass_kg: number;
-  recycled_percent: number;
+  // PT-02A · Nulables porque un cálculo `incomplete` NO tiene número. Estaban
+  // como `number` y `num(null)` los convertía en 0: la lista enseñaba «0,00 %»
+  // sobre un lote del que no se sabía nada, que es la peor lectura posible.
+  recycled_mass_kg: number | null;
+  total_mass_kg: number | null;
+  recycled_percent: number | null;
   declared_percent: number | null;
   risk_flag: boolean;
   defensibility_level: DefensibilityLevel;
   calculated_at: string;
+  result_state: "calculated" | "incomplete";
+  incomplete_reasons: string[];
+  methodology_version: number;
 };
 
 const num = (v: unknown): number => Number(v);
@@ -139,10 +145,13 @@ export async function listLatestCalculations(
   const { data } = await query;
   return (data ?? []).map((r) => ({
     ...r,
-    recycled_mass_kg: num(r.recycled_mass_kg),
-    total_mass_kg: num(r.total_mass_kg),
-    recycled_percent: num(r.recycled_percent),
+    recycled_mass_kg: numOrNull(r.recycled_mass_kg),
+    total_mass_kg: numOrNull(r.total_mass_kg),
+    recycled_percent: numOrNull(r.recycled_percent),
     declared_percent: numOrNull(r.declared_percent),
+    result_state: (r.result_state as "calculated" | "incomplete") ?? "calculated",
+    incomplete_reasons: (r.incomplete_reasons as string[]) ?? [],
+    methodology_version: Number(r.methodology_version ?? 1),
   })) as LatestBatchRecycled[];
 }
 

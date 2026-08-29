@@ -9,7 +9,16 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { explainReason, explainReasons } from "@/lib/domain/recycled-incomplete";
-import { splitMissing, v2ReadinessLabel } from "@/lib/domain/recycled-readiness";
+import {
+  calculationState,
+  formatRecycledPercent,
+  operativeMissing,
+  operativeStatus,
+  structuralBlockers,
+  CALCULATION_STATE_LABEL,
+  DEFENSIBILITY_LABEL,
+} from "@/lib/domain/recycled-readiness";
+import { operativeNextStep, resolveNextStep } from "@/lib/domain/guided-flow";
 import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 
 const ROOT = process.cwd();
@@ -275,124 +284,234 @@ check("H4. Un motivo desconocido se enseña tal cual", () => {
     "inventarle una explicación escondería que apareció uno nuevo");
 });
 
-check("H5. v2 NO vuelve a pedir la composición", () => {
+check("H5. El único camino de cálculo es el vigente", () => {
   const boton = read("components/domain/recycled/calculate-button.tsx");
-  assert(boton.includes("calculateRecycledContentV2Action"), "debía existir el camino a v2");
-  // El botón de v2 se pinta también cuando v1 está deshabilitado por falta de
-  // composición: pedirla otra vez es lo que PT-F10 vino a quitar.
-  assert(/if \(disabled\)[\s\S]{0,400}\{botonV2\}/.test(boton),
-    "el botón de v2 debía seguir disponible sin composición");
-  assert(/No pide composición/.test(boton), "y decirlo");
+  assert(boton.includes("calculateRecycledContentV2Action"), "debía existir el camino vigente");
+  assert(!boton.includes("calculateRecycledContentAction"),
+    "el botón de la metodología anterior debía desaparecer del componente");
+  assert(!/composici[óo]n/i.test(boton.replace(/^ *\*.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")),
+    "el botón no puede volver a nombrar la composición fuera de los comentarios");
 });
 
-check("H6. v1 sigue visible como histórico", () => {
+check("H6. La metodología anterior sigue visible como histórico", () => {
   const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
   assert(/metodología v\{c\.methodology_version\}/.test(pag),
     "el histórico debía distinguir con qué metodología se calculó cada fila");
-  const acc = read("server/actions/recycled.ts");
-  assert(acc.includes("calculateRecycledContentAction"), "v1 debía seguir siendo invocable");
-  assert(acc.includes("calculateRecycledContentV2Action"), "y v2 también");
+  assert(/histórica/.test(pag), "y marcar cuáles son de la retirada");
 });
 
 
 // ---------------------------------------------------------------------------
-// I · P4 · la composición de v1 no puede presentarse como requisito de v2
+// I · P4 · LA METODOLOGÍA ANTERIOR SALE DE LA EXPERIENCIA OPERATIVA
+//
+// Doce comprobaciones, A a L, sobre la decisión de producto: el cálculo
+// vigente es el único operativo; el anterior queda como histórico interno,
+// íntegro y reproducible, pero sin formularios, sin botones y sin poder
+// declarar incompleto a un lote que calcula perfectamente.
 // ---------------------------------------------------------------------------
 
-check("I1. La composición cae del lado de v1, no del de v2", () => {
-  const r = splitMissing(["composición del lote"]);
-  assert(r.ready, "sin composición, v2 SÍ puede calcular");
-  assert(r.v1Only.includes("composición del lote"), "y la composición es cosa de v1");
-  assert(r.missing.length === 0, "no puede figurar como carencia de v2");
+const FICHA = "app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx";
+const LISTA_TRAZA = "app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx";
+const LISTA_CALC = "app/(app)/(shell)/(cpr)/recycled-content/output-batches/page.tsx";
+const GUIADO = "app/(app)/(shell)/(cpr)/guided-flow/output-batches/[id]/page.tsx";
+
+check("A. La ausencia de composición ya no es una carencia", () => {
+  assert(operativeMissing(["composición del lote"]).length === 0,
+    "la composición no puede seguir contando como algo que falta");
+  assert(operativeStatus("incomplete", ["composición del lote"]) === "complete",
+    "un lote al que solo le falta la composición está completo");
+  // Y lo que SÍ falta sigue faltando.
+  assert(operativeStatus("incomplete", ["consumos de la orden"]) === "incomplete",
+    "sin consumos el lote sigue incompleto");
+  assert(operativeMissing(["composición del lote", "consumos de la orden"]).length === 1,
+    "solo se descuenta la composición, no la lista entera");
 });
 
-check("I2. Lo que sí bloquea a v2 sigue bloqueando", () => {
-  const sinConsumos = splitMissing(["consumos de la orden"]);
-  assert(!sinConsumos.ready, "sin consumos no hay denominador");
-  assert(sinConsumos.missing.includes("consumos de la orden"), "y debe decirse");
-  // La denominación vigente, que es la que el dominio compara. La histórica
-  // la traduce el helper central antes de llegar aquí (ver I4b).
-  const sinOrden = splitMissing(["orden / corrida de producción"]);
-  assert(!sinOrden.ready, "sin orden no hay de dónde colgar los consumos");
-});
-
-check("I3. El proveedor NO bloquea a v2: no entra en la fórmula", () => {
-  // v1 lo usaba para graduar la defendibilidad. v2 no lo lee en ningún término.
-  const r = splitMissing(["información de proveedor"]);
-  assert(r.ready, "la falta de proveedor no puede impedir el cálculo v2");
-});
-
-check("I4. Un elemento desconocido cae del lado conservador", () => {
-  // Si mañana la vista emite algo nuevo, mejor que v2 se declare no lista a
-  // que se ignore en silencio.
-  const r = splitMissing(["algo que nadie ha visto"]);
-  assert(r.ready, "no está entre los requisitos de v2, así que no lo bloquea");
-  assert(r.v1Only.length === 0, "y tampoco se presenta como cosa de v1");
-});
-
-check("I4b. El reparto se hace sobre texto YA normalizado, y se comprueba", () => {
-  // Modo de fallo introducido al arreglar P4: la vista de la base emite la
-  // nomenclatura histórica y el dominio compara contra la vigente. Si alguien
-  // pasa la lista en crudo, «orden de producción» no coincide con ningún
-  // requisito y v2 se declara lista SIN estarlo — un falso verde.
-  const crudo = ["orden de producción"];
-  const normalizado = normalizeVisibleTexts(crudo);
+check("B. El reparto se hace sobre texto YA normalizado, y se comprueba", () => {
+  // Modo de fallo heredado de P4: la vista emite la nomenclatura histórica y
+  // el dominio compara contra la vigente. Sin normalizar, «orden de
+  // producción» no coincide con nada y el lote se declara completo SIN
+  // estarlo — un falso verde.
+  const normalizado = normalizeVisibleTexts(["orden de producción"]);
   assert(normalizado[0] === "orden / corrida de producción",
     `el helper debía traducir la denominación histórica, dio «${normalizado[0]}»`);
-  assert(!splitMissing(normalizado).ready,
-    "sin orden, v2 NO puede calcular");
-  // Y los dos puntos de uso lo hacen así.
-  for (const f of ["app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx",
-                   "app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx"]) {
-    assert(/splitMissing\(normalizeVisibleTexts\(/.test(read(f)),
-      `${f} pasa la lista sin normalizar: v2 se declararía lista sin estarlo`);
+  assert(operativeStatus("incomplete", normalizado) === "incomplete",
+    "sin orden el lote NO está completo");
+  assert(/operativeStatus\(comp\.traceability_status, normalizeVisibleTexts\(/.test(read(LISTA_TRAZA)),
+    "el punto de uso pasa la lista sin normalizar");
+});
+
+check("C. Calculabilidad y defendibilidad son dos preguntas distintas", () => {
+  assert(calculationState(null) === "no_calculation", "sin fila no hay cálculo");
+  assert(calculationState({ result_state: "incomplete" }) === "incomplete",
+    "un incompleto no es un calculado");
+  assert(calculationState({ result_state: "calculated" }) === "calculated", "y un calculado sí");
+  // El vocabulario no se solapa: ninguna etiqueta de estado de cálculo puede
+  // decir «trazabilidad», que es lo que confundía las dos preguntas.
+  for (const t of [...Object.values(CALCULATION_STATE_LABEL), ...Object.values(DEFENSIBILITY_LABEL)]) {
+    assert(!/trazabilidad/i.test(t), `la etiqueta «${t}» vuelve a mezclar los dos conceptos`);
+  }
+  assert(DEFENSIBILITY_LABEL.preliminary === "Sustento incompleto",
+    "un cálculo poco sustentado no es un cálculo que no existe");
+});
+
+check("D. Un porcentaje que no existe nunca se escribe como cero", () => {
+  assert(formatRecycledPercent(null) === "sin resultado", "null no es 0");
+  assert(formatRecycledPercent(undefined) === "sin resultado", "ni undefined");
+  assert(formatRecycledPercent(0) === "0.00%", "un cero real sí es un cero");
+  assert(formatRecycledPercent(60.5) === "60.50%", "y un número, su número");
+  // Y el tipo lo impone en la lectura, que es donde se perdía.
+  const db = read("lib/db/recycled.ts");
+  const vista = db.slice(db.indexOf("listLatestCalculations"));
+  assert(/recycled_percent: numOrNull/.test(vista),
+    "la vista del último cálculo colapsaba «no sé» en cero con num()");
+});
+
+/** El código sin comentarios: lo único que llega a ejecutarse. Los comentarios
+ *  de este sprint nombran la composición a propósito, para explicar por qué ya
+ *  no se pide, y confundirlos con la interfaz haría fallar por lo contrario de
+ *  lo que se quiere comprobar. */
+const soloCodigo = (f: string) =>
+  read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+check("E. El formulario de composición no existe en runtime", () => {
+  const forms = soloCodigo("components/domain/traceability/forms.tsx");
+  assert(!/export function CompositionForm/.test(forms), "el componente debía retirarse");
+  for (const t of ["Agregar a la composición", "Material recuperado en el mismo proceso"]) {
+    assert(!forms.includes(t), `el texto «${t}» sigue en el paquete de formularios`);
+  }
+  const pag = read(LISTA_TRAZA);
+  assert(!/<CompositionForm/.test(pag), "la pantalla seguía montando el formulario");
+  assert(!/deleteBatchCompositionAction/.test(pag), "ni el botón de eliminar filas");
+});
+
+check("F. Las tres escrituras de composición están cerradas en el servidor", () => {
+  const acc = read("server/actions/traceability.ts");
+  assert(/const ALLOW_COMPOSITION_WRITES = false/.test(acc), "debía existir el cierre");
+  for (const name of ["addBatchCompositionAction", "updateBatchCompositionAction",
+                      "deleteBatchCompositionAction"]) {
+    const cuerpo = acc.slice(acc.indexOf(`export async function ${name}(`));
+    const guardia = cuerpo.indexOf("ALLOW_COMPOSITION_WRITES");
+    const sesion = cuerpo.indexOf("requireActiveOrg");
+    assert(guardia > 0, `${name} no está cerrada`);
+    assert(guardia < sesion,
+      `${name} niega DESPUÉS de trabajar: la puerta debe ir antes de tocar sesión y base`);
+  }
+  // Y no se borró nada: el histórico tiene que seguir leyéndose.
+  assert(/from\("batch_composition"\)/.test(read("lib/db/traceability.ts")),
+    "la lectura del histórico debía conservarse");
+});
+
+check("G. La metodología anterior no emite cálculos nuevos, pero sigue reproduciendo", () => {
+  const acc = read("server/actions/recycled.ts");
+  assert(/const ALLOW_V1_CALCULATION = false/.test(acc), "debía cerrarse el camino");
+  const cuerpo = acc.slice(acc.indexOf("export async function calculateRecycledContentAction("));
+  assert(cuerpo.indexOf("ALLOW_V1_CALCULATION") < cuerpo.indexOf("requireActiveOrg"),
+    "el cierre debe ir antes de tocar la sesión");
+  assert(acc.includes("calculateRecycledContentV2Action"), "el camino vigente debe seguir");
+  // La función de la base NO se toca: es lo que hace reproducible cada
+  // snapshot ya emitido.
+  for (const f of ["0142_evidence_catalog_and_historical_truth.sql",
+                   "0143_textile_unit_codes_and_concurrency.sql",
+                   "0144_recycled_content_v2.sql",
+                   "0145_textile_material_inventory.sql",
+                   "0146_output_batch_movements.sql"]) {
+    const sql = read(`supabase/migrations/${f}`).replace(/--.*$/gm, "");
+    assert(!/drop function[^;]*calculate_recycled_content\s*\(/.test(sql),
+      `${f} borra la función de la metodología anterior`);
   }
 });
 
-check("I5. La ficha de contenido reciclado separa los dos conceptos", () => {
-  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
-  assert(pag.includes("splitMissing"), "debía repartir lo que falta entre v1 y v2");
-  assert(/metodolog[ií]a v1/.test(pag), "el distintivo de completitud debía decir que es de v1");
-  assert(pag.includes("v2ReadinessLabel"), "y debía enseñar el estado propio de v2");
-  assert(/Composici[óo]n · metodolog[ií]a v1/.test(pag),
-    "la sección de composición debía identificarse como de v1");
-  assert(/Consumos de la orden · metodolog[ií]a v2/.test(pag),
-    "y los consumos como la fuente de v2");
+check("H. La importación masiva ya no es una puerta trasera", () => {
+  const tipos = read("lib/imports/types.ts");
+  const orden = tipos.slice(tipos.indexOf("export const IMPORT_ORDER"));
+  assert(!/"batch_composition"/.test(orden.slice(0, orden.indexOf("];"))),
+    "la composición seguía ofrecida en el importador");
+  // Pero el tipo y la etiqueta se conservan: hay trabajos ya ejecutados que
+  // los llevan y deben poder leerse.
+  assert(/batch_composition: "Composición de lotes producidos"/.test(tipos),
+    "borrar la etiqueta dejaría ilegibles los trabajos históricos");
 });
 
-check("I6. La lista de lotes ya no mezcla las dos carencias", () => {
-  const pag = read("app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx");
-  assert(pag.includes("splitMissing"), "debía repartir lo que falta");
-  assert(/Solo para la metodolog[ií]a v1/.test(pag),
-    "lo que solo necesita v1 debía decirse aparte y sin alarma");
-  // Y el «Falta: …» en rojo ya no puede llevar la lista entera.
-  assert(!/Falta: \{normalizeVisibleTexts\(comp\.missing_items\)/.test(pag),
-    "el aviso rojo seguía pintando todos los elementos juntos");
+check("I. El flujo guiado deja de tener un paso de composición", () => {
+  const pag = read(GUIADO);
+  assert(!/title="Composición"/.test(pag), "el paso debía desaparecer de la secuencia");
+  assert(!/actionLabel="Agregar composición"/.test(pag), "ni su llamada a la acción");
+  assert(!/r\.has_composition \? "completo"/.test(pag),
+    "el estado del paso seguía colgando de la composición");
+  // Y la numeración se cerró: sin huecos y sin repetidos.
+  const nums = [...pag.matchAll(/^\s+number=\{(\d)\}$/gm)].map((m) => Number(m[1]));
+  assert(nums.length > 0, "debía haber pasos numerados");
+  assert(nums.join(",") === nums.map((_, k) => k + 1).join(","),
+    `la numeración quedó rota: ${nums.join(",")}`);
+  // El histórico sí se sigue viendo, cuando existe.
+  assert(/composition\.length > 0/.test(pag), "la composición registrada debía seguir consultándose");
 });
 
-check("I7. El cálculo v2 se ofrece aunque falte composición", () => {
-  const boton = read("components/domain/recycled/calculate-button.tsx");
-  const rama = boton.slice(boton.indexOf("if (disabled)"), boton.indexOf("if (disabled)") + 500);
-  assert(rama.includes("botonV2"),
-    "cuando v1 no puede por falta de composición, v2 debe seguir ofreciéndose");
-  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
-  assert(/La metodolog[ií]a v1 necesita composici[óo]n registrada/.test(pag),
-    "y el motivo debe atribuir la exigencia a v1, no al lote");
+check("J. La cadena operativa salta la composición sin tocar el espejo de la vista", () => {
+  const hechos = {
+    hasProductionOrder: true, hasConsumption: true, hasComposition: false,
+    anySupportMissing: false, anySupportPending: false, hasCalculation: false,
+    latestDefensibilityLevel: null, latestRiskFlag: false,
+  } as const;
+  // El espejo de la vista SQL NO se toca: sigue diciendo lo que la vista dice.
+  assert(resolveNextStep(hechos).code === "add_composition",
+    "el espejo de v_output_batch_readiness debía quedar intacto");
+  // Y la cadena operativa diverge a propósito.
+  assert(operativeNextStep(hechos).code === "calculate",
+    "sin composición, lo que toca es calcular");
+  assert(operativeNextStep(hechos).readiness === "ready_to_calculate",
+    "y el lote está listo, no «faltan datos»");
+  // Lo que de verdad bloquea sigue bloqueando.
+  assert(operativeNextStep({ ...hechos, hasConsumption: false }).code === "add_consumption",
+    "sin consumos no se calcula");
+  // La traducción ocurre en el único punto de entrada de las filas.
+  const acc = read("server/actions/guided-flow.ts");
+  assert(/operativeStepFromRow\(r\)/.test(acc),
+    "las filas de readiness debían traducirse al entrar");
+  assert(!/actionLabel: "Registrar composición"/.test(acc),
+    "el panel seguía recomendando registrar composición");
+  assert(/action_code !== "add_composition"/.test(read("lib/db/implementation.ts")),
+    "el tablero de implantación seguía recomendándola");
 });
 
-check("I8. El producto NO es requisito de v2, y queda escrito", () => {
+check("K. Solo se anuncian los impedimentos que se pueden afirmar sin calcular", () => {
+  assert(structuralBlockers({ hasOrder: true, hasConsumption: true, outputBatchesInOrder: 1 })
+    .length === 0, "un lote normal no tiene impedimentos estructurales");
+  assert(structuralBlockers({ hasOrder: false, hasConsumption: false, outputBatchesInOrder: 1 })
+    .length === 1, "sin orden, un solo impedimento: el de la orden");
+  assert(structuralBlockers({ hasOrder: true, hasConsumption: true, outputBatchesInOrder: 3 })
+    .some((b) => /varios lotes/.test(b)), "la orden con varias salidas debía nombrarse");
+  // Y NO se replican aquí las reglas del motor: una segunda implementación de
+  // φ o de la evidencia acabaría discrepando de la primera.
   const dom = read("lib/domain/recycled-readiness.ts");
-  assert(/PRODUCT_NOT_REQUIRED_FOR_V2/.test(dom), "debía dejarse dicho");
-  assert(/declared_recycled_percent/.test(dom), "y por qué: solo alimenta un aviso");
-  const mig = read("supabase/migrations/0144_recycled_content_v2.sql");
-  const fn = mig.slice(mig.indexOf("function public.calculate_recycled_content_v2"));
-  // El producto solo se lee para el porcentaje declarado, nunca para la masa.
-  assert(!/products[\s\S]{0,200}mass|product_id[\s\S]{0,80}numerador/i.test(fn),
-    "el producto no puede participar en el cálculo");
+  const fn = dom.slice(dom.indexOf("export function structuralBlockers"));
+  assert(!/recycled_fraction|evidence|defensibility/i.test(fn.slice(0, fn.indexOf("\n}"))),
+    "los impedimentos estructurales no pueden reimplementar el motor");
 });
 
-check("I9. La vista de completitud de v1 NO se tocó", () => {
-  // PT-H03 · v1 conserva su semántica. El arreglo es de presentación.
+check("L. Ninguna pantalla operativa vuelve a exigir composición", () => {
+  for (const f of [FICHA, LISTA_TRAZA, LISTA_CALC, GUIADO,
+                   "app/(app)/(shell)/(cpr)/guided-flow/page.tsx"]) {
+    const visible = soloCodigo(f);
+    for (const t of ["Registrar composición", "Agregar composición", "Completar composición",
+                     "Editar composición", "Agregar componente",
+                     "es la base del cálculo de contenido reciclado",
+                     "La composición es necesaria para calcular"]) {
+      assert(!visible.includes(t), `${f} sigue pidiendo composición: «${t}»`);
+    }
+  }
+  // Y la vista de completitud de la metodología anterior deja de consultarse
+  // en las pantallas de cálculo: era la fuente del falso «incompleto».
+  for (const f of [FICHA, LISTA_CALC]) {
+    assert(!/getCompleteness/.test(soloCodigo(f)),
+      `${f} sigue leyendo la completitud de la metodología anterior`);
+  }
+});
+
+check("M. La vista de completitud de la metodología anterior NO se tocó", () => {
+  // El arreglo es de presentación. Modificar 0104 reescribiría la semántica de
+  // cálculos ya emitidos.
   for (const f of ["0142_evidence_catalog_and_historical_truth.sql",
                    "0143_textile_unit_codes_and_concurrency.sql",
                    "0144_recycled_content_v2.sql",
@@ -400,8 +519,11 @@ check("I9. La vista de completitud de v1 NO se tocó", () => {
                    "0146_output_batch_movements.sql"]) {
     const sql = read(`supabase/migrations/${f}`);
     assert(!/v_output_batch_completeness/.test(sql.replace(/--.*$/gm, "")),
-      `${f} modifica la vista de completitud de v1`);
+      `${f} modifica la vista de completitud`);
   }
+  // Y no apareció una migración nueva para esto: la decisión es de producto.
+  assert(!existsSync(join(ROOT, "supabase/migrations/0147_remove_v1_from_active_ux.sql")),
+    "el cambio debía ser solo de código");
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);

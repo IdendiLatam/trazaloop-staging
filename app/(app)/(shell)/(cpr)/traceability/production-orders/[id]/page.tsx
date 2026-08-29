@@ -35,6 +35,10 @@ import {
 } from "@/components/domain/traceability/action-button";
 import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
+// PT-02A · La ausencia de composición manual dejó de ser una carencia: v2 no
+// la usa. Se le retira a la vista de 0104 antes de que llegue a la pantalla.
+import { operativeStatus } from "@/lib/domain/recycled-readiness";
+import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 import { SuccessAlert } from "@/components/ui/alert";
 import { formatProcessVariablesSummary } from "@/lib/domain/process-variables";
 import {
@@ -545,7 +549,7 @@ export default async function ProductionOrderDetailPage({
                     <p className="text-sm font-medium">
                       <span className="code mr-2 text-xs text-loop-deep">{o.batch_code}</span>
                       {o.product_label ?? "Sin producto asociado"}
-                      {comp ? <span className="ml-2 inline-flex"><TraceabilityStatusBadge status={comp.traceability_status} /></span> : null}
+                      {comp ? <span className="ml-2 inline-flex"><TraceabilityStatusBadge status={operativeStatus(comp.traceability_status, normalizeVisibleTexts(comp.missing_items))} /></span> : null}
                       {isNew ? (
                         <span className="ml-2 rounded-full border border-loop/30 bg-loop/5 px-2 py-0.5 text-xs font-medium text-loop-deep">
                           Creado correctamente

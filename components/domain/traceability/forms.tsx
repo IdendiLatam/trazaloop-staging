@@ -10,7 +10,6 @@ import {
   createOutputBatchAction,
   updateOutputBatchAction,
   addBatchConsumptionAction,
-  addBatchCompositionAction,
   type TraceActionState,
 } from "@/server/actions/traceability";
 import { Field } from "@/components/ui/field";
@@ -309,39 +308,17 @@ export function ConsumptionForm({
 }
 
 // ===========================================================================
-export function CompositionForm({
-  outputBatchId,
-  materials,
-}: {
-  outputBatchId: string;
-  materials: Option[];
-}) {
-  const [state, formAction, pending] = useActionState(addBatchCompositionAction, initial);
-
-  return (
-    <form action={formAction} className="space-y-3">
-      <ErrorAlert message={state.error} />
-      <SuccessAlert message={state.success ?? null} />
-      <input type="hidden" name="output_batch_id" value={outputBatchId} />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Select label="Material" name="material_id" options={materials} required />
-        <Field label="Masa kg" name="mass_kg" type="number" min={0.0001} step="0.0001" required />
-        <Field label="Notas (opcional)" name="notes" />
-      </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="is_same_process" className="h-4 w-4 accent-[var(--loop)]" />
-        Material recuperado en el mismo proceso
-        <span className="text-xs text-ink-soft">
-          (se usará en el cálculo de contenido reciclado; nunca cuenta como reciclado)
-        </span>
-      </label>
-      <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Agregando…" : "Agregar a la composición"}
-      </Button>
-    </form>
-  );
-}
-
+// PT-02A · Aquí vivía `CompositionForm`: selector de material, masa en kg,
+// notas y la casilla «Material recuperado en el mismo proceso». Se retira
+// entero. El contenido reciclado se calcula desde los consumos trazados de la
+// orden, y este formulario pedía teclear masas que ninguna fórmula leía; su
+// ausencia, además, se presentaba como «trazabilidad incompleta».
+//
+// Las filas ya registradas se conservan y se siguen viendo en modo consulta:
+// son lo que hace reproducibles los cálculos de la metodología anterior. Lo
+// que desaparece es la escritura, y `addBatchCompositionAction` la rechaza
+// aunque alguien la invoque directamente.
+// ===========================================================================
 
 /** PCR-02 (Bloques D/E) · Consumo de un LOTE PRODUCIDO interno por la orden.
  *  Convive con ConsumptionForm (lotes de entrada externos): dos orígenes

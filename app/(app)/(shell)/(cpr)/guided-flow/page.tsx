@@ -40,8 +40,9 @@ export default async function GuidedFlowPage() {
       return { label: "Crear orden / corrida de producción", href: "/traceability/production-orders" };
     if (d.withoutConsumption > 0)
       return { label: "Agregar consumo", href: "/traceability/production-orders" };
-    if (d.withoutComposition > 0)
-      return { label: "Registrar composición", href: "/traceability/output-batches" };
+    // PT-02A · Aquí iba «Registrar composición» y ganaba a «Calcular»: el
+    // llamado principal del módulo mandaba a rellenar un dato que el cálculo
+    // vigente no usa, y lo hacía antes que a calcular.
     if (d.readyToCalculate > 0)
       return { label: "Calcular contenido reciclado", href: "/recycled-content/output-batches" };
     if (d.warningCount + d.preliminaryCount > 0 || d.criticalGapsCount > 0)
@@ -110,17 +111,10 @@ export default async function GuidedFlowPage() {
     },
     {
       step: 5,
-      title: "Lotes producidos / lotes finales y composición",
-      status: (d.outputBatchesCount === 0
-        ? "pendiente"
-        : d.withoutComposition > 0
-          ? "con advertencias"
-          : "completo") as ProgressStatus,
-      lines: [
-        `${d.outputBatchesCount} lotes registrados`,
-        `${d.withoutComposition} sin composición`,
-      ],
-      actionLabel: d.withoutComposition > 0 ? "Completar composición" : "Ir a lotes producidos / lotes finales",
+      title: "Lotes producidos / lotes finales",
+      status: (d.outputBatchesCount === 0 ? "pendiente" : "completo") as ProgressStatus,
+      lines: [`${d.outputBatchesCount} lotes registrados`],
+      actionLabel: "Ir a lotes producidos / lotes finales",
       actionHref: "/traceability/output-batches",
     },
     {
