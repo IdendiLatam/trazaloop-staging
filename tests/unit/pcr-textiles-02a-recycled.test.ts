@@ -9,6 +9,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { explainReason, explainReasons } from "@/lib/domain/recycled-incomplete";
+import { splitMissing, v2ReadinessLabel } from "@/lib/domain/recycled-readiness";
+import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -290,6 +292,116 @@ check("H6. v1 sigue visible como histórico", () => {
   const acc = read("server/actions/recycled.ts");
   assert(acc.includes("calculateRecycledContentAction"), "v1 debía seguir siendo invocable");
   assert(acc.includes("calculateRecycledContentV2Action"), "y v2 también");
+});
+
+
+// ---------------------------------------------------------------------------
+// I · P4 · la composición de v1 no puede presentarse como requisito de v2
+// ---------------------------------------------------------------------------
+
+check("I1. La composición cae del lado de v1, no del de v2", () => {
+  const r = splitMissing(["composición del lote"]);
+  assert(r.ready, "sin composición, v2 SÍ puede calcular");
+  assert(r.v1Only.includes("composición del lote"), "y la composición es cosa de v1");
+  assert(r.missing.length === 0, "no puede figurar como carencia de v2");
+});
+
+check("I2. Lo que sí bloquea a v2 sigue bloqueando", () => {
+  const sinConsumos = splitMissing(["consumos de la orden"]);
+  assert(!sinConsumos.ready, "sin consumos no hay denominador");
+  assert(sinConsumos.missing.includes("consumos de la orden"), "y debe decirse");
+  // La denominación vigente, que es la que el dominio compara. La histórica
+  // la traduce el helper central antes de llegar aquí (ver I4b).
+  const sinOrden = splitMissing(["orden / corrida de producción"]);
+  assert(!sinOrden.ready, "sin orden no hay de dónde colgar los consumos");
+});
+
+check("I3. El proveedor NO bloquea a v2: no entra en la fórmula", () => {
+  // v1 lo usaba para graduar la defendibilidad. v2 no lo lee en ningún término.
+  const r = splitMissing(["información de proveedor"]);
+  assert(r.ready, "la falta de proveedor no puede impedir el cálculo v2");
+});
+
+check("I4. Un elemento desconocido cae del lado conservador", () => {
+  // Si mañana la vista emite algo nuevo, mejor que v2 se declare no lista a
+  // que se ignore en silencio.
+  const r = splitMissing(["algo que nadie ha visto"]);
+  assert(r.ready, "no está entre los requisitos de v2, así que no lo bloquea");
+  assert(r.v1Only.length === 0, "y tampoco se presenta como cosa de v1");
+});
+
+check("I4b. El reparto se hace sobre texto YA normalizado, y se comprueba", () => {
+  // Modo de fallo introducido al arreglar P4: la vista de la base emite la
+  // nomenclatura histórica y el dominio compara contra la vigente. Si alguien
+  // pasa la lista en crudo, «orden de producción» no coincide con ningún
+  // requisito y v2 se declara lista SIN estarlo — un falso verde.
+  const crudo = ["orden de producción"];
+  const normalizado = normalizeVisibleTexts(crudo);
+  assert(normalizado[0] === "orden / corrida de producción",
+    `el helper debía traducir la denominación histórica, dio «${normalizado[0]}»`);
+  assert(!splitMissing(normalizado).ready,
+    "sin orden, v2 NO puede calcular");
+  // Y los dos puntos de uso lo hacen así.
+  for (const f of ["app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx",
+                   "app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx"]) {
+    assert(/splitMissing\(normalizeVisibleTexts\(/.test(read(f)),
+      `${f} pasa la lista sin normalizar: v2 se declararía lista sin estarlo`);
+  }
+});
+
+check("I5. La ficha de contenido reciclado separa los dos conceptos", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  assert(pag.includes("splitMissing"), "debía repartir lo que falta entre v1 y v2");
+  assert(/metodolog[ií]a v1/.test(pag), "el distintivo de completitud debía decir que es de v1");
+  assert(pag.includes("v2ReadinessLabel"), "y debía enseñar el estado propio de v2");
+  assert(/Composici[óo]n · metodolog[ií]a v1/.test(pag),
+    "la sección de composición debía identificarse como de v1");
+  assert(/Consumos de la orden · metodolog[ií]a v2/.test(pag),
+    "y los consumos como la fuente de v2");
+});
+
+check("I6. La lista de lotes ya no mezcla las dos carencias", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx");
+  assert(pag.includes("splitMissing"), "debía repartir lo que falta");
+  assert(/Solo para la metodolog[ií]a v1/.test(pag),
+    "lo que solo necesita v1 debía decirse aparte y sin alarma");
+  // Y el «Falta: …» en rojo ya no puede llevar la lista entera.
+  assert(!/Falta: \{normalizeVisibleTexts\(comp\.missing_items\)/.test(pag),
+    "el aviso rojo seguía pintando todos los elementos juntos");
+});
+
+check("I7. El cálculo v2 se ofrece aunque falte composición", () => {
+  const boton = read("components/domain/recycled/calculate-button.tsx");
+  const rama = boton.slice(boton.indexOf("if (disabled)"), boton.indexOf("if (disabled)") + 500);
+  assert(rama.includes("botonV2"),
+    "cuando v1 no puede por falta de composición, v2 debe seguir ofreciéndose");
+  const pag = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  assert(/La metodolog[ií]a v1 necesita composici[óo]n registrada/.test(pag),
+    "y el motivo debe atribuir la exigencia a v1, no al lote");
+});
+
+check("I8. El producto NO es requisito de v2, y queda escrito", () => {
+  const dom = read("lib/domain/recycled-readiness.ts");
+  assert(/PRODUCT_NOT_REQUIRED_FOR_V2/.test(dom), "debía dejarse dicho");
+  assert(/declared_recycled_percent/.test(dom), "y por qué: solo alimenta un aviso");
+  const mig = read("supabase/migrations/0144_recycled_content_v2.sql");
+  const fn = mig.slice(mig.indexOf("function public.calculate_recycled_content_v2"));
+  // El producto solo se lee para el porcentaje declarado, nunca para la masa.
+  assert(!/products[\s\S]{0,200}mass|product_id[\s\S]{0,80}numerador/i.test(fn),
+    "el producto no puede participar en el cálculo");
+});
+
+check("I9. La vista de completitud de v1 NO se tocó", () => {
+  // PT-H03 · v1 conserva su semántica. El arreglo es de presentación.
+  for (const f of ["0142_evidence_catalog_and_historical_truth.sql",
+                   "0143_textile_unit_codes_and_concurrency.sql",
+                   "0144_recycled_content_v2.sql",
+                   "0145_textile_material_inventory.sql",
+                   "0146_output_batch_movements.sql"]) {
+    const sql = read(`supabase/migrations/${f}`);
+    assert(!/v_output_batch_completeness/.test(sql.replace(/--.*$/gm, "")),
+      `${f} modifica la vista de completitud de v1`);
+  }
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);

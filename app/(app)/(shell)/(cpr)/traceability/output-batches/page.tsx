@@ -40,6 +40,7 @@ import { LinkedEvidenceList } from "@/components/domain/evidences/view-link";
 import { ListSearchForm, ListPagination } from "@/components/ui/list-controls";
 import { SuccessAlert } from "@/components/ui/alert";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { splitMissing, V1_COMPOSITION_NOTE } from "@/lib/domain/recycled-readiness";
 
 export default async function OutputBatchesPage({
   searchParams,
@@ -326,11 +327,31 @@ export default async function OutputBatchesPage({
                         ))}
                       </p>
                     ) : null}
-                    {comp && comp.missing_items.length > 0 ? (
-                      <p className="mt-1 text-xs text-danger">
-                        Falta: {normalizeVisibleTexts(comp.missing_items).join(", ")}.
-                      </p>
-                    ) : null}
+                    {/* PT-02A · Antes esto decía «Falta: …» en rojo con TODO
+                        mezclado, incluida la composición del lote. La
+                        composición la necesita v1; v2 no la usa. Presentarlas
+                        juntas hacía leer «no puedes calcular» donde sí se
+                        puede. */}
+                    {(() => {
+                      if (!comp || comp.missing_items.length === 0) return null;
+                      const r = splitMissing(normalizeVisibleTexts(comp.missing_items));
+                      return (
+                        <>
+                          {r.missing.length > 0 ? (
+                            <p className="mt-1 text-xs text-danger">
+                              Falta: {r.missing.join(", ")}.
+                            </p>
+                          ) : null}
+                          {r.v1Only.length > 0 ? (
+                            <p className="mt-1 text-xs text-ink-soft">
+                              Solo para la metodología v1:{" "}
+                              {r.v1Only.join(", ")}.{" "}
+                              {V1_COMPOSITION_NOTE}
+                            </p>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                     {comp?.mass_balance_warning ? (
                       <p className="mt-1 inline-block rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 text-xs text-amber">
                         Advertencia de balance: consumido{" "}

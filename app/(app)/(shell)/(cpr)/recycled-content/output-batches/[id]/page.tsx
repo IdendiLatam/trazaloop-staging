@@ -22,7 +22,13 @@ import {
   INCOMPLETE_TITLE,
   INCOMPLETE_LEAD,
 } from "@/lib/domain/recycled-incomplete";
+import {
+  splitMissing,
+  v2ReadinessLabel,
+  V1_COMPOSITION_NOTE,
+} from "@/lib/domain/recycled-readiness";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
+import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { CalculateButton } from "@/components/domain/recycled/calculate-button";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
@@ -58,6 +64,9 @@ export default async function CalculationDetailPage({
       .eq("target_id", id),
   ]);
 
+  // PT-02A · Lo que le falta a v1 y lo que le falta a v2 son dos cosas, y la
+  // pantalla las mezclaba en un único «Trazabilidad incompleta».
+  const readiness = splitMissing(normalizeVisibleTexts(comp?.missing_items ?? []));
   const latest = calculations[0] ?? null;
   const history = calculations.slice(1);
 
@@ -74,7 +83,30 @@ export default async function CalculationDetailPage({
           </p>
           <h1 className="flex flex-wrap items-center gap-3 text-2xl font-semibold tracking-tight">
             <span className="code text-loop-deep">{batch.batch_code}</span>
-            {comp ? <TraceabilityStatusBadge status={comp.traceability_status} /> : null}
+            {/* PT-02A · El distintivo mide la completitud de la metodología
+                HISTÓRICA, que exige composición. Sin decirlo, un lote
+                perfectamente calculable con v2 aparecía en rojo como
+                «Trazabilidad incompleta» y la persona iba a teclear una
+                composición que el cálculo no usa. */}
+            {comp ? (
+              <span className="inline-flex items-center gap-1.5">
+                <TraceabilityStatusBadge status={comp.traceability_status} />
+                <span className="text-[10px] uppercase tracking-wider text-ink-soft">
+                  metodología v1
+                </span>
+              </span>
+            ) : null}
+            {comp ? (
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                  readiness.ready
+                    ? "border-loop/30 bg-loop/5 text-loop-deep"
+                    : "border-danger/30 bg-danger/5 text-danger"
+                }`}
+              >
+                {v2ReadinessLabel(readiness)}
+              </span>
+            ) : null}
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
             {[
@@ -114,14 +146,21 @@ export default async function CalculationDetailPage({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <section className="rounded-lg border border-hairline bg-surface p-4">
-          <h2 className="eyebrow mb-3">Composición</h2>
+          <h2 className="eyebrow mb-3">Composición · metodología v1</h2>
           {composition.length === 0 ? (
-            <p className="text-sm text-ink-soft">
-              Sin composición.{" "}
-              <Link href={`/traceability/output-batches?batch=${batch.id}`} className="text-loop underline">
-                Registrarla
-              </Link>
-            </p>
+            <div className="space-y-1 text-sm text-ink-soft">
+              <p>Sin composición registrada.</p>
+              {/* No es una carencia que haya que subsanar para calcular: es un
+                  dato de la metodología histórica. Decirlo evita que alguien
+                  teclee cien kilos que no van a ninguna fórmula. */}
+              <p className="text-xs">{V1_COMPOSITION_NOTE}</p>
+              <p className="text-xs">
+                <Link href={`/traceability/output-batches?batch=${batch.id}`} className="text-loop underline">
+                  Registrarla de todos modos
+                </Link>{" "}
+                si necesitas calcular con la metodología v1.
+              </p>
+            </div>
           ) : (
             <ul className="space-y-1 text-sm">
               {composition.map((c) => (
@@ -140,7 +179,7 @@ export default async function CalculationDetailPage({
         </section>
 
         <section className="rounded-lg border border-hairline bg-surface p-4">
-          <h2 className="eyebrow mb-3">Consumos de la orden</h2>
+          <h2 className="eyebrow mb-3">Consumos de la orden · metodología v2</h2>
           {consumption.length === 0 ? (
             <p className="text-sm text-ink-soft">Sin consumos registrados.</p>
           ) : (

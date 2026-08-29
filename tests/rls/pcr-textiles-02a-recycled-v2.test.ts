@@ -302,6 +302,66 @@ async function main() {
       `motivo inesperado: ${r.incomplete_reasons}`);
   });
 
+
+  // -------------------------------------------------------------------------
+  // P4 · La regresión del defecto encontrado en validación humana
+  // -------------------------------------------------------------------------
+  await check("P4-a. SIN composición manual, con consumos y φ=60 → CALCULATED 60 %", async () => {
+    // El defecto: la pantalla decía «Trazabilidad incompleta · Falta:
+    // composición del lote» y ofrecía el formulario de composición. El motor
+    // nunca la necesitó; era la interfaz la que la pedía. Esta prueba fija que
+    // el motor no la necesita, para que nadie la reintroduzca como requisito.
+    const b = await corrida("P4A", [{ materialId: post, kg: 100, fraccion: 60 }]);
+    const { data: comp } = await cli.from("batch_composition").select("id").eq("output_batch_id", b);
+    assert((comp ?? []).length === 0, "el fixture debe NO tener composición manual");
+    const r = await calcular(b);
+    assert(r.result_state === "calculated",
+      `salió ${r.result_state}: ${JSON.stringify(r.incomplete_reasons)}`);
+    assert(Number(r.recycled_percent) === 60, `se esperaba 60 %, dio ${r.recycled_percent}`);
+    assert(!r.incomplete_reasons.some((x) => /composi/i.test(x)),
+      `ningún motivo puede hablar de composición: ${r.incomplete_reasons}`);
+  });
+
+  await check("P4-b. SIN composición y SIN producto asociado: calcula igual", async () => {
+    // «Sin producto asociado» aparecía en la misma pantalla y podía leerse como
+    // otra carencia. El producto solo aporta `declared_recycled_percent`, que
+    // v2 usa para AVISAR; no entra en numerador ni denominador.
+    const b = await corrida("P4B", [{ materialId: post, kg: 100, fraccion: 25 }]);
+    const { data: ob } = await cli.from("output_batches").select("product_id").eq("id", b).single();
+    assert(ob!.product_id === null, "el fixture debe NO tener producto");
+    const r = await calcular(b);
+    assert(r.result_state === "calculated", `salió ${r.result_state}: ${r.incomplete_reasons}`);
+    assert(Number(r.recycled_percent) === 25, `se esperaba 25 %, dio ${r.recycled_percent}`);
+  });
+
+  await check("P4-c. SIN composición y φ desconocida → INCOMPLETE por la FRACCIÓN", async () => {
+    const b = await corrida("P4C", [{ materialId: post, kg: 100 }]);
+    const r = await calcular(b);
+    assert(r.result_state === "incomplete", `debía salir incompleto, salió ${r.result_state}`);
+    assert(r.incomplete_reasons.some((x) => x.startsWith("fraction_unknown")),
+      `el motivo debía ser la fracción: ${r.incomplete_reasons}`);
+    // Y jamás por composición: ese era exactamente el mensaje equivocado.
+    assert(!r.incomplete_reasons.some((x) => /composi/i.test(x)),
+      `apareció un motivo de composición: ${r.incomplete_reasons}`);
+    assert(r.recycled_percent === null, "ni 0 % ni 100 %");
+  });
+
+  await check("P4-d. Registrar composición manual NO altera el resultado de v2", async () => {
+    // La otra mitad: si alguien teclea la composición «por si acaso», v2 tiene
+    // que dar exactamente lo mismo. Si cambiara, es que la estaría leyendo.
+    const b = await corrida("P4D", [{ materialId: post, kg: 100, fraccion: 40 }]);
+    const antes = await calcular(b);
+    assert(Number(antes.recycled_percent) === 40, `antes: ${antes.recycled_percent}`);
+    const { error } = await cli.from("batch_composition").insert({
+      organization_id: org, output_batch_id: b, material_id: post, mass_kg: 999 });
+    assert(!error, `composición: ${error?.message}`);
+    const despues = await calcular(b);
+    assert(Number(despues.recycled_percent) === 40,
+      `v2 leyó la composición: pasó de 40 a ${despues.recycled_percent}`);
+    assert(Number(despues.total_mass_kg) === 100,
+      `el denominador salió de la composición (999) en vez del consumo (100): ${despues.total_mass_kg}`);
+  });
+
   // -------------------------------------------------------------------------
   // PT-H05 · el reparto que no se inventa
   // -------------------------------------------------------------------------
