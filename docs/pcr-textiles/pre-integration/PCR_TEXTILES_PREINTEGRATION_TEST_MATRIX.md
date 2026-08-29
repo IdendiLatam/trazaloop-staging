@@ -113,3 +113,13 @@ bash scripts/replay-local.sh           # reejecución limpia 0001→0146
 
 Las suites `-rls` crean su propia empresa y sus propios datos. No tocan nada
 existente y no hace falta limpiarlas.
+
+---
+
+## CIERRE · 2026-08-29
+
+**Validación humana P1–P8: PASS.** Blockers 0 · product gaps 0.
+Cabecera 0148 · Local 0148 · Staging 0148 · Production 0111 (sin tocar).
+
+El resumen final, las nueve decisiones congeladas y lo diferido están en
+[PCR_TEXTILES_PREINTEGRATION_CLOSURE.md](./PCR_TEXTILES_PREINTEGRATION_CLOSURE.md).

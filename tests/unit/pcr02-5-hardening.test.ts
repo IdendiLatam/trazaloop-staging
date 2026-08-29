@@ -220,7 +220,17 @@ check("B4 · capa de datos acotada: agregación en la base, nunca en el cliente"
     assert(INV_DB.includes(`export async function ${fn}`), `función ${fn}`);
   }
   assert(INV_DB.split('.eq("organization_id", orgId)').length >= 6, "todas filtran por empresa");
-  assert(INV_DB.split("INVENTORY_PAGE_SIZE - 1").length === 3, "las dos consultas paginadas usan range acotado por el pageSize del dominio");
+  // PT-02B.1 · Eran DOS consultas paginadas (materiales y sus lotes). Ahora
+  // son CUATRO: se sumaron el inventario de producto terminado y sus lotes.
+  // Lo que la comprobación protege no es el número, es que TODA consulta
+  // paginada acote su rango con el pageSize del dominio en vez de traerse la
+  // tabla entera, así que se cuenta contra las que hay.
+  const paginadas = (INV_DB.match(/from \+ INVENTORY_PAGE_SIZE - 1/g) ?? []).length;
+  assert(paginadas === 4,
+    `se esperaban 4 consultas paginadas acotadas por el pageSize, hay ${paginadas}`);
+  for (const fn of ["searchProductStock", "listStockByProduct"]) {
+    assert(INV_DB.includes(`export async function ${fn}`), `función ${fn}`);
+  }
   assert(!INV_DB.includes('from("input_batches")'), "lee las vistas, no suma tablas crudas en JS");
 });
 
@@ -314,7 +324,16 @@ check("C6 · seguridad: SECURITY INVOKER, search_path fijo, EXECUTE revocado", (
 });
 
 check("C7 · acciones (capa 2): pre-chequeo con los MISMOS mensajes; §12 con tope", () => {
-  assert(ACTIONS.includes("getInputBatchBalance") && ACTIONS.includes("getOutputBatchBalance"), "saldos desde las vistas");
+  // PT-02B.1 · El saldo del lote producido pasó de `getOutputBatchBalance`
+  // —la vista de 0105, que solo descuenta el reproceso— al saldo CONSOLIDADO,
+  // que es el mismo que aplica el disparador. Con el anterior se podía
+  // reprocesar un lote ya despachado. La capa 2 sigue existiendo y sigue
+  // dando el mensaje antes de llegar a la base; lo que cambió es que mira el
+  // saldo correcto.
+  assert(ACTIONS.includes("getInputBatchBalance") && ACTIONS.includes("getOutputBatchStock"),
+    "saldos desde las vistas, y el del lote producido desde el consolidado");
+  assert(!ACTIONS.includes("getOutputBatchBalance"),
+    "no puede quedar una lectura del saldo antiguo: era la mitad de la doble salida");
   assert(ACTIONS.includes("La cantidad a consumir supera el saldo disponible del lote. Disponible: ${"), "mensaje externo en acción");
   assert(ACTIONS.includes("La cantidad a consumir supera el saldo disponible del lote producido. Disponible: ${"), "mensaje interno en acción");
   assert(ACTIONS.includes("saldo.available_kg + Number(row.mass_kg)"), "§12: tope = disponible + masa propia");
@@ -331,9 +350,15 @@ check("C9 · selectores §17: agotados fuera del NUEVO consumo, saldo informativ
   const int_ = DB.slice(DB.indexOf("export async function listConsumableOutputs"));
   assert(ext.slice(0, 1400).includes('from("v_input_batch_inventory")'), "externo: vista de inventario");
   assert(ext.slice(0, 1400).includes('.gt("available_kg", 0)'), "externo: sin agotados");
-  assert(int_.slice(0, 1600).includes('from("v_output_batch_inventory")'), "interno: vista de inventario");
-  assert(int_.slice(0, 1600).includes('.gt("available_kg", 0)'), "interno: sin agotados");
-  assert(int_.slice(0, 1600).includes('.neq("production_order_id", consumingOrderId)'), "anti-autoconsumo del selector intacto");
+  // PT-02B.1 · El selector ofrecía lotes con el saldo de 0105 y llegó a
+  // anunciar «Disponible: 100 kg» de un lote despachado entero. Ahora lee la
+  // misma vista que gobierna el guardián y la pantalla.
+  assert(int_.slice(0, 1900).includes('from("v_output_batch_stock")'),
+    "interno: vista del saldo consolidado");
+  assert(!int_.slice(0, 1900).includes('from("v_output_batch_inventory")'),
+    "interno: no puede seguir leyendo el saldo que ignora los movimientos");
+  assert(int_.slice(0, 1900).includes('.gt("available_kg", 0)'), "interno: sin agotados");
+  assert(int_.slice(0, 1900).includes('.neq("production_order_id", consumingOrderId)'), "anti-autoconsumo del selector intacto");
   assert(ext.includes("Disponible: ${") && int_.includes("Disponible: ${"), "ambas etiquetas informan saldo");
 });
 

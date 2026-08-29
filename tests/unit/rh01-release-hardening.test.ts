@@ -433,6 +433,27 @@ check("17. TODOS los renders de campos generados por la BD pasan por el helper c
   // Usos que NO son render de texto (conteos, iteración, declaración de tipo).
   const NON_RENDER = /^(\.length|\.map\(|\.some\(|\.filter\(|\.join\(|\.forEach\(|\??:)/;
 
+  /**
+   * Campos que llegan a la pantalla YA normalizados, con el sitio exacto donde
+   * se normalizan. La prueba no se fía de esta lista: la comprueba.
+   */
+  const NORMALIZADOS_EN_ORIGEN = new Map<string, { archivo: string; fuente: string }>([
+    ["missing_items", {
+      archivo: "lib/db/traceability.ts",
+      fuente: "export async function getCompleteness",
+    }],
+  ]);
+  for (const [campo, { archivo, fuente }] of NORMALIZADOS_EN_ORIGEN) {
+    const src = readRepoFile(archivo);
+    const i = src.indexOf(fuente);
+    assert(i > 0, `no se encontró ${fuente} en ${archivo}`);
+    const cuerpo = src.slice(i, src.indexOf("\n}", i));
+    assert(/outputBatchReadiness\(|normalizeVisible/.test(cuerpo),
+      `${archivo} dejó de normalizar ${campo} en la fuente: o lo repone, o el campo vuelve a normalizarse en cada pantalla`);
+    assert(new RegExp(`${campo}:`).test(cuerpo),
+      `${archivo} ya no devuelve ${campo}: la excepción sobra`);
+  }
+
   const offenders: string[] = [];
   const files = [
     ...walkFiles("app", /\.tsx$/),
@@ -453,6 +474,15 @@ check("17. TODOS los renders de campos generados por la BD pasan por el helper c
           const after = line.slice(at + field.length + 1);
           if (NON_RENDER.test(after)) continue;
           renderSites++;
+          // P4 final · Un campo puede llegar YA normalizado si quien lo lee lo
+          // normalizó en la fuente. Eso es más fuerte que normalizar en cada
+          // pantalla —no hay forma de olvidarse— pero este barrido no puede
+          // verlo, porque la fuente vive fuera de `app/` y `components/`.
+          //
+          // Así que se admite, y a cambio se EXIGE la prueba: cada excepción
+          // nombra su fuente, y abajo se comprueba que esa fuente sigue
+          // normalizando. Si alguien la quita, esta comprobación falla.
+          if (NORMALIZADOS_EN_ORIGEN.has(field)) continue;
           if (!line.includes("normalizeVisible")) offenders.push(`${rel}:${i + 1} → ${trimmed}`);
         }
       }
@@ -467,7 +497,10 @@ check("18. Los archivos identificados en el sprint aplican el helper (no replace
     "app/(app)/(shell)/(cpr)/audit-support/page.tsx",
     "app/(app)/(shell)/(cpr)/audit-support/output-batches/[id]/evidence-matrix/page.tsx",
     "app/(app)/(shell)/(cpr)/guided-flow/output-batches/[id]/page.tsx",
-    "app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx",
+    // P4 final · `traceability/output-batches` salió de esta lista: ya no
+    // normaliza, porque recibe `missing_items` normalizado desde
+    // `getCompleteness`. Que siga siendo cierto lo vigila la comprobación 17,
+    // que exige la prueba en la fuente.
     "components/domain/audit-support/dossier-body.tsx",
   ];
   for (const rel of targets) {

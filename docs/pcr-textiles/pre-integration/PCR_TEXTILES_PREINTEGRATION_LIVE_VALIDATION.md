@@ -342,4 +342,22 @@ Están documentados como **by design** y no son hallazgos de la validación:
 | P7 | Navegación Textiles-only | | |
 | P8 | Paginación y búsqueda | | |
 
-**Staging:** `0146` ☐  ·  **Production:** `dpl_G7ShrFNuxpojx4wYnVQpj2dCirHp`, sin tocar ☐
+---
+
+## CIERRE · 2026-08-29 · P1–P8 PASS
+
+| | Prueba | Resultado | Evidencia clave |
+|---|---|---|---|
+| P1 | Temporalidad de la evidencia | **PASS** | vigente / obsoleta / pendiente distinguidas; una obsoleta hoy vale para un lote cuya `received_date` la amparaba |
+| P2 | Elegibilidad | **PASS** | el selector solo ofrece misma empresa + aceptada + aplicable |
+| P3 | Confirmación | **PASS** | cancelar deja 0 asociaciones; confirmar consolida; reconfirmar no duplica (`is not distinct from`) ni reescribe el snapshot |
+| P4 | Contenido reciclado | **PASS** | `QA-PT-LS-CALC` 60 % · Defendible · Completa, sin composición. `QA-PT-LS-INC` incompleto por φ, no por composición |
+| P5 | Inventario de materia prima | **PASS** | `QA-PT-LE-PARCIAL` 100 − 40 = 60, con el alcance declarado |
+| P6 | Inventario de producto terminado | **PASS** | 100 → despacho 40 → 60 (agregado 300 → 260); corrección 40→4 → 96 (296); anulación conserva original; recuento 100→97 → −3 → 97; recuento 120 sobre techo 100 rechazado |
+| P7 | Independencia de Textiles | **PASS** | recorrido completo sin caer en el shell de PCR |
+| P8 | Búsqueda y paginación | **PASS** | encuentra fuera de la primera página; limpiar restaura; escala >1000 automatizada |
+
+**Staging:** `0148` ☑  ·  **Production:** DB `0111`, sin migraciones 0112+ ☑ · sin despliegue ☑
+
+Cierre completo en
+[PCR_TEXTILES_PREINTEGRATION_CLOSURE.md](./PCR_TEXTILES_PREINTEGRATION_CLOSURE.md).

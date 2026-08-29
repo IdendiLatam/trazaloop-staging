@@ -282,3 +282,13 @@ Clasificación pedida:
 
 Las migraciones históricas siguen siendo append-only, y Production sigue protegida.
 Corregir esto ahora no cuesta compatibilidad con nadie.
+
+---
+
+## CIERRE · 2026-08-29
+
+**Validación humana P1–P8: PASS.** Blockers 0 · product gaps 0.
+Cabecera 0148 · Local 0148 · Staging 0148 · Production 0111 (sin tocar).
+
+El resumen final, las nueve decisiones congeladas y lo diferido están en
+[PCR_TEXTILES_PREINTEGRATION_CLOSURE.md](./PCR_TEXTILES_PREINTEGRATION_CLOSURE.md).

@@ -36,21 +36,22 @@ function codigoDe(fichero: string): string {
 
 const TODAS = readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort();
 /** Las de este sprint. */
-const DEL_SPRINT = TODAS.filter((f) => f >= "0142" && f < "0148");
+const DEL_SPRINT = TODAS.filter((f) => f >= "0142" && f < "0149");
 
 console.log("\nPCR/TEXTILES · preflight de migraciones\n");
 
-check("A1. Las seis migraciones del sprint están, y no hay una séptima", () => {
-  // La 0147 se sumó por una decisión de producto posterior al cierre previsto:
-  // consolidar el contenido reciclado en una sola metodología antes de que
-  // exista tráfico. El guardián no se relaja —sigue habiendo una lista
-  // cerrada— se amplía con la que se decidió añadir.
-  assert(DEL_SPRINT.length === 6, `se esperaban 6, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
-  for (const n of ["0142", "0143", "0144", "0145", "0146", "0147"]) {
+check("A1. Las siete migraciones del sprint están, y no hay una octava", () => {
+  // La lista creció dos veces, y las dos por una decisión de producto
+  // explícita tomada durante la validación humana: 0147 consolidó el contenido
+  // reciclado en una sola metodología y 0148 cerró la semántica del
+  // inventario. El guardián no se relaja —sigue habiendo una lista cerrada—
+  // se amplía con lo que se decidió añadir, y el sprint cierra aquí.
+  assert(DEL_SPRINT.length === 7, `se esperaban 7, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
+  for (const n of ["0142", "0143", "0144", "0145", "0146", "0147", "0148"]) {
     assert(DEL_SPRINT.some((f) => f.startsWith(n)), `falta ${n}`);
   }
-  assert(!TODAS.some((f) => f.startsWith("0148")),
-    "apareció una 0148: este sprint cierra en 0147");
+  assert(!TODAS.some((f) => f.startsWith("0149")),
+    "apareció una 0149: este sprint cierra en 0148");
 });
 
 check("A2. Las del sprint son contiguas y arrancan justo tras 0141", () => {
@@ -171,8 +172,18 @@ check("C1. Ninguna migración del sprint modifica filas existentes", () => {
       const esBackfill = /set unit_code = public\.textile_canonical_unit/.test(u[0])
         && /where unit_code is null/.test(u[0]);
       const esMetodologia = tabla === "calculation_methodologies";
-      const esCorreccion = f.startsWith("0146");   // dentro de la RPC de corrección
-      assert(esBackfill || esMetodologia || esCorreccion,
+      // La corrección de un movimiento marca el original como no vigente y lo
+      // apunta a su reemplazo. Es LINAJE, no reescritura del dato: la cantidad,
+      // la fecha y el motivo del original no se tocan nunca.
+      //
+      // La excepción se reconoce por lo que la sentencia HACE, no por el
+      // fichero en el que está: decía `f.startsWith("0146")` y quedó caduca en
+      // cuanto la misma RPC se reescribió en 0148.
+      const esLinajeDeCorreccion =
+        tabla === "output_batch_movements"
+        && /set\s+(is_current\s*=\s*false|superseded_by_movement_id\s*=)/.test(u[0])
+        && !/set[^;]*\b(quantity|occurred_at|movement_kind|direction|reason|counted_quantity)\s*=/.test(u[0]);
+      assert(esBackfill || esMetodologia || esLinajeDeCorreccion,
         `${f} actualiza public.${tabla} fuera del backfill: ${u[0].slice(0, 80)}`);
     }
     // 0147 · UNA excepción, y se nombra entera: retira del catálogo la fila de

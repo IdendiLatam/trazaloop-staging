@@ -264,3 +264,13 @@ sigue, no que hubiera error.
   [LIVE_VALIDATION](./PCR_TEXTILES_PREINTEGRATION_LIVE_VALIDATION.md).
 - **No modeló la atribución de consumos a lotes de salida**, que es el dato que
   haría calculable una orden con varias salidas.
+
+---
+
+## CIERRE · 2026-08-29
+
+**Validación humana P1–P8: PASS.** Blockers 0 · product gaps 0.
+Cabecera 0148 · Local 0148 · Staging 0148 · Production 0111 (sin tocar).
+
+El resumen final, las nueve decisiones congeladas y lo diferido están en
+[PCR_TEXTILES_PREINTEGRATION_CLOSURE.md](./PCR_TEXTILES_PREINTEGRATION_CLOSURE.md).

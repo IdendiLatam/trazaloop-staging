@@ -210,3 +210,13 @@ El script solo inserta en **entradas puras de lista**. Su primera versión usó
 búsqueda de subcadena y metió el nombre dentro de un `assert(...)` que
 mencionaba la 0141, convirtiéndolo en una llamada de tres argumentos que
 compilaba y no comprobaba nada.
+
+---
+
+## CIERRE · 2026-08-29
+
+**Validación humana P1–P8: PASS.** Blockers 0 · product gaps 0.
+Cabecera 0148 · Local 0148 · Staging 0148 · Production 0111 (sin tocar).
+
+El resumen final, las nueve decisiones congeladas y lo diferido están en
+[PCR_TEXTILES_PREINTEGRATION_CLOSURE.md](./PCR_TEXTILES_PREINTEGRATION_CLOSURE.md).
