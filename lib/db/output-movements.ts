@@ -21,7 +21,7 @@ export async function listOutputBatchMovements(
   const rows = await readAllStrict<Record<string, unknown>>(() =>
     supabase
       .from("output_batch_movements")
-      .select("id, output_batch_id, movement_kind, direction, quantity, occurred_at, reason, reference, is_current, corrects_movement_id, correction_reason")
+      .select("id, output_batch_id, movement_kind, direction, quantity, occurred_at, reason, reference, is_current, corrects_movement_id, correction_reason, counted_quantity, theoretical_quantity_at_count")
       .eq("organization_id", organizationId)
       .in("output_batch_id", outputBatchIds)
       .order("occurred_at", { ascending: false })
@@ -41,6 +41,12 @@ export async function listOutputBatchMovements(
       isCurrent: Boolean(r.is_current),
       correctsMovementId: (r.corrects_movement_id as string | null) ?? null,
       correctionReason: (r.correction_reason as string | null) ?? null,
+      // PT-02B.1 · El par del recuento. Se lee siempre: un ajuste que no
+      // enseña qué se contó y contra qué es un número sin respaldo.
+      countedQuantity: r.counted_quantity === null || r.counted_quantity === undefined
+        ? null : Number(r.counted_quantity),
+      theoreticalAtCount: r.theoretical_quantity_at_count === null || r.theoretical_quantity_at_count === undefined
+        ? null : Number(r.theoretical_quantity_at_count),
     };
     mapa.set(id, [...(mapa.get(id) ?? []), fila]);
   }

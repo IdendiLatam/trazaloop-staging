@@ -47,10 +47,16 @@ export async function MaterialInventorySection({
   orgId,
   params,
   extraParams,
+  // PT-02B.1 · La ruta se pasa desde fuera para que esta sección sirva en los
+  // DOS sitios donde vive: dentro de los lotes de entrada, donde ya estaba, y
+  // en la pantalla de inventario. Duplicar el componente habría duplicado la
+  // aritmética, que es justo lo que no se quiere tocar.
+  basePath = "/traceability/input-batches",
 }: {
   orgId: string;
   params: InventoryParams;
   extraParams: Record<string, string | undefined>;
+  basePath?: string;
 }) {
   const selectedMaterialId = params.inventario || null;
   const [pageResult, selected] = await Promise.all([
@@ -77,7 +83,7 @@ export async function MaterialInventorySection({
     };
     for (const [k, v] of Object.entries(merged)) if (v) sp.set(k, String(v));
     const qs = sp.toString();
-    return `/traceability/input-batches${qs ? `?${qs}` : ""}#inventario`;
+    return `${basePath}${qs ? `?${qs}` : ""}#inventario`;
   };
 
   const lastPage = Math.max(1, Math.ceil(pageResult.total / pageResult.pageSize));
@@ -105,7 +111,7 @@ export async function MaterialInventorySection({
       </p>
 
       {/* Búsqueda server-side del inventario (independiente de la lista) */}
-      <form method="get" action="/traceability/input-batches#inventario" className="mb-3 flex flex-wrap items-center gap-2">
+      <form method="get" action={`${basePath}#inventario`} className="mb-3 flex flex-wrap items-center gap-2">
         {Object.entries(extraParams).map(([k, v]) =>
           v ? <input key={k} type="hidden" name={k} value={v} /> : null
         )}

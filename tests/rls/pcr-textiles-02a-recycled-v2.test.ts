@@ -486,6 +486,47 @@ async function main() {
     assert(/miembro activo/i.test(error!.message), `mensaje inesperado: ${error!.message}`);
   });
 
+
+  await check("T. Los movimientos de inventario NO tocan el contenido reciclado", async () => {
+    // La separación que PT-02B.1 vino a hacer visible en la pantalla también
+    // tiene que ser cierta en la base: el porcentaje es una propiedad de lo
+    // que ENTRÓ a fabricar el lote, no de lo que queda en el almacén.
+    // Despachar, perder o ajustar no puede mover ni un decimal.
+    const b = await corrida("T", [{ materialId: post, kg: 60, fraccion: 100 },
+                                   { materialId: virgen, kg: 40 }]);
+    const antes = await calcular(b);
+    assert(Number(antes.recycled_percent) === 60, `esperado 60 %, dio ${antes.recycled_percent}`);
+
+    const mover = (kind: string, qty: number, extra: Record<string, unknown> = {}) =>
+      cli.from("output_batch_movements").insert({
+        organization_id: org, output_batch_id: b, movement_kind: kind,
+        quantity: qty, unit_code: "kg", ...extra });
+
+    assert(!(await mover("dispatch", 30)).error, "el despacho debía registrarse");
+    assert(!(await mover("loss", 5, { reason: "rotura" })).error, "la merma debía registrarse");
+    assert(!(await mover("adjustment", 2, {
+      direction: "out", reason: "recuento físico",
+      counted_quantity: 63, theoretical_quantity_at_count: 65 })).error,
+      "el recuento debía registrarse");
+
+    const { data: st } = await cli.from("v_output_batch_stock")
+      .select("available_kg").eq("output_batch_id", b).single();
+    assert(Number(st!.available_kg) === 63, `el saldo sí cambia: 100−30−5−2 = 63, dio ${st!.available_kg}`);
+
+    // El cálculo emitido no se toca…
+    const { data: emitido } = await cli.from("v_latest_batch_recycled")
+      .select("recycled_percent").eq("output_batch_id", b).single();
+    assert(Number(emitido!.recycled_percent) === 60,
+      `el cálculo emitido cambió: ${emitido!.recycled_percent}`);
+
+    // …y recalcular después de las salidas da exactamente lo mismo.
+    const despues = await calcular(b);
+    assert(Number(despues.recycled_percent) === 60,
+      `recalcular tras los movimientos dio ${despues.recycled_percent}`);
+    assert(Number(despues.total_mass_kg) === 100,
+      `el denominador salió del inventario en vez del consumo: ${despues.total_mass_kg}`);
+  });
+
   console.log(`\n  ${passed} correctas, ${failed} fallidas\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

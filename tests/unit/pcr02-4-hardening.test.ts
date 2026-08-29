@@ -188,13 +188,16 @@ check("con la orden cerrada se congela Eliminar lote, y la composición ya no se
   assert(PAGE.includes("orderMutationBlockedMessage(b.production_order_status)"), "condición de congelación en la página");
   const deleteBatch = PAGE.indexOf("deleteOutputBatchAction");
   assert(deleteBatch !== -1 && PAGE.lastIndexOf("orderMutationBlockedMessage", deleteBatch) !== -1, "Eliminar lote condicionado");
-  // PT-02A · Aquí se exigía que el alta y el borrado de composición estuvieran
-  // CONDICIONADOS por el cierre de la orden. Ahora están retirados del todo, lo
-  // que satisface §12 por una vía más fuerte: no queda escritura que congelar.
-  // La comprobación se endurece, no se relaja.
+  // PT-02A retiró la escritura de composición y PT-02B.1 la sección entera, lo
+  // que satisface §12 por una vía más fuerte: no queda nada que congelar.
+  // §12 pedía que la CONSULTA y la GENEALOGÍA sobrevivieran al cierre de la
+  // orden, y las dos siguen: lo que se consulta del lote ahora son sus
+  // evidencias, sus movimientos y su genealogía.
   assert(!PAGE.includes("CompositionForm") && !PAGE.includes("deleteBatchCompositionAction"),
-    "la escritura de composición debía desaparecer de la página, no solo congelarse");
-  assert(PAGE.includes("composition.map"), "pero la consulta permanece (§12)");
+    "la escritura de composición debía desaparecer de la página");
+  assert(!PAGE.includes("listComposition"), "y su consulta también");
+  assert(PAGE.includes("OutputBatchMovements") && PAGE.includes("LinkedEvidenceList"),
+    "la consulta del lote permanece (§12): movimientos y evidencias");
   assert(PAGE.includes("Genealogía"), "consulta y genealogía permanecen (§12)");
 });
 check("mensaje de dominio: cerrada Y cancelada bloquean; abiertas no", () => {
@@ -291,6 +294,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0148_inventory_movement_hardening.sql",
     "0147_recycled_content_methodology_consolidation.sql",
     "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",

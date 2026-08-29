@@ -114,6 +114,11 @@ export const TRAZABILIDAD_GROUP: ModuleNavGroup = {
     { label: "Catálogos", href: "/catalog" },
     { label: "Evidencias", href: "/evidences" },
     { label: "Trazabilidad", href: "/traceability" },
+    // PT-02B.1 · El saldo de materiales vivía DENTRO de la pantalla de lotes
+    // de entrada, así que había que saber que estaba ahí para encontrarlo, y
+    // el de producto terminado no existía. Ahora hay una entrada, con sus dos
+    // superficies. Es simétrica de «Saldo de materia prima» en Textiles.
+    { label: "Inventario", href: "/traceability/inventory" },
     { label: "Contenido reciclado", href: "/recycled-content" },
     { label: "Soporte técnico", href: "/audit-support" },
     { label: "Implementación", href: "/implementation" },

@@ -714,8 +714,14 @@ export async function listConsumableOutputs(
   // nuevo consumo (siguen visibles en listados e histórico) y cada opción
   // informa su saldo. Sigue ACOTADO (PCR-02.1) y excluye la propia orden
   // (el anti-autoconsumo de la BD permanece como última defensa).
+  //
+  // PT-02B.1 · Leía `v_output_batch_inventory` (0105), que solo descuenta el
+  // reproceso. Un lote despachado entero seguía ofreciéndose con «Disponible:
+  // 100 kg», y aceptarlo dejaba el saldo en negativo. La misma fuente que
+  // gobierna el guardián y la pantalla gobierna ahora el selector: una sola
+  // verdad, o el selector promete lo que la base va a negar.
   let request = supabase
-    .from("v_output_batch_inventory")
+    .from("v_output_batch_stock")
     .select(
       "output_batch_id, batch_code, production_order_code, produced_kg, available_kg",
       { count: "exact" }

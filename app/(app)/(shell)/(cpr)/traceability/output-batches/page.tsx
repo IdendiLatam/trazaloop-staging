@@ -13,7 +13,6 @@ import {
   searchOutputBatches,
   getOutputBatch,
   listProductionOrders,
-  listComposition,
   getCompleteness,
   listForwardUsesForOutputs,
 } from "@/lib/db/traceability";
@@ -28,12 +27,7 @@ import {
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
 // PT-02A · La ausencia de composición manual dejó de ser una carencia: v2 no
 // la usa. Se le retira a la vista de 0104 antes de que llegue a la pantalla.
-import {
-  COMPOSITION_RETIRED_NOTE,
-  operativeMissing,
-  operativeStatus,
-  V1_HISTORICAL_ONLY_NOTE,
-} from "@/lib/domain/recycled-readiness";
+import { operativeMissing, operativeStatus } from "@/lib/domain/recycled-readiness";
 import { getOutputBatchStockByIds } from "@/lib/db/inventory";
 import { listOutputBatchMovements } from "@/lib/db/output-movements";
 import { OutputBatchMovements, type MovementRow } from "@/components/domain/traceability/output-movements";
@@ -111,11 +105,6 @@ export default async function OutputBatchesPage({
     pinnedBatch && !pageBatches.some((b) => b.id === pinnedBatch.id)
       ? [pinnedBatch, ...pageBatches]
       : pageBatches;
-  const composition = openBatch
-    ? await listComposition(org.organizationId, openBatch.id)
-    : [];
-  const totalComposition = composition.reduce((acc, c) => acc + c.mass_kg, 0);
-
   // PCR-01 (punto 11): evidencias vinculadas de la página, en lote.
   const evidencesByBatch = await listEvidencesForTargets(
     org.organizationId,
@@ -272,26 +261,33 @@ export default async function OutputBatchesPage({
                     {(() => {
                       const st = stockByBatch.get(b.id);
                       if (!st) return null;
+                      // PT-02B.1 · La línea enseñaba «Producido · Reproceso ·
+                      // Salidas · Disponible» y NO incluía los ajustes: con un
+                      // recuento registrado, la resta que la persona ve no
+                      // cuadraba con el número que hay al final. Ahora la
+                      // aritmética visible es exactamente la de la vista.
+                      const salidas = st.dispatchedKg + st.lostKg + st.internalUseKg;
                       const state = inventoryState(st.availableKg);
-                      // PT-F13 · Esto decía «Disponible: X» restando solo el
-                      // reproceso interno, que era el único camino de salida
-                      // que el modelo conocía. Un lote vendido entero figuraba
-                      // disponible para siempre, con la misma etiqueta que uno
-                      // que sigue en el almacén.
-                      //
-                      // Ahora la cifra descuenta también despachos, mermas y
-                      // uso interno, y cuando NO hay ningún movimiento
-                      // registrado se dice — porque «100 kg disponibles» de un
-                      // lote del que nadie ha registrado salidas no es una
-                      // medición, es una ausencia de datos.
                       return (
                         <p className="mt-0.5 text-xs text-ink-soft">
                           Producido: {formatKg(st.producedKg)} · Reproceso
                           interno: {formatKg(st.reprocessedKg)} · Salidas:{" "}
-                          {formatKg(st.dispatchedKg + st.lostKg + st.internalUseKg)} ·{" "}
-                          {st.movementsCount === 0 ? (
+                          {formatKg(salidas)}
+                          {st.adjustmentKg !== 0 ? (
                             <>
-                              Sin salidas registradas — quedan{" "}
+                              {" "}· Ajustes:{" "}
+                              {st.adjustmentKg > 0 ? "+" : "−"}
+                              {formatKg(Math.abs(st.adjustmentKg))}
+                            </>
+                          ) : null}{" "}
+                          ·{" "}
+                          {st.isInconsistent ? (
+                            <span className="font-semibold text-danger">
+                              Saldo inconsistente: {formatKg(st.availableKg)}
+                            </span>
+                          ) : st.movementsCount === 0 ? (
+                            <>
+                              Sin movimientos registrados — quedan{" "}
                               {formatKg(st.availableKg)} según lo producido
                             </>
                           ) : (
@@ -343,17 +339,14 @@ export default async function OutputBatchesPage({
                         </p>
                       );
                     })()}
-                    {comp?.mass_balance_warning ? (
-                      <p className="mt-1 inline-block rounded-md border border-amber/40 bg-amber/10 px-2 py-0.5 text-xs text-amber">
-                        Advertencia de balance: consumido{" "}
-                        {comp.consumed_mass_kg?.toFixed(2) ?? "—"} kg · composición{" "}
-                        {comp.composition_mass_kg?.toFixed(2) ?? "—"} kg
-                        {comp.produced_quantity_kg !== null
-                          ? ` · producido ${comp.produced_quantity_kg.toFixed(2)} kg`
-                          : ""}{" "}
-                        (tolerancia 5%)
-                      </p>
-                    ) : null}
+                    {/* PT-02B.1 · Aquí salía la «advertencia de balance» de la
+                        vista de 0104, que compara el consumo con la masa de
+                        COMPOSICIÓN. Esa comparación ya no puede producirse: sin
+                        filas de composición el término es nulo y la
+                        advertencia es siempre falsa. Se retira en vez de
+                        dejarla como un aviso que no puede sonar. La
+                        reconciliación que sí importa —producido, salidas y
+                        disponible— está en el bloque de movimientos. */}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <Link
@@ -390,7 +383,7 @@ export default async function OutputBatchesPage({
                 </div>
 
                 {openBatch?.id === b.id ? (
-                  <div id={`composicion-${b.id}`} className="mt-4 space-y-4 border-t border-hairline pt-4">
+                  <div id={`movimientos-${b.id}`} className="mt-4 space-y-4 border-t border-hairline pt-4">
                     {justCreated ? (
                       <div className="space-y-1 rounded-md border border-loop/30 bg-loop/5 px-3 py-2.5">
                         <p role="status" className="text-sm font-semibold text-loop-deep">
@@ -403,57 +396,14 @@ export default async function OutputBatchesPage({
                         </p>
                       </div>
                     ) : null}
-                    {/* PT-02A · La composición dejó de registrarse a mano: v2
-                        deriva el cálculo de los consumos de la orden. La
-                        sección se conserva SOLO para leer lo que se registró
-                        antes — borrarlo sería destruir el histórico con el que
-                        se reproducen los cálculos v1. */}
-                    {composition.length > 0 ? (
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold">
-                          Composición del lote
-                          <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
-                            histórico
-                          </span>
-                        </h3>
-                        <span className="code text-sm text-ink-soft">
-                          Total: {totalComposition.toFixed(2)} kg
-                        </span>
-                      </div>
-                    ) : null}
-
-                    {composition.length === 0 ? (
-                      <p className="text-xs text-ink-soft">{COMPOSITION_RETIRED_NOTE}</p>
-                    ) : (
-                      <ul className="divide-y divide-hairline rounded-md border border-hairline">
-                        {composition.map((c) => (
-                          <li key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                            <div>
-                              <p className="text-sm">
-                                {c.material_name}
-                                {c.is_same_process ? (
-                                  <span className="ml-2 rounded-full border border-hairline bg-paper px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-soft">
-                                    mismo proceso
-                                  </span>
-                                ) : null}
-                              </p>
-                              <p className="code text-xs text-ink-soft">
-                                {c.mass_kg} kg · {c.classification_code}
-                              </p>
-                            </div>
-                            {/* Sin botón de eliminar: estas filas son el
-                                histórico con el que se reproducen los cálculos
-                                v1, y borrarlas los volvería inexplicables. */}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {composition.length > 0 ? (
-                      <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
-                        {V1_HISTORICAL_ONLY_NOTE}
-                      </p>
-                    ) : null}
+                    {/* PT-02B.1 · Aquí se leía todavía la composición registrada
+                        en su día. Deja de aparecer en la experiencia normal:
+                        la pantalla del lote pasa a tener tres cosas separadas
+                        —contenido reciclado, genealogía y movimientos— y la
+                        composición no es ninguna de las tres. Las filas se
+                        conservan en la base y las siguen leyendo las vistas
+                        que reproducen los cálculos históricos; lo que
+                        desaparece es la sección. */}
 
                     <div className="space-y-3 border-t border-hairline pt-3">
                       <LinkedEvidenceList evidences={evidencesByBatch[b.id] ?? []} />
@@ -475,8 +425,7 @@ export default async function OutputBatchesPage({
                       return (
                         <OutputBatchMovements
                           outputBatchId={b.id}
-                          availableKg={st.availableKg}
-                          movementsCount={st.movementsCount}
+                          stock={st}
                           movements={movementsByBatch.get(b.id) ?? []}
                           canRegister={canRegisterMovements}
                         />

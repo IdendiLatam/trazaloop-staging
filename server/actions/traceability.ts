@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getInputBatchBalance, getOutputBatchBalance } from "@/lib/db/inventory";
+import { getInputBatchBalance, getOutputBatchStock } from "@/lib/db/inventory";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
@@ -722,14 +722,16 @@ export async function addOutputConsumptionAction(
     return { error: "Una orden no puede consumir un lote producido por ella misma." };
   }
 
-  // PCR-02.5 (Bloque D, capa 2 de 3): saldo interno = producido − consumido
-  // internamente. La guarda 0105 (FOR UPDATE del lote producido) decide en
-  // última instancia ante concurrencia.
+  // PCR-02.5 (Bloque D, capa 2 de 3) · PT-02B.1: el saldo es el CONSOLIDADO
+  // —despachos, mermas, uso interno y ajustes incluidos—, el mismo que usa el
+  // disparador. Antes miraba solo producido − consumo interno, y por ahí se
+  // podía reprocesar un lote ya despachado. El disparador (FOR UPDATE del lote
+  // producido) decide en última instancia ante concurrencia.
   {
-    const saldo = await getOutputBatchBalance(org.organizationId, outputBatchId);
-    if (saldo && mass > saldo.available_kg) {
+    const saldo = await getOutputBatchStock(org.organizationId, outputBatchId);
+    if (saldo && mass > saldo.availableKg) {
       return {
-        error: `La cantidad a consumir supera el saldo disponible del lote producido. Disponible: ${saldo.available_kg} kg.`,
+        error: `La cantidad a consumir supera el saldo disponible del lote producido. Disponible: ${saldo.availableKg} kg.`,
       };
     }
   }

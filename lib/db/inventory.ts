@@ -237,6 +237,10 @@ export type OutputBatchStock = {
   adjustmentKg: number;
   availableKg: number;
   movementsCount: number;
+  // PT-02B.1 · El techo físico y la marca de anomalía vienen ya de la vista:
+  // la pantalla los calculaba por su cuenta y eso era una segunda fórmula.
+  physicalMaxKg: number;
+  isInconsistent: boolean;
 };
 
 const mapStock = (r: Record<string, unknown>): OutputBatchStock => ({
@@ -250,10 +254,12 @@ const mapStock = (r: Record<string, unknown>): OutputBatchStock => ({
   adjustmentKg: num(r.adjustment_kg),
   availableKg: num(r.available_kg),
   movementsCount: num(r.movements_count),
+  physicalMaxKg: num(r.physical_max_kg),
+  isInconsistent: Boolean(r.is_inconsistent),
 });
 
 const STOCK_COLUMNS =
-  "output_batch_id, batch_code, produced_kg, reprocessed_kg, dispatched_kg, lost_kg, internal_use_kg, adjustment_kg, available_kg, movements_count";
+  "output_batch_id, batch_code, produced_kg, reprocessed_kg, dispatched_kg, lost_kg, internal_use_kg, adjustment_kg, available_kg, movements_count, physical_max_kg, is_inconsistent";
 
 /** El saldo de los lotes indicados. Acotado a la página que se está pintando. */
 export async function getOutputBatchStockByIds(
@@ -288,4 +294,96 @@ export async function getOutputBatchStock(
     .eq("output_batch_id", outputBatchId)
     .maybeSingle();
   return data ? mapStock(data as Record<string, unknown>) : null;
+}
+
+
+// ===========================================================================
+// PT-02B.1 · INVENTARIO DE PRODUCTO TERMINADO, AGREGADO POR PRODUCTO
+// ---------------------------------------------------------------------------
+// Era el requisito original que seguía sin cubrirse: se sabía cuánto quedaba
+// de un LOTE, no cuánto producto hay en planta. La agregación la hace la base
+// (`v_product_stock`, 0148); aquí solo se pagina y se busca, en servidor, con
+// los mismos parámetros propios que el inventario de materiales para no
+// colisionar con la paginación de ninguna lista.
+// ===========================================================================
+
+export type ProductStockRow = {
+  productId: string | null;
+  productCode: string | null;
+  productName: string | null;
+  unitCode: string;
+  batchesTotal: number;
+  batchesWithBalance: number;
+  batchesInconsistent: number;
+  producedKg: number;
+  reprocessedKg: number;
+  exitsKg: number;
+  adjustmentKg: number;
+  availableKg: number;
+};
+
+const mapProductStock = (r: Record<string, unknown>): ProductStockRow => ({
+  productId: (r.product_id as string | null) ?? null,
+  productCode: (r.product_code as string | null) ?? null,
+  productName: (r.product_name as string | null) ?? null,
+  unitCode: (r.unit_code as string) ?? "kg",
+  batchesTotal: num(r.batches_total),
+  batchesWithBalance: num(r.batches_with_balance),
+  batchesInconsistent: num(r.batches_inconsistent),
+  producedKg: num(r.produced_kg),
+  reprocessedKg: num(r.reprocessed_kg),
+  exitsKg: num(r.exits_kg),
+  adjustmentKg: num(r.adjustment_kg),
+  availableKg: num(r.available_kg),
+});
+
+/** Una PÁGINA del inventario de producto terminado. Nunca la tabla entera. */
+export async function searchProductStock(
+  orgId: string,
+  params: { q?: string; page?: string } = {}
+): Promise<InventoryPage<ProductStockRow>> {
+  const supabase = await createServerClient();
+  const page = normalizeInventoryPage(params.page);
+  const from = (page - 1) * INVENTORY_PAGE_SIZE;
+  let request = supabase
+    .from("v_product_stock")
+    .select("*", { count: "exact" })
+    .eq("organization_id", orgId);
+  const cleaned = (params.q ?? "").trim().replace(/[%_]/g, "");
+  if (cleaned) {
+    request = request.or(`product_name.ilike.%${cleaned}%,product_code.ilike.%${cleaned}%`);
+  }
+  const { data, count } = await request
+    .order("product_name", { ascending: true, nullsFirst: false })
+    .range(from, from + INVENTORY_PAGE_SIZE - 1);
+  return {
+    rows: (data ?? []).map((r) => mapProductStock(r as Record<string, unknown>)),
+    total: count ?? 0,
+    page,
+    pageSize: INVENTORY_PAGE_SIZE,
+  };
+}
+
+/** Los lotes de UN producto, para el «Ver lotes» de la fila agregada. */
+export async function listStockByProduct(
+  orgId: string,
+  productId: string | null,
+  page = 1
+): Promise<InventoryPage<OutputBatchStock>> {
+  const supabase = await createServerClient();
+  const from = (page - 1) * INVENTORY_PAGE_SIZE;
+  let request = supabase
+    .from("v_output_batch_stock")
+    .select(STOCK_COLUMNS, { count: "exact" })
+    .eq("organization_id", orgId);
+  request = productId === null ? request.is("product_id", null) : request.eq("product_id", productId);
+  const { data, count } = await request
+    .order("batch_code", { ascending: true })
+    .range(from, from + INVENTORY_PAGE_SIZE - 1);
+  return {
+    rows: (data ?? []).map((r) => mapStock(r as Record<string, unknown>)),
+    total: count ?? 0,
+    page,
+    pageSize: INVENTORY_PAGE_SIZE,
+  };
 }

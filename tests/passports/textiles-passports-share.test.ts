@@ -127,6 +127,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0148_inventory_movement_hardening.sql",
     "0147_recycled_content_methodology_consolidation.sql",
     "0146_output_batch_movements.sql",
     "0145_textile_material_inventory.sql",
