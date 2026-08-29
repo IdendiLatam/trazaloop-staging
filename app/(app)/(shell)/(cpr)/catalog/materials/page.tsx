@@ -140,8 +140,8 @@ export default async function MaterialsPage({
         <div className="rounded-lg border border-dashed border-hairline bg-surface px-6 py-8 text-center">
           <p className="text-sm font-medium">Aún no tienes materiales registrados.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
-            Empieza creando los materiales que usarás en lotes de entrada y
-            composición: el formulario está arriba en esta misma página.
+            Empieza creando los materiales que usarás en los lotes de entrada:
+            el formulario está arriba en esta misma página.
           </p>
         </div>
       ) : (

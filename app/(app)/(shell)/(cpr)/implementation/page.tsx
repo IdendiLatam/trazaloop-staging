@@ -53,7 +53,6 @@ export default async function ImplementationPage() {
     { label: "Lotes de entrada", value: dashboard.inputBatchesCount },
     { label: "Órdenes / corridas de producción", value: dashboard.productionOrdersCount },
     { label: "Lotes producidos / lotes finales", value: dashboard.outputBatchesCount },
-    { label: "Lotes con composición", value: dashboard.outputBatchesWithCompositionCount },
     { label: "Lotes con cálculo", value: dashboard.calculatedOutputBatchesCount },
     { label: "Cálculos defendibles", value: dashboard.defensibleCalculationsCount },
     { label: "Cálculos con advertencias", value: dashboard.warningCalculationsCount },
@@ -117,7 +116,7 @@ export default async function ImplementationPage() {
       ) : null}
       {hasNoCalculableBatches ? (
         <p className="rounded-md border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber">
-          Aún no hay lotes producidos con composición suficiente para calcular
+          Aún no hay lotes producidos con consumos suficientes para calcular
           contenido reciclado.
         </p>
       ) : null}
@@ -240,10 +239,10 @@ export default async function ImplementationPage() {
         {calculations.length === 0 ? (
           <div className="p-4">
             <EmptyState
-              title="Aún no hay lotes producidos con composición suficiente para calcular contenido reciclado."
-              description="Completa trazabilidad y composición para poder calcular."
-              actionLabel="Ir a lotes producidos / lotes finales"
-              actionHref="/traceability/output-batches"
+              title="Aún no hay lotes producidos con consumos suficientes para calcular contenido reciclado."
+              description="Registra los consumos de la orden y calcula desde ahí."
+              actionLabel="Ir a órdenes / corridas de producción"
+              actionHref="/traceability/production-orders"
             />
           </div>
         ) : (

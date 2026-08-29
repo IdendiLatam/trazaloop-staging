@@ -6,7 +6,6 @@ import Link from "next/link";
 import { orderMutationBlockedMessage } from "@/lib/domain/production-alerts";
 // RH-01.3: missing_items lo genera la vista de completitud con la
 // denominación histórica; se normaliza aquí, en presentación.
-import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
 import {
@@ -27,7 +26,6 @@ import {
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
 // PT-02A · La ausencia de composición manual dejó de ser una carencia: v2 no
 // la usa. Se le retira a la vista de 0104 antes de que llegue a la pantalla.
-import { operativeMissing, operativeStatus } from "@/lib/domain/recycled-readiness";
 import { getOutputBatchStockByIds } from "@/lib/db/inventory";
 import { listOutputBatchMovements } from "@/lib/db/output-movements";
 import { OutputBatchMovements, type MovementRow } from "@/components/domain/traceability/output-movements";
@@ -234,7 +232,11 @@ export default async function OutputBatchesPage({
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <span className="code text-xs text-loop-deep">{b.batch_code}</span>
                       {b.product_label ?? "Sin producto asociado"}
-                      {comp ? <TraceabilityStatusBadge status={operativeStatus(comp.traceability_status, normalizeVisibleTexts(comp.missing_items))} /> : null}
+                      {/* P4 final · Sin normalizar aquí: `getCompleteness` ya
+                          devuelve el estado canónico. Cada pantalla haciéndolo
+                          por su cuenta era exactamente cómo el tablero y el
+                          dossier se quedaron con la definición legado. */}
+                      {comp ? <TraceabilityStatusBadge status={comp.traceability_status} /> : null}
                       {highlightId === b.id ? (
                         <span className="rounded-full border border-loop/30 bg-loop/5 px-2 py-0.5 text-xs font-medium text-loop-deep">
                           Guardado correctamente
@@ -331,7 +333,7 @@ export default async function OutputBatchesPage({
                         Se descuenta antes de decidir si queda algo que pedir. */}
                     {(() => {
                       if (!comp) return null;
-                      const missing = operativeMissing(normalizeVisibleTexts(comp.missing_items));
+                      const missing = comp.missing_items;
                       if (missing.length === 0) return null;
                       return (
                         <p className="mt-1 text-xs text-danger">
@@ -353,7 +355,11 @@ export default async function OutputBatchesPage({
                       href={`/traceability/output-batches?batch=${b.id}`}
                       className="text-sm font-semibold text-loop hover:underline"
                     >
-                      {params.batch === b.id ? "Composición ▾" : "Composición"}
+                      {/* P4 final · Se llamaba «Composición» y lo que abre son
+                          evidencias y movimientos. No hay composición
+                          editable, así que el rótulo prometía una pantalla que
+                          no existe. */}
+                      {params.batch === b.id ? "Detalle ▾" : "Detalle"}
                     </Link>
                     <Link
                       href={`/traceability/genealogy?output=${b.id}`}

@@ -98,6 +98,8 @@ export type Completeness = {
   traceability_status: "incomplete" | "complete_with_warnings" | "complete";
 };
 
+import { outputBatchReadiness } from "@/lib/domain/output-batch-readiness";
+
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 
 export async function listInputBatches(
@@ -267,13 +269,31 @@ export async function listComposition(
   });
 }
 
+/**
+ * La completitud de los lotes producidos, YA NORMALIZADA.
+ *
+ * P4 final · `v_output_batch_completeness` (0104) exige composición manual, y
+ * la composición dejó de ser un concepto operativo. Cada superficie que leía
+ * esta función normalizaba por su cuenta —o se olvidaba, que es lo que pasaba
+ * en el tablero y en el dossier—, así que la normalización baja aquí, al único
+ * sitio por el que las filas de esa vista entran a la aplicación.
+ *
+ * La vista NO se toca: es histórica. Lo que sale de esta función es el estado
+ * canónico, y ninguna pantalla tiene ya que acordarse de nada.
+ */
 export async function getCompleteness(orgId: string): Promise<Completeness[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("v_output_batch_completeness")
     .select("*")
     .eq("organization_id", orgId);
-  return (data ?? []).map((r) => ({
+  return (data ?? []).map((r) => {
+    const readiness = outputBatchReadiness({
+      traceability_status: r.traceability_status as string | null,
+      missing_items: (r.missing_items as string[]) ?? [],
+      mass_balance_warning: r.mass_balance_warning as boolean | null,
+    });
+    return {
     output_batch_id: r.output_batch_id,
     output_batch_code: r.output_batch_code,
     production_order_code: r.production_order_code,
@@ -287,10 +307,11 @@ export async function getCompleteness(orgId: string): Promise<Completeness[]> {
     consumed_mass_kg: num(r.consumed_mass_kg),
     composition_mass_kg: num(r.composition_mass_kg),
     produced_quantity_kg: num(r.produced_quantity_kg),
-    mass_balance_warning: r.mass_balance_warning,
-    missing_items: (r.missing_items as string[]) ?? [],
-    traceability_status: r.traceability_status,
-  }));
+    mass_balance_warning: readiness.massBalanceWarning,
+    missing_items: readiness.missing,
+    traceability_status: readiness.status,
+    };
+  });
 }
 
 export type BackwardRow = {

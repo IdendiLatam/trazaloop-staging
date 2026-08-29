@@ -12,12 +12,17 @@ import { explainReason, explainReasons } from "@/lib/domain/recycled-incomplete"
 import {
   calculationState,
   formatRecycledPercent,
-  operativeMissing,
-  operativeStatus,
   structuralBlockers,
   CALCULATION_STATE_LABEL,
   DEFENSIBILITY_LABEL,
 } from "@/lib/domain/recycled-readiness";
+import {
+  operativeMissing,
+  operativeStatus,
+  outputBatchReadiness,
+  READINESS_RULE_TEXT,
+  OUTPUT_BATCH_HINT,
+} from "@/lib/domain/output-batch-readiness";
 import { operativeNextStep, resolveNextStep } from "@/lib/domain/guided-flow";
 import { normalizeVisibleTexts } from "@/lib/domain/nomenclature";
 
@@ -344,8 +349,14 @@ check("B. El reparto se hace sobre texto YA normalizado, y se comprueba", () => 
     `el helper debía traducir la denominación histórica, dio «${normalizado[0]}»`);
   assert(operativeStatus("incomplete", normalizado) === "incomplete",
     "sin orden el lote NO está completo");
-  assert(/operativeStatus\(comp\.traceability_status, normalizeVisibleTexts\(/.test(read(LISTA_TRAZA)),
-    "el punto de uso pasa la lista sin normalizar");
+  // P4 final · La normalización dejó de estar en el punto de uso y bajó a
+  // `getCompleteness`, que es por donde entran TODAS las filas de esa vista.
+  // El modo de fallo que esta comprobación vigila —comparar en crudo— se
+  // vigila ahora ahí y en P4F-C.
+  const db = read("lib/db/traceability.ts");
+  const fn = db.slice(db.indexOf("export async function getCompleteness"));
+  assert(/outputBatchReadiness\(/.test(fn.slice(0, fn.indexOf("\n}"))),
+    "la fuente debe normalizar antes de entregar las filas");
 });
 
 check("C. Calculabilidad y defendibilidad son dos preguntas distintas", () => {
@@ -453,8 +464,10 @@ check("I. El flujo guiado deja de tener un paso de composición", () => {
   assert(nums.length > 0, "debía haber pasos numerados");
   assert(nums.join(",") === nums.map((_, k) => k + 1).join(","),
     `la numeración quedó rota: ${nums.join(",")}`);
-  // El histórico sí se sigue viendo, cuando existe.
-  assert(/composition\.length > 0/.test(pag), "la composición registrada debía seguir consultándose");
+  // P4 final · El bloque histórico de composición también sale: era la última
+  // superficie operativa que nombraba la función retirada.
+  assert(!/composition/i.test(pag.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")),
+    "el flujo guiado no puede seguir enseñando composición");
 });
 
 check("J. La cadena operativa salta la composición sin tocar el espejo de la vista", () => {
@@ -709,6 +722,187 @@ check("0147-L. Demo queda exactamente como estaba", () => {
   assert(!/batch_composition/.test(seed), "el seed de demostración seguía tecleando composición");
   assert(/recycled_fraction: 100/.test(seed), "el seed debía declarar la fracción del lote");
   assert(/calculate_recycled_content_v2/.test(seed), "el seed debía usar el motor único");
+});
+
+
+// ---------------------------------------------------------------------------
+// P4 FINAL · UNA SOLA DEFINICIÓN DE «LOTE COMPLETO»
+//
+// La validación humana encontró el mismo lote descrito de dos maneras a la vez:
+// «Completa» en su ficha y entre los «Incompletos» del tablero, y un dossier
+// que decía «Defendible» y «Trazabilidad incompleta» en el mismo recuadro.
+// Estas comprobaciones reproducen esa contradicción y la fijan.
+// ---------------------------------------------------------------------------
+
+/** La fila que devolvía la vista de 0104 para QA-PT-LS-CALC, literal. */
+const QA_PT_LS_CALC = {
+  traceability_status: "incomplete",
+  missing_items: ["composición del lote"],
+  mass_balance_warning: false,
+} as const;
+
+check("P4F-A. El fixture de la validación humana sale COMPLETO", () => {
+  // Orden, consumos, proveedor y material: todo presente. Lo único que la
+  // vista contaba como ausente era la composición retirada.
+  const r = outputBatchReadiness(QA_PT_LS_CALC);
+  assert(r.status === "complete", `esperado complete, dio ${r.status}`);
+  assert(r.missing.length === 0, `no debía faltar nada, falta: ${r.missing.join(", ")}`);
+  assert(!r.massBalanceWarning, "y sin advertencia de balance");
+});
+
+check("P4F-B. Lo que SÍ rompe la reconstrucción sigue rompiéndola", () => {
+  const sinOrden = outputBatchReadiness({
+    traceability_status: "incomplete",
+    missing_items: ["orden / corrida de producción", "composición del lote"],
+    mass_balance_warning: false,
+  });
+  assert(sinOrden.status === "incomplete", "sin orden el lote está incompleto");
+  assert(sinOrden.missing.length === 1 && sinOrden.missing[0] === "orden / corrida de producción",
+    "y se dice lo que falta DE VERDAD, sin la composición");
+
+  for (const item of ["consumos de la orden", "información de proveedor", "información de material"]) {
+    const r = outputBatchReadiness({ traceability_status: "incomplete", missing_items: [item] });
+    assert(r.status === "incomplete", `«${item}» debía seguir contando`);
+  }
+  // Y NO se inventan requisitos: el producto no es uno.
+  const sinProducto = outputBatchReadiness({ traceability_status: "complete", missing_items: [] });
+  assert(sinProducto.status === "complete", "un lote sin producto asociado está completo");
+});
+
+check("P4F-C. La denominación histórica se traduce antes de comparar", () => {
+  // La vista emite la nomenclatura antigua. Si se comparara en crudo, un lote
+  // sin orden se declararía completo: un falso verde.
+  const r = outputBatchReadiness({
+    traceability_status: "incomplete",
+    missing_items: ["orden de producción"],
+  });
+  assert(r.status === "incomplete", "sin orden NO puede salir completo");
+  assert(r.missing[0] === "orden / corrida de producción",
+    `debía normalizarse la denominación, dio «${r.missing[0]}»`);
+});
+
+check("P4F-D. La advertencia de balance sobrevive, pero no puede nacer nueva", () => {
+  const conAviso = outputBatchReadiness({
+    traceability_status: "complete_with_warnings",
+    missing_items: ["composición del lote"],
+    mass_balance_warning: true,
+  });
+  assert(conAviso.status === "complete_with_warnings",
+    "un lote histórico con desbalance conserva su advertencia");
+});
+
+check("P4F-E. La normalización vive en el punto de ENTRADA, no en cada pantalla", () => {
+  // Esta es la comprobación que impide que la contradicción vuelva: si alguien
+  // añade una superficie nueva y lee `getCompleteness`, ya recibe el estado
+  // canónico sin acordarse de nada.
+  const db = read("lib/db/traceability.ts");
+  const fn = db.slice(db.indexOf("export async function getCompleteness"));
+  const cuerpo = fn.slice(0, fn.indexOf("\n}"));
+  assert(/outputBatchReadiness\(/.test(cuerpo),
+    "getCompleteness debe normalizar: es el único punto por el que entran esas filas");
+  assert(/traceability_status: readiness\.status/.test(cuerpo), "y devolver el estado canónico");
+  assert(/missing_items: readiness\.missing/.test(cuerpo), "y la lista ya depurada");
+
+  // Y NINGUNA pantalla vuelve a normalizar por su cuenta: dos copias de una
+  // regla son dos reglas.
+  for (const f of ["app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx",
+                   "app/(app)/(shell)/(cpr)/traceability/production-orders/[id]/page.tsx"]) {
+    assert(!/operativeStatus\(/.test(read(f)),
+      `${f} sigue normalizando en la pantalla en vez de confiar en la fuente`);
+  }
+});
+
+check("P4F-F. El tablero de trazabilidad cuenta con la regla canónica", () => {
+  const db = read("lib/db/traceability.ts");
+  const fn = db.slice(db.indexOf("getTraceabilityMetrics"));
+  const cuerpo = fn.slice(0, fn.indexOf("\n}"));
+  assert(/getCompleteness\(orgId\)/.test(cuerpo),
+    "los conteos deben salir de la fuente normalizada, no de la vista en crudo");
+  const pag = read("app/(app)/(shell)/(cpr)/traceability/page.tsx");
+  const visible = pag.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert(!/composición/i.test(visible), "el tablero seguía nombrando la composición");
+  assert(/READINESS_RULE_TEXT/.test(pag), "y debe citar la regla, no reescribirla");
+  assert(!/con su composición/.test(READINESS_RULE_TEXT + OUTPUT_BATCH_HINT),
+    "ni los textos que la regla exporta");
+  assert(/orden, consumos y/.test(READINESS_RULE_TEXT) && !/composición/.test(READINESS_RULE_TEXT),
+    "la regla enseñada debe ser la vigente");
+});
+
+check("P4F-G. El dossier usa la misma regla", () => {
+  const db = read("lib/db/audit-support.ts");
+  const fn = db.slice(db.indexOf("export async function getDossier"));
+  const cuerpo = fn.slice(0, fn.indexOf("\n}"));
+  assert(/outputBatchReadiness\(/.test(cuerpo),
+    "el dossier arrastraba el traceability_status de la vista de 0104 sin normalizar");
+  assert(/v_output_batch_completeness/.test(cuerpo),
+    "y necesita los missing_items para saber QUÉ falta, no solo que falta algo");
+  const cuerpoUI = read("components/domain/audit-support/dossier-body.tsx");
+  assert(/d\.composition_mass_kg \?/.test(cuerpoUI),
+    "la masa de composición solo se enseña si el snapshot histórico la tenía");
+});
+
+check("P4F-H. Ninguna superficie operativa nombra ya la composición", () => {
+  const soloCodigo = (f: string) =>
+    read(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const superficies = [
+    "app/(app)/(shell)/(cpr)/traceability/page.tsx",
+    "app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx",
+    "app/(app)/(shell)/(cpr)/traceability/production-orders/[id]/page.tsx",
+    "app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx",
+    "app/(app)/(shell)/(cpr)/recycled-content/output-batches/page.tsx",
+    "app/(app)/(shell)/(cpr)/guided-flow/output-batches/[id]/page.tsx",
+    "app/(app)/(shell)/(cpr)/guided-flow/page.tsx",
+    "app/(app)/(shell)/(cpr)/implementation/page.tsx",
+    "components/domain/traceability/forms.tsx",
+    "components/domain/traceability/output-movements.tsx",
+  ];
+  for (const f of superficies) {
+    assert(!/composici[óo]n/i.test(soloCodigo(f)),
+      `${f} sigue nombrando la composición en runtime`);
+  }
+  // Y el itinerario de implantación tampoco manda a registrarla.
+  const dom = read("lib/domain/implementation.ts");
+  assert(!/title: "Registrar composición"/.test(dom),
+    "el itinerario seguía teniendo un paso «Registrar composición»");
+  assert(/Registrar consumos de la orden/.test(dom),
+    "y en su sitio debe estar el paso que sí alimenta el cálculo");
+});
+
+check("P4F-I. El rótulo «Composición» de la ficha desapareció", () => {
+  const pag = read("app/(app)/(shell)/(cpr)/traceability/output-batches/page.tsx");
+  assert(/"Detalle ▾" : "Detalle"/.test(pag),
+    "el desplegable se llamaba «Composición» y lo que abre son evidencias y movimientos");
+  const orden = read("app/(app)/(shell)/(cpr)/traceability/production-orders/[id]/page.tsx");
+  assert(/Detalle del lote/.test(orden) && !/Composición y detalle/.test(orden),
+    "el enlace desde la orden también");
+});
+
+check("P4F-J. Una sola primitiva, sin copias", () => {
+  // `recycled-readiness` tenía su propia versión de la regla. Dos copias de
+  // una regla son dos reglas, y eso fue exactamente el defecto.
+  const rr = read("lib/domain/recycled-readiness.ts");
+  assert(/export \{[\s\S]{0,200}\} from "@\/lib\/domain\/output-batch-readiness";/.test(rr),
+    "recycled-readiness debe reexportar, no reimplementar");
+  assert(!/function operativeMissing/.test(rr), "no puede quedar una segunda implementación");
+  // Y las dos rutas de importación dan lo mismo.
+  assert(operativeStatus("incomplete", ["composición del lote"]) === "complete",
+    "el atajo debe coincidir con la primitiva");
+  assert(operativeMissing(["composición del lote", "consumos de la orden"]).length === 1,
+    "y la depuración también");
+});
+
+check("P4F-K. Las tres dimensiones siguen separadas y coherentes", () => {
+  // Calculabilidad, defendibilidad y trazabilidad son tres preguntas. Lo que
+  // no puede pasar es que la tercera diga «incompleta» por un requisito que
+  // ya no existe mientras las otras dos dicen que todo está bien.
+  assert(calculationState({ result_state: "calculated" }) === "calculated", "calculabilidad");
+  assert(DEFENSIBILITY_LABEL.defensible === "Defendible", "defendibilidad");
+  assert(outputBatchReadiness(QA_PT_LS_CALC).status === "complete", "trazabilidad");
+  // Y la combinación que SÍ es legítima sigue siendo posible.
+  const conFaltas = outputBatchReadiness({
+    traceability_status: "incomplete", missing_items: ["información de proveedor"] });
+  assert(conFaltas.status === "incomplete",
+    "calculado + sustento incompleto + trazabilidad incompleta sigue siendo una combinación válida");
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);

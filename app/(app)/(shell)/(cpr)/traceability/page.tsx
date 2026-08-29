@@ -5,6 +5,10 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import { getTraceabilityMetrics } from "@/lib/db/traceability";
+import {
+  READINESS_RULE_TEXT,
+  OUTPUT_BATCH_HINT,
+} from "@/lib/domain/output-batch-readiness";
 
 export default async function TraceabilityIndexPage() {
   const org = await requireCprModule();
@@ -13,7 +17,7 @@ export default async function TraceabilityIndexPage() {
   const cards = [
     { href: "/traceability/input-batches", title: "Lotes de entrada", count: m.inputBatches, hint: "Material que ingresa, con proveedor y clasificación." },
     { href: "/traceability/production-orders", title: "Órdenes / corridas de producción", count: m.productionOrders, hint: "Dónde se consumen los lotes de entrada." },
-    { href: "/traceability/output-batches", title: "Lotes producidos / lotes finales", count: m.outputBatches, hint: "Producto terminado con su composición." },
+    { href: "/traceability/output-batches", title: "Lotes producidos / lotes finales", count: m.outputBatches, hint: OUTPUT_BATCH_HINT },
     { href: "/traceability/genealogy", title: "Genealogía", count: null, hint: "Reconstruye la cadena hacia atrás y hacia adelante." },
   ];
 
@@ -41,9 +45,9 @@ export default async function TraceabilityIndexPage() {
           Trazabilidad de {org.organizationName}
         </h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Registra la cadena lote a lote: entrada → orden → salida →
-          composición. Sobre estos datos se calcula el contenido reciclado y
-          se construye el dossier técnico.
+          Registra la cadena lote a lote: entrada → orden → salida. Sobre estos
+          datos se calcula el contenido reciclado y se construye el dossier
+          técnico.
         </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -130,10 +134,14 @@ export default async function TraceabilityIndexPage() {
             <dd className="code text-2xl font-semibold text-danger">{m.incompleteBatches}</dd>
           </div>
         </dl>
+        {/* P4 final · Este texto decía «orden, consumos, composición y…», y
+            los conteos de arriba salían de esa misma definición legado: los
+            tres lotes de la validación humana aparecían incompletos por un
+            requisito que ya no existe. La regla vive ahora en un solo sitio y
+            el texto la cita en vez de repetirla con otras palabras. */}
         <p className="mt-3 text-xs text-ink-soft">
-          Un lote producido / lote final está completo cuando tiene orden, consumos,
-          composición y la información de proveedor y material de sus entradas.
-          Las advertencias señalan diferencias de balance de masa mayores al 5%.
+          {READINESS_RULE_TEXT} Las advertencias señalan diferencias de balance
+          de masa mayores al 5%.
         </p>
       </section>
     </div>

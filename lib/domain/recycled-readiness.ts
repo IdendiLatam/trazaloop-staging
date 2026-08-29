@@ -32,44 +32,24 @@
  */
 
 // ===========================================================================
-// 1 · LO QUE YA NO CUENTA COMO CARENCIA OPERATIVA
+// 1 · LA PREPARACIÓN DE TRAZABILIDAD VIVE EN OTRO SITIO
+// ---------------------------------------------------------------------------
+// P4 final · Aquí había una segunda copia de la regla de completitud. Dos
+// copias de una regla son dos reglas, y eso fue exactamente el defecto: la
+// ficha usaba esta y el tablero usaba la de la base. La definición canónica
+// está ahora en `lib/domain/output-batch-readiness.ts`, y este módulo se queda
+// con lo suyo: calculabilidad y defendibilidad.
+//
+// Se reexportan porque hay pruebas y pantallas que las importan de aquí, y
+// mover el import no cambia nada salvo el sitio del que se lee.
 // ===========================================================================
 
-/**
- * Elementos de `missing_items` que pertenecen SOLO a la metodología histórica.
- *
- * Se comparan en su denominación OFICIAL: la lista debe venir pasada por
- * `normalizeVisibleTexts` (lib/domain/nomenclature.ts). La vista emite todavía
- * la histórica, y duplicar ese vocabulario aquí crearía una segunda copia
- * lista para desincronizarse — que es justo lo que RH-01 prohíbe.
- */
-export const V1_ONLY_MISSING = ["composición del lote"] as const;
-
-/** Lo que falta DE VERDAD, una vez retirado lo que solo interesaba a v1. */
-export function operativeMissing(missingItems: readonly string[]): string[] {
-  return missingItems.filter((m) => !(V1_ONLY_MISSING as readonly string[]).includes(m));
-}
-
-export type TraceabilityStatus = "incomplete" | "complete_with_warnings" | "complete";
-
-/**
- * El estado de trazabilidad SIN la exigencia de composición.
- *
- * La derivación es fiel a la propia vista: su `traceability_status` vale
- * `incomplete` exactamente cuando alguno de los cinco elementos falta, así que
- * si al retirar la composición no queda ninguno, el lote no está incompleto.
- * Y las advertencias de balance que la vista calcula comparan CONTRA la masa
- * de composición: sin composición no pueden dispararse.
- */
-export function operativeStatus(
-  status: string,
-  missingItems: readonly string[]
-): TraceabilityStatus {
-  const restante = operativeMissing(missingItems);
-  if (restante.length > 0) return "incomplete";
-  if (status === "incomplete") return "complete";
-  return (status as TraceabilityStatus) ?? "complete";
-}
+export {
+  operativeMissing,
+  operativeStatus,
+  RETIRED_MISSING_ITEMS as V1_ONLY_MISSING,
+  type TraceabilityStatus,
+} from "@/lib/domain/output-batch-readiness";
 
 // ===========================================================================
 // 2 · CALCULABILIDAD

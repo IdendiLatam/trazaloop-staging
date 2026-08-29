@@ -14,10 +14,7 @@ import { CalculateButton } from "@/components/domain/recycled/calculate-button";
 import { GAP_SEVERITY_LABEL } from "@/lib/db/audit-support";
 // RH-01.3: normalización de denominación visible sobre textos de la BD.
 import { normalizeVisibleText } from "@/lib/domain/nomenclature";
-import {
-  structuralBlockers,
-  V1_HISTORICAL_ONLY_NOTE,
-} from "@/lib/domain/recycled-readiness";
+import { structuralBlockers } from "@/lib/domain/recycled-readiness";
 
 const linkClass = "text-loop hover:underline";
 
@@ -29,10 +26,11 @@ export default async function GuidedBatchDetailPage({
   const { id } = await params;
   const { data } = await getOutputBatchGuidedDetailAction(id);
   if (!data) notFound();
-  const { readiness: r, batch, composition, consumption, evidences, gaps, history } = data;
+  // `composition` sigue viniendo de la acción —la usan otras lecturas— pero
+  // esta pantalla ya no la enseña.
+  const { readiness: r, batch, consumption, evidences, gaps, history } = data;
   if (!batch) notFound();
 
-  const totalComposition = composition.reduce((sum, c) => sum + Number(c.mass_kg), 0);
   const requiredEvidences = evidences.filter((e) => e.is_required_for_defensibility);
   // (rev. 03.1–03.3.4) La vigencia la decide la vista (regla canónica 03.1):
   // una archivada sigue visible como histórica pero NO cuenta como válida,
@@ -146,40 +144,12 @@ export default async function GuidedBatchDetailPage({
           )}
         </GuidedStep>
 
-        {/* PT-02A · Aquí había un «Paso 4 · Composición» que pedía teclear a
-            mano las masas del lote y bloqueaba el paso de cálculo si faltaban.
-            El cálculo vigente sale de los consumos —el paso 3— y no mira la
-            composición para nada, así que era un paso de trabajo que no llevaba
-            a ninguna parte. Lo registrado antes se sigue enseñando, pero como
-            dato histórico y fuera de la secuencia: un paso numerado afirma que
-            hay algo que hacer. */}
-        {composition.length > 0 ? (
-          <section className="rounded-lg border border-hairline bg-canvas p-4">
-            <h2 className="text-sm font-semibold">
-              Composición registrada
-              <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-soft">
-                histórico
-              </span>
-            </h2>
-            <p className="mt-1 text-xs text-ink-soft">{V1_HISTORICAL_ONLY_NOTE}</p>
-            <ul className="mt-3 space-y-1 text-sm">
-              {composition.map((c) => (
-                <li key={c.id} className="flex flex-wrap justify-between gap-2">
-                  <span>
-                    {c.material_name}
-                    {c.is_same_process ? (
-                      <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
-                    ) : null}
-                  </span>
-                  <span className="code text-xs">{c.mass_kg} kg</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs text-ink-soft">
-              Total: <span className="code">{totalComposition.toFixed(2)} kg</span>
-            </p>
-          </section>
-        ) : null}
+        {/* PT-02A / P4 final · Aquí había un «Paso 4 · Composición» que pedía
+            teclear a mano las masas del lote y bloqueaba el paso de cálculo si
+            faltaban. El cálculo sale de los consumos —el paso 3— y no mira la
+            composición para nada. Primero dejó de ser un paso y se conservó
+            como bloque histórico; ahora sale del todo, para que no quede
+            ninguna superficie operativa que nombre la función retirada. */}
 
         {/* Paso 4 — Evidencias */}
         <GuidedStep

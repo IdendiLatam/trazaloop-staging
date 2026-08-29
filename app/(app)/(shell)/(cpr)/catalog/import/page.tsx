@@ -36,7 +36,7 @@ export default async function ImportPage() {
           antes de importar.
         </p>
         <p className="mt-1 text-sm text-ink-soft">
-          Para importar también evidencias, lotes, órdenes / corridas, consumos y composición,
+          Para importar también evidencias, lotes, órdenes / corridas y consumos,
           usa{" "}
           <Link href="/imports" className="text-loop hover:underline">
             Importaciones

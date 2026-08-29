@@ -118,6 +118,8 @@ export const GAP_SEVERITY_LABEL: Record<string, string> = {
   info: "Informativa",
 };
 
+import { outputBatchReadiness } from "@/lib/domain/output-batch-readiness";
+
 const num = (v: unknown): number => Number(v);
 const numOrNull = (v: unknown): number | null =>
   v === null || v === undefined ? null : Number(v);
@@ -134,8 +136,31 @@ export async function getDossier(
     .eq("calculation_id", calculationId)
     .maybeSingle();
   if (!data) return null;
+
+  // P4 final · `v_calculation_dossier` arrastra el `traceability_status` de la
+  // vista de completitud de 0104, que exige composición manual. Por eso el
+  // dossier de un lote perfectamente reconstruible decía «Defendible» y
+  // «Trazabilidad incompleta» en el mismo recuadro.
+  //
+  // La vista no expone `missing_items`, así que hace falta pedirlos: sin
+  // saber QUÉ falta no se puede distinguir «le falta la composición retirada»
+  // de «le falta la orden». Es una consulta acotada a un lote y evita una
+  // migración para reescribir una vista histórica.
+  const { data: comp } = await supabase
+    .from("v_output_batch_completeness")
+    .select("missing_items, traceability_status, mass_balance_warning")
+    .eq("organization_id", orgId)
+    .eq("output_batch_id", data.output_batch_id as string)
+    .maybeSingle();
+  const readiness = outputBatchReadiness({
+    traceability_status: (comp?.traceability_status as string | null) ?? (data.traceability_status as string | null),
+    missing_items: (comp?.missing_items as string[]) ?? [],
+    mass_balance_warning: (comp?.mass_balance_warning as boolean | null) ?? null,
+  });
+
   return {
     ...data,
+    traceability_status: readiness.status,
     produced_quantity_kg: numOrNull(data.produced_quantity_kg),
     total_mass_kg: num(data.total_mass_kg),
     recycled_mass_kg: num(data.recycled_mass_kg),

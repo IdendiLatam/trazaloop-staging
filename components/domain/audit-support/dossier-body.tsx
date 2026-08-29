@@ -168,9 +168,16 @@ export function DossierBody({
             </table>
           </div>
         )}
-        <dl className="mt-3 grid grid-cols-3 gap-4 text-sm">
+        {/* P4 final · Aquí salía «Masa en composición». La composición dejó de
+            ser un concepto operativo y en cualquier lote nuevo ese número es
+            cero, así que enseñarlo en un documento de auditoría solo invitaba
+            a preguntar por qué está vacío. Se conserva la fila SOLO cuando el
+            snapshot histórico la tenía. */}
+        <dl className={`mt-3 grid gap-4 text-sm ${d.composition_mass_kg ? "grid-cols-3" : "grid-cols-2"}`}>
           <div><dt className="text-xs text-ink-soft">Masa consumida</dt><dd className="code">{kg(d.consumed_mass_kg)}</dd></div>
-          <div><dt className="text-xs text-ink-soft">Masa en composición</dt><dd className="code">{kg(d.composition_mass_kg)}</dd></div>
+          {d.composition_mass_kg ? (
+            <div><dt className="text-xs text-ink-soft">Masa en composición (histórico)</dt><dd className="code">{kg(d.composition_mass_kg)}</dd></div>
+          ) : null}
           <div><dt className="text-xs text-ink-soft">Cantidad producida</dt><dd className="code">{kg(d.produced_quantity_kg)}</dd></div>
         </dl>
         {d.mass_balance_warning ? (

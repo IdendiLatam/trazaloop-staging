@@ -444,17 +444,23 @@ export function resolveChecklist(f: ChecklistFacts): ChecklistItem[] {
       actionHref: "/traceability/output-batches",
     },
     {
+      // P4 final · Este paso era «Registrar composición». La composición dejó
+      // de ser un concepto operativo, así que el itinerario de implantación
+      // mandaba a rellenar un dato que ninguna fórmula lee. En su lugar va el
+      // paso que SÍ alimenta el cálculo y que antes no estaba en la lista: los
+      // consumos de la orden. El identificador se conserva para no renumerar
+      // un itinerario que la gente puede tener a medias.
       id: 11,
-      title: "Registrar composición",
-      description: "Registra los materiales y masas que componen el lote producido / lote final.",
+      title: "Registrar consumos de la orden",
+      description: "Registra qué lotes de entrada consumió cada orden: de ahí sale el contenido reciclado.",
       status:
-        f.outputBatchesCount === 0
+        f.productionOrdersCount === 0
           ? "pendiente"
-          : f.outputBatchesWithCompositionCount < f.outputBatchesCount
-            ? "con advertencias"
-            : "completo",
-      actionLabel: "Registrar composición",
-      actionHref: "/traceability/output-batches",
+          : f.hasReadyToCalculate || f.calculatedOutputBatchesCount > 0
+            ? "completo"
+            : "con advertencias",
+      actionLabel: "Ir a órdenes / corridas de producción",
+      actionHref: "/traceability/production-orders",
     },
     {
       id: 12,

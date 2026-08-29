@@ -90,8 +90,8 @@ export default async function EvidenceMatrixPage({
           Consolidado de las evidencias que soportan este lote por todas sus
           rutas: lote, orden, lotes de entrada, proveedores, materiales,
           producto y familia; incluye los soportes de origen y de
-          reclasificación de los materiales de la composición aunque no tengan
-          enlace explícito.
+          reclasificación de los materiales del lote aunque no tengan enlace
+          explícito.
         </p>
         <EvidenceMatrixTable rows={evidences} />
       </section>

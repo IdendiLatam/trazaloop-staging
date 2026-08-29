@@ -6,11 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { createServerClient } from "@/lib/supabase/server";
-import {
-  listOutputBatches,
-  listComposition,
-  listConsumption,
-} from "@/lib/db/traceability";
+import { listOutputBatches, listConsumption } from "@/lib/db/traceability";
 import {
   listCalculationsForBatch,
   EXCLUSION_LABEL,
@@ -26,7 +22,6 @@ import {
   COMPOSITION_RETIRED_NOTE,
   DEFENSIBILITY_HELP,
   structuralBlockers,
-  V1_HISTORICAL_ONLY_NOTE,
   type Defensibility,
 } from "@/lib/domain/recycled-readiness";
 import { CalculationStateBadge } from "@/components/domain/recycled/calculation-state-badge";
@@ -53,8 +48,7 @@ export default async function CalculationDetailPage({
   const batch = batches.find((b) => b.id === id);
   if (!batch) notFound();
 
-  const [composition, consumption, { data: evidenceLinks }] = await Promise.all([
-    listComposition(org.organizationId, id),
+  const [consumption, { data: evidenceLinks }] = await Promise.all([
     batch.production_order_id
       ? listConsumption(org.organizationId, batch.production_order_id)
       : Promise.resolve([]),
@@ -167,27 +161,12 @@ export default async function CalculationDetailPage({
         </section>
       </div>
 
-      {/* Solo si existe. Una sección vacía titulada «histórico» sobre un lote
-          que nunca tuvo composición no informa de nada: inventa una ausencia. */}
-      {composition.length > 0 ? (
-        <section className="rounded-lg border border-hairline bg-canvas p-4">
-          <h2 className="eyebrow mb-1">Composición registrada · histórico</h2>
-          <p className="mb-3 text-xs text-ink-soft">{V1_HISTORICAL_ONLY_NOTE}</p>
-          <ul className="space-y-1 text-sm">
-            {composition.map((c) => (
-              <li key={c.id} className="flex justify-between gap-2">
-                <span>
-                  {c.material_name}
-                  {c.is_same_process ? (
-                    <span className="ml-1 text-[10px] uppercase text-ink-soft">(mismo proceso)</span>
-                  ) : null}
-                </span>
-                <span className="code text-xs">{c.mass_kg} kg</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {/* P4 final · Aquí se leía la composición registrada en su día. Sale de
+          la experiencia normal: no es un concepto operativo, no interviene en
+          el cálculo y mantener la palabra en pantalla era la última fuente de
+          la contradicción que la validación humana encontró. Las filas siguen
+          en la base y las siguen leyendo las vistas que reproducen los
+          cálculos históricos. */}
 
       <section className="rounded-lg border border-hairline bg-surface p-4">
         <h2 className="eyebrow mb-3">Evidencias asociadas al lote</h2>

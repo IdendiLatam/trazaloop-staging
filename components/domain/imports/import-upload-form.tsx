@@ -43,8 +43,7 @@ export function ImportUploadForm({
         </select>
         <span className="mt-1 block text-xs text-ink-soft">
           Sigue este orden: proveedores → materiales → evidencias → familias → productos → lotes
-          de entrada → órdenes / corridas → consumos → lotes producidos / lotes finales →
-          composición.
+          de entrada → órdenes / corridas → consumos → lotes producidos / lotes finales.
         </span>
       </label>
 
