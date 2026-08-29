@@ -527,6 +527,61 @@ async function main() {
       `el denominador salió del inventario en vez del consumo: ${despues.total_mass_kg}`);
   });
 
+
+  await check("U. Un cálculo nuevo NO reescribe el dossier del anterior", async () => {
+    // Historical Truth del expediente, contra la base. El motor ya garantiza
+    // que la fila del cálculo es inmutable (caso P); esto comprueba lo que la
+    // gente hace de verdad: abrir el dossier de un cálculo VIEJO después de
+    // haber recalculado, y que siga diciendo lo que dijo.
+    const b = await corrida("U", [{ materialId: post, kg: 60, fraccion: 100 },
+                                   { materialId: virgen, kg: 40 }]);
+    const uno = await calcular(b);
+    assert(Number(uno.recycled_percent) === 60, `primer cálculo: ${uno.recycled_percent}`);
+
+    const leer = async (id: string) => {
+      const { data } = await cli.from("v_calculation_dossier")
+        .select("recycled_percent, total_mass_kg, recycled_mass_kg, defensibility_level, calculated_at")
+        .eq("calculation_id", id).single();
+      return JSON.stringify(data);
+    };
+    const componentes = async (id: string) => {
+      const { data } = await cli.from("v_calculation_component_rows")
+        .select("material_name, mass_kg, phi, counted")
+        .eq("calculation_id", id).order("component_index");
+      return JSON.stringify(data);
+    };
+    const dossierAntes = await leer(uno.id);
+    const compAntes = await componentes(uno.id);
+
+    // Cambia el mundo: más consumo virgen, y el porcentaje baja.
+    const { data: ob } = await cli.from("output_batches")
+      .select("production_order_id").eq("id", b).single();
+    const { data: le } = await cli.from("input_batches").insert({
+      organization_id: org, supplier_id: sup!.id, material_id: virgen,
+      batch_code: `LE-U3-${stamp}`, received_date: HACE_UN_ANNO, quantity_kg: 40 })
+      .select("id").single();
+    await cli.from("batch_consumption").insert({
+      organization_id: org, production_order_id: ob!.production_order_id,
+      input_batch_id: le!.id, mass_kg: 40 });
+    await cli.from("output_batches").update({ produced_quantity_kg: 140 }).eq("id", b);
+
+    const dos = await calcular(b);
+    assert(dos.id !== uno.id, "recalcular debía crear un snapshot NUEVO");
+    assert(Number(dos.recycled_percent) !== 60,
+      `el segundo cálculo debía dar otra cosa, dio ${dos.recycled_percent}`);
+
+    // Y el primero sigue exactamente igual.
+    assert(await leer(uno.id) === dossierAntes,
+      "el dossier del primer cálculo se reescribió al emitir el segundo");
+    assert(await componentes(uno.id) === compAntes,
+      "los componentes del primer cálculo se reescribieron");
+
+    // Los dos coexisten, cada uno con su identificador.
+    const { data: ambos } = await cli.from("v_calculation_dossier")
+      .select("calculation_id").eq("output_batch_id", b);
+    assert((ambos ?? []).length === 2, `debían coexistir 2 dossiers, hay ${ambos?.length}`);
+  });
+
   console.log(`\n  ${passed} correctas, ${failed} fallidas\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

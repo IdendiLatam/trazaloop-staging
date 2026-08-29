@@ -8,6 +8,7 @@ import { EXCLUSION_LABEL, WARNING_LABEL, LEVEL_LABEL } from "@/lib/db/recycled";
 import { DefensibilityBadge } from "@/components/domain/recycled/defensibility-badge";
 import { TraceabilityStatusBadge } from "@/components/domain/traceability/status-badge";
 import { EvidenceMatrixTable } from "@/components/domain/audit-support/evidence-matrix-table";
+import { DOSSIER_CURRENT_EVIDENCE_NOTE } from "@/lib/domain/recycled-readiness";
 
 const kg = (v: number | null | undefined) =>
   v === null || v === undefined
@@ -244,13 +245,25 @@ export function DossierBody({
 
       {/* 7.6 Evidencias de soporte */}
       <section className="rounded-lg border border-hairline bg-surface p-5">
-        <h2 className="eyebrow mb-3">Evidencias de soporte</h2>
+        <h2 className="eyebrow mb-1">Evidencias de soporte</h2>
+        {/* P4 · Las cifras y los componentes de arriba SON el snapshot del
+            cálculo: no cambian aunque el mundo cambie. Esta matriz y las
+            brechas de abajo, no: se leen del estado ACTUAL de las evidencias.
+            La exportación en PDF ya lo declaraba en su `historicalLimitReason`;
+            en pantalla no se decía, y un documento de auditoría que mezcla dos
+            temporalidades sin avisar es peor que uno que solo tiene una. */}
+        <p className="mb-3 text-xs text-ink-soft">
+          {DOSSIER_CURRENT_EVIDENCE_NOTE}
+        </p>
         <EvidenceMatrixTable rows={bundle.evidences} />
       </section>
 
       {/* 7.7 Brechas */}
       <section className="print-avoid-break rounded-lg border border-hairline bg-surface p-5">
-        <h2 className="eyebrow mb-3">Brechas y acciones sugeridas</h2>
+        <h2 className="eyebrow mb-1">Brechas y acciones sugeridas</h2>
+        <p className="mb-3 text-xs text-ink-soft">
+          Estado actual del lote, igual que la matriz de arriba.
+        </p>
         {bundle.gaps.length === 0 ? (
           <p className="text-sm text-ink-soft">No se identifican brechas críticas en este cálculo.</p>
         ) : (

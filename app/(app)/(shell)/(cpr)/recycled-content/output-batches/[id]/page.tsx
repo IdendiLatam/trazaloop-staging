@@ -226,7 +226,15 @@ export default async function CalculationDetailPage({
         <section className="rounded-lg border border-loop/30 bg-surface p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold">Último cálculo</h2>
-            <DefensibilityBadge level={latest.defensibility_level} />
+            <span className="flex items-center gap-3">
+              <DefensibilityBadge level={latest.defensibility_level} />
+              <Link
+                href={`/audit-support/calculations/${latest.id}`}
+                className="text-xs text-loop hover:underline"
+              >
+                Ver dossier
+              </Link>
+            </span>
           </div>
           {latest.defensibility_level === "preliminary" ? (
             <p className="mt-2 text-sm text-ink-soft">
@@ -396,11 +404,23 @@ export default async function CalculationDetailPage({
                 {c.recycled_percent === null ? null : (
                   <DefensibilityBadge level={c.defensibility_level} />
                 )}
+                {/* Cada cálculo tiene SU dossier, y el histórico no servía de
+                    nada sin la puerta para abrirlo: se veían las fechas y los
+                    porcentajes anteriores, pero solo se podía consultar el
+                    expediente del último. */}
+                <Link
+                  href={`/audit-support/calculations/${c.id}`}
+                  className="text-xs text-loop hover:underline"
+                >
+                  Ver dossier
+                </Link>
               </li>
             ))}
           </ul>
           <p className="mt-2 text-xs text-ink-soft">
-            Los snapshots anteriores se conservan intactos: nada se sobrescribe.
+            Los snapshots anteriores se conservan intactos: nada se sobrescribe,
+            y cada uno conserva su propio dossier con las cifras y los
+            componentes que tenía el día que se emitió.
           </p>
         </section>
       ) : null}

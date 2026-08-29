@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { explainReason, explainReasons } from "@/lib/domain/recycled-incomplete";
 import {
   calculationState,
+  DOSSIER_CURRENT_EVIDENCE_NOTE,
   formatRecycledPercent,
   structuralBlockers,
   CALCULATION_STATE_LABEL,
@@ -903,6 +904,83 @@ check("P4F-K. Las tres dimensiones siguen separadas y coherentes", () => {
     traceability_status: "incomplete", missing_items: ["información de proveedor"] });
   assert(conFaltas.status === "incomplete",
     "calculado + sustento incompleto + trazabilidad incompleta sigue siendo una combinación válida");
+});
+
+
+// ---------------------------------------------------------------------------
+// P4 · CADA CÁLCULO CONSERVA SU PROPIO DOSSIER
+//
+// Lo demostrado contra la base: emitir un cálculo nuevo NO reescribe el
+// dossier del anterior (60 % / 100 kg siguen ahí después de recalcular a
+// 42,8571 % / 140 kg, con los mismos componentes). Aquí se fija el cableado:
+// que el expediente se busque por `calculation_id` y que exista la puerta para
+// abrir el de un cálculo que ya no es el último.
+// ---------------------------------------------------------------------------
+
+check("P4D-A. El dossier se busca por calculation_id, no por lote", () => {
+  const acc = read("server/actions/audit-support.ts");
+  const bundle = acc.slice(acc.indexOf("async function buildDossierBundle"));
+  const cuerpo = bundle.slice(0, bundle.indexOf("\n}"));
+  assert(/getDossier\(org\.organizationId, calculationId\)/.test(cuerpo),
+    "el dossier debe pedirse por el identificador del cálculo");
+  assert(/listComponentRows\(org\.organizationId, calculationId\)/.test(cuerpo),
+    "y sus componentes también: son el snapshot de ESE cálculo");
+  const db = read("lib/db/audit-support.ts");
+  const fn = db.slice(db.indexOf("export async function getDossier"));
+  assert(/\.eq\("calculation_id", calculationId\)/.test(fn.slice(0, fn.indexOf("\n}"))),
+    "la consulta debe filtrar por calculation_id");
+  // Y la ruta lleva ese identificador, no el del lote.
+  const pag = read("app/(app)/(shell)/(cpr)/audit-support/calculations/[id]/page.tsx");
+  assert(/getCalculationDossierAction\(id\)/.test(pag), "la página resuelve por el id de la ruta");
+});
+
+check("P4D-B. El PDF y el JSON corresponden a ESE cálculo", () => {
+  const exp = read("lib/export/adapters/cpr-extended.ts");
+  const ad = exp.slice(exp.indexOf('key: "cpr.support-calculation.detail"'));
+  const cuerpo = ad.slice(0, ad.indexOf("\n};"));
+  assert(/getDossier\(req\.organizationId, req\.id\)/.test(cuerpo),
+    "el PDF debe armarse desde el dossier del cálculo pedido");
+  assert(/listComponentRows\(req\.organizationId, req\.id\)/.test(cuerpo),
+    "y sus componentes desde el mismo snapshot");
+  const acc = read("server/actions/audit-support.ts");
+  const json = acc.slice(acc.indexOf("export async function exportCalculationDossierJsonAction"));
+  assert(/buildDossierBundle\(calculationId\)/.test(json.slice(0, json.indexOf("\n}"))),
+    "el JSON debe salir del mismo paquete, por calculation_id");
+  assert(/calculation_id: d\.calculation_id/.test(json),
+    "y llevar dentro el identificador del cálculo que documenta");
+});
+
+check("P4D-C. Hay puerta para abrir el dossier de un cálculo que ya no es el último", () => {
+  // Esto es lo que faltaba: el histórico se veía —fechas y porcentajes— pero
+  // solo se podía abrir el expediente del último cálculo.
+  const ficha = read("app/(app)/(shell)/(cpr)/recycled-content/output-batches/[id]/page.tsx");
+  assert(/audit-support\/calculations\/\$\{c\.id\}/.test(ficha),
+    "cada fila del historial debe enlazar a SU dossier");
+  assert(/audit-support\/calculations\/\$\{latest\.id\}/.test(ficha),
+    "y el último cálculo también");
+  const lista = read("app/(app)/(shell)/(cpr)/recycled-content/page.tsx");
+  assert(/audit-support\/calculations\/\$\{l\.calculation_id\}/.test(lista),
+    "la tabla de cálculos debe abrir el dossier de cada uno, no solo el lote");
+  // Y el propio dossier ya enlazaba su historial: se comprueba que sigue.
+  const cuerpo = read("components/domain/audit-support/dossier-body.tsx");
+  assert(/audit-support\/calculations\/\$\{h\.id\}/.test(cuerpo),
+    "el historial dentro del dossier debe seguir abriendo cada snapshot");
+});
+
+check("P4D-D. Las dos temporalidades del dossier se declaran en pantalla", () => {
+  // Las cifras son snapshot; la matriz de evidencias y las brechas son estado
+  // actual, porque se derivan de `v_latest_batch_recycled`. El PDF ya lo
+  // declaraba en su `historicalLimitReason`; la pantalla callaba.
+  const exp = read("lib/export/adapters/cpr-extended.ts");
+  const ad = exp.slice(exp.indexOf('key: "cpr.support-calculation.detail"'));
+  assert(/temporality: "current"/.test(ad.slice(0, ad.indexOf("\n};"))),
+    "el adaptador debía seguir declarando su temporalidad");
+  const cuerpo = read("components/domain/audit-support/dossier-body.tsx");
+  assert(/DOSSIER_CURRENT_EVIDENCE_NOTE/.test(cuerpo),
+    "y la pantalla también debe decirlo");
+  assert(/snapshot congelado/.test(DOSSIER_CURRENT_EVIDENCE_NOTE)
+      && /estado ACTUAL/.test(DOSSIER_CURRENT_EVIDENCE_NOTE),
+    "la nota tiene que distinguir las dos mitades, no suavizarlas");
 });
 
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);

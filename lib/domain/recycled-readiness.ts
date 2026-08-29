@@ -164,3 +164,20 @@ export const COMPOSITION_WRITE_BLOCKED =
  * el denominador: un lote sin producto calcula igual.
  */
 export const PRODUCT_NOT_REQUIRED_FOR_V2 = true;
+
+/**
+ * Las dos temporalidades del dossier técnico, dichas en voz alta.
+ *
+ * Las cifras y los componentes son el SNAPSHOT del cálculo: inmutables, y un
+ * recálculo posterior no los toca. La matriz de evidencias y las brechas se
+ * leen del estado ACTUAL del lote. Mezclarlas sin avisar es lo que convierte
+ * un documento de auditoría en una fuente de discusiones.
+ *
+ * Para congelar también el contexto existe el expediente de preparación de
+ * auditoría, que guarda snapshot y hash.
+ */
+export const DOSSIER_CURRENT_EVIDENCE_NOTE =
+  "Las cifras y los componentes de arriba son el snapshot congelado de este " +
+  "cálculo. Esta matriz, en cambio, refleja el estado ACTUAL de las evidencias " +
+  "del lote: si una se valida o se archiva después, aquí se ve. Para congelar " +
+  "también el contexto, usa el expediente de preparación de auditoría.";

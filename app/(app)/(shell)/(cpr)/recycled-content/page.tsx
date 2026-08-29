@@ -140,12 +140,24 @@ export default async function RecycledContentPage() {
                       {new Date(l.calculated_at).toLocaleDateString("es-CO")}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <Link
-                        href={`/recycled-content/output-batches/${l.output_batch_id}`}
-                        className="text-loop hover:underline"
-                      >
-                        Ver detalle
-                      </Link>
+                      {/* Cada fila ES un cálculo emitido, con su
+                          `calculation_id`. Solo ofrecía «Ver detalle» del
+                          LOTE, así que desde aquí no había manera de abrir el
+                          expediente de ese cálculo concreto. */}
+                      <span className="inline-flex gap-3">
+                        <Link
+                          href={`/audit-support/calculations/${l.calculation_id}`}
+                          className="text-loop hover:underline"
+                        >
+                          Ver dossier
+                        </Link>
+                        <Link
+                          href={`/recycled-content/output-batches/${l.output_batch_id}`}
+                          className="text-loop hover:underline"
+                        >
+                          Ver lote
+                        </Link>
+                      </span>
                     </td>
                   </tr>
                 ))}
