@@ -40,18 +40,28 @@ const DEL_SPRINT = TODAS.filter((f) => f >= "0142" && f < "0149");
 
 console.log("\nPCR/TEXTILES · preflight de migraciones\n");
 
-check("A1. Las siete migraciones del sprint están, y no hay una octava", () => {
+check("A1. Las siete migraciones del sprint están, y son EXACTAMENTE esas", () => {
   // La lista creció dos veces, y las dos por una decisión de producto
   // explícita tomada durante la validación humana: 0147 consolidó el contenido
   // reciclado en una sola metodología y 0148 cerró la semántica del
-  // inventario. El guardián no se relaja —sigue habiendo una lista cerrada—
-  // se amplía con lo que se decidió añadir, y el sprint cierra aquí.
-  assert(DEL_SPRINT.length === 7, `se esperaban 7, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
-  for (const n of ["0142", "0143", "0144", "0145", "0146", "0147", "0148"]) {
+  // inventario. El sprint cierra en 0148.
+  //
+  // La comprobación decía además «no existe ninguna 0149». Eso protegía contra
+  // un fichero colado, pero por un camino que caduca en cuanto empieza el
+  // sprint siguiente: 0149 es de QUALITY-12.3B1 y no tiene nada que ver con
+  // este. Se comprueba lo que de verdad importa —que el RANGO del sprint
+  // contiene exactamente estos siete nombres— que además es más estricto:
+  // detecta tanto una migración de más como una renombrada.
+  const ESPERADAS = ["0142", "0143", "0144", "0145", "0146", "0147", "0148"];
+  assert(DEL_SPRINT.length === ESPERADAS.length,
+    `se esperaban ${ESPERADAS.length}, hay ${DEL_SPRINT.length}: ${DEL_SPRINT}`);
+  for (const n of ESPERADAS) {
     assert(DEL_SPRINT.some((f) => f.startsWith(n)), `falta ${n}`);
   }
-  assert(!TODAS.some((f) => f.startsWith("0149")),
-    "apareció una 0149: este sprint cierra en 0148");
+  for (const f of DEL_SPRINT) {
+    assert(ESPERADAS.some((n) => f.startsWith(n)),
+      `${f} se coló en el rango del sprint`);
+  }
 });
 
 check("A2. Las del sprint son contiguas y arrancan justo tras 0141", () => {

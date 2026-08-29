@@ -589,6 +589,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0149_quality_interested_parties_core.sql",
     "0148_inventory_movement_hardening.sql",
     "0147_recycled_content_methodology_consolidation.sql",
     "0146_output_batch_movements.sql",
