@@ -25,6 +25,32 @@ import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
 
 const initial: MovementActionState = { error: null };
 
+/**
+ * Todo el formulario en UN estado.
+ *
+ * Estaban repartidos entre estado de React (el tipo, el recuento) y el DOM (la
+ * cantidad, la fecha, el motivo, la referencia), y por esa costura se coló la
+ * incoherencia: media parte se reiniciaba y la otra no. Un solo objeto se
+ * reinicia entero o no se reinicia.
+ */
+type FormularioMovimiento = {
+  kind: MovementKind;
+  cantidad: string;
+  contado: string;
+  fecha: string;
+  motivo: string;
+  referencia: string;
+};
+
+const FORMULARIO_INICIAL: FormularioMovimiento = {
+  kind: "dispatch",
+  cantidad: "",
+  contado: "",
+  fecha: "",
+  motivo: "",
+  referencia: "",
+};
+
 export type MovementRow = {
   id: string;
   kind: string;
@@ -93,13 +119,66 @@ export function OutputBatchMovements({
   const [regState, registrar, registrando] = useActionState(registerOutputMovementAction, initial);
   const [corrState, corregir, corrigiendo] = useActionState(correctOutputMovementAction, initial);
   const [anulState, anular, anulando] = useActionState(annulOutputMovementAction, initial);
-  const [kind, setKind] = useState<MovementKind>("dispatch");
-  const [contado, setContado] = useState("");
+  const [form, setForm] = useState<FormularioMovimiento>(FORMULARIO_INICIAL);
   const [corrigiendoId, setCorrigiendoId] = useState<string | null>(null);
   const [anulandoId, setAnulandoId] = useState<string | null>(null);
+  const { kind, contado } = form;
+
+  /**
+   * El formulario vuelve a su estado inicial CUANDO —y solo cuando— el
+   * movimiento se registró.
+   *
+   * EL DEFECTO QUE ESTO CIERRA
+   *
+   * React 19 reinicia el DOM del formulario al terminar la acción, pero no
+   * toca el estado de React. Tras registrar un recuento, el `<select>` volvía
+   * visualmente a «Despacho / entrega» mientras la etiqueta seguía diciendo
+   * «Cantidad contada físicamente» con el 97 del movimiento anterior: la mitad
+   * del formulario reiniciada y la otra mitad no.
+   *
+   * Todos los campos son CONTROLADOS y se reinician juntos, aquí. Al fallar la
+   * validación NO se reinicia nada: la persona corrige el número sin volver a
+   * elegir el tipo, que es lo contrario de lo que hace un reinicio ciego.
+   *
+   * Se ajusta DURANTE EL RENDER comparando el resultado con el anterior, no en
+   * un efecto: el efecto pintaría primero el estado viejo y luego lo
+   * corregiría, y además dispara un renderizado en cascada.
+   *
+   * La comparación es del objeto entero, no de su mensaje: dos registros
+   * seguidos producen el mismo texto de éxito, y comparando textos el segundo
+   * no reiniciaría nada.
+   */
+  const [ultimoRegistro, setUltimoRegistro] = useState(regState);
+  if (ultimoRegistro !== regState) {
+    setUltimoRegistro(regState);
+    if (regState.success) setForm(FORMULARIO_INICIAL);
+  }
+
+  /** Corregir o anular con éxito cierra su panel: dejarlo abierto invita a
+   *  repetir la operación sobre un movimiento que ya no es el vigente. */
+  const [ultimaCorreccion, setUltimaCorreccion] = useState(corrState);
+  if (ultimaCorreccion !== corrState) {
+    setUltimaCorreccion(corrState);
+    if (corrState.success) setCorrigiendoId(null);
+  }
+  const [ultimaAnulacion, setUltimaAnulacion] = useState(anulState);
+  if (ultimaAnulacion !== anulState) {
+    setUltimaAnulacion(anulState);
+    if (anulState.success) setAnulandoId(null);
+  }
 
   const vigentes = movements.filter((m) => m.isCurrent);
   const corregidos = movements.filter((m) => !m.isCurrent);
+
+  /** Cambiar de tipo limpia lo que pertenecía al tipo anterior. Conservar un
+   *  recuento de 97 al pasar a «Despacho» sería arrastrar el dato de otro
+   *  movimiento a un campo que significa otra cosa. La fecha, el motivo y la
+   *  referencia se conservan: describen el hecho, no el tipo. */
+  const cambiarTipo = (nuevo: MovementKind) =>
+    setForm((f) => ({ ...f, kind: nuevo, cantidad: "", contado: "" }));
+
+  const campo = <K extends keyof FormularioMovimiento>(k: K, v: FormularioMovimiento[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
 
   // La previsualización del recuento, con la misma función que usa el
   // servidor: si la persona ve un número aquí y otro al confirmar, deja de
@@ -158,7 +237,7 @@ export function OutputBatchMovements({
             <select
               name="movement_kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as MovementKind)}
+              onChange={(e) => cambiarTipo(e.target.value as MovementKind)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
             >
               {MOVEMENT_KIND_OPTIONS.map((o) => (
@@ -176,7 +255,7 @@ export function OutputBatchMovements({
                 inputMode="decimal"
                 required
                 value={contado}
-                onChange={(e) => setContado(e.target.value)}
+                onChange={(e) => campo("contado", e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
               />
               <span className="mt-1 block text-xs text-ink-soft">
@@ -190,6 +269,8 @@ export function OutputBatchMovements({
                 name="quantity"
                 inputMode="decimal"
                 required
+                value={form.cantidad}
+                onChange={(e) => campo("cantidad", e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
               />
               <span className="mt-1 block text-xs text-ink-soft">
@@ -229,6 +310,8 @@ export function OutputBatchMovements({
             <input
               name="occurred_at"
               type="date"
+              value={form.fecha}
+              onChange={(e) => campo("fecha", e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
             />
             <span className="mt-1 block text-xs text-ink-soft">
@@ -243,6 +326,8 @@ export function OutputBatchMovements({
             <input
               name="reason"
               required={reasonIsRequired(kind)}
+              value={form.motivo}
+              onChange={(e) => campo("motivo", e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
             />
           </label>
@@ -252,6 +337,8 @@ export function OutputBatchMovements({
             <input
               name="reference"
               placeholder="Número de remisión, pedido, guía…"
+              value={form.referencia}
+              onChange={(e) => campo("referencia", e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2"
             />
           </label>

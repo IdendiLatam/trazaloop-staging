@@ -35,6 +35,9 @@ const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const HACE_UN_ANNO = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
 
 type Calc = {
+  // El identificador del snapshot: lo necesita el caso U para releer el
+  // dossier de un cálculo que ya no es el último.
+  id: string;
   result_state: string; recycled_percent: number | null; total_mass_kg: number | null;
   recycled_mass_kg: number | null; incomplete_reasons: string[]; components: unknown[];
   methodology_version: number; defensibility_level: string; warnings: unknown;

@@ -428,5 +428,96 @@ check("V. La aritmética visible cuadra con la de la base", () => {
     "la línea del listado omitía los ajustes y la resta no salía");
 });
 
+
+// ---------------------------------------------------------------------------
+// P6 · EL FORMULARIO NO PUEDE QUEDARSE A MEDIAS
+//
+// Defecto encontrado en la validación humana: tras registrar un recuento, el
+// selector volvía a «Despacho / entrega» y la etiqueta seguía diciendo
+// «Cantidad contada físicamente» con el 97 del movimiento anterior. React 19
+// reinicia el DOM del formulario al terminar la acción y no toca el estado de
+// React: media parte reiniciada, media parte no.
+// ---------------------------------------------------------------------------
+
+check("P6-A/B. Al registrar con ÉXITO, el formulario se reinicia entero", () => {
+  // Un solo objeto de estado. La costura entre «el tipo vive en React» y «la
+  // cantidad vive en el DOM» era por donde entraba la incoherencia.
+  assert(/type FormularioMovimiento = \{[\s\S]{0,260}kind: MovementKind;[\s\S]{0,260}cantidad: string;[\s\S]{0,260}contado: string;/.test(COMPONENTE),
+    "el tipo y los valores dependientes deben vivir en el MISMO estado");
+  for (const c of ["kind", "cantidad", "contado", "fecha", "motivo", "referencia"]) {
+    assert(new RegExp(`FORMULARIO_INICIAL[\\s\\S]{0,240}${c}:`).test(COMPONENTE),
+      `el estado inicial debe incluir ${c}: si un campo se queda fuera, se queda con el valor anterior`);
+  }
+  assert(/kind: "dispatch"/.test(COMPONENTE), "y volver a «Despacho / entrega»");
+  assert(/if \(regState\.success\) setForm\(FORMULARIO_INICIAL\);/.test(COMPONENTE),
+    "el reinicio debe colgar del ÉXITO, no de que la acción haya terminado");
+  // Y TODOS los campos son controlados: si alguno sigue leyendo del DOM, el
+  // reinicio de React 19 lo tocará por su cuenta y volveremos al mismo sitio.
+  for (const [nombre, valor] of [["quantity", "form.cantidad"], ["counted_quantity", "contado"],
+                                 ["occurred_at", "form.fecha"], ["reason", "form.motivo"],
+                                 ["reference", "form.referencia"]] as const) {
+    const i = COMPONENTE.indexOf(`name="${nombre}"`);
+    assert(i > 0, `falta el campo ${nombre}`);
+    assert(COMPONENTE.slice(i, i + 260).includes(`value={${valor}}`),
+      `el campo ${nombre} no está controlado: React 19 lo reiniciaría por su cuenta`);
+  }
+});
+
+check("P6-C. Cambiar de tipo limpia lo que era del tipo anterior", () => {
+  assert(/const cambiarTipo = \(nuevo: MovementKind\) =>[\s\S]{0,200}cantidad: "", contado: ""/.test(COMPONENTE),
+    "cambiar de tipo debe vaciar cantidad y recuento");
+  assert(/onChange=\{\(e\) => cambiarTipo\(/.test(COMPONENTE),
+    "el selector debe pasar por cambiarTipo, no por un set directo");
+  // La previsualización y el mensaje del techo cuelgan del recuento, así que
+  // al vaciarlo desaparecen solos. Se comprueba que es así y no por una copia.
+  assert(/kind === "adjustment" && contado\.trim\(\) !== ""/.test(COMPONENTE),
+    "la previsualización debe derivarse del tipo y del recuento, no guardarse aparte");
+  assert(/\{kind === "adjustment" \? \([\s\S]{0,400}Cantidad contada físicamente/.test(COMPONENTE),
+    "la etiqueta del recuento solo puede existir en el ajuste");
+  assert(/\) : \([\s\S]{0,300}Cantidad \(kg\)/.test(COMPONENTE),
+    "y los demás tipos piden «Cantidad (kg)»");
+});
+
+check("P6-D. Un rechazo del servidor CONSERVA lo tecleado", () => {
+  // El reinicio cuelga del éxito. Al fallar, `regState.success` es falso y el
+  // estado no se toca: se conserva el tipo, el número y el resto.
+  const bloque = COMPONENTE.slice(COMPONENTE.indexOf("if (ultimoRegistro !== regState)"));
+  const cuerpo = bloque.slice(0, bloque.indexOf("\n  }"));
+  assert(/regState\.success/.test(cuerpo), "el reinicio debe mirar el éxito");
+  assert(!/regState\.error/.test(cuerpo), "y no reiniciar nada al fallar");
+  // El ajuste se hace durante el render, no en un efecto: un efecto pintaría
+  // primero el estado viejo y encima dispara renderizados en cascada.
+  assert(!/useEffect/.test(COMPONENTE),
+    "el reinicio no puede vivir en un efecto");
+});
+
+check("P6-E/F. Un recuento rechazado no escribe nada", () => {
+  // El servidor resuelve el recuento ANTES de escribir: si `resolveCount` no
+  // da un resultado, retorna con el error y no llega al insert.
+  const reg = ACCION.slice(ACCION.indexOf("export async function registerOutputMovementAction"));
+  const cuerpo = reg.slice(0, reg.indexOf("\n}"));
+  const iResolve = cuerpo.indexOf("resolveCount(");
+  const iInsert = cuerpo.indexOf('from("output_batch_movements").insert');
+  assert(iResolve > 0 && iInsert > iResolve,
+    "el recuento debe resolverse antes de escribir");
+  assert(/if \(!r\.ok\) return \{ error: r\.error \};/.test(cuerpo),
+    "un recuento imposible tiene que salir por return, no seguir hasta la base");
+  // Y aunque llegara, la base lo rechaza: el techo físico está en el guardián.
+  assert(/físicamente posible/.test(MIG148),
+    "la barrera de verdad sigue siendo el disparador");
+});
+
+check("P6-G. Corregir y anular siguen intactos, y cierran su panel", () => {
+  assert(/if \(corrState\.success\) setCorrigiendoId\(null\)/.test(COMPONENTE),
+    "una corrección con éxito cierra su panel");
+  assert(/if \(anulState\.success\) setAnulandoId\(null\)/.test(COMPONENTE),
+    "y una anulación el suyo");
+  // Lo que NO cambia: siguen siendo la misma RPC, sin borrado.
+  assert((ACCION.match(/rpc\("correct_output_batch_movement"/g) ?? []).length === 1,
+    "corregir y anular comparten camino");
+  assert(/Anular/.test(COMPONENTE) && !/Eliminar/.test(COMPONENTE),
+    "«Anular» sí, «Eliminar» no");
+});
+
 console.log(`\n  ${passed} comprobaciones correctas, ${failed} fallidas\n`);
 process.exit(failed === 0 ? 0 : 1);

@@ -63,7 +63,7 @@ async function main() {
 
   async function saldo(id: string) {
     const { data } = await cli.from("v_output_batch_stock")
-      .select("produced_kg, reprocessed_kg, dispatched_kg, lost_kg, internal_use_kg, adjustment_kg, available_kg, movements_count")
+      .select("produced_kg, reprocessed_kg, dispatched_kg, lost_kg, internal_use_kg, adjustment_kg, available_kg, movements_count, physical_max_kg, is_inconsistent")
       .eq("output_batch_id", id).single();
     return data!;
   }
@@ -538,6 +538,41 @@ async function main() {
     const { data: filas } = await c2.from("v_product_stock")
       .select("product_id").eq("organization_id", org);
     assert((filas ?? []).length === 0, "el inventario agregado filtró entre empresas");
+  });
+
+
+  await check("P6-E/F. Un recuento rechazado no escribe NADA y el saldo no se mueve", async () => {
+    // La otra mitad del defecto de formulario: cuando el servidor rechaza, lo
+    // que no puede pasar es que algo haya quedado escrito a medias.
+    const b = await loteProducido("B1P6", 100);
+    await mover(b, "adjustment", 3, {
+      direction: "out", reason: "recuento físico",
+      counted_quantity: 97, theoretical_quantity_at_count: 100 });
+    assert(Number((await saldo(b)).available_kg) === 97, "el recuento válido debía dejarlo en 97");
+
+    const antes = await cli.from("output_batch_movements")
+      .select("id", { count: "exact", head: true }).eq("output_batch_id", b);
+
+    // Contar 120 sobre un techo de 100: imposible.
+    const { error } = await mover(b, "adjustment", 23, {
+      direction: "in", reason: "recuento imposible",
+      counted_quantity: 120, theoretical_quantity_at_count: 97 });
+    assert(error, "contar por encima del techo físico debía rechazarse");
+    assert(/físicamente posible/.test(error!.message), `mensaje inesperado: ${error!.message}`);
+
+    const despues = await cli.from("output_batch_movements")
+      .select("id", { count: "exact", head: true }).eq("output_batch_id", b);
+    assert(antes.count === despues.count,
+      `el rechazo escribió ${(despues.count ?? 0) - (antes.count ?? 0)} fila(s)`);
+
+    const s2 = await saldo(b);
+    assert(Number(s2.available_kg) === 97, `el saldo se movió a ${s2.available_kg}`);
+    assert(Number(s2.physical_max_kg) === 100, `el techo se movió a ${s2.physical_max_kg}`);
+
+    // Y el inventario agregado tampoco.
+    const { data: agg } = await cli.from("v_product_stock")
+      .select("available_kg").eq("organization_id", org).is("product_id", null).single();
+    assert(agg !== null, "debía existir el agregado de los lotes sin producto");
   });
 
   console.log(`\n  ${passed} correctas, ${failed} fallidas\n`);
