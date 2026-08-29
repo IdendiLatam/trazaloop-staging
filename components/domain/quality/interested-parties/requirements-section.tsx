@@ -43,8 +43,16 @@ const inputClass =
  * cliente o de una decisión propia.
  */
 export function RequirementsSection({
-  requirements, processLinks, processes, canMutate,
+  assessmentId, requirements, processLinks, processes, canMutate,
 }: {
+  /** A QUÉ análisis pertenece lo que se registre aquí.
+   *
+   *  Se pasa explícitamente y viaja en un campo oculto. La primera versión no
+   *  lo llevaba: el formulario se pintaba entero, se enviaba, y la acción
+   *  respondía «falta el análisis al que pertenece». Ninguna prueba estática
+   *  lo vio —el campo no existía, así que no había nada que comprobar— y la de
+   *  DOM tampoco, porque comprobaba que el envío ocurría y no QUÉ llevaba. */
+  assessmentId: string;
   requirements: RequirementRow[];
   processLinks: RequirementProcessRow[];
   processes: { id: string; name: string }[];
@@ -110,6 +118,7 @@ export function RequirementsSection({
             Registrar necesidad, expectativa o requisito
           </summary>
           <form action={altaAction} className="mt-3 space-y-3">
+            <input type="hidden" name="assessment_id" value={assessmentId} />
             <ErrorAlert message={alta.error} />
             <SuccessAlert message={alta.success ? alta.message ?? null : null} />
 

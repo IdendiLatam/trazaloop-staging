@@ -233,7 +233,8 @@ async function main() {
   await check("AK. Convertir exige motivo y solo envía tras confirmar", async () => {
     envios.length = 0;
     const v = await montar(createElement(RequirementsSection, {
-      requirements: [NECESIDAD], processLinks: [], processes: [], canMutate: true,
+      assessmentId: "a-1", requirements: [NECESIDAD], processLinks: [], processes: [],
+      canMutate: true,
     }));
     await v.abrirTodo();
     await v.escribir("rationale", "Quedó firmado en el contrato marco.");
@@ -256,10 +257,36 @@ async function main() {
       "el envío no lleva el motivo de la conversión");
   });
 
+  await check("AK2. El alta de una entrada viaja CON el análisis al que pertenece", async () => {
+    // EL DEFECTO QUE ESTA COMPROBACIÓN EXISTE PARA IMPEDIR
+    //
+    // La primera versión de esta sección no recibía `assessmentId` y su
+    // formulario no llevaba el campo. Se pintaba entero, se enviaba, y la
+    // acción respondía «falta el análisis al que pertenece»: no se podía
+    // registrar ni una necesidad desde la interfaz.
+    //
+    // Ninguna prueba lo vio. La estática no podía —el campo no existía, así
+    // que no había nada que buscar— y esta comprobaba que el envío OCURRÍA,
+    // no QUÉ llevaba. Lo encontró un navegador de verdad al pulsar el botón.
+    envios.length = 0;
+    const v = await montar(createElement(RequirementsSection, {
+      assessmentId: "a-1", requirements: [], processLinks: [], processes: [],
+      canMutate: true,
+    }));
+    await v.abrirTodo();
+    await v.escribir("title", "Entrega en menos de 48 horas");
+    await v.click("Registrar");
+    assert(cuantos() === 1, `esperaba 1 envío, hubo ${cuantos()}`);
+    assert(envios[0].campos.assessment_id?.[0] === "a-1",
+      "el alta de una entrada no dice a qué análisis pertenece");
+    assert(envios[0].campos.entry_kind?.[0] === "need",
+      "el tipo por omisión debía ser «necesidad»");
+  });
+
   await check("AL. Una necesidad NO ofrece convertirse en proceso ni pide subtipo al listarse", async () => {
     const v = await montar(createElement(RequirementsSection, {
-      requirements: [NECESIDAD], processLinks: [], processes: [{ id: "p1", name: "Despacho" }],
-      canMutate: true,
+      assessmentId: "a-1", requirements: [NECESIDAD], processLinks: [],
+      processes: [{ id: "p1", name: "Despacho" }], canMutate: true,
     }));
     await v.abrirTodo();
     // Los procesos cuelgan del REQUISITO, no de la necesidad.
@@ -269,7 +296,7 @@ async function main() {
 
   await check("AM. Un requisito sí ofrece relacionar procesos, y con su vigencia", async () => {
     const v = await montar(createElement(RequirementsSection, {
-      requirements: [REQUISITO],
+      assessmentId: "a-1", requirements: [REQUISITO],
       processLinks: [{
         id: "l-9", requirementId: "r-2", processId: "p1", processName: "Despacho",
         processRevisionId: null, linkKind: "addressed_by" as const, note: null,

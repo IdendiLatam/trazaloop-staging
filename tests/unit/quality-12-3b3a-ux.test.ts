@@ -386,6 +386,23 @@ check("AA. Ningún componente escribe en la base por su cuenta", () => {
   }
 });
 
+check("AA2. Cada formulario de escritura declara sobre QUÉ escribe", () => {
+  // Un formulario que no lleva el identificador de su dueño se pinta perfecto,
+  // se envía perfecto y la acción lo rechaza. Pasó con el alta de entradas.
+  const REQUERIDO: Record<string, string> = {
+    "requirements-section.tsx": "assessment_id",
+    "strategies-section.tsx": "assessment_id",
+    "reviews-section.tsx": "assessment_id",
+    "assessment-section.tsx": "assessment_id",
+    "monitoring-section.tsx": "owner_id",
+  };
+  for (const [archivo, campo] of Object.entries(REQUERIDO)) {
+    const src = fuente(archivo);
+    assert(new RegExp(`type="hidden"[^>]*name="${campo}"`).test(src.replace(/\s+/g, " ")),
+      `${archivo} tiene un formulario de escritura sin ${campo}`);
+  }
+});
+
 check("AB. La interfaz NO ofrece las relaciones centrales como referencia genérica", () => {
   for (const par of CORE_RELATION_PAIRS) {
     assert(!(PERIPHERAL_REF_KINDS as readonly string[]).includes(par.refKind),

@@ -122,6 +122,7 @@ export function InterestedPartyDetail({
       />
 
       <RequirementsSection
+        assessmentId={assessment.id}
         requirements={requirements}
         processLinks={processLinks}
         processes={processes}
