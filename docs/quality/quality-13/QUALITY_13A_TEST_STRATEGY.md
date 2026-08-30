@@ -25,6 +25,12 @@ podía ver. Las dos lecciones valen aquí.
 
 ### B1 · Primitivas
 
+- **estática, nueva en 13A.1:** recontar la matriz de integración desde el archivo y
+  compararla con su bloque de resumen. Deriva **las dos** cifras del mismo documento, así
+  que no es frágil: no hay número escrito a mano en la prueba. Es la comprobación que
+  habría evitado el «130 celdas» de 13A.
+
+
 - **base real:** cada propietario nuevo de `work_references` acepta lo que debe y
   **rechaza** las parejas que ya tienen tabla propia —una por una, no en bloque—;
 - **base real:** una referencia a otra empresa se rechaza; la RLS no devuelve nada
@@ -72,6 +78,8 @@ podía ver. Las dos lecciones valen aquí.
 - **base real:** quien no puede ver un dominio **no lo recibe** en el contexto, ni
   resumido;
 - **base real:** `as_of` no mezcla el presente;
+- **estática:** toda pantalla integrada declara si presenta CURRENT, AS_OF o PERIOD
+  (QI-29);
 - **base real:** texto con aspecto de instrucción sigue llegando **como dato**;
 - **base real:** cero llamadas a proveedor en las pruebas.
 

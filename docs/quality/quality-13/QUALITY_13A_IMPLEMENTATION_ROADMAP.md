@@ -45,8 +45,9 @@ enlaces a cada dominio; y la ficha de cargo con su vista inversa (QI-02).
 **Migración:** ninguna.
 
 **Cómo se sabe que está bien:** una empresa con datos en los siete ejes ve los siete;
-una vacía ve estados vacíos útiles, no ceros; y el tiempo de carga no crece con el
-tamaño del dominio —recuentos con `head: true`, listas con `limit`—.
+una vacía ve estados vacíos útiles, no ceros; cada sección lleva al dominio dueño y
+**ninguna** reimplementa su edición (QI-04); y el tiempo de carga no crece con el tamaño
+del dominio —recuentos con `head: true`, listas con `limit`—.
 
 **Riesgo:** que el mirador se convierta en quince pantallas apiladas. El tope de filas
 por sección no es cosmético.
@@ -55,10 +56,14 @@ por sección no es cosmético.
 
 ## QUALITY-13B3 · Convergencia de la atención
 
-**Qué:** plantillas equivalentes a los seis barridos heredados que aún no tienen
-relevo, cada una declarando `supersedes_observer` (QI-08); la fuente de proceso para
-automatización (QI-22); y el contrato único de punto de atención (QI-09) con
-deduplicación por sujeto (QI-10).
+**Qué:** plantillas equivalentes a los **diez** barridos y tablas de señal que aún no
+tienen relevo —el mapa completo está en el descubrimiento §4.bis—, cada una declarando
+`supersedes_observer` (QI-08); la fuente de proceso para automatización (QI-22); y el
+contrato único de punto de atención (QI-09) con deduplicación por sujeto (QI-10) y
+enlace obligatorio a la causa (QI-26).
+
+**Regla de compatibilidad (QI-27):** ningún barrido se borra. Se releva, se comprueba
+contra lo que emitía, y solo después se plantea retirarlo.
 
 **Migración:** una, para la fuente de proceso y las plantillas.
 
@@ -87,7 +92,9 @@ configurado ve una portada que lo dice en vez de doce ceros.
 
 ## QUALITY-13B5 · Convergencia de Intelligence y aceptación
 
-**Qué:** el adaptador de proceso enriquecido (QI-21) reutilizando el cargador de B1;
+**Qué:** el adaptador de proceso enriquecido (QI-21) y la composición de servidor que
+conserva procedencia, privacidad, modo temporal y frontera de permiso (QI-28),
+reutilizando el cargador de B1;
 exponer los constructores de Revisión por la Dirección fuera de una revisión abierta
 (QI-19) si el mirador o la portada lo necesitan; y la aceptación integrada.
 
@@ -103,7 +110,10 @@ formal de revisión depende de IA; y las 225 comprobaciones anteriores siguen en
 
 - El informe «Quality completo» en PDF: **ya existe** y se llama Revisión por la
   Dirección (QI-19).
-- Modelar proveedor→proceso y queja→proceso: **requiere decisión humana** (G-05).
+- Modelar proveedor→proceso y queja→proceso: **decidido en 13A.1 que no se modela**
+  (QI-23). Lo que sí entra, en B2, es **derivar** y enseñar esa relación desde lo que ya
+  es cierto.
+- Convertir tareas propias de dominio en acciones transversales (QI-24).
 - Ayuda global, tutoriales, vídeo de bienvenida, FAQ, planes, pagos y soporte: sprint
   transversal.
 - El selector global de módulos con Quality dominante: transversal, aunque la

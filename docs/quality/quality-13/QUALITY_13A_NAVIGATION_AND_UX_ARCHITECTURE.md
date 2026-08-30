@@ -10,7 +10,7 @@ Doce grupos y ~38 destinos, más «Inicio Quality» y «Mis tareas» en el nivel
 |---|---|
 | Contexto | Partes interesadas |
 | Sistema de gestión | Cargos · Procesos · Mapa de procesos |
-| Desempeño | Objetivos · Indicadores |
+| Desempeño → **Evaluación** | Objetivos · Indicadores |
 | Riesgos y oportunidades | Riesgos y oportunidades · Metodología |
 | Casos y acciones | Casos |
 | Documentación | Documentos · Lista Maestra |
@@ -49,10 +49,19 @@ la estructura de la norma y suena ordenada.
 **N-01 · «Contexto» crece.** Hoy tiene una entrada. Recibirá «Contexto de la empresa»
 (4.1) cuando exista. Ningún cambio ahora; el grupo ya está preparado.
 
-**N-02 · Resolver la colisión de «Desempeño».** El grupo pasa a llamarse **«Objetivos e
-indicadores»** y la entrada de Personas conserva «Desempeño», que es su nombre propio
-(evaluación de desempeño). Alternativa opuesta —renombrar la de Personas a «Evaluación
-de desempeño»— también vale. **Es decisión humana.**
+**N-02 · La colisión de «Desempeño», resuelta (13A.1).** El grupo pasa a llamarse
+**«Evaluación»**; la entrada de Personas **conserva «Desempeño»**, que es su nombre
+propio y describe lo que esa pantalla hace.
+
+Y **no** se llama «Evaluación del desempeño». Nombrar el grupo con el título literal del
+capítulo 9 de la norma metería el numeral en la navegación por la puerta de atrás, y el
+principio congelado es el contrario: la navegación operativa está desacoplada de los
+numerales. «Evaluación» dice lo que se hace ahí —mirar si el sistema funciona— sin pedir
+que nadie recuerde un número.
+
+Tampoco cambian de sitio Auditorías ni Revisión por la dirección: moverlas dentro de
+«Evaluación» sería la reorganización por capítulos que se rechazó en §2, y no resuelve
+ningún hueco.
 
 **N-03 · La portada deja de ser una lista de doce bloques.** Un solo bloque «Qué
 requiere atención», ordenado por urgencia y **no por dominio**, con el origen a la vista
@@ -90,9 +99,22 @@ relaciones con otros procesos, documentos, historial de revisiones.
 - **Personas**: el cargo propietario ya está; listar a las personas de un proceso es
   otra pantalla (estructura de la empresa).
 
-**Cada sección debe mostrar recuento y las tres o cuatro filas más relevantes, con
-enlace a su dominio. Nunca la tabla entera.** Un mirador que carga quince listas
-completas no es un mirador: es quince pantallas apiladas.
+**El patrón, congelado en 13A.1:**
+
+```
+resumen / contexto  →  recuento y estado  →  enlace profundo al dominio dueño
+```
+
+Ejemplo literal: «Riesgos abiertos: 3 → Ver riesgos». **Nada más.**
+
+El mirador **no vuelve a construir** el editor de riesgos, ni el de indicadores, ni el de
+hallazgos dentro de la ficha del proceso. Cada dominio sigue siendo el dueño de su
+edición, y quien quiera editar va allí. Un mirador que carga quince listas completas no
+es un mirador: es quince pantallas apiladas, con quince formularios que mantener por
+duplicado.
+
+Y solo se muestran las relaciones **con semántica real**: nada de forzar `process_id`
+donde QI-03 lo prohíbe.
 
 ---
 

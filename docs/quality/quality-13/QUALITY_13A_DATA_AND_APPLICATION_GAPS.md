@@ -71,15 +71,36 @@ sujeto, no por dominio.
 
 ---
 
-## G-05 · Proveedores y clientes no declaran proceso · **A/B**
+## G-05 · Proveedores y clientes no declaran proceso · **B** · *decidido en 13A.1*
 
 Ni `quality_supplier_scopes` ni `quality_customer_feedback` tienen relación con proceso.
 El caso que nace de una queja sí la tiene (`work_case_processes`).
 
-**Decisión pendiente, no obvia:** ¿es el ALCANCE del proveedor lo que se relaciona con
-procesos —«este alcance abastece a Producción»— o basta con la relación indirecta a
-través del caso? Lo primero es modelado nuevo; lo segundo es gratis y puede bastar.
-**Requiere decisión humana.**
+**Decisión humana (13A.1): no se crean relaciones core nuevas.** Ni
+`supplier_processes`, ni `complaint_processes`, ni equivalentes. La relación se
+**deriva** de las verdades operativas que ya existen:
+
+- *proveedor → proceso*: por lo que suministra —el alcance, la categoría, y el caso o el
+  incidente que lo toca—;
+- *queja → proceso*: por el caso que genera, que sí declara sus procesos.
+
+**Y si en algún punto hace falta declararla explícitamente**, se usa el mecanismo
+transversal —`work_references`— y no una tabla nueva. Con la salvedad de siempre: si la
+relación llegara a necesitar **vigencia propia**, entonces ya no es periférica y la
+conversación cambia (QI-13).
+
+**Por qué es la decisión correcta y no un atajo:** una tabla `supplier_processes` sería
+una segunda verdad que alguien tendría que mantener a mano, y que se separaría de la
+primera —lo que el proveedor realmente suministra— en cuanto cambiara un alcance. Crear
+estructura para simplificar una pantalla es exactamente cómo nacen los datos que nadie
+actualiza.
+
+**Se reabre solo si aparece un caso real** que no se pueda ni derivar ni expresar como
+enlace periférico. Hasta entonces, esto queda cerrado.
+
+**Efecto en la matriz:** las dos celdas pasan de FALTA a PARCIAL. No porque el problema
+desaparezca, sino porque deja de ser un hueco de modelado y pasa a ser trabajo de
+derivación y de pantalla.
 
 ---
 
@@ -115,13 +136,26 @@ ser suficiente**: una campaña de escucha ES un periodo.
 
 ---
 
-## G-09 · Semántica de acción en desarrollo de personas · **B**
+## G-09 · Tarea propia de dominio ≠ acción transversal · **B** · *decidido en 13A.1*
 
 `quality_development_plan_items` tiene título, responsable, fecha objetivo y estado
 propios, fuera de `work_actions`.
 
-**Probablemente correcto** —desarrollar a alguien no es una acción correctiva— pero hoy
-es una omisión, no una decisión. Hay que decidirlo y escribirlo.
+**Decisión humana (13A.1): correcto, y se congela como principio.**
+
+> **TAREA PROPIA DE DOMINIO ≠ ACCIÓN TRANSVERSAL.**
+
+Una capacitación, una verificación de eficacia o una actividad de desarrollo pueden
+seguir siendo objetos de Personas. `work_actions` se usa cuando hay una acción
+transversal explícita que gestionar conforme a AC-01…AC-35, no como envoltorio universal
+de todo lo que tiene fecha y responsable.
+
+Puede **relacionarse** con una acción transversal cuando corresponda —y ahí está
+`work_references`— pero **no se duplica automáticamente**. Duplicar por sistema
+convertiría la bandeja de acciones en un calendario de formación y haría irreconocible
+lo que de verdad es una acción correctiva.
+
+Deja de ser una omisión y pasa a ser una decisión: **QI-24**.
 
 ---
 
@@ -147,8 +181,8 @@ su ayuda por el mismo componente compartido.
 
 | Clase | Huecos | ¿Migración? |
 |---|---|---|
-| **A** modelo | G-01, parte de G-05 | G-01 sí (CHECK + disparador); G-05 solo si se decide modelar |
-| **B** aplicación | G-02, G-04, G-08, G-09 | no |
+| **A** modelo | G-01 | sí, una: CHECK + ramas del disparador |
+| **B** aplicación | G-02, G-04, G-05, G-08, G-09 | no |
 | **C** UX | G-02, G-04 | no |
 | **D** automatización | G-03, G-06 | G-06 sí |
 | **E** Intelligence | G-07 | no |

@@ -101,6 +101,34 @@ y `action_overdue`—. Los otros seis barridos siguen corriendo en paralelo al m
 Esto no es un fallo: es una migración a medias, con el mecanismo ya construido. Y es la
 causa raíz del riesgo de **doble conteo** que el encargo teme para la portada.
 
+### 4.bis · El mapa de convergencia, pieza por pieza (QI-27)
+
+Antes de tocar nada hay que saber qué es cada cosa. Esta tabla es el inventario que
+QI-27 exige, y es la referencia para el tramo de convergencia.
+
+| Mecanismo | Qué es | Estado | Destino |
+|---|---|---|---|
+| `quality_signals` | **fuente de verdad** de la observación por reglas | vigente | se queda; es el destino de todo lo demás |
+| `quality_automation_rules` + versiones | **observadores** declarados por la empresa | vigente | se queda |
+| `quality_risk_signals` | señales del dominio de riesgos | **barrido heredado** | relevar con plantilla equivalente |
+| `quality_supplier_signals` | señales de proveedores | **barrido heredado** | relevar |
+| `quality_customer_signals` | señales de voz del cliente | **barrido heredado** | relevar |
+| `quality_knowledge_signals` | señales de conocimiento | **barrido heredado** | relevar |
+| `quality_scan_pending_measurements` | barrido de mediciones pendientes | **relevado** por `indicator_measurement_due` | hecho |
+| `work_scan_pending_actions` | barrido de acciones vencidas | **relevado** por `action_overdue` | hecho |
+| `quality_scan_audits` | barrido de auditorías | **barrido heredado** | relevar |
+| `quality_scan_customer_voice` | barrido de voz del cliente | **barrido heredado** | relevar |
+| `quality_scan_management_reviews` | barrido de revisión por la dirección | **barrido heredado** | relevar |
+| `quality_scan_people_signals` | barrido de personas | **barrido heredado** | relevar |
+| `quality_scan_risk_reviews` | barrido de revisiones de riesgo | **barrido heredado** | relevar |
+| `quality_scan_supplier_reviews` | barrido de reevaluaciones | **barrido heredado** | relevar |
+| `work_alerts` / `work_tasks` | **salidas**, no fuentes | vigente | se quedan |
+
+**Regla de compatibilidad, congelada en QI-27:** ningún barrido se borra. Se releva con
+`supersedes_observer`, se comprueba contra lo que emitía, y solo después se plantea
+retirarlo. Una empresa que no adopte la plantilla equivalente tiene que seguir recibiendo
+exactamente lo mismo que recibía.
+
 ---
 
 ## 5 · Portada de Quality · qué hace hoy
