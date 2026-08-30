@@ -168,8 +168,10 @@ npx vercel deploy --target=preview --yes --scope idendi-latam-s-projects
 `orgId` guardado en `.vercel/project.json` no coincide con el ámbito que el CLI resuelve
 por defecto. El mensaje sugiere un problema de credenciales y no lo es.
 
-El destino va **explícito y en afirmativo**, siempre. Nunca `--prod=false`: eso costó un
-incidente de producción el 27 de agosto de 2026 (`docs/releases/VERCEL_DEPLOY_SAFETY.md`).
+El destino va **explícito y en afirmativo**, siempre. Las formas que intentan NEGAR el
+destino de producción no hacen lo que parecen y costaron un incidente el 27 de agosto de
+2026; cuáles son y por qué engañan está en `docs/releases/VERCEL_DEPLOY_SAFETY.md`, que es
+el único sitio donde esa forma se escribe —y hay una prueba que lo vigila—.
 
 Preview verificado: **Ready**, con Vercel SSO activo —responde 302 a `vercel.com/sso-api`
 sin sesión— y **sin tocar una sola variable de entorno**. Production siguió con su

@@ -208,7 +208,8 @@
     "test:quality123b2-integrations": "tsx --conditions=react-server tests/rls/quality-12-3b2-integrations.test.ts",
     "test:quality123b2-history": "tsx --conditions=react-server tests/rls/quality-12-3b2-history.test.ts",
     "test:quality123b3a-ux": "tsx tests/unit/quality-12-3b3a-ux.test.ts",
-    "test:quality123b3a-ui": "tsx --tsconfig tsconfig.test.json tests/ui/quality-12-3b3a-ux.test.tsx"
+    "test:quality123b3a-ui": "tsx --tsconfig tsconfig.test.json tests/ui/quality-12-3b3a-ux.test.tsx",
+    "test:quality123b3a-e2e": "tsx tests/e2e/quality-12-3b3a-walkthrough.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

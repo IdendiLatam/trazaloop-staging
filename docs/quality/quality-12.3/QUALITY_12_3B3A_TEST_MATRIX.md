@@ -4,10 +4,13 @@ Dos suites nuevas, 49 comprobaciones. Todas verificadas por **código de salida*
 
 | Suite | Comando | Qué prueba |
 |---|---|---|
-| Forma del código | `npm run test:quality123b3a-ux` | 35 comprobaciones estáticas |
-| Cableado en un DOM real | `npm run test:quality123b3a-ui` | 14 comprobaciones montando componentes |
+| Forma del código | `npm run test:quality123b3a-ux` | 36 comprobaciones estáticas |
+| Cableado en un DOM real | `npm run test:quality123b3a-ui` | 15 comprobaciones montando componentes |
+| Aceptación P1…P10 | `npm run test:quality123b3a-e2e` | 32 comprobaciones contra el build de producción |
 
-Las dos entran en `test:all`.
+Las dos primeras entran en `test:all`. La tercera **no**, por el mismo criterio que las
+demás suites `*-ui` de recorrido: levanta un servidor y tarda minutos. Se corre aparte,
+como `test:quality011-ui`.
 
 ---
 
@@ -129,3 +132,30 @@ existente sin arquitectura nueva.
 
 No se construyó: el contenido del documento —qué secciones, con qué orden y qué se
 firma— es justo lo que la validación humana tiene que decidir primero. Cerrarlo en B3B.
+
+
+---
+
+## 7 · Aceptación P1…P10 · `tests/e2e/quality-12-3b3a-walkthrough.test.ts`
+
+Recorre la matriz humana contra el **build de producción**, enviando los formularios de
+verdad: Next los renderiza con sus campos `$ACTION_*` y `encType="multipart/form-data"`
+para que funcionen sin JavaScript, y la suite aprovecha justo eso. La acción que corre es
+la de producción; después se relee la base para ver qué quedó.
+
+Enviarlo como `urlencoded` devuelve un 200 y no ejecuta nada — se ve un éxito y no ha
+pasado absolutamente nada. Costó un rato descubrirlo y por eso queda escrito.
+
+| Bloque | Comprobaciones |
+|---|---|
+| P1 | menú Contexto, título, ayuda, seis métricas sin «desempeño», sin rastro de PCR |
+| P2 | listado unificado, búsqueda de servidor, cuatro filtros, valor desconocido ignorado |
+| P3 | siembra de categorías, alta de identidad, dos validaciones que **no escriben nada**, alta con prioridad y metodología, entidad ya analizada deshabilitada, sucesión e inmutabilidad |
+| P4 | necesidad atada a su análisis, subtipo obligatorio solo en requisito, conversión con motivo que conserva el origen |
+| P5 | vínculo con proceso, su vigencia, y cierre que **no borra** |
+| P6 | estrategia general sin vínculos, cargo responsable, once mecanismos, estrategia múltiple con sus vínculos |
+| P7 | lenguaje de producto, enlace periférico por nombre, cruce con Voz del cliente y Proveedores sin copiar, y la base rechazando las relaciones centrales |
+| P8 | «sin cambios» que no fabrica análisis; sin cadencia no hay «vencida» |
+| P9 | el análisis de esa fecha, el aviso, y **cero formularios de escritura** |
+| P10 | el recorrido entero sin PCR ni Textiles |
+| Accesibilidad | `<caption>`, `scope`, paginador anunciado, aviso con `role="status"` |

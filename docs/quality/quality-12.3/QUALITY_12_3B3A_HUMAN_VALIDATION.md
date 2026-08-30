@@ -1,7 +1,14 @@
 # QUALITY-12.3B3A · VALIDACIÓN HUMANA
 
-**Estado: preparada, NO ejecutada.** Nada de lo que sigue está dado por bueno: son las
-diez cosas que hay que mirar con los ojos, en Preview, antes de declarar nada.
+**Estado: la parte mecánica ya está comprobada; la de criterio, no.**
+
+P1…P10 se ejecutaron con un navegador real sobre el Preview y se conservaron como suite de
+regresión (`npm run test:quality123b3a-e2e`). El detalle, las capturas y el único defecto
+que apareció están en `QUALITY_12_3B3A_BROWSER_ACCEPTANCE.md`.
+
+Lo que sigue **no** es papeleo repetido: es la mitad que una máquina no puede firmar. Al
+recorrer cada P, la pregunta ya no es «¿funciona?» —eso está comprobado— sino **«¿se
+entiende, sirve, y no estorba?»**.
 
 ---
 
@@ -15,6 +22,9 @@ diez cosas que hay que mirar con los ojos, en Preview, antes de declarar nada.
    lo que necesita el archivo de datos.
 3. Aplica `docs/quality/quality-12.3/qa/QA_Q123_FIXTURES.sql` en el editor SQL de
    Staging, cambiando la única línea marcada por el nombre de esa empresa.
+
+   Si usas la empresa **QA Staging · Pruebas Quality**, los datos `QA Q123` ya están: los
+   dejó la validación automatizada. Puedes ir directo a P1.
 
 Los datos de prueba montan cuatro partes interesadas, cuatro entradas, dos estrategias
 —una general y una específica—, una revisión sin cambios y una sucesión de análisis.
