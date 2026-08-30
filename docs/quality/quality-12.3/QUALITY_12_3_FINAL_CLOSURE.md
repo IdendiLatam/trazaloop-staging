@@ -85,6 +85,12 @@ Intelligence viene vacío.
 Y una validación humana automatizada con navegador real sobre el Preview: P1–P10 PASS,
 con doce capturas en `qa/browser-validation/`.
 
+El humo visual de B3B —capturas de los PDF y de la ayuda enriquecida en el navegador—
+**no** se ejecutó: el Preview nuevo nace en otro host y pide iniciar sesión, y se
+decidió cerrar sin ese paso. Lo funcional está cubierto por
+`test:quality123b3b-outputs`, que descarga los PDF de verdad contra el build de
+producción; lo que queda es juicio visual, y está dicho en la matriz de pruebas.
+
 ## 7 · Lo que este dominio NO hace
 
 No acredita conformidad. No declara nada certificado. No decide la pertinencia por su

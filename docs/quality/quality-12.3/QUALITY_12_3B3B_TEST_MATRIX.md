@@ -111,3 +111,37 @@ en las dos direcciones —más estricta que antes—.
 un listado se llame Listado, Lista maestra, Maestro o Reporte. Se renombró a **Reporte
 de partes interesadas**. Sesenta documentos con la misma convención valen más que uno
 con el nombre que a este dominio le sonaba mejor.
+
+
+---
+
+## 8 · Humo de navegador de B3B · NO ejecutado, y por qué
+
+El Preview de B3B es
+`https://trazaloop-production-1uzoons2d-idendi-latam-s-projects.vercel.app`, **Ready**
+y con SSO activo. Cada despliegue del CLI nace en su propio host, así que la sesión de
+aplicación del Preview anterior no viaja y el nuevo pide iniciar sesión. Se consultó, y
+la decisión fue cerrar sin ese paso.
+
+**Lo que eso deja sin mirar con los ojos:** las capturas de A–H del encargo —la pantalla,
+la entrada contextual a Intelligence, los dos PDF descargados desde el navegador, la
+ayuda «i» enriquecida— y la comprobación visual de que no aparece ninguna interfaz de
+tutorial.
+
+**Lo que NO queda sin verificar**, porque lo cubre `test:quality123b3b-outputs` contra el
+build de producción y por HTTP con una sesión real:
+
+- los tres PDF se descargan y empiezan por `%PDF`;
+- el de una fecha lleva la fecha en el nombre y **no es** el de hoy;
+- el histórico no filtra el análisis actual y el corriente declara que es el presente;
+- otra empresa no descarga la ficha, y sin sesión no hay PDF;
+- los tres botones están en la pantalla, y en modo histórico el botón **cambia**;
+- Intelligence se ofrece desde la ficha con el contexto fijado, y no hay una segunda
+  caja de chat.
+
+Y `test:quality123b3a-e2e` volvió a recorrer P1–P10 después de B3B, en **EXIT=0**: la
+interfaz no se rompió.
+
+Queda pendiente, entonces, el juicio visual: si la fila de botones de la cabecera se lee
+bien, si el PDF impreso resulta legible en papel, y si la ayuda enriquecida ayuda de
+verdad. Eso es trabajo de una persona mirando, no de una suite.
