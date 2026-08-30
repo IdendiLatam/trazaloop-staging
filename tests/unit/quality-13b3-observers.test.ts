@@ -318,11 +318,21 @@ console.log("\nE · La migración 0153");
 
 const M0153 = readFileSync(join(DIR, "0153_quality_attention_convergence.sql"), "utf8");
 
-check("E1. Existe, y es la cabecera", () => {
-  const nums = FICHEROS.map((f) => Number(f.slice(0, 4)));
-  assert(Math.max(...nums) === 153, `la cabecera es ${Math.max(...nums)}`);
-  assert(FICHEROS.filter((f) => Number(f.slice(0, 4)) > 153).length === 0,
-    "hay migraciones por encima de 0153");
+/**
+ * B3 se entregó sobre 0153 y esa es su migración. Fijar aquí la cabecera del
+ * repositorio era una foto, no un invariante: la puso en rojo el primer tramo
+ * que añadió otra migración por un motivo distinto. Lo que se comprueba es la
+ * promesa —que 0153 existe y es la de B3—, no cuántas vinieron después.
+ */
+check("E1. Existe, y no se ha tocado desde entonces", () => {
+  assert(FICHEROS.includes("0153_quality_attention_convergence.sql"),
+    "desapareció la migración de B3");
+  const posteriores = FICHEROS.filter((f) => Number(f.slice(0, 4)) > 153);
+  for (const f of posteriores) {
+    const c = readFileSync(join(DIR, f), "utf8");
+    assert(!/quality_observer_is_superseded|work_scan_pending_actions|quality_scan_/.test(c),
+      `${f} vuelve a tocar el relevo de observadores que B3 dejó cerrado`);
+  }
 });
 
 check("E2. NO crea ninguna tabla · ni sexta de atención, ni de tablero", () => {

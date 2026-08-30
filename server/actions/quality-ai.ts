@@ -19,6 +19,7 @@ import {
 } from "@/lib/ai/prompts";
 import { SUGGESTION_KINDS } from "@/lib/domain/quality-ai";
 import { readTemporal, readUseCase } from "@/lib/domain/quality-ai-request";
+import { isScreenContext } from "@/lib/domain/quality-intelligence";
 import type { AiAnswer } from "@/lib/ai/schemas";
 
 /**
@@ -122,7 +123,10 @@ export async function askCopilotAction(
   // §49 · El contexto fijado, si la consulta se abrió desde algo concreto.
   const pinnedType = optional(formData, "pinned_type");
   const pinnedId = optional(formData, "pinned_id");
-  const pinned = pinnedType && pinnedId ? { type: pinnedType, id: pinnedId } : null;
+  // QUALITY-13B5 · Un contexto de pantalla —la portada— no trae identificador y
+  // aun así fija el contexto: es de donde se pregunta.
+  const pinned = pinnedType && (pinnedId || isScreenContext(pinnedType))
+    ? { type: pinnedType, id: pinnedId ?? "" } : null;
 
   // §21/§22 · Sobre qué momento se pregunta. Lo elige la pantalla con una lista
   // cerrada, no una fecha suelta escrita a mano.

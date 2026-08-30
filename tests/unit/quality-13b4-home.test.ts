@@ -371,10 +371,19 @@ check("G3. Y nada se llama «desempeño» siendo completitud", () => {
     "la portada vuelve a llamar «desempeño» a algo que no lo es");
 });
 
-check("G4. Sin esquema nuevo: la cabecera sigue en 0153", () => {
-  const nums = readdirSync("supabase/migrations")
-    .filter((f) => f.endsWith(".sql")).map((f) => Number(f.slice(0, 4)));
-  assert(Math.max(...nums) === 153, `la cabecera es ${Math.max(...nums)}: B4 no toca el esquema`);
+/**
+ * B4 se entregó sin migración: consume B1 y B3. Lo que se comprueba es esa
+ * promesa —que ninguna migración existe POR la portada—, no el número de la
+ * cabecera, que era una foto del día de la entrega.
+ */
+check("G4. Ninguna migración existe por la portada", () => {
+  for (const f of readdirSync("supabase/migrations").filter((x) => x.endsWith(".sql"))) {
+    const c = leer(`supabase/migrations/${f}`).replace(/^--.*$/gm, "");
+    // Ninguna estructura de portada ni de tablero de Quality. `v_guided_flow_dashboard`
+    // de 0032 es del onboarding de la plataforma y lleva ahí desde antes.
+    assert(!/(create|alter) (table|view)[^;]*quality_(home|dashboard)/i.test(c),
+      `${f} tiene esquema de la portada de Quality`);
+  }
   for (const f of readdirSync("supabase/migrations").filter((x) => x.endsWith(".sql"))) {
     const c = leer(`supabase/migrations/${f}`);
     for (const t of ["quality_attention", "quality_dashboard", "quality_home"]) {

@@ -40,6 +40,19 @@ export type ContextRequest = {
   pinned?: { type: string; id: string } | null;
   /** §78 · Qué usos tiene encendidos la empresa. */
   allow: { people: boolean; customer: boolean };
+  /**
+   * QUALITY-13B5 · §23 · Qué fuentes cargar, cuando se sabe.
+   *
+   * `null` o ausente = las de siempre, que es el comportamiento que tenía el
+   * producto antes de este tramo. Cuando la pregunta viene de una pantalla
+   * concreta, el plan de contexto dice qué hace falta y **no se carga nada
+   * más**: preguntar por un proceso no necesita el historial de proveedores de
+   * la empresa entera, y cargarlo era dinero, latencia y contexto que diluye.
+   *
+   * La selección la decide el SERVIDOR a partir de dónde se pulsó. No la decide
+   * el modelo, y no se adivina leyendo el texto de la pregunta.
+   */
+  sources?: readonly string[] | null;
 };
 
 type Db = Awaited<ReturnType<typeof createServerClient>>;
@@ -134,10 +147,11 @@ export class ContextWriter {
     if (other.truncated) this.truncated = true;
   }
 
-  pack(temporal: TemporalScope): ContextPack {
+  pack(temporal: TemporalScope, attempted: string[] = []): ContextPack {
     return {
       refs: this.refs, facts: this.facts, notes: this.notes,
-      sourcesUsed: [...this.sources], temporalLimitations: this.limitations,
+      sourcesUsed: [...this.sources], sourcesAttempted: attempted,
+      temporalLimitations: this.limitations,
       conflicts: this.conflicts, temporal,
       truncated: this.truncated, charCount: this.chars,
     };
@@ -178,6 +192,10 @@ export async function buildContext(
   const aplicables = ADAPTERS.filter((a) => {
     if (a.feature === "people" && !req.allow.people) return false;
     if (a.feature === "customer" && !req.allow.customer) return false;
+    // QUALITY-13B5 · La selección manda sobre el `"*"`: una fuente declarada
+    // «para todo» sigue siendo para todo, pero solo cuando nadie ha dicho qué
+    // hace falta de verdad.
+    if (req.sources) return req.sources.includes(a.code);
     return a.useCases.includes("*") || a.useCases.includes(req.useCase);
   });
 
@@ -220,7 +238,10 @@ export async function buildContext(
     w.absorb(propio);
   }
 
-  return w.pack(req.temporal);
+  // Las que se INTENTARON, aportaran o no. Es lo que permite distinguir «se
+  // preguntó y no había» de «no se preguntó», y lo que hace medible la
+  // especialización de §23.
+  return w.pack(req.temporal, aplicables.map((a) => a.code));
 }
 
 /** Cuántas fuentes se leen a la vez. Suficiente para que no duela la espera,

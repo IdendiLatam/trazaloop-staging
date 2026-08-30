@@ -46,8 +46,18 @@ export type ContextPack = {
   refs: ContextRef[];
   facts: ContextFact[];
   notes: ContextNote[];
-  /** Qué fuentes se consultaron de verdad, para poder decirlo (§25 del cierre). */
+  /** Qué fuentes APORTARON algo, para poder decirlo (§25 del cierre). */
   sourcesUsed: string[];
+  /**
+   * QUALITY-13B5 · Qué fuentes se INTENTARON leer.
+   *
+   * No es lo mismo que `sourcesUsed`, y la diferencia importa dos veces: una
+   * fuente que se leyó y no tenía nada dice «no hay», y una que no se leyó no
+   * dice nada. Y es la única forma honesta de medir si la especialización de
+   * fuentes sirve para algo: contar las que aportaron confunde «no se preguntó»
+   * con «se preguntó y estaba vacío».
+   */
+  sourcesAttempted: string[];
   /** §22 · Fuentes que la pregunta pedía y NO saben reconstruir el pasado. */
   temporalLimitations: string[];
   /** §68 · Contradicciones entre fuentes autorizadas: se muestran, no se eligen. */
@@ -60,7 +70,8 @@ export type ContextPack = {
 
 export function emptyPack(temporal: TemporalScope): ContextPack {
   return {
-    refs: [], facts: [], notes: [], sourcesUsed: [], temporalLimitations: [],
+    refs: [], facts: [], notes: [], sourcesUsed: [], sourcesAttempted: [],
+    temporalLimitations: [],
     conflicts: [], temporal, truncated: false, charCount: 0,
   };
 }

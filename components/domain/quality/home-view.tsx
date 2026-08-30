@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { QualityHome } from "@/lib/db/quality-home";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import {
   GROUP_HINT, GROUP_LABEL, HOME_DOMAINS, HOME_SAMPLE, attentionState, domainAttention,
   filterHref, filterSummary, groupAttention, incompleteNotice, toLine,
@@ -337,7 +338,13 @@ export function QualityHomeView({
     <div className="max-w-4xl space-y-5">
       <header className="space-y-1">
         <p className="eyebrow">Módulos · Trazaloop Quality</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Trazaloop Quality</h1>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Trazaloop Quality</h1>
+          {/* QUALITY-13B5 · §6 · UNA entrada, y es un enlace: abre el mismo
+              Intelligence de siempre con el contexto fijado a la portada. Ni un
+              chat incrustado aquí, ni un motor aparte. */}
+          <AskCopilotButton type="quality_home" label="Portada de Quality" />
+        </div>
         <p className="text-sm text-ink-soft">
           Qué requiere atención hoy en el sistema de gestión, y desde dónde se atiende.
         </p>

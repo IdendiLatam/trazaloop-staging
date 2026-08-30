@@ -4,12 +4,16 @@ import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
 import { aiConfig, aiCredentialConfigured } from "./config";
 import { buildContext, type ContextRequest } from "./context/builder";
 import "./context/adapters";
+// QUALITY-13B5 · Las dos fuentes integradas se registran igual que las demás:
+// un motor, un registro de adaptadores.
+import "./context/integrated";
 import { resolveProvider } from "./provider";
 import { ANSWER_SCHEMA, ANSWER_SCHEMA_NAME, evidenceFromContext, validateAnswer,
          type AiAnswer } from "./schemas";
 import { tenantBlock, type PromptTemplate } from "./prompts";
 import type { ContextPack, TemporalScope } from "./context/types";
 import { createServerClient } from "@/lib/supabase/server";
+import { selectSources } from "@/lib/domain/quality-intelligence";
 
 /**
  * Trazaloop · QUALITY-12 · El orquestador.
@@ -43,6 +47,8 @@ export type CopilotRequest = {
   pinned?: { type: string; id: string; label?: string } | null;
   sessionId?: string | null;
   allow: { people: boolean; customer: boolean };
+  /** QUALITY-13B5 · §23 · Las fuentes que la pantalla de origen necesita. */
+  sources?: readonly string[] | null;
 };
 
 export type CopilotOutcome =
@@ -123,6 +129,9 @@ export async function runCopilot(
     temporal: req.temporal,
     pinned: req.pinned ? { type: req.pinned.type, id: req.pinned.id } : null,
     allow: req.allow,
+    // QUALITY-13B5 · Lo que pida quien llama; si no pide nada, el plan de la
+    // pantalla de origen; y si tampoco hay, las fuentes de siempre.
+    sources: req.sources ?? selectSources(req.pinned?.type ?? null),
   };
   const pack = await buildContext(ctxReq, db);
 

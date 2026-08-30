@@ -42,7 +42,7 @@ cerrándolas a mano. Hay que hacer la misma lista **antes** de ampliar.
 **Lo entregado además de la migración:** el contrato de integración —tiempo, enlace,
 sección, atención, observador y frontera de la tarea propia—, el contexto de proceso con
 nueve secciones y el de cargo con cuatro, la derivación de proveedor y queja sin
-persistir nada, y 49 comprobaciones. **Sin interfaz.**
+persistir nada, y 43 comprobaciones. **Sin interfaz.**
 
 ---
 
@@ -130,21 +130,32 @@ se borró. Detalle en `QUALITY_13B4_HOME_IMPLEMENTATION.md` §2.
 cargo y resolverlo mal convertiría el usuario en dueño (QI-12)— y «Cambios recientes» —sin
 una fuente que no sea la bitácora, §18 dice que no—.
 
-## QUALITY-13B5 · Convergencia de Intelligence y aceptación
+## QUALITY-13B5 · Intelligence entre dominios · **ENTREGADO** (0154)
 
-**Qué:** el adaptador de proceso enriquecido (QI-21) y la composición de servidor que
-conserva procedencia, privacidad, modo temporal y frontera de permiso (QI-28),
-reutilizando el cargador de B1;
-exponer los constructores de Revisión por la Dirección fuera de una revisión abierta
-(QI-19) si el mirador o la portada lo necesitan; y la aceptación integrada.
+**Qué:** dos fuentes que miran el sistema por donde está unido —la atención convergida de
+B3 y el contexto de proceso de B1/B2—, la selección de fuentes por pantalla de origen, las
+entradas contextuales desde la portada y el mirador, y el catálogo de preguntas integradas.
 
-**Migración:** ninguna.
+**Migración:** `0154_quality_intelligence_integrated_sources.sql`. **Dos filas en un
+catálogo**, y con necesidad demostrada: `quality_ai_add_reference` rechaza una cita cuya
+fuente no esté registrada, así que sin esas dos filas las citas de las fuentes integradas
+se enseñaban y no se guardaban. Lo destapó la suite de QUALITY-12 al ponerse en rojo.
 
-**Cómo se sabe que está bien:** «¿qué procesos concentran riesgos y acciones abiertas?»
-se responde con hechos citables; ninguna respuesta se salta un permiso; ninguna entrada
-formal de revisión depende de IA; y las 225 comprobaciones anteriores siguen en verde.
+**Cómo se sabe que está bien:** «¿qué procesos concentran riesgos y acciones abiertas?» se
+responde con hechos citables; ninguna respuesta se salta un permiso; ninguna entrada formal
+de revisión depende de IA; y **la especialización se midió**: una pregunta global pide 23
+fuentes, una de proceso pide 7.
+
+**Lo que NO entró, con su motivo:** ninguna lista nueva de preguntas para Partes
+interesadas —ya traía seis de 12.3B3B y tres son las integradas— y ninguna llamada a un
+proveedor en vivo, porque el entorno no tiene credencial y §26 no lo exige.
 
 ---
+
+## Cierre de QUALITY-13
+
+Los cinco tramos entregados. **434 comprobaciones** en veinte suites. Local y Staging en
+**0154**; Production en **0111**, sin tocar. Ver `QUALITY_13_FINAL_CLOSURE.md`.
 
 ## Lo que NO entra en ningún tramo
 

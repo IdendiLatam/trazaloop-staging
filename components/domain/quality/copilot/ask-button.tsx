@@ -14,9 +14,14 @@ import { INTELLIGENCE_ACTIONS } from "@/lib/domain/intelligence-identity";
 export function AskCopilotButton({
 
   type, id, label, text = INTELLIGENCE_ACTIONS.ask,
-}: { type: string; id: string; label: string; text?: string }) {
+}: { type: string; id?: string; label: string; text?: string }) {
+  // QUALITY-13B5 · Hay contextos que son una PANTALLA y no una entidad: la
+  // portada de Quality no tiene identificador, y fijar el contexto a ella
+  // —«pregunto desde aquí, con lo que aquí se está mirando»— es igual de
+  // legítimo. Sin identificador el enlace no lo lleva.
   const href = `/quality/copilot?type=${encodeURIComponent(type)}`
-    + `&id=${encodeURIComponent(id)}&label=${encodeURIComponent(label)}`;
+    + (id ? `&id=${encodeURIComponent(id)}` : "")
+    + `&label=${encodeURIComponent(label)}`;
   return (
     <Link
       href={href}

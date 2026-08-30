@@ -11,6 +11,7 @@ import {
 import { providerIsLive } from "@/lib/ai/provider";
 import { CopilotPanel } from "@/components/domain/quality/copilot/copilot";
 import { CopilotAdmin } from "@/components/domain/quality/copilot/admin";
+import { isScreenContext } from "@/lib/domain/quality-intelligence";
 
 export const metadata = { title: INTELLIGENCE_PRODUCT_NAME };
 
@@ -28,8 +29,10 @@ export default async function CopilotPage({
   ]);
 
   // §49 · Si se llega desde una entidad, el contexto empieza ahí y se dice.
-  const pinned = sp.type && sp.id
-    ? { type: sp.type, id: sp.id, label: sp.label ?? sp.type }
+  // QUALITY-13B5 · Y también si se llega desde una PANTALLA integrada —la
+  // portada—, que no tiene identificador y sí tiene contexto.
+  const pinned = sp.type && (sp.id || isScreenContext(sp.type))
+    ? { type: sp.type, id: sp.id ?? "", label: sp.label ?? sp.type }
     : null;
 
   const canConfigure = ["admin", "quality"].includes(org.roleCode);

@@ -17,6 +17,7 @@ import {
   HUMAN_IN_THE_LOOP, NO_LEARNING_CLAIM, plainText, starterFor,
   USE_CASES, USE_CASE_LABEL, type AiUseCase,
 } from "@/lib/domain/quality-ai";
+import { contextPlan } from "@/lib/domain/quality-intelligence";
 
 /**
  * Trazaloop Quality · QUALITY-12 · El Copilot.
@@ -110,6 +111,16 @@ export function CopilotPanel({
             La consulta empieza por aquí. Puedes preguntar por otras cosas y el
             Se ampliará el contexto dentro de lo que tu rol puede ver.
           </span>
+          {/* QUALITY-13B5 · Desde una pantalla integrada se dice QUÉ se va a
+              mirar. No es un adorno: una respuesta que sale de nueve dominios y
+              otra que sale de tres no valen lo mismo, y quien pregunta debería
+              poder notarlo antes de leerla. */}
+          {contextPlan(pinned.type) ? (
+            <span className="mt-1 block text-ink-soft">
+              Se consultará lo que tu rol pueda ver de: {contextPlan(pinned.type)!.sources.length}{" "}
+              fuentes relacionadas con {contextPlan(pinned.type)!.label.toLowerCase()}.
+            </span>
+          ) : null}
         </p>
       ) : null}
 

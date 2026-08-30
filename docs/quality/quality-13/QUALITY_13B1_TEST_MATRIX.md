@@ -1,6 +1,11 @@
 # QUALITY-13B1 · MATRIZ DE PRUEBAS
 
-Cuatro suites, **49 comprobaciones**, todas por código de salida.
+Cuatro suites, **43 comprobaciones**, todas por código de salida.
+
+> **Corregido en el cierre de QUALITY-13.** Este documento decía 49. La tabla de abajo
+> siempre dijo 16 + 9 + 9 + 9, que son 43, y es lo que imprimen las suites. El 49 era un
+> número escrito a mano que nunca se recontó — exactamente lo que 13A.1 pidió no volver a
+> hacer. Se deja dicho en vez de corregirlo en silencio.
 
 | Suite | Comando | Qué prueba | Dónde |
 |---|---|---|---|

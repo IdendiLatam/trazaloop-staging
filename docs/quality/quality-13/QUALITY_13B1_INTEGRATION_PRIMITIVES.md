@@ -19,7 +19,7 @@ atención.
 | `lib/db/quality-position-context.ts` | «de qué responde este cargo» |
 | `0152` | el proceso, observable por la automatización |
 
-Cuatro suites, 49 comprobaciones.
+Cuatro suites, 43 comprobaciones.
 
 ---
 

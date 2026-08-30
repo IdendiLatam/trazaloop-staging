@@ -7,6 +7,7 @@
  */
 
 import { INTELLIGENCE_SHORT_NAME } from "@/lib/domain/intelligence-identity";
+import { questionsFor } from "@/lib/domain/quality-intelligence";
 
 // ---------------------------------------------------------------------------
 // Las seis separaciones (§8, §43, §44)
@@ -191,6 +192,11 @@ export const STARTER_QUESTIONS: { label: string; question: string }[] = [
 ];
 
 export function starterFor(pinnedType: string | null): { label: string; question: string }[] {
+  // QUALITY-13B5 · Los cinco orígenes integrados traen sus propias preguntas:
+  // cruzan dominios, y las de aquí abajo son de un dominio cada una. Cuando el
+  // catálogo integrado tiene algo que decir, manda él.
+  const integradas = questionsFor(pinnedType);
+  if (integradas) return integradas;
   switch (pinnedType) {
     case "quality_process": return [
       { label: "Resumir desempeño", question: "Resume el desempeño de este proceso." },
