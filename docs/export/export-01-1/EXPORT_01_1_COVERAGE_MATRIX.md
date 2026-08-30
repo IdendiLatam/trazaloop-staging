@@ -17,14 +17,14 @@ No existe `PENDING`.
 
 | | |
 |---|---|
-| Entidades clasificadas | **209** |
-| Ejes clasificados (ficha · listado · histórico) | **627** |
-| `AVAILABLE` | **228** |
-| `EMBEDDED` | **263** |
+| Entidades clasificadas | **212** |
+| Ejes clasificados (ficha · listado · histórico) | **636** |
+| `AVAILABLE` | **231** |
+| `EMBEDDED` | **269** |
 | `NOT_APPLICABLE` | **87** |
 | `HISTORICAL_NOT_SUPPORTED` | **49** |
 | **`PENDING`** | **0** |
-| Claves distintas en el registro | **167** |
+| Claves distintas en el registro | **170** |
 
 ## Quality
 
@@ -179,6 +179,9 @@ No existe `PENDING`.
 | Ajustes de la automatización | `/quality/automation` | E | N/A | N/A | N/A |
 | Consulta a Intelligence | `/quality/copilot` | B | EMBEDDED · dentro de *Propuesta de Intelligence* | **AVAILABLE** · `quality.ai-run.list` | **HISTORICAL_NOT_SUPPORTED** |
 | Propuesta de Intelligence | `/quality/copilot` | C | **AVAILABLE** · `quality.ai-suggestion.detail` | **AVAILABLE** · `quality.ai-suggestion.list` | **AVAILABLE** · `quality.ai-suggestion.detail` |
+| Parte interesada | `/quality/context/interested-parties` | A | **AVAILABLE** · `quality.interested-party.detail` | **AVAILABLE** · `quality.interested-party.list` | **AVAILABLE** · `quality.interested-party.historical` |
+| Requisito de parte interesada | `/quality/context/interested-parties` | C | EMBEDDED · dentro de *Parte interesada* | EMBEDDED · dentro de *Parte interesada* | EMBEDDED · dentro de *Parte interesada* |
+| Estrategia de relacionamiento | `/quality/context/interested-parties` | C | EMBEDDED · dentro de *Parte interesada* | EMBEDDED · dentro de *Parte interesada* | EMBEDDED · dentro de *Parte interesada* |
 | Fuente citada por Intelligence | — | D | EMBEDDED · dentro de *Propuesta de Intelligence* | EMBEDDED · dentro de *Propuesta de Intelligence* | EMBEDDED · dentro de *Propuesta de Intelligence* |
 | Conversación con Intelligence | `/quality/copilot` | E | N/A | N/A | N/A |
 | Valoración de una respuesta | — | E | N/A | N/A | N/A |
@@ -658,6 +661,12 @@ sustancia y que no sea «no alcanzó el tiempo».
 | Ajustes de la automatización | Histórico | NOT_APPLICABLE | La configuración vigente es la única que importa; qué señales se emitieron y con qué reglas se lee en las ejecuciones, que sí son historia. |
 | Consulta a Intelligence | Ficha | EMBEDDED | Dentro de *Propuesta de Intelligence*. Una consulta suelta no es un documento de la empresa: lo que se archiva es el borrador que salió de ella, si es que salió alguno. |
 | Consulta a Intelligence | Histórico | HISTORICAL_NOT_SUPPORTED | El reporte retrata las consultas que existen hoy. Cada una conserva con qué modelo y con qué instrucciones se respondió, y eso se lee en el propio reporte. |
+| Requisito de parte interesada | Ficha | EMBEDDED | Dentro de *Parte interesada*. Un requisito de una parte interesada no significa nada suelto: es lo que ESA parte necesita, espera u obliga, y se lee dentro de su ficha. |
+| Requisito de parte interesada | Listado | EMBEDDED | Dentro de *Parte interesada*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Requisito de parte interesada | Histórico | EMBEDDED | Dentro de *Parte interesada*. La reconstrucción por fecha imprime los requisitos vigentes ese día dentro del informe de partes interesadas. |
+| Estrategia de relacionamiento | Ficha | EMBEDDED | Dentro de *Parte interesada*. Una estrategia existe para una parte interesada concreta; fuera de su ficha no se sabe con quién se está tratando. |
+| Estrategia de relacionamiento | Listado | EMBEDDED | Dentro de *Parte interesada*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
+| Estrategia de relacionamiento | Histórico | EMBEDDED | Dentro de *Parte interesada*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Fuente citada por Intelligence | Ficha | EMBEDDED | Dentro de *Propuesta de Intelligence*. Una fuente citada solo significa algo dentro de la respuesta que la citó; suelta es un enlace sin pregunta. |
 | Fuente citada por Intelligence | Listado | EMBEDDED | Dentro de *Propuesta de Intelligence*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |
 | Fuente citada por Intelligence | Histórico | EMBEDDED | Dentro de *Propuesta de Intelligence*. Fila de relación sin identidad empresarial propia: se representa dentro de su registro padre. |

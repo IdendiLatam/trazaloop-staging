@@ -482,32 +482,154 @@ export function historicalNotice(asOf: string): string {
 
 export const INTERESTED_PARTIES_HELP = {
   overview:
-    "Una parte interesada es quien puede afectar al sistema de gestión o verse afectado por "
-    + "él: clientes, personal, entes reguladores, proveedores, la comunidad del entorno.\n\n"
-    + "Aquí se registran tres cosas y conviene no mezclarlas:\n"
-    + "· si es PERTINENTE para el sistema de gestión, y por qué;\n"
-    + "· qué NECESITA, qué ESPERA y qué OBLIGA;\n"
-    + "· qué hace la empresa al respecto, y cada cuánto lo vuelve a mirar.\n\n"
-    + "Priorizar es opcional. Y la prioridad no decide la pertinencia: una parte de prioridad "
-    + "baja puede ser perfectamente pertinente.",
-  entries:
-    "NECESIDAD es lo que la parte requiere para funcionar. EXPECTATIVA es lo que espera aunque "
-    + "nadie se lo haya prometido. REQUISITO es lo único que obliga: por ley, por contrato, por "
-    + "una norma o porque la empresa se comprometió.\n\n"
-    + "Convertir una necesidad en requisito no la borra ni la reetiqueta: crea un requisito que "
-    + "apunta a ella y guarda por qué pasó a obligar. Dentro de un año esa es la diferencia "
-    + "entre saber de dónde salió una obligación y suponerlo.",
-  strategies:
-    "Una estrategia dice qué hace la empresa con esta parte interesada. Puede ser general, o "
-    + "atender requisitos concretos: lo que se guarda son los vínculos, así que el alcance se "
-    + "cuenta y nunca contradice a la realidad.\n\n"
-    + "El responsable es un CARGO, no una persona. Y la cadencia de revisión la decide la "
-    + "empresa: sin cadencia y sin fecha prevista, nada se declara vencido.",
+    "QUÉ ES\n"
+    + "Una parte interesada es quien puede afectar al sistema de gestión o verse afectado "
+    + "por él: clientes, personal, entes reguladores, proveedores, la comunidad del "
+    + "entorno. No todas importan igual, y decidir cuáles importan es justamente el "
+    + "trabajo.\n\n"
+    + "EJEMPLO\n"
+    + "Un cliente institucional del que dependen la mitad de los pedidos es pertinente. "
+    + "El proveedor de café de la oficina, casi con seguridad, no.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2. Pide determinar las partes interesadas pertinentes para el "
+    + "sistema de gestión y sus requisitos pertinentes, y hacer seguimiento de esa "
+    + "información. No pide una matriz concreta ni una fórmula de puntuación: eso lo "
+    + "decide cada empresa.",
+
+  relevance:
+    "QUÉ ES\n"
+    + "Pertinente significa que lo que esa parte necesita, espera u obliga PUEDE afectar "
+    + "a la capacidad de entregar lo que se promete. No es lo mismo que importante para "
+    + "el negocio, y no es lo mismo que prioritaria.\n\n"
+    + "EJEMPLO\n"
+    + "Una fundación con la que se colabora puntualmente puede ser muy valiosa para la "
+    + "empresa y NO ser pertinente para el sistema de gestión, si no impone requisitos ni "
+    + "toca ningún proceso. Se registra así, con esa razón escrita.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2. Declarar a alguien no pertinente es una decisión legítima; lo "
+    + "que no se sostiene es no haberla tomado, ni poder explicarla. Por eso descartar "
+    + "obliga aquí a escribir el porqué.",
+
+  need:
+    "QUÉ ES\n"
+    + "Lo que la parte requiere para su propio funcionamiento. Todavía no obliga a nada: "
+    + "es lo que se escucha antes de decidir.\n\n"
+    + "EJEMPLO\n"
+    + "Un cliente institucional necesita recibir información trazable del servicio para "
+    + "poder responder ante su propio comité.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2. Separar necesidad de requisito es lo que permite después "
+    + "responder «qué de todo esto obliga», que es la única pregunta que se audita.",
+
+  expectation:
+    "QUÉ ES\n"
+    + "Lo que la parte espera aunque nadie se lo haya prometido por escrito. Tampoco "
+    + "obliga, y por eso se registra aparte: convertirla en obligación es una decisión, "
+    + "no un trámite.\n\n"
+    + "EJEMPLO\n"
+    + "El mismo cliente espera que se le avise antes de cualquier cambio de formato. "
+    + "Nadie lo firmó; se espera igual.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2. Una expectativa no atendida rara vez genera una no "
+    + "conformidad, y muy a menudo genera una queja. Registrarla es lo que permite "
+    + "decidir a tiempo si conviene asumirla.",
+
+  requirement:
+    "QUÉ ES\n"
+    + "Lo único que OBLIGA: por ley, por una disposición reglamentaria, por contrato, "
+    + "por una norma técnica que la "
+    + "empresa adoptó, o porque se comprometió. Por eso pide siempre decir de dónde viene "
+    + "la obligación.\n\n"
+    + "EJEMPLO\n"
+    + "Tiempo de respuesta contractual de 48 horas: es contractual, está firmado, y se "
+    + "puede incumplir.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2, y —cuando el requisito viene de un cliente— 8.2, que trata los "
+    + "requisitos para los productos y servicios. Los legales y reglamentarios aparecen "
+    + "además en 8.2.2.",
+
+  influence:
+    "QUÉ ES\n"
+    + "Cuánto puede esa parte afectar a la empresa, a su sistema de gestión o al logro de "
+    + "los resultados previstos. Es una de las dos mitades de la plantilla de priorización "
+    + "que la pantalla SUGIERE.\n\n"
+    + "EJEMPLO\n"
+    + "Un ente regulador puede detener una operación: influencia alta, aunque no compre "
+    + "nada.\n\n"
+    + "RESPALDO\n"
+    + "La norma NO exige influencia × impacto ni ninguna otra fórmula: priorizar es "
+    + "opcional. Es una práctica común y aquí se ofrece como plantilla, no como requisito. "
+    + "Si se usa, la puntuación se guarda siempre junto a la metodología que la produjo.",
+
+  impact:
+    "QUÉ ES\n"
+    + "La consecuencia para la empresa de NO atender los requisitos pertinentes de esa "
+    + "parte. Es la otra mitad de la plantilla sugerida.\n\n"
+    + "EJEMPLO\n"
+    + "No cumplir el plazo del cliente institucional cuesta la renovación del contrato: "
+    + "impacto alto. Que la comunidad del entorno no reciba el informe anual molesta, "
+    + "pero no detiene nada: impacto bajo.\n\n"
+    + "RESPALDO\n"
+    + "Igual que la influencia: es una ayuda para ordenar el trabajo, no una exigencia de "
+    + "ISO 9001:2015. Y la prioridad NO decide la pertinencia: una parte de prioridad baja "
+    + "puede ser perfectamente pertinente.",
+
+  strategy:
+    "QUÉ ES\n"
+    + "Qué hace la empresa con esa parte interesada: para qué, cómo, quién responde y cada "
+    + "cuánto se vuelve a mirar. Puede ser general para la parte o atender requisitos "
+    + "concretos.\n\n"
+    + "EJEMPLO\n"
+    + "Para el cliente institucional: seguimiento mensual del cumplimiento de plazo "
+    + "mediante un indicador, a cargo del Coordinador de Servicio, revisado cada seis "
+    + "meses.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2 pide hacer seguimiento y revisar la información sobre las partes "
+    + "y sus requisitos; 5.3 pide asignar responsabilidades, y por eso el responsable aquí "
+    + "es un CARGO y no una persona. La norma no obliga a documentar una «estrategia»: "
+    + "obliga a que se pueda demostrar que se gestiona.",
+
+  monitoring:
+    "QUÉ ES\n"
+    + "Cómo se sabe si lo que se hace funciona. Hay once mecanismos disponibles y ninguno "
+    + "es obligatorio; lo que no se sostiene es gestionar sin saber cómo se comprueba.\n\n"
+    + "EJEMPLO\n"
+    + "Una encuesta sirve para clientes. Para un ente regulador, lo que sirve es el "
+    + "cumplimiento regulatorio; para el personal, una reunión periódica; para un "
+    + "proveedor, su evaluación.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 9.1, seguimiento y medición. La encuesta de satisfacción que pide "
+    + "9.1.2 es para percepción del CLIENTE: la mayoría de las partes interesadas no se "
+    + "miden así, y presuponerlo llevaría a encuestar a quien no procede.",
+
+  review:
+    "QUÉ ES\n"
+    + "Volver a mirar. Registrar que se revisó y no había nada que cambiar TAMBIÉN cuenta: "
+    + "sin ese registro, un análisis desatendido y uno comprobado el mes pasado se ven "
+    + "iguales.\n\n"
+    + "EJEMPLO\n"
+    + "En el comité de operaciones se revisa el plan del cliente institucional, se "
+    + "concluye que el plazo se sostiene y se deja constancia. No se crea un análisis "
+    + "nuevo: no ha cambiado nada.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 4.2 pide seguimiento y revisión de esta información, y 9.3 incluye "
+    + "los cambios en las partes interesadas pertinentes entre las entradas de la revisión "
+    + "por la dirección. La frecuencia la decide la empresa: la norma no dice «anual».",
+
   history:
-    "Un análisis no se edita: se sustituye. El anterior se conserva entero con su fecha y su "
-    + "justificación, y el nuevo pasa a regir.\n\n"
-    + "«Ver estado en fecha» reconstruye qué regía ese día —el análisis, sus requisitos y sus "
-    + "estrategias— en modo de solo lectura. Es la pregunta que hace una auditoría.",
+    "QUÉ ES\n"
+    + "Un análisis no se edita: se sustituye. El anterior se conserva entero, con su fecha "
+    + "y su justificación, y el nuevo pasa a regir. «Ver estado en fecha» reconstruye qué "
+    + "regía ese día —el análisis, sus requisitos y sus estrategias— en modo de solo "
+    + "lectura.\n\n"
+    + "EJEMPLO\n"
+    + "En una auditoría preguntan por qué en marzo no había estrategia para un cliente que "
+    + "hoy sí la tiene. Se elige esa fecha y se ve exactamente lo que había, sin mezclar "
+    + "nada de hoy.\n\n"
+    + "RESPALDO\n"
+    + "ISO 9001:2015, 7.5, información documentada: lo que se conserva tiene que poder "
+    + "demostrar lo que se hizo. Un registro que se puede reescribir deja de demostrar "
+    + "nada.",
 } as const;
 
 export type InterestedPartiesHelpKey = keyof typeof INTERESTED_PARTIES_HELP;

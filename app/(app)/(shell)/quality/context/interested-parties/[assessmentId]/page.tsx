@@ -14,6 +14,8 @@ import {
   canManageInterestedParties, historicalNotice, PERIPHERAL_REF_KINDS,
   type PeripheralRefKind,
 } from "@/lib/domain/quality-interested-parties";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
+import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import { InterestedPartyDetail } from "@/components/domain/quality/interested-parties/detail-view";
 import { HistorySection } from "@/components/domain/quality/interested-parties/history-section";
 
@@ -104,7 +106,32 @@ export default async function InterestedPartyDetailPage({
   const refLabels = await resolvePeripheralLabels(org.organizationId, refs);
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-5xl space-y-4">
+      {/* Las dos puertas de salida del dominio, arriba y juntas: preguntar a
+          Intelligence sobre ESTA parte, y llevarse el papel. En modo histórico
+          el PDF respeta la fecha que se está mirando; imprimir el estado de hoy
+          bajo un encabezado del pasado sería firmar algo falso. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <AskCopilotButton
+          type="quality_stakeholder_assessment"
+          id={vigente.id}
+          label={`Parte interesada: ${vigente.subjectLabel}`}
+        />
+        {asOf ? (
+          <ExportPdfButton
+            exportKey="quality.interested-party.historical"
+            filters={{ date: asOf }}
+            label={`Descargar PDF del estado al ${asOf}`}
+          />
+        ) : (
+          <ExportPdfButton
+            exportKey="quality.interested-party.detail"
+            id={vigente.id}
+            label="Descargar PDF"
+          />
+        )}
+      </div>
+
       <InterestedPartyDetail
         assessment={vigente}
         history={detalle.history}

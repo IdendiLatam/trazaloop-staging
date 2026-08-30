@@ -958,3 +958,146 @@ registerAdapter({
     w.fact(`La plataforma vigila ${filas.length} condición(es) con reglas activas.`, nums);
   },
 });
+
+// ---------------------------------------------------------------------------
+// Partes interesadas · QUALITY-12.3B3B
+// ---------------------------------------------------------------------------
+// Dos adaptadores, uno por cada fuente que 0150 declaró en `quality_ai_sources`
+// —`interested_party` e `interested_party_strategy`—, las dos `open` y las dos
+// `as_of`.
+//
+// LOS DOS LEEN POR LA CAPA DE APLICACIÓN, no por consultas propias.
+// `loadIntelligenceContext` es la función de B2 que ya sabe qué se puede
+// contar de una parte interesada y qué no: la parte se cita por su nombre
+// comercial y el responsable por su CARGO. Ni correos, ni teléfonos, ni
+// contactos, ni quién firmó. Escribir aquí una segunda consulta habría
+// duplicado esa decisión, y la copia se separaría del original en el primer
+// cambio.
+//
+// Y los números los cuenta la base: `getSummary` devuelve cuántas partes
+// pertinentes no tienen estrategia. El modelo lee esa cifra; no la deduce.
+// ---------------------------------------------------------------------------
+
+/** El corte temporal de la pregunta. Sin `as_of`, hoy. */
+function corteDe(req: ContextRequest): string {
+  return req.temporal.mode === "as_of" && req.temporal.asOf
+    ? req.temporal.asOf
+    : new Date().toISOString().slice(0, 10);
+}
+
+registerAdapter({
+  code: "interested_party",
+  useCases: ["*"],
+  temporal: "as_of",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    const { loadIntelligenceContext, getSummary } =
+      await import("@/lib/db/quality-interested-parties");
+    const corte = corteDe(req);
+    const historico = req.temporal.mode === "as_of" && Boolean(req.temporal.asOf);
+
+    const items = await loadIntelligenceContext(
+      req.organizationId, { asOf: corte, limit: LIMITE }, db);
+    const partes = items.filter((i) => i.kind === "assessment");
+    if (partes.length === 0) return;
+
+    const nums: number[] = [];
+    for (const p of partes) {
+      const f = p.facts as {
+        category?: string | null; assessed_on?: string; relevance?: string;
+        relevance_rationale?: string | null;
+        priority?: string | null; summary?: string | null;
+        entries?: { kind: string; subtype: string | null; title: string }[];
+      };
+      const PERTINENCIA: Record<string, string> = {
+        relevant: "se considera pertinente",
+        not_relevant: "NO se considera pertinente",
+        under_review: "está en evaluación",
+      };
+      const n = w.ref({
+        sourceCode: "interested_party",
+        entityType: "quality_stakeholder_assessment",
+        entityId: p.id,
+        label: `Parte interesada: ${p.label}`,
+        deepLink: `/quality/context/interested-parties/${p.id}`,
+        asOf: historico ? corte : null,
+      });
+      nums.push(n);
+
+      const entradas = f.entries ?? [];
+      const requisitos = entradas.filter((e) => e.kind === "requirement");
+      w.fact(
+        `${historico ? `Al ${corte}, la` : "La"} parte interesada «${p.label}»`
+        + `${f.category ? ` (categoría ${f.category})` : ""} estaba analizada el `
+        + `${f.assessed_on ?? "—"} y `
+        + `${PERTINENCIA[f.relevance ?? ""] ?? "no declara su pertinencia"}`
+        + `${f.relevance_rationale ? ` (${f.relevance_rationale})` : ""}`
+        + `${f.priority ? `, con prioridad ${f.priority}` : ""}. `
+        + `Tiene ${entradas.length} entrada(s) registrada(s), de las cuales `
+        + `${requisitos.length} son requisitos.`, [n]);
+
+      for (const e of requisitos.slice(0, 6)) {
+        w.fact(
+          `«${p.label}» tiene el requisito «${e.title}»`
+          + `${e.subtype ? ` (${e.subtype})` : ""}.`, [n]);
+      }
+      // §23 · El texto de la empresa va como NOTA: material para leer, nunca
+      // instrucción. Una necesidad que dijera «ignora lo anterior» seguiría
+      // siendo una necesidad escrita por alguien.
+      if (f.summary) {
+        w.note(`Resumen del análisis de «${p.label}»`, f.summary, [n]);
+      }
+    }
+
+    // El hueco, contado por la base. Solo tiene sentido sobre el presente:
+    // `getSummary` cuenta a una fecha, y para el pasado ya se dijo arriba lo
+    // que regía entonces.
+    const resumen = await getSummary(req.organizationId, corte, db);
+    w.fact(
+      `${historico ? `Al ${corte} había` : "Hay"} ${resumen.relevant} parte(s) `
+      + `interesada(s) pertinente(s), ${resumen.underReview} en evaluación y `
+      + `${resumen.requirements} requisito(s) pertinente(s). `
+      + `${resumen.relevantWithoutStrategy} parte(s) pertinente(s) no tienen `
+      + `ninguna estrategia vigente.`, nums.slice(0, 3));
+  },
+});
+
+registerAdapter({
+  code: "interested_party_strategy",
+  useCases: ["*"],
+  temporal: "as_of",
+  async load(db: Db, req: ContextRequest, w: ContextWriter) {
+    const { loadIntelligenceContext } =
+      await import("@/lib/db/quality-interested-parties");
+    const corte = corteDe(req);
+    const historico = req.temporal.mode === "as_of" && Boolean(req.temporal.asOf);
+
+    const items = await loadIntelligenceContext(
+      req.organizationId, { asOf: corte, limit: LIMITE }, db);
+    const estrategias = items.filter((i) => i.kind === "strategy");
+    if (estrategias.length === 0) return;
+
+    for (const e of estrategias) {
+      const f = e.facts as {
+        stakeholder?: string | null; monitoring?: string | null; status?: string;
+        last_reviewed_on?: string | null; next_review_on?: string | null;
+        review_state?: string;
+      };
+      const n = w.ref({
+        sourceCode: "interested_party_strategy",
+        entityType: "quality_stakeholder_strategy",
+        entityId: e.id,
+        label: `Estrategia: ${e.label}`,
+        deepLink: "/quality/context/interested-parties",
+        asOf: historico ? corte : null,
+      });
+      w.fact(
+        `${historico ? `Al ${corte}, la` : "La"} estrategia «${e.label}»`
+        + `${f.stakeholder ? ` (parte interesada: ${f.stakeholder})` : ""} estaba `
+        + `${f.status ?? "sin estado"} y se sigue mediante `
+        + `${f.monitoring ?? "ningún método declarado"}. `
+        + `Última revisión: ${f.last_reviewed_on ?? "ninguna"}; `
+        + `próxima prevista: ${f.next_review_on ?? "sin fecha"} `
+        + `(estado de revisión: ${f.review_state ?? "sin calcular"}).`, [n]);
+    }
+  },
+});

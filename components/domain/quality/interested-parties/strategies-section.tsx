@@ -55,7 +55,7 @@ export function StrategiesSection({
     <section id="estrategias" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Estrategias</h2>
-        <SectionHint hint={interestedPartiesHint("strategies")} />
+        <SectionHint hint={interestedPartiesHint("strategy")} />
       </div>
       <p className="text-sm text-ink-soft">
         Qué se hace con esta parte interesada: para qué, cómo, quién responde y cada cuánto se
@@ -172,7 +172,10 @@ export function StrategiesSection({
                 </span>
               </label>
               <label className="block space-y-1">
-                <span className="block text-xs font-medium text-ink">Método de seguimiento</span>
+                <span className="flex items-center gap-1 text-xs font-medium text-ink">
+                  Método de seguimiento
+                  <SectionHint hint={interestedPartiesHint("monitoring")} />
+                </span>
                 <select name="monitoring_method" className={inputClass} defaultValue="">
                   <option value="">Sin definir</option>
                   {MONITORING_METHODS.map((m) => (

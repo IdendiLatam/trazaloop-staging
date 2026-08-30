@@ -1442,6 +1442,35 @@ export const EXPORT_INVENTORY: readonly InventoryRow[] = [
     // las fuentes con las que se generó, y eso no cambia después.
     historical: has("quality.ai-suggestion.detail"),
   },
+  // ------------------------------------------------------------------
+  // Quality · CONTEXTO · partes interesadas (QUALITY-12.3B3B)
+  // ------------------------------------------------------------------
+  {
+    entity: "Parte interesada", module: "quality",
+    route: "/quality/context/interested-parties", klass: "A",
+    detail: has("quality.interested-party.detail"),
+    list: has("quality.interested-party.list"),
+    // Histórico DE VERDAD: el dominio guarda la vigencia de cada análisis, de
+    // cada requisito y de cada estrategia. Reconstruir un día no es estimar.
+    historical: has("quality.interested-party.historical"),
+  },
+  {
+    entity: "Requisito de parte interesada", module: "quality",
+    route: "/quality/context/interested-parties", klass: "C",
+    detail: embedded("Parte interesada",
+      "Un requisito de una parte interesada no significa nada suelto: es lo que ESA parte necesita, espera u obliga, y se lee dentro de su ficha."),
+    list: embedded("Parte interesada"),
+    historical: embedded("Parte interesada",
+      "La reconstrucción por fecha imprime los requisitos vigentes ese día dentro del informe de partes interesadas."),
+  },
+  {
+    entity: "Estrategia de relacionamiento", module: "quality",
+    route: "/quality/context/interested-parties", klass: "C",
+    detail: embedded("Parte interesada",
+      "Una estrategia existe para una parte interesada concreta; fuera de su ficha no se sabe con quién se está tratando."),
+    list: embedded("Parte interesada"),
+    historical: embedded("Parte interesada"),
+  },
   {
     entity: "Fuente citada por Intelligence", module: "quality", route: null, klass: "D",
     detail: embedded("Propuesta de Intelligence",

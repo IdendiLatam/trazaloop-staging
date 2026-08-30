@@ -67,7 +67,7 @@ export function RequirementsSection({
     <section id="requisitos" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Necesidades, expectativas y requisitos</h2>
-        <SectionHint hint={interestedPartiesHint("entries")} />
+        <SectionHint hint={interestedPartiesHint("requirement")} />
       </div>
       <p className="text-sm text-ink-soft">
         Lo que esta parte necesita, lo que espera y lo que obliga. Son tres cosas distintas y
@@ -134,7 +134,10 @@ export function RequirementsSection({
                       className="mt-1"
                     />
                     <span>
-                      <span className="font-medium">{ENTRY_KIND_LABEL[k]}</span>
+                      <span className="inline-flex items-center gap-1 font-medium">
+                        {ENTRY_KIND_LABEL[k]}
+                        <SectionHint hint={interestedPartiesHint(k)} />
+                      </span>
                       <span className="block text-xs text-ink-soft">{AYUDA_TIPO[k]}</span>
                     </span>
                   </label>

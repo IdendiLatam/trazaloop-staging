@@ -8,11 +8,12 @@
 
 EXPORT-01 entregó 32 exportaciones y dejó 31 filas clasificadas como
 pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
-**167 exportaciones**, con **0 pendientes**.
+**167 exportaciones**, con **0 pendientes**. QUALITY-12.3B3B añadió las tres
+de partes interesadas: **170**.
 
 ## Todas las claves del registro
 
-### Quality (112)
+### Quality (115)
 
 - `quality.action.detail`
 - `quality.action.list`
@@ -61,6 +62,9 @@ pendientes. EXPORT-01.1 cerró esas 31 y llevó el registro a
 - `quality.document-revision.detail`
 - `quality.document.detail`
 - `quality.effectiveness.detail`
+- `quality.interested-party.detail`
+- `quality.interested-party.historical`
+- `quality.interested-party.list`
 - `quality.indicator.detail`
 - `quality.indicator.list`
 - `quality.knowledge.detail`

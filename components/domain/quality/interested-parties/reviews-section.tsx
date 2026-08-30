@@ -4,10 +4,11 @@ import { useActionState, useState } from "react";
 import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  REVIEW_VERDICT_LABEL, type ReviewVerdict,
+  interestedPartiesHint, REVIEW_VERDICT_LABEL, type ReviewVerdict,
 } from "@/lib/domain/quality-interested-parties";
 import type { ReviewRow, StrategyRow } from "@/lib/db/quality-interested-parties";
 import { recordReviewAction, type IpActionState } from "@/server/actions/quality-interested-parties";
+import { SectionHint } from "@/components/ui/section-hint";
 import { Badge } from "./badges";
 
 const inicial: IpActionState = { error: null };
@@ -42,7 +43,10 @@ export function ReviewsSection({
 
   return (
     <section id="revisiones" className="space-y-4 scroll-mt-20">
-      <h2 className="text-lg font-semibold">Revisiones</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold">Revisiones</h2>
+        <SectionHint hint={interestedPartiesHint("review")} />
+      </div>
       <p className="text-sm text-ink-soft">
         Cuándo se volvió a mirar esta parte, qué se concluyó y cuándo toca la próxima.
       </p>

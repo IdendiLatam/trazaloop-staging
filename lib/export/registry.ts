@@ -98,6 +98,10 @@ import {
 import {
   qualityAiRunList, qualityAiSuggestionDetail, qualityAiSuggestionList,
 } from "./adapters/quality-ai";
+import {
+  qualityInterestedPartyDetail, qualityInterestedPartyHistorical,
+  qualityInterestedPartyList,
+} from "./adapters/quality-interested-parties";
 import type { ExportDefinition } from "./registry-types";
 
 /**
@@ -301,6 +305,17 @@ const DEFINITIONS: readonly ExportDefinition[] = [
   // personas: ver el consumo y ver el contenido son permisos distintos.
   // ------------------------------------------------------------------
   qualityAiSuggestionDetail, qualityAiSuggestionList, qualityAiRunList,
+
+  // ------------------------------------------------------------------
+  // Quality · CONTEXTO · partes interesadas (QUALITY-12.3B3B)
+  //
+  // Dos informes y una ficha. El informe «al [fecha]» es `historical` de
+  // verdad: el dominio guarda la vigencia de cada análisis, de cada requisito
+  // y de cada estrategia, así que reconstruir un día no es una estimación.
+  // El informe corriente es `current` y lo dice en el papel.
+  // ------------------------------------------------------------------
+  qualityInterestedPartyList, qualityInterestedPartyDetail,
+  qualityInterestedPartyHistorical,
 ];
 
 const BY_KEY = new Map(DEFINITIONS.map((d) => [d.key, d]));

@@ -214,6 +214,23 @@ export function starterFor(pinnedType: string | null): { label: string; question
     case "quality_audit": return [
       { label: "Preparar la auditoría", question: "¿Qué debería revisar en esta auditoría?" },
     ];
+    // QUALITY-12.3B3B · Contexto → partes interesadas. Son preguntas, no
+    // respuestas: la persona las edita antes de enviarlas, y el modelo
+    // contesta con lo que hay registrado o dice que no hay nada.
+    case "quality_stakeholder_assessment": return [
+      { label: "Resumir las pertinentes",
+        question: "Resume las partes interesadas pertinentes y por qué lo son." },
+      { label: "Requisitos sin estrategia",
+        question: "¿Qué requisitos pertinentes no tienen ninguna estrategia que los atienda?" },
+      { label: "Requisitos sin proceso",
+        question: "¿Qué requisitos pertinentes no están relacionados con ningún proceso?" },
+      { label: "Estrategias sin seguimiento",
+        question: "¿Qué estrategias de relacionamiento no tienen método de seguimiento ni revisión reciente?" },
+      { label: "Qué cambió",
+        question: "¿Qué cambió en las partes interesadas desde la última revisión registrada?" },
+      { label: "Para la revisión por la dirección",
+        question: "Prepara los puntos de partes interesadas para la revisión por la dirección." },
+    ];
     case "quality_management_review": return [
       { label: "Resumen ejecutivo", question: "Prepara un borrador de resumen ejecutivo de esta revisión." },
     ];

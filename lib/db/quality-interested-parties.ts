@@ -1656,11 +1656,19 @@ export async function loadIntelligenceContext(
   const hoy = opts.asOf ?? today();
   const tope = Math.min(opts.limit ?? 60, 200);
 
+  // TODAS las vigentes, no solo las pertinentes.
+  //
+  // La primera versión filtraba a `relevant`, y con eso quedaban sin respuesta
+  // dos preguntas que se hacen en cualquier auditoría: «¿por qué descartamos a
+  // esta parte?» y «¿qué cambió desde la revisión anterior?». La pertinencia no
+  // es un permiso —la clase de privacidad de esta fuente es la misma para las
+  // tres— así que esconder las descartadas no protegía nada y sí impedía
+  // explicarlas. Cada elemento dice su pertinencia y su razón; el modelo cita
+  // lo que hay.
   const { data: analisis } = await supabase
     .from("quality_stakeholder_assessments")
     .select(ASSESSMENT_COLUMNS)
     .eq("organization_id", orgId)
-    .eq("relevance_status", "relevant")
     .lte("effective_from", hoy).or(`effective_to.is.null,effective_to.gt.${hoy}`)
     .order("assessed_on", { ascending: false })
     .limit(tope);
@@ -1697,6 +1705,7 @@ export async function loadIntelligenceContext(
       category: a.categoryName,
       assessed_on: a.assessedOn,
       relevance: a.relevanceStatus,
+      relevance_rationale: a.relevanceRationale,
       priority: a.priorityLabel,
       summary: a.summary,
       entries: porAnalisis.get(a.id) ?? [],

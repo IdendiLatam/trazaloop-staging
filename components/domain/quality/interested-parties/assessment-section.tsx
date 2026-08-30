@@ -4,11 +4,12 @@ import { useActionState, useRef, useState } from "react";
 import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  RELEVANCE_LABEL, RELEVANCE_STATES, SUGGESTED_METHOD, priorityView,
+  interestedPartiesHint, RELEVANCE_LABEL, RELEVANCE_STATES, SUGGESTED_METHOD, priorityView,
   type RelevanceState,
 } from "@/lib/domain/quality-interested-parties";
 import type { AssessmentRow } from "@/lib/db/quality-interested-parties";
 import { supersedeAssessmentAction, type IpActionState } from "@/server/actions/quality-interested-parties";
+import { SectionHint } from "@/components/ui/section-hint";
 import { RelevanceBadge } from "./badges";
 
 const inicial: IpActionState = { error: null };
@@ -50,11 +51,17 @@ export function AssessmentSection({
 
   return (
     <section id="resumen" className="space-y-4 scroll-mt-20">
-      <h2 className="text-lg font-semibold">Resumen del análisis</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold">Resumen del análisis</h2>
+        <SectionHint hint={interestedPartiesHint("overview")} />
+      </div>
 
       <dl className="grid gap-3 rounded-lg border border-hairline bg-surface p-4 sm:grid-cols-2">
         <div>
-          <dt className="text-xs font-medium text-ink-soft">Pertinencia</dt>
+          <dt className="flex items-center gap-1 text-xs font-medium text-ink-soft">
+            Pertinencia
+            <SectionHint hint={interestedPartiesHint("relevance")} />
+          </dt>
           <dd className="mt-1"><RelevanceBadge status={assessment.relevanceStatus} /></dd>
         </div>
         <div>
@@ -148,7 +155,13 @@ export function AssessmentSection({
             </label>
 
             <fieldset className="space-y-2 rounded-md border border-hairline p-3">
-              <legend className="px-1 text-xs font-medium text-ink">Prioridad (opcional)</legend>
+              <legend className="px-1 text-xs font-medium text-ink">
+                <span className="inline-flex items-center gap-1">
+                  Prioridad (opcional)
+                  <SectionHint hint={interestedPartiesHint("influence")} />
+                  <SectionHint hint={interestedPartiesHint("impact")} />
+                </span>
+              </legend>
               <label className="block space-y-1">
                 <span className="block text-xs font-medium text-ink">Prioridad</span>
                 <select name="priority_label" className={inputClass}

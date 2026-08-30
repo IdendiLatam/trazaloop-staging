@@ -13,6 +13,7 @@ import {
   type RelevanceState, type ReviewState, type SubjectKind,
 } from "@/lib/domain/quality-interested-parties";
 import { SectionHint } from "@/components/ui/section-hint";
+import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import { InterestedPartiesSubnav } from "@/components/domain/quality/interested-parties/subnav";
 import { InterestedPartiesSummaryCards } from "@/components/domain/quality/interested-parties/summary-cards";
 import { InterestedPartiesList } from "@/components/domain/quality/interested-parties/parties-list";
@@ -47,6 +48,7 @@ export default async function InterestedPartiesPage({
   const revision = pick(uno("revision"), [...REVIEW_STATES, "no_strategy"] as const);
   const entidad = uno("entidad") ?? "";
   const canManage = canManageInterestedParties(org.roleCode);
+  const hoy = new Date().toISOString().slice(0, 10);
 
   const [pagina, summary, categories, groups, parties] = await Promise.all([
     searchAssessments(org.organizationId, {
@@ -79,7 +81,26 @@ export default async function InterestedPartiesPage({
         </p>
       </header>
 
-      <InterestedPartiesSubnav current="parties" />
+      <div className="flex flex-wrap items-center gap-2">
+        <InterestedPartiesSubnav current="parties" />
+      </div>
+
+      {/* EXPORT-01 · «Descargar PDF», con la misma forma que en el resto de la
+          plataforma. Dos documentos porque afirman cosas distintas sobre el
+          tiempo: el informe dice lo que rige hoy, y el otro reconstruye una
+          fecha. Los filtros que estén puestos viajan con el primero. */}
+      <div className="flex flex-wrap gap-2">
+        <ExportPdfButton
+          exportKey="quality.interested-party.list"
+          filters={{ pertinencia, tipo }}
+          label="Descargar PDF"
+        />
+        <ExportPdfButton
+          exportKey="quality.interested-party.historical"
+          filters={{ date: hoy }}
+          label="Descargar PDF del estado en una fecha"
+        />
+      </div>
 
       <InterestedPartiesSummaryCards summary={summary} basePath={BASE} />
 
