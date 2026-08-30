@@ -46,20 +46,27 @@ persistir nada, y 49 comprobaciones. **Sin interfaz.**
 
 ---
 
-## QUALITY-13B2 · Mirador de proceso
+## QUALITY-13B2 · Mirador de proceso · **ENTREGADO** (sin migración)
 
-**Qué:** las siete secciones de QI-04 en la ficha, con recuento y tres o cuatro filas;
-enlaces a cada dominio; y la ficha de cargo con su vista inversa (QI-02).
+**Qué:** las nueve secciones de B1 en la ficha, agrupadas en siete bloques con el orden
+de gestión; recuento del dominio y hasta cuatro filas; enlace a cada dominio dueño; la
+parte interesada derivada de su requisito; proveedor y queja derivados en la dirección
+del proceso; el bloque de atención del proceso; y el renombrado de navegación de QI-25.
 
-**Migración:** ninguna.
+**Migración:** **ninguna**. Cabecera 0152, la misma con la que empezó el tramo.
 
-**Cómo se sabe que está bien:** una empresa con datos en los siete ejes ve los siete;
-una vacía ve estados vacíos útiles, no ceros; cada sección lleva al dominio dueño y
-**ninguna** reimplementa su edición (QI-04); y el tiempo de carga no crece con el tamaño
-del dominio —recuentos con `head: true`, listas con `limit`—.
+**Cómo se sabe que está bien:** 124 comprobaciones en cuatro suites —decisiones,
+pantalla, base real y aceptación por HTTP—. La aceptación abre **todos** los destinos que
+el mirador ofrece; ahí apareció el único defecto real del tramo: un documento de otro
+módulo enlazado a `/quality/documents/…` daba 404. Ver
+`QUALITY_13B2_PROCESS_COCKPIT_IMPLEMENTATION.md` §5.
 
-**Riesgo:** que el mirador se convierta en quince pantallas apiladas. El tope de filas
-por sección no es cosmético.
+**Lo que NO entró, y sigue siendo de su tramo:** la ficha de cargo con su vista inversa
+(QI-02) —el contexto de cargo existe desde B1 y no tiene pantalla; construirla aquí
+habría sido el mirador de cargo, que §16 del encargo excluye—.
+
+**Riesgo, gestionado:** que el mirador se convierta en quince pantallas apiladas. Tope de
+cuatro filas por sección, verificado en las cuatro suites.
 
 ---
 

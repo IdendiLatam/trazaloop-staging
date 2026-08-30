@@ -5,6 +5,7 @@ import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { shellModuleName, trazadocDocumentHref } from "@/lib/modules/registry";
+import { deepLink } from "@/lib/domain/quality-integration";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
 import { LifecyclePanel } from "@/components/domain/quality/lifecycle-panel";
@@ -426,6 +427,7 @@ export function QualityProcessDetailView({
   canPublish,
   canManage,
   eligibility,
+  cockpit,
 }: {
   detail: Detail;
   shownRevisionId: string | null;
@@ -438,6 +440,14 @@ export function QualityProcessDetailView({
   canManage: boolean;
   /** Dictamen de eliminación, resuelto en servidor (QUALITY-03.1a). */
   eligibility: DeletionEligibility;
+  /**
+   * QUALITY-13B2 · El mirador, ya pintado en servidor.
+   *
+   * Llega como nodo y no como datos a propósito: así esta pantalla —que es de
+   * cliente y edita— no puede consultar nada por su cuenta ni rehacer una sola
+   * de las decisiones de la capa de aplicación. Recibe y coloca.
+   */
+  cockpit?: React.ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -515,9 +525,22 @@ export function QualityProcessDetailView({
               {process.code ? `${process.code} · ` : ""}
               {qualityCategoryLabel(process.categoryCode)}
               {" · "}
-              {process.ownerPositionName
-                ? `Propietario: ${process.ownerPositionName}`
-                : "Sin cargo propietario"}
+              {/* QUALITY-13B2 · §16 · El propietario sigue siendo un CARGO, y
+                  ahora lleva a su ficha. Sin construir el mirador del cargo:
+                  eso no es de este tramo. */}
+              {process.ownerPositionName && process.ownerPositionId ? (
+                <>
+                  {"Propietario: "}
+                  <Link
+                    href={deepLink("quality_position", process.ownerPositionId)}
+                    className="text-loop hover:underline"
+                  >
+                    {process.ownerPositionName}
+                  </Link>
+                </>
+              ) : (
+                "Sin cargo propietario"
+              )}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -1058,6 +1081,15 @@ export function QualityProcessDetailView({
           </p>
         ) : null}
       </Section>
+
+      {/* --------------------------------------------------------------- */}
+      {/* El proceso dentro del sistema de gestión · QUALITY-13B2           */}
+      {/* --------------------------------------------------------------- */}
+      {/* Va aquí y no arriba: primero qué ES el proceso —identidad,
+          propósito, entradas y salidas, con quién se relaciona—, y después
+          qué hay a su alrededor. Al revés se leería el contexto de algo que
+          todavía no se sabe qué es. */}
+      {cockpit}
 
       {/* --------------------------------------------------------------- */}
       {/* Documentos de TrazaDocs                                          */}

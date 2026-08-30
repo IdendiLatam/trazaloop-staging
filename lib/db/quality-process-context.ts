@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
+import { shellModuleName } from "@/lib/modules/registry";
 import {
   CURRENT, deepLink, notVisibleSection, okSection, unavailableSection,
   type ContextItem, type ContextSection, type IntegrationSubject,
@@ -308,6 +309,19 @@ function seccionIndicadores(supabase: Db, orgId: string, processId: string) {
   });
 }
 
+/**
+ * Los documentos vinculados al proceso.
+ *
+ * `module_key` NO es un adorno. Un proceso de Quality puede referenciar un
+ * documento de PCR o de Textiles —la pantalla de vinculación ofrece los de
+ * cualquier módulo de la empresa, y eso es correcto—, pero su ficha vive en el
+ * módulo dueño. Mandarlo a `/quality/documents/…` da un 404, que es justo lo
+ * que encontró la aceptación de QUALITY-13B2.
+ *
+ * Así que la fila de un documento ajeno se enseña **con el módulo del que es**
+ * y **sin enlace**. Enlazar al módulo dueño tampoco vale: una empresa que solo
+ * tiene Quality no puede entrar allí, y sería la puerta rota de siempre.
+ */
 function seccionDocumentos(supabase: Db, orgId: string, processId: string) {
   const href = deepLink("trazadoc_document");
   return seccion("documents", "Documentos", href, async () => {
@@ -319,11 +333,21 @@ function seccionDocumentos(supabase: Db, orgId: string, processId: string) {
     let items: ContextItem[] = [];
     if (ids.length > 0) {
       const { data: docs } = await supabase.from("trazadoc_documents")
-        .select("id, title, code, status").eq("organization_id", orgId).in("id", ids);
-      items = (docs ?? []).map((d) => item(
-        "trazadoc_document", d.id as string,
-        `${d.code ? `${d.code} · ` : ""}${d.title as string}`,
-        { state: d.status as string }));
+        .select("id, title, code, status, module_key").eq("organization_id", orgId).in("id", ids);
+      items = (docs ?? []).map((d) => {
+        const propio = (d.module_key as string) === "quality";
+        const nombre = `${d.code ? `${d.code} · ` : ""}${d.title as string}`;
+        return {
+          subjectKind: "trazadoc_document" as IntegrationSubject,
+          subjectId: d.id as string,
+          label: propio ? nombre : `${nombre} · de ${shellModuleName(d.module_key as string)}`,
+          state: d.status as string,
+          severity: null,
+          href: propio ? deepLink("trazadoc_document", d.id as string)
+                       : deepLink("trazadoc_document"),
+          linksToDetail: propio,
+        };
+      });
     }
     return okSection({ key: "documents", label: "Documentos", count: count ?? 0, items, href });
   });

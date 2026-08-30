@@ -216,6 +216,21 @@ export type ContextItem = {
   /** La gravedad del dominio, si el dominio tiene una. Nunca se inventa. */
   severity?: string | null;
   href: string;
+  /**
+   * ¿Este `href` abre la ficha de ESTA fila?
+   *
+   * Por omisión lo dice `hasDetailRoute` del tipo de sujeto, y con eso basta casi
+   * siempre. La excepción la encontró la aceptación de QUALITY-13B2: un documento
+   * de TrazaDocs **sí** tiene ficha, pero la tiene en el módulo del que es dueño.
+   * Un proceso de Quality puede referenciar un documento de PCR o de Textiles
+   * —la pantalla de vinculación ofrece los de cualquier módulo de la empresa— y
+   * mandarlo a `/quality/documents/…` devuelve un 404.
+   *
+   * Cuando el cargador sabe que la ficha no está donde su tipo dice, lo pone a
+   * `false` y la pantalla enseña la fila sin enlace. Ni se esconde, ni se
+   * promete una puerta que no abre.
+   */
+  linksToDetail?: boolean;
 };
 
 export type ContextSection = {

@@ -250,7 +250,7 @@ export const QUALITY_SGC_GROUP: ModuleNavGroup = {
 };
 
 /**
- * Desempeño. Grupo propio, no un apéndice del sistema de gestión: objetivos e
+ * Evaluación. Grupo propio, no un apéndice del sistema de gestión: objetivos e
  * indicadores son la pata que responde «¿esto funciona?», y meterlos junto a
  * los procesos los convertiría en una pantalla más de configuración.
  *
@@ -258,9 +258,25 @@ export const QUALITY_SGC_GROUP: ModuleNavGroup = {
  * indicador puede existir sin objetivo (mide un proceso, o la empresa), y un
  * objetivo se mide con varios indicadores: esconder los indicadores dentro de
  * los objetivos haría invisible la mitad de los casos.
+ *
+ * QUALITY-13B2 · QI-25 · SE LLAMABA «DESEMPEÑO», Y COLISIONABA.
+ *
+ * Personas tiene su propia entrada «Desempeño», que es el nombre correcto de lo
+ * que esa pantalla hace: evaluar a las personas. Dos cosas distintas con la
+ * misma palabra en el mismo menú obligan a recordar cuál es cuál.
+ *
+ * El grupo pasa a «Evaluación» —mirar si el sistema funciona— y la entrada de
+ * Personas conserva su nombre. Y NO se llama «Evaluación del desempeño»: eso
+ * metería el título literal del capítulo 9 en la navegación, y el principio
+ * congelado dice lo contrario, que la navegación operativa está desacoplada de
+ * los numerales.
+ *
+ * Auditorías y Revisión por la dirección NO se mudan aquí dentro. Sería
+ * reorganizar por capítulos de la norma, que 13A rechazó, y no resolvería
+ * ningún hueco.
  */
-export const QUALITY_DESEMPENO_GROUP: ModuleNavGroup = {
-  title: "Desempeño",
+export const QUALITY_EVALUACION_GROUP: ModuleNavGroup = {
+  title: "Evaluación",
   items: [
     { label: "Objetivos", href: "/quality/objectives" },
     { label: "Indicadores", href: "/quality/indicators" },
@@ -429,7 +445,7 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
   ],
   groups: [QUALITY_CONTEXTO_GROUP, QUALITY_SGC_GROUP, QUALITY_PERSONAS_GROUP,
            QUALITY_PROVEEDORES_GROUP,
-           QUALITY_VOZ_CLIENTE_GROUP, QUALITY_DESEMPENO_GROUP, QUALITY_RIESGOS_GROUP,
+           QUALITY_VOZ_CLIENTE_GROUP, QUALITY_EVALUACION_GROUP, QUALITY_RIESGOS_GROUP,
            QUALITY_CASOS_GROUP, QUALITY_AUDITORIAS_GROUP,
            QUALITY_REVISION_DIRECCION_GROUP, QUALITY_AUTOMATIZACION_GROUP,
            QUALITY_COPILOT_GROUP,
