@@ -98,6 +98,12 @@ export const INTEGRATION_SUBJECTS = [
   "quality_supplier_profile", "quality_supplier_scope", "quality_supplier_evaluation",
   "quality_customer_profile", "quality_customer_feedback", "quality_survey_campaign",
   "quality_person", "quality_competency", "quality_knowledge_item",
+  // QUALITY-13B3 · Los cinco que faltaban. No son nuevos: `work_alerts` y
+  // `work_tasks` llevan escribiéndolos desde 0123 y 0125, y sin ellos el
+  // inventario de observadores no podía nombrar a su sujeto —ni enlazarlo—.
+  "quality_competency_evidence", "quality_development_plan_item",
+  "quality_knowledge_transfer_plan", "quality_learning_activity",
+  "quality_supplier_document",
   "quality_management_review",
   "quality_stakeholder_assessment", "quality_stakeholder_requirement",
   "quality_stakeholder_strategy",
@@ -150,6 +156,14 @@ const RUTA: Record<IntegrationSubject, { base: string; detalle?: (id: string) =>
   quality_person: { base: "/quality/people", detalle: (id) => `/quality/people/${id}` },
   quality_competency: { base: "/quality/people/competencies" },
   quality_knowledge_item: { base: "/quality/people/knowledge" },
+  // Ninguno de los cinco tiene ficha propia: viven dentro de la pantalla de su
+  // dominio. Se enlaza a esa pantalla, que es un destino honesto, y no se
+  // fabrica una URL con su identificador.
+  quality_competency_evidence: { base: "/quality/people/competencies" },
+  quality_development_plan_item: { base: "/quality/people/development" },
+  quality_knowledge_transfer_plan: { base: "/quality/people/knowledge" },
+  quality_learning_activity: { base: "/quality/people/development" },
+  quality_supplier_document: { base: "/quality/suppliers" },
   quality_management_review: {
     base: "/quality/management-review", detalle: (id) => `/quality/management-review/${id}` },
   quality_stakeholder_assessment: {

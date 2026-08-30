@@ -460,19 +460,33 @@ check("J2. Y se dice en pantalla, porque no es evidente", () => {
 console.log("\nK · Sin esquema nuevo");
 // ===========================================================================
 
-check("K1. La cabecera de migraciones sigue en 0152", () => {
+/**
+ * B2 se entregó sobre la cabecera 0152 y NO añadió esquema. Lo que se comprueba
+ * es esa promesa, no el número: fijar la cabecera en 152 habría puesto en rojo
+ * este tramo el día que otro añadiera una migración por un motivo distinto, que
+ * es exactamente lo que pasó en B3. La promesa se sigue verificando; el número,
+ * que era una foto y no un invariante, ya no.
+ */
+check("K1. El mirador se entregó sobre 0152 y no bajó de ahí", () => {
   const nums = readdirSync("supabase/migrations")
     .filter((f) => f.endsWith(".sql"))
     .map((f) => Number(f.slice(0, 4)))
     .filter((n) => Number.isFinite(n));
-  const cabecera = Math.max(...nums);
-  assert(cabecera === 152, `la cabecera es ${cabecera}: B2 no debía tocar el esquema`);
+  assert(Math.max(...nums) >= 152, `la cabecera es ${Math.max(...nums)}`);
+  assert(nums.includes(152), "desapareció la migración sobre la que se construyó B2");
 });
 
-check("K2. No se creó ninguna tabla de negocio nueva", () => {
-  const nuevas = readdirSync("supabase/migrations")
-    .filter((f) => Number(f.slice(0, 4)) > 152);
-  assert(nuevas.length === 0, `hay migraciones nuevas: ${nuevas.join(", ")}`);
+check("K2. Ninguna migración existe POR el mirador", () => {
+  const dir = "supabase/migrations";
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".sql"))) {
+    const contenido = readFileSync(`${dir}/${f}`, "utf8");
+    for (const prohibida of ["quality_process_cockpit", "quality_attention",
+                             "quality_dashboard", "quality_supplier_processes",
+                             "quality_complaint_processes"]) {
+      assert(!new RegExp(`create table[^;]*${prohibida}`, "i").test(contenido),
+        `${f} crea la tabla ${prohibida}`);
+    }
+  }
 });
 
 // ===========================================================================

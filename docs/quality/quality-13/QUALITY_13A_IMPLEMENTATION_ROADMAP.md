@@ -70,27 +70,38 @@ cuatro filas por sección, verificado en las cuatro suites.
 
 ---
 
-## QUALITY-13B3 · Convergencia de la atención
+## QUALITY-13B3 · Convergencia de la atención · **ENTREGADO** (0153)
 
-**Qué:** plantillas equivalentes a los **diez** barridos y tablas de señal que aún no
-tienen relevo —el mapa completo está en el descubrimiento §4.bis—, cada una declarando
-`supersedes_observer` (QI-08); la fuente de proceso para automatización (QI-22); y el
-contrato único de punto de atención (QI-09) con deduplicación por sujeto (QI-10) y
-enlace obligatorio a la causa (QI-26).
+**Qué se esperaba:** plantillas equivalentes a los **diez** barridos y tablas de señal que
+aún no tienen relevo, cada una declarando `supersedes_observer`.
 
-**Regla de compatibilidad (QI-27):** ningún barrido se borra. Se releva, se comprueba
-contra lo que emitía, y solo después se plantea retirarlo.
+**Qué se encontró al mirar el código, que cambia el plan:**
 
-**Migración:** una, para la fuente de proceso y las plantillas.
+1. **Un barrido no es un observador: es un montón.** `quality_scan_audits` observa cinco
+   condiciones; `quality_scan_people_signals`, siete. `supersedes_observer` nombra el
+   barrido y la guarda hacía `return 0` al principio de la función.
+2. **Eso ya estaba causando una pérdida.** Adoptar la plantilla `action_overdue` apagaba
+   también el aviso de verificar la eficacia, que **ninguna** plantilla releva. Medido
+   contra base real, no deducido.
+3. **`quality_risk_signals` no la escribe nadie.** Relevarla habría sido relevar el vacío.
+4. **Las otras tres tablas de señal no son observadores**: son el almacén de su barrido.
 
-**Cómo se sabe que está bien:** adoptar la plantilla apaga el barrido correspondiente y
-la bandeja **no** duplica; el mismo problema aparece una vez aunque dos dominios lo
-conozcan; y una empresa que no adopta nada sigue viendo exactamente lo que veía.
+**Qué se entregó:** el inventario completo —33 condiciones, comprobado contra las
+migraciones—, las diez comprobaciones de compatibilidad, la corrección de granularidad en
+`0153_quality_attention_convergence.sql`, y la consulta convergida que B4 usará en lugar
+de preguntar a cinco mecanismos. **96 comprobaciones.**
 
-**Riesgo:** el más alto de los cinco. Aquí se toca lo que la gente ya recibe. Cada
-plantilla debe medirse contra el barrido que releva **antes** de relevarlo.
+**Cero relevos nuevos, y ese es el resultado.** Las diez salen NO EQUIVALENTE con las
+plantillas de hoy: umbrales distintos, sujetos distintos u observadores más estrechos.
+Forzarlos habría repetido, diez veces, el fallo que este tramo encontró.
 
----
+**Lo que queda apuntado con su motivo exacto:** `quality_scan_risk_reviews` podrá relevarse
+cuando la fuente `risk` exponga `status`; `knowledge_single_holder`, cuando se compruebe la
+paridad del filtro de criticidad. Ver `QUALITY_13B3_OBSERVER_COMPATIBILITY.md`.
+
+**Riesgo, gestionado:** era el tramo más alto de los cinco porque se toca lo que la gente
+ya recibe. No se borró ni se desactivó ningún barrido; el único cambio de comportamiento
+**devuelve** un aviso que se había perdido.
 
 ## QUALITY-13B4 · Portada de atención
 
