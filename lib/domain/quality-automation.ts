@@ -87,6 +87,9 @@ export const AUTOMATION_DOMAINS = [
   // QUALITY-12.3B3B · El contexto entra al motor por la puerta de todos: una
   // fuente de dominio más, con sus sujetos observables y sus campos.
   "interested_parties",
+  // QUALITY-13B1 · El eje primario de integración se había quedado fuera desde
+  // 0129: había fuente para doce dominios y ninguna para procesos.
+  "processes",
   "cross_domain",
 ] as const;
 export type AutomationDomain = (typeof AUTOMATION_DOMAINS)[number];
@@ -104,6 +107,7 @@ export const AUTOMATION_DOMAIN_LABEL: Record<AutomationDomain, string> = {
   audits: "Auditorías",
   management_review: "Revisión por la dirección",
   interested_parties: "Partes interesadas",
+  processes: "Procesos",
   cross_domain: "Transversal",
 };
 

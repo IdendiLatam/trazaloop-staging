@@ -18,22 +18,31 @@ descubrimiento cambia dos cosas:
 
 ---
 
-## QUALITY-13B1 · Primitivas de enlace
+## QUALITY-13B1 · Primitivas de enlace · **ENTREGADO** (0152)
 
 **Qué:** ampliar `work_references` con los propietarios de planificación (QI-12), con el
 rechazo explícito de las parejas que ya tienen tabla propia (QI-13); y el cargador
 compuesto de proceso (QI-05) sin interfaz todavía.
 
-**Migración:** una, del tipo de 0150 —CHECK + ramas del disparador—.
+**Migración entregada:** `0152_quality_process_automation_source.sql`. Resultó ser de
+otro tipo del previsto: lo que hizo falta no fue ampliar `work_references` —eso sigue
+pendiente y se hará cuando un consumidor lo necesite— sino registrar el **proceso como
+sujeto observable**, que era el hueco de esquema que 13A había marcado como el único
+seguro. Ver `QUALITY_13B1_INTEGRATION_PRIMITIVES.md`.
 
 **Cómo se sabe que está bien:** un objetivo puede declarar de qué requisito nace; un
 riesgo puede decir de qué parte interesada viene; y objetivo→proceso **se rechaza** por
 la vía genérica porque ya tiene tabla. El cargador devuelve los recuentos correctos para
 un proceso con datos en los siete ejes.
 
-**Riesgo:** ampliar el vocabulario abre parejas que no se deben permitir. Ya pasó en
-0150 y se resolvió cerrándolas a mano. Aquí hay que hacer la misma lista **antes** de
-ampliar.
+**Riesgo, que sigue vivo para cuando se amplíe `work_references`:** ampliar el
+vocabulario abre parejas que no se deben permitir. Ya pasó en 0150 y se resolvió
+cerrándolas a mano. Hay que hacer la misma lista **antes** de ampliar.
+
+**Lo entregado además de la migración:** el contrato de integración —tiempo, enlace,
+sección, atención, observador y frontera de la tarea propia—, el contexto de proceso con
+nueve secciones y el de cargo con cuatro, la derivación de proveedor y queja sin
+persistir nada, y 49 comprobaciones. **Sin interfaz.**
 
 ---
 
