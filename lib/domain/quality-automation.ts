@@ -84,6 +84,9 @@ export const QUALITY_BY_OBSERVATION =
 export const AUTOMATION_DOMAINS = [
   "documents", "indicators", "objectives", "cases", "actions", "risks",
   "people", "suppliers", "customer", "audits", "management_review",
+  // QUALITY-12.3B3B · El contexto entra al motor por la puerta de todos: una
+  // fuente de dominio más, con sus sujetos observables y sus campos.
+  "interested_parties",
   "cross_domain",
 ] as const;
 export type AutomationDomain = (typeof AUTOMATION_DOMAINS)[number];
@@ -100,6 +103,7 @@ export const AUTOMATION_DOMAIN_LABEL: Record<AutomationDomain, string> = {
   customer: "Voz del cliente",
   audits: "Auditorías",
   management_review: "Revisión por la dirección",
+  interested_parties: "Partes interesadas",
   cross_domain: "Transversal",
 };
 

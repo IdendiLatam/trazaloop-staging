@@ -317,6 +317,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0151_quality_interested_parties_automation_and_outputs.sql",
     "0150_quality_interested_parties_integrations.sql",
     "0149_quality_interested_parties_core.sql",
     "0148_inventory_movement_hardening.sql",

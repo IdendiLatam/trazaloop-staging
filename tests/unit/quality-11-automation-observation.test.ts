@@ -1437,7 +1437,51 @@ check("V5. los permisos son los tres roles del dominio, y publicar es más estre
 check("V6. los catálogos del dominio y los de la base dicen lo mismo", () => {
   for (const s of SEVERITIES) assert(RAW_SQL.includes(`'${s}'`), `falta la gravedad ${s}`);
   for (const s of SIGNAL_STATUSES) assert(RAW_SQL.includes(`'${s}'`), `falta el estado ${s}`);
-  for (const d of AUTOMATION_DOMAINS) assert(RAW_SQL.includes(`'${d}'`), `falta el dominio ${d}`);
+  // EL VOCABULARIO DE DOMINIOS YA NO CABE EN 0129, Y ESO ES LO NORMAL.
+  //
+  // Esta comprobación buscaba cada dominio dentro de 0129, que es donde nació
+  // la lista. QUALITY-12.3B3B añadió `interested_parties` como cualquier otro
+  // catálogo de este repositorio: soltando el CHECK y reponiéndolo COMPLETO en
+  // una migración posterior. Buscar solo en 0129 obligaría a editar una
+  // migración ya aplicada —justo lo que el proyecto prohíbe— para que la
+  // prueba pasara.
+  //
+  // Lo que no cambia es el invariante: el vocabulario de TypeScript y el de la
+  // base tienen que decir lo mismo. Así que se lee la ÚLTIMA definición de
+  // cada CHECK, esté en la migración que esté, y se comparan los conjuntos.
+  {
+    const migraciones = readdirSync(join(ROOT, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql")).sort();
+    const ultimaDefinicion = (constraint: string): string[] => {
+      let valores: string[] = [];
+      for (const f of migraciones) {
+        const sql = read(`supabase/migrations/${f}`);
+        let desde = sql.indexOf(`add constraint ${constraint}`);
+        while (desde !== -1) {
+          const bloque = sql.slice(desde, sql.indexOf(";", desde));
+          valores = [...bloque.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+          desde = sql.indexOf(`add constraint ${constraint}`, desde + 1);
+        }
+        const creado = sql.indexOf(`constraint ${constraint}`);
+        if (valores.length === 0 && creado !== -1) {
+          const bloque = sql.slice(creado, sql.indexOf("),", creado));
+          valores = [...bloque.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+        }
+      }
+      return valores;
+    };
+    const enBase = new Set([
+      ...ultimaDefinicion("quality_automation_sources_domain_check"),
+      ...ultimaDefinicion("quality_automation_rules_category_check"),
+    ]);
+    for (const d of AUTOMATION_DOMAINS) {
+      assert(enBase.has(d), `falta el dominio ${d} en los CHECK vigentes de la base`);
+    }
+    for (const d of enBase) {
+      assert((AUTOMATION_DOMAINS as readonly string[]).includes(d),
+        `la base admite el dominio ${d} y TypeScript no lo conoce`);
+    }
+  }
   assert(SEVERITY_IS_DECLARED.length > 40,
     "la gravedad no se explica como declaración de la regla");
 });
