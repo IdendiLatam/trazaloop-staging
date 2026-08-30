@@ -103,19 +103,32 @@ paridad del filtro de criticidad. Ver `QUALITY_13B3_OBSERVER_COMPATIBILITY.md`.
 ya recibe. No se borró ni se desactivó ningún barrido; el único cambio de comportamiento
 **devuelve** un aviso que se había perdido.
 
-## QUALITY-13B4 · Portada de atención
+## QUALITY-13B4 · Portada de Quality · **ENTREGADO** (sin migración)
 
-**Qué:** la portada reconstruida sobre el contrato de B3; partes interesadas incluida;
-cada línea con su origen y su enlace a la fila; sin la palabra «desempeño» para
-completitud (QI-11).
+**Qué:** la portada reconstruida sobre la consulta convergida de B3. Partes interesadas
+incluida por fin; cada línea con su origen y su enlace a la causa; sin la palabra
+«desempeño» para completitud (QI-11); filtros por dominio y por proceso resueltos en
+servidor; y doce baldosas que dicen cuánto hay **y** cuánto pide atención.
 
-**Migración:** ninguna.
+**Migración:** **ninguna**. Cabecera 0153.
 
-**Cómo se sabe que está bien:** ninguna cifra sale de las filas cargadas; ningún
-problema aparece dos veces; cada línea lleva a su fila; y una empresa sin nada
-configurado ve una portada que lo dice en vez de doce ceros.
+**Cómo se sabe que está bien:** 96 comprobaciones en cuatro suites. Ninguna cifra sale de
+las filas cargadas —todas del resumen deduplicado—; el aviso y el pendiente del mismo
+riesgo se enseñan como **un** asunto; cada línea lleva a su ficha y **todos** los destinos
+se abren en la aceptación; y una empresa sin nada configurado ve una portada que lo dice
+en vez de doce ceros.
 
----
+**La decisión que más pesa:** «no hay asuntos» solo se dice si **todas** las fuentes se
+leyeron. Con una caída se dice lo contrario, y con esas palabras. Una portada en verde es
+donde más daño haría callar.
+
+**Auditoría de los doce cargadores viejos:** tres salen —sus condiciones son ya de B3—,
+ocho se adaptan a dar contexto administrativo, y uno se queda. Ninguna función de dominio
+se borró. Detalle en `QUALITY_13B4_HOME_IMPLEMENTATION.md` §2.
+
+**Lo que NO entró, con su motivo:** el filtro «Mi atención» por cargo —la propiedad es del
+cargo y resolverlo mal convertiría el usuario en dueño (QI-12)— y «Cambios recientes» —sin
+una fuente que no sea la bitácora, §18 dice que no—.
 
 ## QUALITY-13B5 · Convergencia de Intelligence y aceptación
 

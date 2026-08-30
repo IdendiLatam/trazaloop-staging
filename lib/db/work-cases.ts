@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient } from "@/lib/supabase/server";
 import {
   parseClosure,
@@ -463,10 +465,12 @@ export async function deleteCaseRow(
 }
 
 /** Resumen para la portada de Quality. Números reales, sin ceros decorativos. */
-export async function getCaseSummary(organizationId: string): Promise<{
+export async function getCaseSummary(
+  organizationId: string, client?: SupabaseClient
+): Promise<{
   openCases: number; openNonconformities: number; overdueActions: number; pendingEffectiveness: number;
 }> {
-  const supabase = await createServerClient();
+  const supabase = client ?? await createServerClient();
   const [cases, actions] = await Promise.all([
     supabase.from("work_cases").select("status, classification").eq("organization_id", organizationId),
     supabase.from("work_actions")

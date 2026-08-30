@@ -1207,10 +1207,21 @@ check("S4. la señal se lee con su explicación y su origen a la vista", () => {
 });
 
 check("S5. el inicio de Calidad consolida lo que requiere atención (§171)", () => {
-  const home = read("app/(app)/(shell)/quality/page.tsx");
-  assert(/getAutomationHomeSignals/.test(home), "el inicio no lee las señales abiertas");
-  assert(/Requieren atención/.test(home), "no existe la tarjeta consolidada");
-  assert(/quality\/automation\/signals/.test(home), "la tarjeta no lleva a las señales");
+  // QUALITY-13B4 · Ya no hay una tarjeta de automatización aparte: sus señales
+  // entran en la MISMA lista convergida que todo lo demás, que es lo que §171
+  // pedía —una consolidación, no una tarjeta por dominio—. La avería del motor
+  // sigue distinguiéndose de una condición de calidad.
+  const composicion = read("lib/db/quality-home.ts");
+  assert(/loadAttention/.test(composicion),
+    "el inicio no consume la atención convergida");
+  assert(/getAutomationHomeSignals/.test(composicion),
+    "el inicio no comprueba el estado del motor");
+  const vista = read("components/domain/quality/home-view.tsx").replace(/\s+/g, " ");
+  assert(/avería técnica, no una condición de calidad/.test(vista),
+    "el inicio no distingue la avería del motor de un problema de calidad");
+  const dominio = read("lib/domain/quality-home.ts");
+  assert(/label: "Automatización"/.test(dominio),
+    "no se puede llegar a la automatización desde el inicio");
 });
 
 check("S6. un fallo del motor se muestra como avería, no como hallazgo de calidad (§173)", () => {

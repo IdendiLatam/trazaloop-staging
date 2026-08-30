@@ -1102,10 +1102,19 @@ check("S3. el flujo se pinta como camino, no como asistente rígido", () => {
 });
 
 check("S4. la portada de Quality avisa, sin duplicar el tablero", () => {
-  const home = read("app/(app)/(shell)/quality/page.tsx");
-  assert(/getManagementReviewHomeSignals/.test(home), "la portada no lee las señales");
-  assert(/reviewLines/.test(home), "la portada no pinta ninguna línea");
-  assert(/sin mirar/.test(home), "la portada no avisa de entradas pendientes");
+  // QUALITY-13B4 · La composición se mudó a `lib/db/quality-home.ts`. La
+  // promesa no cambia: la portada avisa de la revisión y NO reconstruye sus
+  // quince entradas.
+  const composicion = read("lib/db/quality-home.ts");
+  assert(/getManagementReviewHomeSignals/.test(composicion),
+    "la portada no lee las señales de la revisión");
+  const dominio = read("lib/domain/quality-home.ts");
+  assert(/label: "Revisión por la dirección"/.test(dominio),
+    "la portada no ofrece el dominio de revisión por la dirección");
+  const vista = read("components/domain/quality/home-view.tsx");
+  assert(/en preparación/.test(vista), "la portada no dice si hay una revisión en preparación");
+  assert(!/quality_management_review_inputs/.test(composicion + vista),
+    "la portada reconstruye las entradas de la revisión en vez de enlazar a ella");
 });
 
 check("S5. las pantallas enseñan las separaciones donde se producen", () => {

@@ -506,12 +506,18 @@ async function main() {
     assert(!has(tareas.body, "no conformidad"), "se creó una no conformidad automáticamente");
   });
 
-  await check("15. La portada resume el desempeño con datos reales", async () => {
+  await check("15. La portada avisa del indicador fuera de meta, con datos reales", async () => {
+    // QUALITY-13B4 · La portada dejó de tener un bloque «Desempeño» —esa palabra
+    // colisionaba con la evaluación de personas, y QI-25 la reservó para ellas—.
+    // Lo que se comprueba sigue siendo lo mismo: que el indicador fuera de meta
+    // aparece, que se aclara que no es una no conformidad, y que se llega a
+    // Objetivos e indicadores.
     const r = await get(qualityHref);
-    assert(has(r.body, "Desempeño"), "la portada no resume el desempeño");
-    assert(has(r.body, "indicador fuera de meta") || has(r.body, "indicadores fuera de meta"),
-      "la portada no dice cuántos indicadores están fuera de meta");
-    assert(has(r.body, "no es una no conformidad"), "la portada no aclara qué significa");
+    assert(has(r.body, "Necesita atención"), "la portada no encabeza con lo que hay que atender");
+    assert(has(r.body, "fuera de meta"),
+      "la portada no dice que hay un indicador fuera de meta");
+    assert(has(r.body, "no es por sí mismo una no conformidad"),
+      "la portada no aclara qué significa estar fuera de meta");
     assert(has(r.body, "Objetivos e indicadores"), "la portada no ofrece el acceso al desempeño");
   });
 

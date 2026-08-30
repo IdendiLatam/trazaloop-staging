@@ -1043,10 +1043,19 @@ check("Q3. las rutas viven DENTRO del turno con sesión", () => {
 });
 
 check("Q4. la portada de Quality avisa de las auditorías", () => {
+  // QUALITY-13B4 · La portada dejó de preguntar a cada dominio por su cuenta:
+  // la atención sale entera de la consulta convergida, y auditorías es uno de
+  // sus dominios. La promesa —que la portada avisa de lo de auditorías, y en
+  // particular de los hallazgos sin evaluar— se comprueba donde ahora vive.
   const home = read("app/(app)/(shell)/quality/page.tsx");
-  assert(/getAuditHomeSignals/.test(home), "la portada no lee las señales");
-  assert(/auditLines/.test(home), "la portada no pinta ninguna línea de auditoría");
-  assert(/hallazgo sin evaluar/i.test(home), "la portada no avisa de hallazgos sin evaluar");
+  assert(/loadQualityHome/.test(home), "la portada no compone la atención convergida");
+  const dominio = read("lib/domain/quality-home.ts");
+  assert(/label: "Auditorías"/.test(dominio), "la portada no ofrece el dominio de auditorías");
+  const inventario = read("lib/domain/quality-observers.ts");
+  assert(/audit_finding_unevaluated/.test(inventario),
+    "el hallazgo sin evaluar dejó de ser una condición observada");
+  assert(/hallazgo no es una no conformidad/i.test(dominio),
+    "la portada no aclara que un hallazgo sin evaluar no es una no conformidad");
 });
 
 check("Q5. las pantallas enseñan la separación donde se produce", () => {

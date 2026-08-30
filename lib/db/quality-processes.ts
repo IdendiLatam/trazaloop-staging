@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient } from "@/lib/supabase/server";
 import { parseEligibility } from "@/lib/domain/lifecycle";
 
@@ -997,8 +999,10 @@ export type QualitySummary = {
   documents: number;
 };
 
-export async function getQualitySummary(organizationId: string): Promise<QualitySummary> {
-  const supabase = await createServerClient();
+export async function getQualitySummary(
+  organizationId: string, client?: SupabaseClient
+): Promise<QualitySummary> {
+  const supabase = client ?? await createServerClient();
   const [positions, processes, published, maps, publishedMaps, documents] = await Promise.all([
     supabase.from("quality_positions").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("is_active", true),

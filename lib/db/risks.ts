@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient } from "@/lib/supabase/server";
 import type {
   Aggregation, AssessmentKind, CauseSource, ControlNature, ControlStatus,
@@ -1388,11 +1390,13 @@ export async function deleteOpportunity(opportunityId: string): Promise<{ error:
 }
 
 /** Resumen para la portada de Quality (§64). Solo lo accionable. */
-export async function getRiskSummary(organizationId: string): Promise<{
+export async function getRiskSummary(
+  organizationId: string, client?: SupabaseClient
+): Promise<{
   aboveAppetite: number; reviewsOverdue: number; overdueActions: number;
   pendingApproval: number; activeOpportunities: number;
 }> {
-  const supabase = await createServerClient();
+  const supabase = client ?? await createServerClient();
   const [risks, ops] = await Promise.all([
     supabase.from("v_quality_risk_overview")
       .select("status, current_is_acceptable, review_overdue, overdue_action_count, treatment_status")

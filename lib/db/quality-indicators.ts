@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient } from "@/lib/supabase/server";
 import type {
   CalcDefinition, DataQuality, DataState, Direction, Evaluation, Frequency,
@@ -95,8 +97,10 @@ function mapObjective(r: Record<string, unknown>): ObjectiveRow {
   };
 }
 
-export async function listObjectives(organizationId: string): Promise<ObjectiveRow[]> {
-  const supabase = await createServerClient();
+export async function listObjectives(
+  organizationId: string, client?: SupabaseClient
+): Promise<ObjectiveRow[]> {
+  const supabase = client ?? await createServerClient();
   const { data, error } = await supabase
     .from("v_quality_objective_performance")
     .select("*")
@@ -355,8 +359,10 @@ function mapIndicator(r: Record<string, unknown>): IndicatorRow {
   };
 }
 
-export async function listIndicators(organizationId: string): Promise<IndicatorRow[]> {
-  const supabase = await createServerClient();
+export async function listIndicators(
+  organizationId: string, client?: SupabaseClient
+): Promise<IndicatorRow[]> {
+  const supabase = client ?? await createServerClient();
   const { data, error } = await supabase
     .from("v_quality_indicator_status")
     .select("*")
