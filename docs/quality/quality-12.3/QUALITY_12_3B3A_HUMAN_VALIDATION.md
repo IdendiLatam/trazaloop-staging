@@ -15,7 +15,10 @@ entiende, sirve, y no estorba?»**.
 ## 0 · Antes de empezar
 
 1. Abre el **Preview**:
-   `https://trazaloop-production-64ygj26gk-idendi-latam-s-projects.vercel.app` Usa una empresa de Staging con
+   `https://trazaloop-production-5bs4ma9zj-idendi-latam-s-projects.vercel.app`
+
+   Es el que lleva la corrección del alta de entradas; el anterior ya no sirve.
+   Usa una empresa de Staging con
    **Quality** habilitado. Vercel SSO sigue activo: la primera vez pedirá acceso.
 2. Ve a **Quality → Contexto → Partes interesadas → Categorías** y pulsa
    **«Sembrar las categorías iniciales»**. Es el primer paso de la validación y además
