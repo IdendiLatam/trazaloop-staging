@@ -164,10 +164,17 @@ async function main() {
   });
 
   await check("P1.2 · Intelligence sabe de dónde vienes", async () => {
-    assert(has(copilotHome, "Contexto:"), "no se dice desde dónde se pregunta");
+    assert(has(copilotHome, "Estás preguntando sobre"),
+      "no se dice desde dónde se pregunta");
     assert(has(copilotHome, "Portada de Quality"), "no se nombra la portada");
-    assert(has(copilotHome, "fuentes relacionadas con portada de quality"),
-      "no se dice qué se va a consultar");
+    assert(has(copilotHome, "Fuentes disponibles para este contexto"),
+      "no se dice cuántas fuentes hay disponibles");
+    assert(has(copilotHome, "partirá de la información de esta portada"),
+      "no se explica de dónde parte la consulta");
+    // Y NO el nombre interno de la pantalla ni una promesa que después no cuadre.
+    assert(!has(copilotHome, "mirador"), "se enseña el nombre interno de una pantalla");
+    assert(!has(copilotHome, "Se consultará"),
+      "se promete lo que se va a consultar, y después no cuadra");
   });
 
   // =========================================================================
@@ -213,10 +220,18 @@ async function main() {
   });
 
   await check("P4.1 · El contexto queda fijado AL PROCESO, y con sus sugerencias", async () => {
-    assert(has(copilotProc, "Contexto:"), "no se dice desde dónde se pregunta");
+    assert(has(copilotProc, "Estás preguntando sobre"),
+      "no se dice desde dónde se pregunta");
     assert(has(copilotProc, "Despacho a cliente"), "no se nombra el proceso de origen");
-    assert(has(copilotProc, "fuentes relacionadas con mirador de proceso"),
-      "no se dice qué se va a consultar para este proceso");
+    // El sujeto y el tipo, cada uno una vez: nunca «Contexto: Proceso: X».
+    assert(!/proceso:\s*proceso/i.test(flat(copilotProc)),
+      "el tipo se dice dos veces");
+    assert(has(copilotProc, "partirá de la información de este proceso"),
+      "no se explica que el proceso es el punto de partida");
+    assert(has(copilotProc, "Fuentes disponibles para este contexto: 7"),
+      "no se dicen las fuentes disponibles de este contexto");
+    assert(!has(copilotProc, "mirador de proceso"),
+      "se enseña el nombre interno de la pantalla");
     assert(has(copilotProc, "Resumir el proceso"), "falta la sugerencia de resumen");
     assert(has(copilotProc, "Requisitos que le afectan"),
       "falta la de requisitos de partes interesadas");

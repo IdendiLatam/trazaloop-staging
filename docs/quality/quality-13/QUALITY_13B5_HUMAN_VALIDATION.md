@@ -36,7 +36,34 @@ hacer lo mismo.
 
 ---
 
-## 3 · Lo que NO es un defecto
+## 3 · El microarreglo de presentación · tras el primer humo
+
+La composición estaba bien; **la presentación contaba mal lo que pasaba**. Cuatro cosas,
+las cuatro vistas por una persona en treinta segundos y ninguna por una suite:
+
+| Se veía | Por qué estaba mal | Ahora |
+|---|---|---|
+| «Contexto: Proceso: Gestión Comercial» | el tipo dicho dos veces | **Estás preguntando sobre** · «Gestión Comercial · Proceso» |
+| «se consultará … 7 fuentes relacionadas con **mirador de proceso**» | nombre interno de una pantalla, y una promesa que después no cuadraba | «Fuentes disponibles para este contexto: 7» y, en la respuesta, «Fuentes utilizadas en esta respuesta: N» |
+| «y el Se ampliará el contexto…» | frase rota de un pegado anterior | la frase del ancla, entera |
+| «Evidencia suficiente» + «Sin proveedor de IA configurado» + «Interpretación de la IA» | la pantalla contaba que un modelo había intervenido cuando no había ninguno | «Información disponible», «Hechos encontrados» y «Lectura del contexto» |
+
+**Disponible no es usado.** Antes de preguntar se dice cuántas fuentes hay; después,
+cuántas aportaron algo. Son dos cifras distintas y ahora se dicen con palabras distintas.
+
+**«Evidencia suficiente» pasó a «Contexto suficiente».** El nivel siempre midió cuánto
+contexto autorizado se encontró; «evidencia suficiente» es, en una empresa con sistema de
+gestión, una frase con dueño — la suficiencia probatoria la declara quien audita—. El valor
+guardado no cambia: era la etiqueta la que estaba mal.
+
+**Con modelo hay «Análisis de Intelligence».** Nunca «conclusión», «dictamen» ni
+«conformidad»: eso sonaría a decisión formal, y no lo es.
+
+Todo esto está en `quality13b5-copy`: 20 comprobaciones, para que no vuelva.
+
+---
+
+## 4 · Lo que NO es un defecto
 
 - **Que sin proveedor configurado avise y no responda.** Es lo correcto: no hay a quién
   preguntar, y fingir una respuesta sería peor.
@@ -50,7 +77,7 @@ hacer lo mismo.
 
 ---
 
-## 4 · El estado de la IA en vivo
+## 5 · El estado de la IA en vivo
 
 **No se ejecutó ninguna llamada a un proveedor.** El entorno local no tiene credencial
 configurada, y §26 lo permite explícitamente: «Do not block B5 if live provider is
@@ -65,7 +92,7 @@ vivo. **Nunca en Production.**
 
 ---
 
-## 5 · Dónde mirar si algo no cuadra
+## 6 · Dónde mirar si algo no cuadra
 
 | Síntoma | Dónde |
 |---|---|
@@ -75,3 +102,4 @@ vivo. **Nunca en Production.**
 | la atención no cuadra | es de B3 · `lib/db/quality-attention.ts` |
 | el contexto de proceso no cuadra | es de B1 · `lib/db/quality-process-context.ts` |
 | una cita no se guarda | su fuente falta en `quality_ai_sources` (ver 0154) |
+| un rótulo suena a dictamen | `lib/domain/quality-intelligence.ts` §5 y `EVIDENCE_LABEL` |

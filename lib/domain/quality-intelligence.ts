@@ -283,3 +283,96 @@ export const FORMAL_DECISIONS_RESERVED_TO_PEOPLE: readonly string[] = [
 export const SUGGESTION_ONLY_NOTE =
   "Esto es una sugerencia a partir de lo registrado. Ninguna de estas decisiones "
   + "la toma Trazaloop: las toma quien responde por el sistema de gestión.";
+
+// ===========================================================================
+// 5 · CÓMO SE PRESENTA EL CONTEXTO (microarreglo tras el humo humano de B5)
+// ===========================================================================
+
+/**
+ * QUÉ SE ARREGLÓ, Y POR QUÉ ESTABA MAL
+ *
+ * La tarjeta decía «Contexto: Proceso: Gestión Comercial» —el tipo repetido, una
+ * vez por la etiqueta y otra por el rótulo— y «se consultará lo que tu rol pueda
+ * ver de 7 fuentes relacionadas con mirador de proceso».
+ *
+ * Tres problemas, y los tres los vio una persona en treinta segundos:
+ *
+ *   1 · «mirador de proceso» es el nombre INTERNO de una pantalla. Quien
+ *       pregunta no tiene por qué saberlo.
+ *   2 · «se consultará … 7 fuentes» promete un número que después no cuadra:
+ *       de siete pedidas puede que solo cuatro tengan algo. Disponible no es
+ *       usado, y decir lo primero con las palabras de lo segundo es mentir un
+ *       poco.
+ *   3 · No quedaba claro que el proceso es el ANCLA: la frase daba a entender
+ *       que la pregunta podía irse de ahí.
+ */
+
+/**
+ * Parte la etiqueta fijada en sujeto y tipo.
+ *
+ * Las pantallas llevan desde QUALITY-12 mandando «Proceso: Gestión Comercial», y
+ * cambiar las ocho llamadas para arreglar un rótulo sería tocar ocho ficheros
+ * por un problema de presentación. Se parte aquí, que es donde se presenta.
+ */
+export function splitPinnedLabel(label: string): { subject: string; kind: string | null } {
+  const i = label.indexOf(": ");
+  if (i <= 0) return { subject: label.trim(), kind: null };
+  return { subject: label.slice(i + 2).trim(), kind: label.slice(0, i).trim() };
+}
+
+/** Cómo se nombra el punto de partida en la frase. Nunca el nombre de la
+ *  pantalla: «mirador de proceso» es vocabulario de dentro. */
+const ANCHOR_NOUN: Record<string, string> = {
+  quality_home: "esta portada",
+  quality_process: "este proceso",
+  quality_management_review: "esta revisión por la dirección",
+  quality_stakeholder_assessment: "esta parte interesada",
+  quality_audit: "esta auditoría",
+  quality_indicator: "este indicador",
+  work_case: "este caso",
+  quality_supplier_scope: "este proveedor",
+  quality_signal: "esta señal",
+};
+
+export function anchorNoun(pinnedType: string | null | undefined): string {
+  return (pinnedType && ANCHOR_NOUN[pinnedType]) || "este punto de partida";
+}
+
+/**
+ * La frase del ancla.
+ *
+ * Dice tres cosas y las tres importan: de dónde parte, que puede ampliar si la
+ * pregunta lo pide, y que ampliar no se salta ningún permiso. Lo que NO dice es
+ * que la pregunta abandone el origen, porque no lo abandona.
+ */
+export function contextAnchorNote(pinnedType: string | null | undefined): string {
+  return `Intelligence partirá de la información de ${anchorNoun(pinnedType)} y sus `
+    + "relaciones en Quality. Si tu pregunta lo requiere, podrá incorporar información "
+    + "relacionada de otros dominios que tu rol tenga permiso para consultar.";
+}
+
+/**
+ * Cuántas fuentes están DISPONIBLES para este contexto.
+ *
+ * Disponibles, no consultadas y desde luego no usadas: es el tamaño del plan.
+ * Cuántas aportaron algo solo se sabe después, y se dice después.
+ */
+export function availableSourceCount(pinnedType: string | null | undefined): number | null {
+  return contextPlan(pinnedType)?.sources.length ?? null;
+}
+
+/** El rótulo de la tarjeta. En lengua de producto, y sin repetir el tipo. */
+export const CONTEXT_CARD_TITLE = "Estás preguntando sobre";
+
+/** El rótulo del bloque que cierra una respuesta SIN modelo. */
+export const NO_MODEL_SECTION_TITLE = "Lectura del contexto";
+export const NO_MODEL_SECTION_NOTE =
+  "Estos son los datos registrados actualmente en Trazaloop. Revísalos junto con las "
+  + "personas responsables del proceso.";
+
+/** El rótulo del bloque que cierra una respuesta CON modelo. No «conclusión»,
+ *  ni «dictamen»: eso sonaría a decisión formal, y no lo es. */
+export const MODEL_SECTION_TITLE = "Análisis de Intelligence";
+
+/** Lo que se dice arriba cuando no intervino ningún modelo. */
+export const NO_MODEL_HEADER_TITLE = "Información disponible";

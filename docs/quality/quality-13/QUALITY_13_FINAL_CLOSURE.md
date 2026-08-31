@@ -109,7 +109,10 @@ de proceso—, una selección de fuentes por pantalla de origen, y dos entradas 
 **Lo medido:** una pregunta global pedía **23** fuentes; desde un proceso pide **7**; desde
 la portada, **10**. La selección la decide el servidor, no el modelo.
 
-**75 comprobaciones.**
+**95 comprobaciones**, veinte de ellas del microarreglo de presentación que encontró el
+primer humo humano: el tipo dicho dos veces, el nombre interno de una pantalla a la vista,
+un número de fuentes prometido que después no cuadraba, y una respuesta que decía
+«Interpretación de la IA» sin que hubiera intervenido ningún modelo.
 
 ---
 
@@ -142,7 +145,7 @@ Production nunca recibió Quality: el módulo sigue siendo privado.
 
 ## 6 · Las pruebas
 
-**434 comprobaciones nuevas** en veinte suites, todas por código de salida.
+**454 comprobaciones nuevas** en veintiuna suites, todas por código de salida.
 
 | Tramo | Suites | Comprobaciones |
 |---|---|---|
@@ -150,10 +153,10 @@ Production nunca recibió Quality: el módulo sigue siendo privado.
 | B2 | 4 | 124 |
 | B3 | 4 | 96 |
 | B4 | 4 | 96 |
-| B5 | 4 | 75 |
-| | | **434** |
+| B5 | 5 | 95 |
+| | | **454** |
 
-Nueve entran en `test:all`; las de base real y las tres aceptaciones por HTTP se corren
+Diez entran en `test:all`; las de base real y las tres aceptaciones por HTTP se corren
 aparte porque necesitan Supabase local y el build de producción.
 
 **Las cuatro que más valieron**, y las cuatro encontraron algo que el código fuente no
@@ -196,6 +199,11 @@ que leían.
 **«Cero» es la mentira más fácil de un sistema de gestión.** Una lectura denegada, una
 fuente caída y un dominio vacío se parecen mucho en una pantalla, y solo uno de los tres
 permite dormir tranquilo. Está separado en las cinco capas.
+
+**Una persona ve en treinta segundos lo que 454 pruebas no miran.** El microarreglo de B5
+—cuatro problemas de presentación, ninguno funcional— lo encontró el primer humo humano.
+Las suites comprobaban que la composición era correcta; ninguna comprobaba que la pantalla
+contara bien lo que había pasado. Ahora hay una que sí.
 
 **Documentar lo que NO se hizo cuesta lo mismo y vale más.** Cero relevos nuevos en B3, «Mi
 atención» aplazado en B4, sin lista nueva de preguntas para Contexto en B5: los tres con su

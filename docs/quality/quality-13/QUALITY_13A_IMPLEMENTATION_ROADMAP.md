@@ -154,7 +154,7 @@ proveedor en vivo, porque el entorno no tiene credencial y §26 no lo exige.
 
 ## Cierre de QUALITY-13
 
-Los cinco tramos entregados. **434 comprobaciones** en veinte suites. Local y Staging en
+Los cinco tramos entregados. **454 comprobaciones** en veintiuna suites. Local y Staging en
 **0154**; Production en **0111**, sin tocar. Ver `QUALITY_13_FINAL_CLOSURE.md`.
 
 ## Lo que NO entra en ningún tramo

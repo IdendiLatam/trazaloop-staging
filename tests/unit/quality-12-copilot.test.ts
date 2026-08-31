@@ -588,7 +588,16 @@ console.log("\nL · LA PANTALLA (§65, §113, §115, §116, §164)");
 
 check("L1. la respuesta separa hechos, interpretación y sugerencias (§65)", () => {
   assert(/Hechos encontrados/.test(UI), "no hay bloque de hechos");
-  assert(/Interpretación de la IA/.test(UI), "no hay bloque de interpretación");
+  // QUALITY-13B5 · El bloque de interpretación sigue existiendo y sigue estando
+  // separado de los hechos; lo que cambió es su rótulo. Se llamaba
+  // «Interpretación de la IA» y aparecía también cuando NO había intervenido
+  // ningún modelo, que es lo que vio el humo humano. Ahora hay dos: «Análisis de
+  // Intelligence» cuando el modelo contestó, y «Lectura del contexto» cuando la
+  // respuesta la compuso el código.
+  assert(/MODEL_SECTION_TITLE/.test(UI) && /NO_MODEL_SECTION_TITLE/.test(UI),
+    "no hay bloque de interpretación, ni con modelo ni sin él");
+  assert(/modelRan/.test(UI),
+    "el bloque de interpretación no distingue si intervino un modelo");
   assert(/Sugerencias · para que decidas tú/.test(UI), "no hay bloque de sugerencias");
   assert(/Fuentes/.test(UI), "no hay bloque de fuentes");
 });

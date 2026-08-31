@@ -116,15 +116,27 @@ export const RUN_STATUS_LABEL: Record<AiRunStatus, string> = {
   rate_limited: "Bloqueada por el tope",
 };
 
+/**
+ * QUALITY-13B5 · microarreglo · «Evidencia suficiente» decía otra cosa.
+ *
+ * El nivel siempre midió cuánto CONTEXTO autorizado se encontró, y así se
+ * calcula. Pero «evidencia suficiente» es, en una empresa con sistema de
+ * gestión, una frase con dueño: la suficiencia probatoria la declara quien
+ * audita, no una pantalla. El humo humano lo leyó como un dictamen.
+ *
+ * Se renombra a lo que de verdad mide. El valor guardado —`sufficient`,
+ * `limited`, `missing`— no cambia: es la etiqueta la que estaba mal.
+ */
 export const EVIDENCE_LABEL: Record<string, string> = {
-  sufficient: "Evidencia suficiente",
-  limited: "Evidencia escasa",
-  missing: "Sin evidencia",
+  sufficient: "Contexto suficiente",
+  limited: "Contexto escaso",
+  missing: "Sin contexto",
 };
 
-/** §66 · Lo que significa cada nivel, para que nadie lo lea como un porcentaje. */
+/** §66 · Lo que significa cada nivel, para que nadie lo lea como un porcentaje
+ *  ni como un juicio de conformidad. */
 export const EVIDENCE_MEANING: Record<string, string> = {
-  sufficient: "Se encontraron varias fuentes autorizadas que sostienen lo que se afirma.",
+  sufficient: "Se encontraron varias fuentes autorizadas relacionadas con tu pregunta.",
   limited: "Se encontró poca información autorizada: conviene contrastar antes de decidir.",
   missing: "No se encontró información autorizada relacionada con la pregunta.",
 };

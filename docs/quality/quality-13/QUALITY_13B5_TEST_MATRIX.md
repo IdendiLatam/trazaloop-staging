@@ -1,16 +1,17 @@
 # QUALITY-13B5 · MATRIZ DE PRUEBAS
 
-Cuatro suites, **75 comprobaciones**. Cada cifra sale de contar los `✔` que imprime su
+Cinco suites, **95 comprobaciones**. Cada cifra sale de contar los `✔` que imprime su
 suite.
 
 | Suite | Qué prueba | Comprobaciones |
 |---|---|---|
 | `quality13b5-intelligence` | las decisiones, sin base ni modelo | 35 |
+| `quality13b5-copy` | la presentación del contexto y de la respuesta | 20 |
 | `quality13b5-context` | la composición contra base real, y su tamaño | 19 |
 | `quality13b5-injection` | el texto de la empresa como dato | 6 |
 | `quality13b5-e2e` | el recorrido P1…P8 por HTTP | 15 |
 
-La primera entra en `test:all`. Las otras tres necesitan Supabase local; la última, además,
+Las dos primeras entran en `test:all`. Las otras tres necesitan Supabase local; la última, además,
 el build de producción.
 
 ---
@@ -115,3 +116,28 @@ la cabecera de migraciones de su día como si fuera un invariante.
 | `quality123b3b-intelligence` AD | 5+ sugerencias en Contexto | intactas: B5 **no** las sustituyó |
 
 La tercera no llegó a cambiarse: se cambió el código para no romperla, que era lo correcto.
+
+---
+
+## 5 · El microarreglo de presentación
+
+El humo humano encontró cuatro cosas que ninguna suite veía, porque ninguna rompía nada
+funcional. `quality13b5-copy` las cubre:
+
+| | Qué se comprueba |
+|---|---|
+| A | el contexto no expone «mirador de proceso» ni ningún nombre interno |
+| B | el tipo NO se dice dos veces |
+| C | disponibles y usadas tienen frases distintas, y la primera va antes de preguntar |
+| D | sin modelo, no se habla de «interpretación de la IA» |
+| E | sin modelo, los hechos determinísticos siguen viéndose |
+| F | con modelo, se permite «Análisis de Intelligence» y se prohíbe «conclusión», «dictamen» y «conformidad» |
+| G | «Evidencia suficiente» pasó a «Contexto suficiente»; los valores guardados no cambian |
+| H | el origen sigue visible como ancla, y se dice que no se abandona |
+| I | la selección de fuentes no se tocó: cinco contextos, 7 y 10 fuentes |
+| J | las citas no se tocaron |
+| K | el compositor no se tocó |
+
+Y la de QUALITY-12 que comprobaba la separación de bloques se reescribió: el bloque de
+interpretación **sigue existiendo y sigue separado de los hechos**; lo que cambió es que
+ahora hay dos rótulos según intervenga o no un modelo.

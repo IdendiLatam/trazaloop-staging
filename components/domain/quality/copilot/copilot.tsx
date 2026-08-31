@@ -17,7 +17,11 @@ import {
   HUMAN_IN_THE_LOOP, NO_LEARNING_CLAIM, plainText, starterFor,
   USE_CASES, USE_CASE_LABEL, type AiUseCase,
 } from "@/lib/domain/quality-ai";
-import { contextPlan } from "@/lib/domain/quality-intelligence";
+import {
+  CONTEXT_CARD_TITLE, MODEL_SECTION_TITLE, NO_MODEL_HEADER_TITLE,
+  NO_MODEL_SECTION_NOTE, NO_MODEL_SECTION_TITLE, availableSourceCount,
+  contextAnchorNote, splitPinnedLabel,
+} from "@/lib/domain/quality-intelligence";
 
 /**
  * Trazaloop Quality · QUALITY-12 · El Copilot.
@@ -104,24 +108,33 @@ export function CopilotPanel({
         } />
       ) : null}
 
+      {/* QUALITY-13B5 · microarreglo. Antes decía «Contexto: Proceso: Gestión
+          Comercial» —el tipo dos veces— y prometía «se consultarán 7 fuentes»,
+          que después no cuadraba con las que aportaron algo. Y nombraba la
+          pantalla por su nombre interno.
+
+          Ahora: el sujeto grande, el tipo detrás, el ancla explicada, y el
+          número presentado como lo que es —DISPONIBLES—, nunca como usadas. */}
       {pinned ? (
-        <p className="rounded-md border border-hairline bg-canvas px-3 py-2 text-xs text-ink">
-          <span className="font-medium">Contexto: </span>{pinned.label}
-          <span className="block text-ink-soft">
-            La consulta empieza por aquí. Puedes preguntar por otras cosas y el
-            Se ampliará el contexto dentro de lo que tu rol puede ver.
-          </span>
-          {/* QUALITY-13B5 · Desde una pantalla integrada se dice QUÉ se va a
-              mirar. No es un adorno: una respuesta que sale de nueve dominios y
-              otra que sale de tres no valen lo mismo, y quien pregunta debería
-              poder notarlo antes de leerla. */}
-          {contextPlan(pinned.type) ? (
-            <span className="mt-1 block text-ink-soft">
-              Se consultará lo que tu rol pueda ver de: {contextPlan(pinned.type)!.sources.length}{" "}
-              fuentes relacionadas con {contextPlan(pinned.type)!.label.toLowerCase()}.
-            </span>
+        <div className="rounded-md border border-hairline bg-canvas px-3 py-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+            {CONTEXT_CARD_TITLE}
+          </p>
+          <p className="text-sm font-medium text-ink">
+            {splitPinnedLabel(pinned.label).subject}
+            {splitPinnedLabel(pinned.label).kind ? (
+              <span className="font-normal text-ink-soft">
+                {" · "}{splitPinnedLabel(pinned.label).kind}
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-1 text-xs text-ink-soft">{contextAnchorNote(pinned.type)}</p>
+          {availableSourceCount(pinned.type) !== null ? (
+            <p className="mt-1 text-xs text-ink-soft">
+              Fuentes disponibles para este contexto: {availableSourceCount(pinned.type)}
+            </p>
           ) : null}
-        </p>
+        </div>
       ) : null}
 
       <form action={action} className="space-y-3">
@@ -258,12 +271,25 @@ function Answer({ state }: { state: AiActionState }) {
   const refs = state.references ?? [];
   const meta = state.meta;
 
+  /**
+   * ¿Intervino un modelo de verdad?
+   *
+   * Son dos cosas distintas y las dos tienen que ser ciertas: que hubiera
+   * proveedor configurado y que se le llamara. Sin las dos, lo que se ve son
+   * datos de Trazaloop compuestos por código, y llamarlo «interpretación de la
+   * IA» es contar algo que no pasó. Lo vio el humo humano: la respuesta decía a
+   * la vez «sin proveedor de IA configurado» y «Interpretación de la IA».
+   */
+  const modelRan = meta ? meta.live === true && meta.providerCalled !== false : false;
+
   return (
     <article className="space-y-4 rounded-lg border border-hairline bg-surface p-4">
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-canvas px-2 py-0.5 text-xs text-ink">
-            {EVIDENCE_LABEL[a.evidence] ?? a.evidence}
+            {modelRan
+              ? (EVIDENCE_LABEL[a.evidence] ?? a.evidence)
+              : NO_MODEL_HEADER_TITLE}
           </span>
           {meta ? (
             <span className="text-xs text-ink-soft">
@@ -279,6 +305,13 @@ function Answer({ state }: { state: AiActionState }) {
           ) : null}
         </div>
         <p className="text-xs text-ink-soft">{EVIDENCE_MEANING[a.evidence]}</p>
+        {/* Disponible NO es usado. Arriba, antes de preguntar, se dijo cuántas
+            fuentes había; aquí se dice cuántas aportaron algo de verdad. */}
+        {meta ? (
+          <p className="text-xs text-ink-soft">
+            Fuentes utilizadas en esta respuesta: {meta.sources.length}
+          </p>
+        ) : null}
       </header>
 
       <p className="text-sm text-ink">{plainText(a.summary)}</p>
@@ -301,16 +334,27 @@ function Answer({ state }: { state: AiActionState }) {
         </section>
       ) : null}
 
-      {a.interpretation.length > 0 ? (
+      {modelRan && a.interpretation.length > 0 ? (
         <section className="space-y-1">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-ink">
-            Interpretación de la IA
+            {MODEL_SECTION_TITLE}
           </h3>
           <ul className="space-y-1">
             {a.interpretation.map((t, i) => (
               <li key={i} className="text-sm text-ink-soft">{plainText(t)}</li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {/* Sin modelo, el cierre es determinístico y se dice como tal: no hay
+          análisis que enseñar, hay datos que leer. */}
+      {!modelRan && a.facts.length > 0 ? (
+        <section className="space-y-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink">
+            {NO_MODEL_SECTION_TITLE}
+          </h3>
+          <p className="text-sm text-ink-soft">{NO_MODEL_SECTION_NOTE}</p>
         </section>
       ) : null}
 
