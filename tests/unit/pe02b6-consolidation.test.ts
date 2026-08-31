@@ -301,17 +301,42 @@ check("F2. Y el paquete de revisión existe", () => {
   }
 });
 
-check("F3. Nada de esto publica nada", () => {
+check("F3. Publicar es un acto aparte, y por la vía canónica", () => {
+  // Hasta PE-02B5B esta comprobación exigía que NINGÚN guion publicara. Ya no
+  // vale: B5B publicó por decisión de la dirección, y su guion existe.
+  //
+  // Lo que se conserva es lo que de verdad protegía. Uno: el guion de borradores
+  // sigue sin publicar, para que preparar contenido nunca lo active de rebote.
+  // Dos: quien publique lo hace por la función canónica, no escribiendo el
+  // estado a mano — porque publicar también archiva la vigente, la enlaza en los
+  // dos sentidos y deja constancia de quién fue, y eso a mano se olvida.
   assert(!/faq_publish_entry|legal_publish_document|help_publish_item/.test(SEMILLA),
     "el guion de borradores publica contenido");
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
     .flatMap((e) => e.isDirectory() ? walk(`${dir}/${e.name}`)
       : /\.(sql|ts)$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+  const publicadores: string[] = [];
   for (const f of walk("scripts")) {
-    const src = leer(f).replace(/^\s*--.*$/gm, "");
-    assert(!/legal_publish_document/.test(src),
-      `${f} activaría una política legal`);
+    const crudo = leer(f);
+    const src = crudo.replace(/^\s*--.*$/gm, "");
+    // Nadie escribe el estado a mano. La excepción son los guiones del kit de
+    // lanzamiento v1.0.0: se escribieron ANTES de que existieran las funciones
+    // canónicas de 0156, llevan escrito que nunca se han ejecutado, y se
+    // conservan como historia. Si alguna vez hicieran falta, hay que rehacerlos.
+    const esKitAntiguo = f.startsWith("scripts/release/v1/")
+      && crudo.includes("NO SE HA EJECUTADO");
+    assert(esKitAntiguo
+      || !/update\s+(public\.)?legal_documents[\s\S]{0,200}status\s*=\s*'active'/i.test(src),
+      `${f} activa una política escribiendo el estado a mano`);
+    assert(!/insert\s+into\s+(public\.)?faq_entry_revisions/i.test(src),
+      `${f} inserta una revisión saltándose la barrera de verificación`);
+    assert(!/insert\s+into\s+(public\.)?user_legal_acceptances/i.test(src),
+      `${f} fabrica una aceptación legal`);
+    if (/legal_publish_document|faq_publish_entry/.test(src)) publicadores.push(f);
   }
+  // Y publicar vive en un solo sitio, con nombre propio.
+  assert(publicadores.every((f) => f.includes("pe02b5b")),
+    `hay guiones que publican fuera del tramo de publicación: ${publicadores.join(", ")}`);
 });
 
 // ===========================================================================

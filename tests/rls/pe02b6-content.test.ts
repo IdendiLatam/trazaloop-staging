@@ -118,51 +118,94 @@ async function main() {
   });
 
   // =========================================================================
-  console.log("\nB · Y sin embargo, nada se publicó");
+  console.log("\nB · Y las confirmaciones sobrevivieron a la publicación");
   // =========================================================================
+  //
+  // Hasta PE-02B5B este bloque comprobaba que nada estuviera publicado. La
+  // dirección aprobó la publicación el 2026-08-31, así que la pregunta cambió:
+  // ya no es «¿sigue guardado?», es «¿llegó entero a lo que se lee?».
+  //
+  // Es el momento en que una afirmación se puede perder sin que nadie lo note.
+  // Publicar copia el borrador a una revisión inmutable, y si en esa copia se
+  // quedara atrás la mitad que dice «esto lo decidimos nosotros», la respuesta
+  // publicada afirmaría más de lo que puede sostener.
 
-  await check("B1. Las quince siguen siendo borradores sin revisión", async () => {
+  await check("B1. Las quince están publicadas, y ninguna a medias", async () => {
     const { data } = await sa.from("faq_entries").select("id, slug, status").in("slug", SLUGS);
     assert(data && data.length === 15, `hay ${data?.length} de 15`);
     for (const e of data as { slug: string; status: string }[]) {
-      assert(e.status === "draft", `«${e.slug}» está en «${e.status}»`);
+      assert(e.status === "published", `«${e.slug}» está en «${e.status}»`);
     }
     const ids = (data ?? []).map((r) => String((r as { id: string }).id));
-    const { data: revs } = await sa.from("faq_entry_revisions").select("id").in("entry_id", ids);
-    assert(!revs || revs.length === 0, `hay ${revs?.length} revisiones publicadas`);
+    const { data: revs } = await sa.from("faq_entry_revisions")
+      .select("id").in("entry_id", ids).is("effective_to", null);
+    assert(revs && revs.length === 15,
+      `hay ${revs?.length} revisiones vigentes y deberían ser 15`);
   });
 
-  await check("B2. Ninguna se lee en la FAQ", async () => {
-    const { data: publica } = await anonimo.from("v_faq_public").select("slug").in("slug", SLUGS);
-    assert(!publica || publica.length === 0, `${publica?.length} son públicas`);
-    const { data: conSesion } = await sa.from("v_faq_authenticated")
-      .select("slug").in("slug", SLUGS);
-    assert(!conSesion || conSesion.length === 0, `${conSesion?.length} se leen con sesión`);
+  await check("B2. Lo publicado de entrenamiento conserva LAS DOS MITADES", async () => {
+    const { data: e } = await sa.from("faq_entries").select("id")
+      .eq("slug", "seguridad_entrenamiento_modelos").single();
+    const { data } = await sa.from("faq_entry_revisions")
+      .select("answer_short, answer_long, verification_status, verification_note, source_basis")
+      .eq("entry_id", (e as { id: string }).id).is("effective_to", null).single();
+    const r = data as Record<string, string>;
+    const texto = `${r.answer_short} ${r.answer_long}`;
+    // La política del proveedor…
+    assert(/documentación oficial/i.test(texto), "se perdió la atribución al proveedor");
+    assert(/salvo que el cliente lo autorice/i.test(texto), "se perdió el «salvo autorización»");
+    // …y nuestra decisión, que es la mitad que se pierde si alguien recorta.
+    assert(/no ha activado la autorización/i.test(texto),
+      "se perdió que Trazaloop no activó la autorización");
+    assert(/configuración de nuestra cuenta, no una promesa del proveedor/i.test(texto),
+      "se perdió la frase que separa lo nuestro de lo del proveedor");
+    assert(r.verification_status === "verified_with_qualifier",
+      `se publicó como «${r.verification_status}»`);
+    assert(/lo confirmó una persona, no el repositorio/i.test(String(r.verification_note)),
+      "la salvedad no viajó a la revisión");
+    assert(/OpenAI/.test(String(r.source_basis)),
+      "la procedencia no dice de qué proveedor es la política citada");
   });
 
-  await check("B3. La política vigente sigue siendo la v1", async () => {
-    const { data } = await anonimo.from("legal_documents")
-      .select("version, content").eq("document_type", "privacy").eq("status", "active");
-    assert(data && data.length === 1, `hay ${data?.length} políticas vigentes`);
-    assert((data![0] as { version: string }).version === "v1",
-      `la vigente es «${(data![0] as { version: string }).version}»`);
+  await check("B3. Y lo publicado de retención sigue diciendo que NO hay ZDR", async () => {
+    const { data: e } = await sa.from("faq_entries").select("id")
+      .eq("slug", "seguridad_retencion_proveedor").single();
+    const { data } = await sa.from("faq_entry_revisions")
+      .select("answer_short, answer_long, verification_status, verification_note")
+      .eq("entry_id", (e as { id: string }).id).is("effective_to", null).single();
+    const r = data as Record<string, string>;
+    const texto = `${r.answer_short} ${r.answer_long}`;
+    assert(/30 días/i.test(texto), "se perdió el plazo");
+    assert(/no tiene contratado un acuerdo de retención cero/i.test(texto),
+      "se perdió que no hay retención cero");
+    assert(/NO es un acuerdo de retención cero/i.test(texto),
+      "se perdió la distinción con pedir que no se almacene");
+    assert(/máximo/i.test(texto), "se perdió que el plazo es un máximo");
+    assert(r.verification_status === "verified_with_qualifier",
+      `se publicó como «${r.verification_status}»`);
+    assert(/no tiene retención cero/i.test(String(r.verification_note)),
+      "la salvedad no viajó a la revisión");
   });
 
-  await check("B4. La sucesora recoge las confirmaciones y sigue en borrador", async () => {
-    const { data } = await sa.from("legal_documents")
-      .select("status, content, published_at").eq("version", "v1.1-draft").single();
-    const d = data as { status: string; content: string; published_at: string | null };
-    assert(d.status === "draft", `está en «${d.status}»`);
-    assert(d.published_at === null, "tiene fecha de publicación");
-    assert(/No se ha activado/.test(d.content),
-      "la sucesora no recoge la confirmación del entrenamiento");
-    assert(/No se tiene contratado/.test(d.content),
-      "la sucesora no recoge la confirmación de la retención");
-    assert(!/PENDIENTE DE CONFIRMACIÓN HUMANA/.test(d.content),
-      "la sucesora mantiene un aviso ya resuelto");
-  });
+  await check("B4. La política vigente es la v1.1, con las dos confirmaciones dentro",
+    async () => {
+      const { data } = await anonimo.from("legal_documents")
+        .select("version, content, published_at")
+        .eq("document_type", "privacy").eq("status", "active").single();
+      const d = data as { version: string; content: string; published_at: string | null };
+      assert(d.version === "v1.1", `la vigente es «${d.version}»`);
+      assert(d.published_at, "la vigente no tiene fecha de publicación");
+      assert(/No se ha activado/.test(d.content),
+        "la vigente no recoge la confirmación del entrenamiento");
+      assert(/No se tiene contratado/.test(d.content),
+        "la vigente no recoge la confirmación de la retención");
+      assert(!/PENDIENTE DE CONFIRMACIÓN HUMANA/.test(d.content),
+        "la vigente mantiene un aviso ya resuelto");
+    });
 
-  await check("B5. Y nadie tiene que volver a aceptar", async () => {
+  await check("B5. Y la reaceptación se pide, en vez de darse por hecha", async () => {
+    // Al revés que antes: lo que ahora sería un fallo grave es que alguien
+    // quedara aceptado de la v1.1 sin haberla aceptado.
     const email2 = `pe02b6-acepta-${sello}@test.trazaloop.dev`;
     const { data: c2 } = await admin.auth.admin.createUser({
       email: email2, password, email_confirm: true, user_metadata: { full_name: "QA acepta" } });
@@ -173,10 +216,12 @@ async function main() {
       { p_ip_address: null, p_user_agent: "b6" });
     assert(!error, `aceptar: ${error?.message}`);
     const { data: suyas } = await admin.from("user_legal_acceptances")
-      .select("version").eq("user_id", c2.user!.id);
-    const versiones = (suyas ?? []).map((r) => String((r as { version: string }).version));
-    assert(versiones.length === 2 && versiones.every((v) => v === "v1"),
-      `se aceptaron ${versiones.join(", ")} y debía ser v1 dos veces`);
+      .select("version, document_type").eq("user_id", c2.user!.id);
+    const privacidad = (suyas ?? []).filter((r) =>
+      (r as { document_type: string }).document_type === "privacy");
+    assert(privacidad.length === 1 &&
+      String((privacidad[0] as { version: string }).version) === "v1.1",
+      `aceptó «${privacidad.map((r) => (r as { version: string }).version).join(", ")}»`);
   });
 
   // =========================================================================

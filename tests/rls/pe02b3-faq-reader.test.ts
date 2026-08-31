@@ -366,16 +366,18 @@ async function main() {
   await check("P. Se sembró contenido útil, y NADA bloqueado", async () => {
     const todas = dato(await LEER.searchFaq({ audience: "authenticated",
       pageSize: 200 }, miembro.client), "todas");
-    const sembradas = todas.rows.filter((x) => !/^(qa_|b3_)/.test(x.slug));
+    // Lo que sembró ESTE tramo son las veinticuatro de siempre. Las quince de
+    // seguridad las publicó PE-02B5B el 2026-08-31, así que se excluyen: aquí no
+    // se mide lo que hizo otro tramo.
+    const sembradas = todas.rows
+      .filter((x) => !/^(qa_|b3_|seguridad_)/.test(x.slug));
     assert(sembradas.length >= 20, `solo hay ${sembradas.length} respuestas sembradas`);
-
-    // Nada de seguridad, nada de entrenamiento de modelos, nada de precios.
     assert(!sembradas.some((x) => x.categoryCode === "seguridad"),
-      "la siembra publicó una respuesta de seguridad, y esa categoría es de B5");
+      "una respuesta de este tramo acabó en la categoría de seguridad");
     for (const s of sembradas) {
       const texto = `${s.question} ${s.answerShort} ${s.answerLong ?? ""}`.toLowerCase();
       assert(!/entrenar model|entrenamiento de model/.test(texto),
-        `se publicó la respuesta del entrenamiento de modelos: ${s.slug}`);
+        `una respuesta de este tramo habla del entrenamiento de modelos: ${s.slug}`);
       assert(!/(us\$|usd|€|\d+\s?(mb|gb)\b)/i.test(texto),
         `una respuesta escribe una cifra comercial: ${s.slug}`);
       // Frases enteras, no fragmentos: «no emite certificaciones» contiene

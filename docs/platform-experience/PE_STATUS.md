@@ -29,18 +29,25 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-02B6 | Consolidación y preparación de la revisión | — | **cerrado** |
 | PE-02B6.1 | El paquete editorial, para revisar sin consola | — | **cerrado** |
 | PE-02B6.2 | Correcciones editoriales y pintado del texto legal | — | **cerrado** |
-| PE-02B5B | **Publicación** | — | **NO EMPEZADO** |
+| PE-02B5B | **Publicación en Staging** | — | **cerrado** · 2026-08-31 |
 
 ### El estado de PE-02, en dos líneas
 
-> **Implementación técnica de PE-02: LISTA.**
-> **Publicación de PE-02: PENDIENTE de B5B, y B5B depende de una revisión humana.**
+> **PE-02: CERRADO en Staging.**
+> **Producción: no empezado, y empieza por aplicar 47 migraciones.**
 
-Lo que está listo y no se ve: la sucesora de la política de privacidad
-(`v1.1-draft`) y quince respuestas de seguridad. Todo en borrador, a propósito.
+La política de privacidad **v1.1 está vigente** desde el 31 de agosto de 2026 y
+las **quince respuestas de seguridad están publicadas**. La v1 quedó archivada con
+su texto intacto y sus 153 aceptaciones. El cierre está en
+[`PE_02_FINAL_CLOSURE.md`](PE_02_FINAL_CLOSURE.md) y lo que falta mirar con los
+ojos, en [`PE_02_FINAL_HUMAN_VALIDATION.md`](PE_02_FINAL_HUMAN_VALIDATION.md).
 
-Lo que abre la puerta de B5B está en
-[`PE_02B6_B5B_PUBLICATION_PLAN.md`](PE_02B6_B5B_PUBLICATION_PLAN.md).
+El plan que abrió la puerta de B5B —ya ejecutado— está en
+[`PE_02B6_B5B_PUBLICATION_PLAN.md`](PE_02B6_B5B_PUBLICATION_PLAN.md), y lo que
+se hizo al cruzarla, en
+[`PE_02B5B_PUBLICATION.md`](PE_02B5B_PUBLICATION.md),
+[`PE_02B5B_REACCEPTANCE.md`](PE_02B5B_REACCEPTANCE.md) y
+[`PE_02B5B_SECURITY_FAQ_ACCEPTANCE.md`](PE_02B5B_SECURITY_FAQ_ACCEPTANCE.md).
 
 Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 
@@ -62,8 +69,8 @@ Y lo que se corrigió después de aquella revisión, en
 | ¿Retención cero contratada? | **respondida** · no · 2026-08-31 |
 | ¿Qué proveedor de IA usa el entorno desplegado? | **respondida** · OpenAI · 2026-08-31 |
 | ¿Se nombra al proveedor en el texto público? | **abierta** · no bloquea publicar |
-| ¿Se publica la política de privacidad v1.1? | **abierta** · bloquea B5B |
-| ¿Se publican las quince respuestas de seguridad? | **abierta** · bloquea B5B |
+| ¿Se publica la política de privacidad v1.1? | **respondida** · sí · publicada 2026-08-31 |
+| ¿Se publican las quince respuestas de seguridad? | **respondida** · sí · publicadas 2026-08-31 |
 
 ---
 

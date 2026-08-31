@@ -262,7 +262,9 @@
     "test:pe02b6-content": "tsx --conditions=react-server tests/rls/pe02b6-content.test.ts",
     "test:pe02b62-markdown": "tsx tests/unit/pe02b62-legal-markdown.test.ts",
     "test:pe02b62-legal-ui": "tsx --tsconfig tsconfig.test.json tests/ui/pe02b62-legal.test.tsx",
-    "test:pe02b62-content": "tsx --conditions=react-server tests/rls/pe02b62-content.test.ts"
+    "test:pe02b62-content": "tsx --conditions=react-server tests/rls/pe02b62-content.test.ts",
+    "test:pe02b5b": "tsx --conditions=react-server tests/rls/pe02b5b-publication.test.ts",
+    "test:pe02b5b-e2e": "tsx tests/e2e/pe02b5b-published.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

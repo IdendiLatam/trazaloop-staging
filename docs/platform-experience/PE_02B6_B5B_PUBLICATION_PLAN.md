@@ -1,5 +1,10 @@
 # PE-02B6 · La puerta de B5B
 
+> **Ejecutado el 31 de agosto de 2026.** La dirección aprobó, y B5B publicó en
+> Staging la política v1.1 y las quince respuestas. Lo que sigue se conserva
+> como el plan que se siguió; lo que ocurrió al seguirlo está en
+> [`PE_02B5B_PUBLICATION.md`](PE_02B5B_PUBLICATION.md).
+
 **B5B no se ejecuta hasta que una persona apruebe el contenido.** Este documento
 dice qué abre la puerta, qué se hace al cruzarla y en qué orden.
 
@@ -131,7 +136,7 @@ aceptar otra vez. Por eso el paso 1 va después de la revisión y no antes.
 | Contenido preparado | **sí** |
 | Confirmaciones técnicas | **resueltas** |
 | Confirmaciones de la dirección sobre IA | **resueltas** (2026-08-31) |
-| Aprobación editorial del contenido | **PENDIENTE** |
-| Proveedor de IA en producción | **PENDIENTE** · no bloquea |
+| Aprobación editorial del contenido | **recibida** · 2026-08-31 |
+| Proveedor de IA | **verificado** · OpenAI en el entorno desplegado; ninguno en Producción |
 | Revisión jurídica de la sección 18 | **PENDIENTE** |
-| **B5B puede empezar** | **NO** |
+| **B5B puede empezar** | **sí** · empezó y terminó el 2026-08-31 |

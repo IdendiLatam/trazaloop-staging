@@ -1,9 +1,12 @@
 /**
- * Trazaloop · PE-02B6.2 · Lo corregido, y lo que sigue sin publicarse.
+ * Trazaloop · PE-02B6.2 · Lo corregido, y que es lo que se publicó.
  *
- * Este tramo tocó el texto de un documento legal. Eso hace que la mitad de
- * estas comprobaciones sean sobre lo que NO pasó: la vigente sigue siendo la
- * v1, la sucesora sigue en borrador, y una cuenta nueva sigue aceptando v1.
+ * Este tramo tocó el texto de un documento legal, y PE-02B5B lo publicó. Así
+ * que estas comprobaciones ya no vigilan que nada se publique: vigilan que lo
+ * VIGENTE sea el texto corregido y no el que llevaba el andamiaje dentro.
+ *
+ * La diferencia importa. Publicar la versión equivocada de un documento legal
+ * no se retira: se corrige con otra versión, y con otra reaceptación.
  *
  * Correr: npm run test:pe02b62-content
  */
@@ -52,9 +55,12 @@ async function main() {
   await admin.from("platform_staff")
     .insert({ user_id: creado.user.id, role_code: "superadmin", status: "active" });
 
+  // PE-02B5B renombró el borrador de trabajo `v1.1-draft` a su versión real
+  // `v1.1` al publicarlo. Se busca por versión comercial, no por nombre de
+  // trabajo, que era temporal por definición.
   const { data: borradorFila } = await sa.from("legal_documents")
     .select("id, status, content, published_at, version, title")
-    .eq("document_type", "privacy").eq("version", "v1.1-draft").single();
+    .eq("document_type", "privacy").eq("version", "v1.1").single();
   assert(borradorFila, "no existe la sucesora");
   const BORRADOR = borradorFila as {
     status: string; content: string; published_at: string | null;
@@ -80,8 +86,8 @@ async function main() {
       "el cartel de borrador sigue dentro del contenido");
     assert(!/BORRADOR SUCESOR/i.test(BORRADOR.content),
       "el estado editorial sigue escrito en el texto");
-    // Y el metadato sí lo dice, que es donde toca.
-    assert(BORRADOR.status === "draft", `la fila está en «${BORRADOR.status}»`);
+    // Y el estado lo dice el metadato, que es donde toca: hoy, «vigente».
+    assert(BORRADOR.status === "active", `la fila está en «${BORRADOR.status}»`);
   });
 
   await check("A2. Ni una ruta del repositorio dentro del texto", async () => {
@@ -137,8 +143,7 @@ async function main() {
     // sería fijar hoy algo que se decide después, y las dos podrían no coincidir.
     assert(/de su publicación en la plataforma/i.test(BORRADOR.content),
       "la fecha de entrada en vigor no se deriva de la publicación");
-    assert(BORRADOR.published_at === null,
-      "la sucesora ya tiene fecha de publicación");
+    assert(BORRADOR.published_at, "la vigente no tiene fecha de publicación");
     // No puede haber ninguna fecha futura escrita como si fuera la de vigor.
     for (const inventada of ["1 de septiembre de 2026", "1 de octubre de 2026",
       "2026-09-", "2026-10-"]) {
@@ -283,53 +288,88 @@ async function main() {
   });
 
   // =========================================================================
-  console.log("\nF · Y sin embargo, nada se publicó");
+  console.log("\nF · Y lo corregido es lo que se publicó");
   // =========================================================================
+  //
+  // Este bloque comprobaba, hasta PE-02B5B, que nada estuviera publicado. Se
+  // publicó el 2026-08-31 por decisión de la dirección, así que ahora comprueba
+  // lo que de verdad importa: que lo vigente sea el texto CORREGIDO y no el que
+  // llevaba el andamiaje dentro. Publicar la versión equivocada de un documento
+  // legal es un error que no se retira: se corrige con otra versión, y con otra
+  // reaceptación.
 
-  await check("F1. La política vigente sigue siendo la v1, sin tocar", async () => {
+  await check("F1. Lo vigente es la v1.1, y es el texto sin andamiaje", async () => {
     const { data } = await anonimo.from("legal_documents")
-      .select("version, content, status").eq("document_type", "privacy").eq("status", "active");
+      .select("version, content, status")
+      .eq("document_type", "privacy").eq("status", "active");
     assert(data && data.length === 1, `hay ${data?.length} políticas vigentes`);
     const activa = data![0] as { version: string; content: string };
-    assert(activa.version === "v1", `la vigente es «${activa.version}»`);
-    assert(activa.content.includes("versión preliminar"), "el texto de la vigente cambió");
-    assert(activa.content.length < 2000,
-      "la vigente creció: ¿se le aplicó algo de este tramo?");
+    assert(activa.version === "v1.1", `la vigente es «${activa.version}»`);
+    // Las cuatro correcciones de este tramo, ahora sobre lo PUBLICADO.
+    assert(!/Este documento es un BORRADOR|BORRADOR SUCESOR/i.test(activa.content),
+      "se publicó el cartel de borrador");
+    assert(!/docs\/platform-experience|PE_02B|PE-02B5A/.test(activa.content),
+      "se publicó una ruta del repositorio");
+    assert(!/Pendiente de confirmación/.test(activa.content),
+      "se publicó una nota editorial pendiente");
+    assert(!/Resend/i.test(activa.content),
+      "se publicó un encargado sin integración");
   });
 
-  await check("F2. La sucesora sigue siendo borrador y no la ve nadie fuera", async () => {
-    assert(BORRADOR.status === "draft", `está en «${BORRADOR.status}»`);
-    assert(BORRADOR.published_at === null, "tiene fecha de publicación");
+  await check("F2. Con la vigencia coherente y sin fecha inventada", async () => {
     const { data } = await anonimo.from("legal_documents")
-      .select("version").eq("document_type", "privacy");
-    const versiones = (data ?? []).map((r) => String((r as { version: string }).version));
-    assert(!versiones.includes("v1.1-draft"), "un visitante ve la sucesora");
-  });
-
-  await check("F3. Las quince siguen en borrador, con cero revisiones", async () => {
-    const { data } = await sa.from("faq_entries").select("id, slug, status")
-      .in("slug", SLUGS_SEGURIDAD);
-    assert(data && data.length === 15, `hay ${data?.length} de 15`);
-    for (const e of data as { slug: string; status: string }[]) {
-      assert(e.status === "draft", `«${e.slug}» está en «${e.status}»`);
+      .select("content, published_at")
+      .eq("document_type", "privacy").eq("status", "active").single();
+    const d = data as { content: string; published_at: string };
+    const vigencia = d.content.slice(d.content.indexOf("## 21."));
+    assert(/Versión comercial:\*\* 1\.1/.test(vigencia), "la vigencia no declara la 1.1");
+    assert(!/Versión comercial:\*\* 1\.0/.test(vigencia), "la vigencia dice que es la 1.0");
+    assert(/de su publicación en la plataforma/i.test(d.content),
+      "la fecha de vigor no se deriva de la publicación");
+    // Y la que vale es la que la plataforma escribió al publicar.
+    assert(d.published_at, "la vigente no tiene fecha de publicación");
+    for (const inventada of ["2026-09-", "2026-10-", "1 de septiembre de 2026"]) {
+      assert(!d.content.includes(inventada), `se publicó una fecha inventada: ${inventada}`);
     }
-    const ids = (data ?? []).map((r) => String((r as { id: string }).id));
-    const { data: revs } = await sa.from("faq_entry_revisions").select("id").in("entry_id", ids);
-    assert(!revs || revs.length === 0, `hay ${revs?.length} revisiones publicadas`);
   });
 
-  await check("F4. Ninguna se lee, ni sin sesión ni con ella", async () => {
-    const { data: publica } = await anonimo.from("v_faq_public")
-      .select("slug").in("slug", SLUGS_SEGURIDAD);
-    assert(!publica || publica.length === 0, `${publica?.length} son públicas`);
-    const { data: dentro } = await sa.from("v_faq_authenticated")
-      .select("slug").in("slug", SLUGS_SEGURIDAD);
-    assert(!dentro || dentro.length === 0, `${dentro?.length} se leen con sesión`);
+  await check("F3. La v1 se archivó intacta, con sus aceptaciones", async () => {
+    const { data } = await admin.from("legal_documents")
+      .select("status, content, retired_at, id")
+      .eq("document_type", "privacy").eq("version", "v1").single();
+    const v1 = data as { status: string; content: string; retired_at: string | null; id: string };
+    assert(v1.status === "archived", `la v1 está en «${v1.status}»`);
+    assert(v1.content.includes("versión preliminar"), "el texto de la v1 cambió");
+    assert(v1.content.length < 2000, "la v1 creció: alguien le escribió encima");
+    assert(v1.retired_at, "se archivó sin fecha de retiro");
+    const { count } = await admin.from("user_legal_acceptances")
+      .select("id", { count: "exact", head: true }).eq("legal_document_id", v1.id);
+    assert((count ?? 0) > 0, "la v1 se quedó sin sus aceptaciones");
   });
 
-  await check("F5. Y una cuenta nueva sigue aceptando v1, no v1.1", async () => {
-    // Es la comprobación irreversible del tramo: si esto cambia, a todo el
-    // mundo se le vuelve a pedir aceptar, y eso no se retira.
+  await check("F4. Las quince están publicadas y se leen según su visibilidad",
+    async () => {
+      const { data } = await sa.from("faq_entries").select("slug, status, visibility")
+        .in("slug", SLUGS_SEGURIDAD);
+      assert(data && data.length === 15, `hay ${data?.length} de 15`);
+      const filas = data as { slug: string; status: string; visibility: string }[];
+      for (const e of filas) {
+        assert(e.status === "published", `«${e.slug}» está en «${e.status}»`);
+      }
+      const publicas = filas.filter((e) => e.visibility === "public").map((e) => e.slug);
+      const conSesion = filas.filter((e) => e.visibility === "authenticated").map((e) => e.slug);
+      const { data: leePublico } = await anonimo.from("v_faq_public")
+        .select("slug").in("slug", SLUGS_SEGURIDAD);
+      const vistas = new Set((leePublico ?? [])
+        .map((r) => String((r as { slug: string }).slug)));
+      assert(vistas.size === publicas.length,
+        `un visitante ve ${vistas.size} y se declararon ${publicas.length} públicas`);
+      for (const slug of conSesion) {
+        assert(!vistas.has(slug), `«${slug}» se declaró con sesión y la ve un visitante`);
+      }
+    });
+
+  await check("F5. Y la reaceptación se pide de verdad", async () => {
     const email2 = `pe02b62-acepta-${sello}@test.trazaloop.dev`;
     const { data: c2 } = await admin.auth.admin.createUser({
       email: email2, password, email_confirm: true,
@@ -341,10 +381,12 @@ async function main() {
       { p_ip_address: null, p_user_agent: "b62" });
     assert(!error, `aceptar: ${error?.message}`);
     const { data: suyas } = await admin.from("user_legal_acceptances")
-      .select("version").eq("user_id", c2.user!.id);
-    const versiones = (suyas ?? []).map((r) => String((r as { version: string }).version));
-    assert(versiones.length === 2 && versiones.every((v) => v === "v1"),
-      `se aceptaron «${versiones.join(", ")}» y debían ser dos v1`);
+      .select("version, document_type").eq("user_id", c2.user!.id);
+    const privacidad = (suyas ?? []).filter((r) =>
+      (r as { document_type: string }).document_type === "privacy");
+    assert(privacidad.length === 1 &&
+      String((privacidad[0] as { version: string }).version) === "v1.1",
+      "no se aceptó la política vigente");
   });
 
   console.log(`\nPE-02B6.2 · contenido: ${passed} en verde, ${failed} en rojo\n`);

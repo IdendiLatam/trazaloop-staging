@@ -53,59 +53,87 @@ async function main() {
   await admin.from("platform_staff")
     .insert({ user_id: creado.user.id, role_code: "superadmin", status: "active" });
 
-  console.log("\nPE-02B5A · Los borradores, sin publicar\n");
+  // PE-02B5B (2026-08-31) · Las quince YA ESTÁN PUBLICADAS. La dirección lo
+  // aprobó, y este bloque asertaba lo contrario, así que había que rehacerlo.
+  //
+  // Lo que se conserva es lo que este tramo escribió y sigue siendo su
+  // responsabilidad: que las quince existan, que su contenido sea el revisado,
+  // que la barrera de verificación siga funcionando, y que las salvedades no se
+  // hayan perdido al publicar. Lo que ya no se puede afirmar es que no se lean.
+  console.log("\nPE-02B5A · Las quince respuestas, con su contenido intacto\n");
 
   // =========================================================================
   console.log("A · Las quince respuestas de seguridad");
   // =========================================================================
 
-  await check("A1. Están las quince, y todas en borrador", async () => {
+  await check("A1. Están las quince, y ninguna se quedó a medias", async () => {
     const { data } = await sa.from("faq_entries")
       .select("slug, status").in("slug", SLUGS);
     assert(data && data.length === 15, `hay ${data?.length} de 15`);
-    for (const e of data as { slug: string; status: string }[]) {
-      assert(e.status === "draft", `«${e.slug}» está en «${e.status}» y debería ser borrador`);
+    const estados = new Set((data as { status: string }[]).map((e) => e.status));
+    // O las quince o ninguna. Media categoría publicada sería peor que ninguna:
+    // el visitante vería un tema de seguridad que responde a la mitad.
+    assert(estados.size === 1,
+      `las quince no están en el mismo estado: ${[...estados].join(", ")}`);
+  });
+
+  await check("A2. Y al publicarlas no se perdió el respaldo de ninguna", async () => {
+    // Lo que este tramo escribió fue la PROCEDENCIA de cada respuesta. Publicar
+    // copia el borrador a una revisión, y ahí es donde se podría haber quedado
+    // por el camino.
+    const { data: ids } = await sa.from("faq_entries").select("id, slug").in("slug", SLUGS);
+    const porId = new Map((ids ?? []).map((r) => {
+      const x = r as { id: string; slug: string }; return [x.id, x.slug];
+    }));
+    const { data: revs } = await sa.from("faq_entry_revisions")
+      .select("entry_id, source_basis, verification_status, verification_note")
+      .in("entry_id", [...porId.keys()]).is("effective_to", null);
+    for (const r of (revs ?? []) as Record<string, unknown>[]) {
+      const slug = porId.get(String(r.entry_id));
+      assert(String(r.source_basis ?? "").length > 20,
+        `«${slug}» se publicó sin decir en qué se apoya`);
+      if (r.verification_status === "verified_with_qualifier") {
+        assert(String(r.verification_note ?? "").length >= 10,
+          `«${slug}» se publicó con salvedad y sin salvedad escrita`);
+      }
     }
   });
 
-  await check("A2. Ninguna tiene revisión publicada", async () => {
-    const { data: ids } = await sa.from("faq_entries").select("id").in("slug", SLUGS);
-    const lista = (ids ?? []).map((r) => String((r as { id: string }).id));
-    const { data: revs } = await sa.from("faq_entry_revisions")
-      .select("id").in("entry_id", lista);
-    assert(!revs || revs.length === 0,
-      `hay ${revs?.length} revisiones publicadas y no debería haber ninguna`);
-  });
-
-  await check("A3. Y NINGUNA se lee en la FAQ · ni sin sesión ni con ella", async () => {
-    const { data: publica } = await anonimo.from("v_faq_public").select("slug").in("slug", SLUGS);
+  await check("A3. Las que se declararon con sesión NO se leen sin ella", async () => {
+    // La visibilidad la declaró este tramo, respuesta por respuesta. Publicar no
+    // puede haberla cambiado, y una que hablara del uso diario asomando a un
+    // visitante sería una fuga, no una mejora de alcance.
+    const { data: entradas } = await sa.from("faq_entries")
+      .select("slug, visibility").in("slug", SLUGS);
+    const conSesionDeclaradas = (entradas ?? [])
+      .filter((r) => (r as { visibility: string }).visibility === "authenticated")
+      .map((r) => String((r as { slug: string }).slug));
+    assert(conSesionDeclaradas.length === 5,
+      `se declararon ${conSesionDeclaradas.length} con sesión y eran 5`);
+    const { data: publica } = await anonimo.from("v_faq_public")
+      .select("slug").in("slug", conSesionDeclaradas);
     assert(!publica || publica.length === 0,
-      `${publica?.length} respuestas de seguridad son públicas`);
-    const { data: conSesion } = await sa.from("v_faq_authenticated").select("slug").in("slug", SLUGS);
-    assert(!conSesion || conSesion.length === 0,
-      `${conSesion?.length} respuestas de seguridad se leen con sesión`);
-    // Ni buscando su texto.
-    const { data: buscada } = await anonimo.from("v_faq_public")
-      .select("slug").textSearch("search_document", "salvedad infraestructura",
-        { config: "spanish", type: "websearch" });
-    assert(!buscada || !buscada.some((r) => SLUGS.includes(String((r as { slug: string }).slug))),
-      "una respuesta de seguridad aparece al buscar su contenido");
+      `${publica?.length} respuestas de sesión se leen sin sesión`);
   });
 
-  await check("A4. La categoría de seguridad sigue sin ofrecerse a un visitante",
-    async () => {
-      const { data } = await anonimo.from("v_faq_public_categories").select("code");
-      const codigos = (data ?? []).map((r) => String((r as { code: string }).code));
-      // Puede haber residuo de otras suites; lo que se comprueba es que NINGUNA
-      // de las quince lo haya provocado.
-      const { data: mias } = await anonimo.from("v_faq_public")
-        .select("slug").eq("category_code", "seguridad");
-      const deEsteTramo = (mias ?? [])
-        .filter((r) => SLUGS.includes(String((r as { slug: string }).slug)));
-      assert(deEsteTramo.length === 0,
-        "una respuesta de este tramo hizo aparecer la categoría de seguridad");
-      assert(Array.isArray(codigos), "no se pudieron leer las categorías");
-    });
+  await check("A4. Y ningún borrador se lee: lo que se ve es la revisión", async () => {
+    // El borrador y la revisión viven en tablas distintas justamente para esto.
+    // Editar un texto publicado no puede cambiar lo que se está leyendo.
+    const { data: e } = await sa.from("faq_entries").select("id")
+      .eq("slug", "seguridad_como_protege").single();
+    const id = (e as { id: string }).id;
+    const { data: borrador } = await sa.from("faq_entry_drafts")
+      .select("answer_short").eq("entry_id", id).eq("language", "es").single();
+    const { data: revision } = await sa.from("faq_entry_revisions")
+      .select("answer_short").eq("entry_id", id).is("effective_to", null).single();
+    const { data: leida } = await anonimo.from("v_faq_public")
+      .select("answer_short").eq("slug", "seguridad_como_protege").single();
+    assert(leida, "la respuesta bandera no se lee");
+    assert((leida as { answer_short: string }).answer_short
+      === (revision as { answer_short: string }).answer_short,
+      "lo que se lee no viene de la revisión publicada");
+    assert(borrador, "se perdió el borrador al publicar");
+  });
 
   // =========================================================================
   console.log("\nB · La barrera hace su trabajo");
@@ -160,23 +188,28 @@ async function main() {
       }
     });
 
-  await check("B1b. Y las dos que dependían del proveedor ya están resueltas",
+  await check("B1b. Y las dos que dependían del proveedor viajaron con su salvedad",
     async () => {
-      // Sin publicarlas. Lo que se comprueba es que la confirmación del
-      // 2026-08-31 quedó escrita y con salvedad, no que la barrera las deje pasar.
+      // Se publicaron el 2026-08-31, después de las dos confirmaciones. Lo que
+      // importa ahora es que la salvedad viajó a la revisión: es la mitad que
+      // dice de dónde viene cada afirmación, y sin ella la respuesta afirmaría
+      // más de lo que puede.
       for (const slug of ["seguridad_entrenamiento_modelos", "seguridad_retencion_proveedor"]) {
-        const { data: e } = await sa.from("faq_entries").select("id, status")
-          .eq("slug", slug).single();
-        assert((e as { status: string }).status === "draft",
-          `«${slug}» ya no es un borrador`);
-        const { data } = await sa.from("faq_entry_drafts")
-          .select("verification_status, verification_note")
-          .eq("entry_id", (e as { id: string }).id).eq("language", "es").single();
-        const d = data as { verification_status: string; verification_note: string | null };
+        const { data: e } = await sa.from("faq_entries").select("id").eq("slug", slug).single();
+        const { data } = await sa.from("faq_entry_revisions")
+          .select("verification_status, verification_note, external_source_url, external_source_checked_on")
+          .eq("entry_id", (e as { id: string }).id).is("effective_to", null).single();
+        const d = data as {
+          verification_status: string; verification_note: string | null;
+          external_source_url: string | null; external_source_checked_on: string | null };
         assert(d.verification_status === "verified_with_qualifier",
-          `«${slug}» está en «${d.verification_status}» y la confirmación humana exige salvedad`);
+          `«${slug}» se publicó como «${d.verification_status}»`);
         assert((d.verification_note ?? "").length >= 10,
-          `«${slug}» está con salvedad y no la tiene escrita: la base la rechazaría`);
+          `«${slug}» se publicó sin la salvedad escrita`);
+        assert(d.external_source_url?.includes("openai.com"),
+          `«${slug}» se publicó sin su fuente`);
+        assert(d.external_source_checked_on === "2026-08-31",
+          `«${slug}» se publicó sin la fecha de consulta`);
       }
     });
 
@@ -230,45 +263,52 @@ async function main() {
   console.log("\nC · La política de privacidad");
   // =========================================================================
 
-  await check("C1. La vigente NO cambió", async () => {
-    const { data } = await anonimo.from("legal_documents")
-      .select("id, version, content, status").eq("document_type", "privacy")
-      .eq("status", "active");
-    assert(data && data.length === 1, `hay ${data?.length} políticas vigentes`);
-    const activa = data![0] as { version: string; content: string };
-    assert(activa.version === "v1", `la vigente es «${activa.version}»`);
-    assert(activa.content.includes("versión preliminar"),
-      "el texto de la vigente cambió");
+  await check("C1. La v1 se archivó SIN que su texto cambiara", async () => {
+    // PE-02B5B publicó la sucesora el 2026-08-31. Lo que este tramo tiene que
+    // seguir garantizando es que suceder no es reescribir: la v1 queda intacta,
+    // porque hay 153 personas que aceptaron ESE texto y no otro.
+    const { data } = await admin.from("legal_documents")
+      .select("version, status, content, retired_at, superseded_by_id")
+      .eq("document_type", "privacy").eq("version", "v1").single();
+    const v1 = data as {
+      status: string; content: string; retired_at: string | null;
+      superseded_by_id: string | null };
+    assert(v1.status === "archived", `la v1 está en «${v1.status}»`);
+    assert(v1.content.includes("versión preliminar"), "el texto de la v1 cambió");
+    assert(v1.content.length < 2000, "la v1 creció: alguien le escribió encima");
+    assert(v1.retired_at, "la v1 se archivó sin fecha de retiro");
+    assert(v1.superseded_by_id, "la v1 no apunta a la versión que la sucedió");
   });
 
-  await check("C2. La sucesora existe y es un BORRADOR", async () => {
+  await check("C2. La sucesora está vigente y es el texto que se revisó", async () => {
     const { data } = await sa.from("legal_documents")
-      .select("version, status, content, published_at")
-      .eq("document_type", "privacy").eq("version", "v1.1-draft").single();
-    const d = data as { status: string; content: string; published_at: string | null };
-    assert(d.status === "draft", `la sucesora está en «${d.status}»`);
-    assert(d.published_at === null, "la sucesora tiene fecha de publicación");
-    assert(d.content.length > 15000, `la sucesora tiene ${d.content.length} caracteres`);
+      .select("version, status, content, published_at, supersedes_id")
+      .eq("document_type", "privacy").eq("status", "active").single();
+    const d = data as {
+      version: string; status: string; content: string;
+      published_at: string | null; supersedes_id: string | null };
+    assert(d.version === "v1.1", `la vigente es «${d.version}»`);
+    assert(d.published_at, "la vigente no tiene fecha de publicación");
+    assert(d.supersedes_id, "la vigente no dice a qué versión sucede");
+    assert(d.content.length > 15000, `la vigente tiene ${d.content.length} caracteres`);
+    // Y no se publicó el nombre de trabajo.
+    assert(!d.version.includes("draft"), "se publicó el nombre de trabajo del borrador");
   });
 
-  await check("C3. Y el visitante NO la ve", async () => {
+  await check("C3. El visitante ve una sola política, y es la vigente", async () => {
     const { data } = await anonimo.from("legal_documents")
       .select("version").eq("document_type", "privacy");
     const versiones = (data ?? []).map((r) => String((r as { version: string }).version));
-    assert(!versiones.includes("v1.1-draft"), "el borrador legal es público");
-    assert(versiones.length === 1 && versiones[0] === "v1",
-      `el visitante ve ${versiones.join(", ")}`);
+    assert(versiones.length === 1 && versiones[0] === "v1.1",
+      `el visitante ve ${versiones.join(", ") || "(nada)"}`);
   });
 
-  await check("C4. A nadie se le va a volver a pedir aceptar", async () => {
-    // La puerta compara los documentos ACTIVOS requeridos con lo aceptado. Si la
-    // sucesora estuviera activa, todo el mundo tendría que aceptar de nuevo.
+  await check("C4. Y a quien acepte ahora se le pide la v1.1", async () => {
     const { data: requeridos } = await anonimo.from("legal_documents")
       .select("id, document_type, version").eq("status", "active")
       .in("document_type", ["terms", "privacy"]);
     assert(requeridos && requeridos.length === 2, "cambió el número de requeridos");
 
-    // Una persona que acepta AHORA queda al día, y sigue al día después.
     const email2 = `pe02b5a-acepta-${sello}@test.trazaloop.dev`;
     const { data: c2 } = await admin.auth.admin.createUser({
       email: email2, password, email_confirm: true, user_metadata: { full_name: "QA acepta" } });
@@ -281,21 +321,29 @@ async function main() {
 
     const { data: suyas } = await admin.from("user_legal_acceptances")
       .select("version, document_type").eq("user_id", c2.user!.id);
-    const aceptadas = (suyas ?? []).map((r) => String((r as { version: string }).version));
-    assert(aceptadas.every((v) => v === "v1"),
-      `se aceptó una versión inesperada: ${aceptadas.join(", ")}`);
-    assert(aceptadas.length === 2, `se aceptaron ${aceptadas.length} documentos de 2`);
+    const privacidad = (suyas ?? []).filter((r) =>
+      (r as { document_type: string }).document_type === "privacy");
+    assert(privacidad.length === 1, `aceptó ${privacidad.length} políticas de privacidad`);
+    assert(String((privacidad[0] as { version: string }).version) === "v1.1",
+      `aceptó «${(privacidad[0] as { version: string }).version}» y la vigente es la v1.1`);
+    assert((suyas ?? []).length === 2, `se aceptaron ${suyas?.length} documentos de 2`);
   });
 
-  await check("C5. El borrador legal se puede corregir · sigue siendo borrador", async () => {
-    const { data } = await sa.from("legal_documents")
-      .select("id, content").eq("version", "v1.1-draft").single();
-    const id = (data as { id: string }).id;
-    const original = (data as { content: string }).content;
+  await check("C5. Lo publicado ya NO se puede corregir en el sitio", async () => {
+    // Mientras fue borrador, corregirlo era lo normal. Publicado, no: hay
+    // aceptaciones que apuntan a este texto. El disparador de 0156 lo impide
+    // incluso al cliente administrativo, que es lo que lo hace una garantía y no
+    // una convención.
+    const { data } = await admin.from("legal_documents")
+      .select("id, content").eq("document_type", "privacy").eq("status", "active").single();
+    const { id, content } = data as { id: string; content: string };
     const { error } = await admin.from("legal_documents")
-      .update({ content: original + "\n" }).eq("id", id);
-    assert(!error, `no se pudo corregir el borrador: ${error?.message}`);
-    await admin.from("legal_documents").update({ content: original }).eq("id", id);
+      .update({ content: content + "\nañadido" }).eq("id", id);
+    assert(error, "se pudo reescribir una política vigente");
+    const { data: despues } = await admin.from("legal_documents")
+      .select("content").eq("id", id).single();
+    assert((despues as { content: string }).content === content,
+      "el texto vigente cambió pese al rechazo");
   });
 
   console.log(`\nPE-02B5A · borradores: ${passed} en verde, ${failed} en rojo\n`);
