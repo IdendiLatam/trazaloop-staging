@@ -20,6 +20,23 @@ import type { NextConfig } from "next";
  * realmente necesita.
  */
 const nextConfig: NextConfig = {
+  /**
+   * PE-02B1 · La comprobación de tipos de la COMPILACIÓN mira solo la
+   * aplicación.
+   *
+   * `tsconfig.json` incluye todo el árbol, así que hasta ahora `next build`
+   * cargaba también el arnés de pruebas —sesenta y tantas suites, algunas de
+   * mil líneas— para comprobar tipos que ninguna ruta usa. Añadir la cuarta
+   * suite de este tramo cruzó el límite: el proceso de compilación agotaba la
+   * memoria y moría, sin que ninguna línea de producto hubiera cambiado.
+   *
+   * No se pierde ninguna comprobación: `npm run typecheck` sigue usando
+   * `tsconfig.json` —pruebas incluidas— y forma parte de `test:all`. Es la
+   * misma frontera que `outputFileTracingExcludes` ya trazaba unas líneas más
+   * abajo, aplicada también a los tipos.
+   */
+  typescript: { tsconfigPath: "tsconfig.build.json" },
+
   // Fija la raíz del rastreo al propio proyecto: nunca infiere hacia
   // arriba, sea cual sea la estructura de carpetas del entorno donde corra
   // el build.

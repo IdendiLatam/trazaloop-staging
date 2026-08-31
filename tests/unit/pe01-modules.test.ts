@@ -460,10 +460,15 @@ check("H3. Sin marcadores de lo que todavía no existe", () => {
   }
 });
 
-check("H4. Sin migración: la cabecera sigue en 0154", () => {
-  const files = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
-  const max = Math.max(...files.map((f) => Number(f.slice(0, 4))));
-  assert(max === 154, `la cabecera es ${max}: PE-01B no toca el esquema`);
+check("H4. Sin migración: PE-01B no añadió ninguna", () => {
+  // La promesa es «PE-01B no tocó el esquema», y se comprueba diciendo eso:
+  // que entre 0154 —la última de QUALITY-13— y hoy, ninguna migración lleva
+  // el nombre de este tramo. Antes se comprobaba que la cabecera fuera 0154,
+  // que es una fotografía: PE-02B1 la rompió sin cambiar nada de PE-01B.
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  const mias = migraciones.filter((f) => /pe01|module_entry|modules_entry/i.test(f));
+  assert(mias.length === 0, `PE-01B añadió migraciones: ${mias.join(", ")}`);
+  assert(migraciones.some((f) => f.startsWith("0154")), "desapareció 0154");
 });
 
 check("H5. La entrada de PCR sigue existiendo, y es suya", () => {

@@ -359,9 +359,16 @@ console.log("\nH · Sin esquema, sin cuota aparte");
  * §35 exige.
  */
 check("H1. La única migración de B5 es un asiento de catálogo", () => {
+  // La promesa es «B5 añadió UNA migración, y es una siembra de catálogo». No
+  // es «la cabecera del repositorio es 154»: eso era una fotografía, y la
+  // rompía cualquier sprint posterior sin que B5 hubiera cambiado en nada.
+  // PE-02B1 añadió 0155 y fue la primera en tropezar con ella.
   const nums = readdirSync("supabase/migrations")
     .filter((f) => f.endsWith(".sql")).map((f) => Number(f.slice(0, 4)));
-  assert(Math.max(...nums) === 154, `la cabecera es ${Math.max(...nums)}`);
+  assert(nums.filter((n) => n >= 152 && n <= 154).length === 3,
+    "B5 y sus dos tramos previos ya no son tres migraciones");
+  assert(!nums.includes(154.5) && nums.filter((n) => n === 154).length === 1,
+    "hay más de una migración 0154");
   const m = leer("supabase/migrations/0154_quality_intelligence_integrated_sources.sql");
   assert(!/create table|alter table|drop /i.test(m),
     "0154 hace algo más que sembrar el catálogo");

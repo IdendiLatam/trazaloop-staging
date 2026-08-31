@@ -1,0 +1,5 @@
+{
+  "//": "Trazaloop · PE-02B1 · El tsconfig que usa SOLO la compilación de la aplicación. Extiende el de siempre y le quita las pruebas: no son código de la aplicación, ninguna ruta las importa y next.config ya las excluye del rastreo de archivos por la misma razón. Comprobarlas aquí obligaba al compilador a cargar el repositorio entero —producto y arnés de pruebas a la vez— y en una máquina de 8 GB eso agota la memoria del proceso. Las pruebas SIGUEN comprobándose: `npm run typecheck` usa tsconfig.json, que las incluye, y forma parte de test:all.",
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "tests", "scripts"]
+}

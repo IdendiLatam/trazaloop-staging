@@ -382,6 +382,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
     "0154_quality_intelligence_integrated_sources.sql",
+    "0155_platform_faq_foundation.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
