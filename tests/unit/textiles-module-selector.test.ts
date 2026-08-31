@@ -145,7 +145,13 @@ check("7. El portal resuelve la tarjeta por flag + organization_modules en servi
 
 check("8. Cuando está disponible, la tarjeta es un enlace activo a /textiles", () => {
   assert(portal.includes("isEnterableState"), "un estado enterable debía producir un enlace");
-  assert(portal.includes("Entrar"), "la tarjeta activa debía decir Entrar");
+  // PE-01B movió la etiqueta de la tarjeta a `lib/modules/entry.ts`, que es
+  // quien la compone a partir del nombre del módulo. Hasta hoy esta línea
+  // seguía pasando por casualidad: la palabra «Entrar» aparecía en la nota al
+  // pie de la puerta, que PE-02B3 sustituyó por la frase acordada. La promesa
+  // —la tarjeta activa invita a entrar— se comprueba donde vive.
+  const entrada = read("lib/modules/entry.ts");
+  assert(/Entrar a \$\{/.test(entrada), "la tarjeta activa debía decir Entrar");
   // QUALITY-01.1: el selector dejó de nombrar la ruta de cada módulo y la
   // resuelve por catálogo. La exigencia es la misma —la tarjeta activa enlaza
   // la home del módulo— y ahora se comprueba sobre la fuente canónica, que es

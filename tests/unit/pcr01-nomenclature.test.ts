@@ -59,12 +59,25 @@ check("3. Texto normativo NTC 6632 / UNE-EN 15343 sin alteración", () => {
     CPR_SHELL_MODULE.headerBadge === "NTC 6632 · UNE-EN 15343",
     "el badge normativo no debía tocarse"
   );
+  // PE-02B3 · La portada dejó de escribir las frases de los módulos y las lee
+  // del catálogo (PEH-19). La exigencia es la misma —las normas siguen a la
+  // vista de quien entra a trazaloop.com— y se comprueba en la fuente que la
+  // portada pinta. Al hacerlo se descubrió que habían desaparecido de verdad:
+  // PE-01B las había quitado de la frase y nadie lo notó hasta que la portada
+  // pasó a leer de ahí.
+  const copia = readSource("../../lib/modules/entry.ts");
+  assert(copia.includes("NTC 6632") && copia.includes("UNE-EN 15343"),
+    "las normas debían seguir en la frase que pinta la landing");
   const landing = readSource("../../app/page.tsx");
-  assert(landing.includes("NTC 6632") && landing.includes("UNE-EN 15343"), "las normas debían seguir en la landing");
+  assert(landing.includes("ENTRY_COPY"), "la landing debía pintar la frase del catálogo");
 });
 
 check("4. Superficies visibles clave dicen PCR", () => {
-  assert(readSource("../../app/page.tsx").includes("Trazaloop PCR"), "landing");
+  // La portada pinta los nombres desde el catálogo, así que la comprobación se
+  // hace donde está el nombre. Que llegue al HTML lo comprueba el recorrido por
+  // HTTP de PE-02B3 (P1.3).
+  assert(readSource("../../lib/modules/catalog.ts").includes('"Trazaloop PCR"'), "catálogo");
+  assert(readSource("../../app/page.tsx").includes("specializedModules()"), "landing");
   assert(readSource("../../app/legal/page.tsx").includes("Trazaloop PCR"), "página legal informativa");
   assert(
     readSource("../../app/(app)/(shell)/(cpr)/onboarding/page.tsx").includes("Bienvenido a Trazaloop PCR"),

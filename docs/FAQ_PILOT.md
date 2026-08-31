@@ -1,3 +1,19 @@
+> **SUSTITUIDO · ya no es la FAQ canónica.**
+>
+> Desde PE-02B3 las preguntas frecuentes de Trazaloop viven **en la
+> plataforma**: se administran desde `/platform/faq` y se leen en `/faq`, sin
+> desplegar para corregir una respuesta.
+>
+> Ocho de las diez preguntas de este archivo se trasladaron allí, algunas
+> reescritas. Este documento **se conserva** como registro de lo que se
+> respondía a las empresas piloto, y **no debe editarse**: corregir aquí no
+> cambia lo que lee nadie.
+>
+> Ver `docs/platform-experience/PE_02B3_FAQ_CONTENT_SEED.md` para el detalle de
+> qué se trasladó, qué se reescribió y qué se dejó fuera.
+
+---
+
 # Trazaloop · Preguntas frecuentes (piloto)
 
 Para usuarios de las empresas piloto. Lenguaje directo, sin tecnicismos.

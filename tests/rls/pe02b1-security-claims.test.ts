@@ -279,7 +279,12 @@ async function main() {
              pg_get_function_result(p.oid) as retorno
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname like 'faq\\_%'`);
-    assert(filas.length === 4, `hay ${filas.length} funciones de FAQ y deberían ser 4`);
+    // Contar cuántas hay era una fotografía: PE-02B3 añadió la interna que
+    // publica sin comprobar quién publica —conservando entera la barrera de
+    // verificación— y la cuenta subió a cinco sin que nada de B1 cambiara. Lo
+    // que importa es que TODAS cumplan, y que la que no debe alcanzar nadie no
+    // la alcance: eso se comprueba justo debajo.
+    assert(filas.length >= 4, `hay ${filas.length} funciones de FAQ y deberían ser al menos 4`);
     for (const f of filas) {
       assert(f.prosecdef, `${f.proname} no es security definer`);
       assert(f.fija_search_path, `${f.proname} no fija su search_path`);
@@ -295,6 +300,18 @@ async function main() {
     const paraAnon = ejec.filter((r) => r.rolname === "anon");
     assert(paraAnon.length === 0,
       `el anónimo puede ejecutar: ${paraAnon.map((r) => r.proname).join(", ")}`);
+    // Y la publicación SIN comprobación de autoridad no se concede a ningún rol
+    // de la aplicación. Quedan `postgres` —que es su dueño y siempre puede— y
+    // `service_role`, que se salta todo por definición y no se usa en tiempo de
+    // ejecución: eso lo garantiza la comprobación estática de que ninguna capa
+    // de FAQ construye el cliente administrativo. Lo que aquí importa es que ni
+    // el visitante ni una sesión normal lleguen a ella: la aplicación pasa por
+    // `faq_publish_entry`, que sí comprueba quién publica.
+    const deLaAplicacion = new Set(["anon", "authenticated"]);
+    const interna = ejec.filter((r) => r.proname === "faq_publish_entry_internal"
+      && deLaAplicacion.has(String(r.rolname)));
+    assert(interna.length === 0,
+      `faq_publish_entry_internal se concedió a: ${interna.map((r) => r.rolname).join(", ")}`);
   });
 
   await check("S4. Las vistas públicas no exponen procedencia interna", async () => {

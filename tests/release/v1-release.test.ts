@@ -136,6 +136,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0154_quality_intelligence_integrated_sources.sql",
     "0155_platform_faq_foundation.sql",
     "0156_platform_legal_documents_hardening.sql",
+    "0157_platform_faq_initial_content.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -460,11 +461,24 @@ check("6. Construcción sigue «Próximamente»; Quality es funcional pero no es
   assert(COMMERCIAL_MODULES.length === 4, "el catálogo debe seguir teniendo 4 módulos comerciales");
 });
 
-check("6b. La portada sigue mostrando Quality y Construcción como Próximamente", () => {
+check("6b. La portada presenta los cuatro módulos, y solo el futuro como Próximamente", () => {
+  // El nombre de esta comprobación decía «Quality y Construcción como
+  // Próximamente», y eso dejó de ser cierto en PE-01: Quality se anuncia como
+  // disponible por decisión humana. Seguía pasando por casualidad —encontraba
+  // «Trazaloop Quality» y «Próximamente» en el mismo archivo, aunque fueran de
+  // tarjetas distintas—. Y en PE-02B3 la portada pasó a leer los nombres del
+  // catálogo, así que ya no hay literales que buscar.
+  //
+  // Lo que se conserva, dicho de verdad: los cuatro módulos se presentan, y el
+  // único «Próximamente» es el del que todavía no existe.
   const landing = read("app/page.tsx");
-  assert(landing.includes("Trazaloop Quality"), "falta la tarjeta de Quality");
-  assert(landing.includes("Trazaloop Construcción"), "falta la tarjeta de Construcción");
-  assert(landing.includes("Próximamente"), "debe conservarse la etiqueta Próximamente");
+  assert(landing.includes("heroModule()") && landing.includes("specializedModules()"),
+    "la portada debe presentar los módulos desde el catálogo");
+  assert(COMMERCIAL_MODULES.length === 4, "el catálogo debe presentar cuatro módulos");
+  assert(landing.includes('activo ? "Disponible" : "Próximamente"'),
+    "la portada debe pintar el estado de cada módulo desde su catálogo");
+  assert(getCommercialModuleByKey("construccion")?.status === "coming_soon",
+    "Construcción debe seguir siendo el único módulo futuro");
 });
 
 // ===========================================================================
@@ -1216,6 +1230,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0154_quality_intelligence_integrated_sources.sql",
     "0155_platform_faq_foundation.sql",
     "0156_platform_legal_documents_hardening.sql",
+    "0157_platform_faq_initial_content.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -3359,13 +3374,19 @@ check("81. Quality y Construcción NO se presentan como funcionales", () => {
     "construccion debe seguir en coming_soon"
   );
   assert(FUNCTIONAL_MODULE_CODES.length === 3, "CPR, Textiles y Quality son los funcionales");
-  // La portada los mantiene como «Próximamente».
+  // La portada mantiene «Próximamente» SOLO para Construcción: Quality se
+  // anuncia disponible desde PE-01, por decisión humana, y desde PE-02B3 el
+  // estado de cada tarjeta lo decide el catálogo y no un literal escrito aquí.
   const landing = read("app/page.tsx");
   assert(
-    landing.includes("Trazaloop Quality") &&
-      landing.includes("Trazaloop Construcción") &&
-      landing.includes("Próximamente"),
-    "la portada debe seguir mostrándolos como Próximamente"
+    landing.includes('activo ? "Disponible" : "Próximamente"'),
+    "la portada debe pintar el estado de cada módulo desde su catálogo"
+  );
+  assert(
+    !/status: "coming_soon"/.test(
+      read("lib/modules/catalog.ts").split('key: "quality"')[1]?.slice(0, 400) ?? ""
+    ),
+    "Quality no debe volver a presentarse como futuro"
   );
 });
 

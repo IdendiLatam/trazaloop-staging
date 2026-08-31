@@ -73,9 +73,15 @@ export const ENTRY_COPY: Record<CommercialModuleKey, string> = {
   quality:
     "Gestiona procesos, riesgos, objetivos, personas, proveedores, auditorías y mejora "
     + "continua desde un entorno conectado y trazable.",
+  // PE-02B3 · Las dos normas vuelven a la frase. PE-01B las había quitado por
+  // brevedad, y al pasar la portada pública a leer de aquí (PEH-19) desaparecieron
+  // también de ahí — donde llevaban desde el primer sprint y donde sí dicen algo:
+  // quien busca trazabilidad de contenido reciclado busca por el número de la
+  // norma. Nombrarlas es una REFERENCIA, no una afirmación de conformidad.
   cpr:
-    "Trazabilidad de contenido reciclado en plásticos: de la materia prima al lote "
-    + "producido, con las evidencias que respaldan cada declaración.",
+    "Trazabilidad de contenido reciclado en plásticos (NTC 6632 / UNE-EN 15343): "
+    + "de la materia prima al lote producido, con las evidencias que respaldan "
+    + "cada declaración.",
   textiles:
     "Trazabilidad de prendas y composición de fibras, con evidencias, circularidad y "
     + "pasaporte técnico.",
@@ -136,6 +142,24 @@ export const RESOLUTION_FAILED_TITLE =
 export const RESOLUTION_FAILED_BODY =
   "Es un problema temporal al consultar tu acceso, no un cambio en lo que tienes "
   + "contratado. Vuelve a intentarlo en unos minutos.";
+
+/**
+ * PE-02B3 · Carryover-02 de PE-01 · La nota al pie de la puerta.
+ *
+ * Decía: «El estado de cada módulo se resuelve con la hora del servidor y con lo
+ * que tu empresa tiene hoy. Entrar a un módulo no decide qué puedes hacer
+ * dentro: eso lo determina tu rol.»
+ *
+ * Era cierta y era vocabulario interno. «Hora del servidor» explica CÓMO se
+ * calcula algo a quien solo preguntaba QUÉ tiene. La regla no cambia —el estado
+ * se sigue resolviendo con la hora del servidor y el papel sigue decidiendo lo
+ * de dentro—; lo que cambia es que dejamos de contárselo a quien no preguntó.
+ *
+ * Texto congelado por decisión humana. No reescribir.
+ */
+export const MODULE_ACCESS_FOOTNOTE =
+  "Los módulos disponibles dependen del acceso de tu empresa. Dentro de cada "
+  + "módulo, tu rol define las funciones que puedes usar.";
 
 export const PLATFORM_TAGLINE = "Una cuenta, varios módulos. Entra al que necesites.";
 

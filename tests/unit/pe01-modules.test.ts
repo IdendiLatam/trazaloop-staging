@@ -394,15 +394,28 @@ check("G4. Y el botón no expone la clave interna", () => {
 });
 
 check("G5. El portal público ya no dice que Quality está por llegar", () => {
-  const i = PORTAL.indexOf("Trazaloop Quality");
-  assert(i > 0, "el portal perdió Quality");
-  const tarjeta = PORTAL.slice(Math.max(0, i - 600), i + 400);
-  assert(!/Próximamente/.test(tarjeta), "el portal sigue anunciando Quality como futuro");
-  assert(/Disponible/.test(tarjeta), "el portal no dice que Quality está disponible");
-  // Construcción SÍ sigue siendo futuro.
-  const j = PORTAL.indexOf("Trazaloop Construcción");
-  assert(/Próximamente/.test(PORTAL.slice(Math.max(0, j - 400), j + 600)),
-    "Construcción dejó de presentarse como futuro");
+  // PE-02B3 · La portada dejó de escribir los nombres de los módulos y los lee
+  // del catálogo, así que ya no se puede buscar «Trazaloop Quality» en su
+  // código. La promesa es la misma y se comprueba en dos mitades: que el
+  // protagonista se pinte como disponible, y que el único «Próximamente» sea el
+  // del módulo que de verdad no existe. Que los nombres lleguen al HTML lo
+  // comprueba el recorrido por HTTP.
+  const hero = PORTAL.indexOf('id="modulo-principal"');
+  assert(hero > 0, "el portal perdió el bloque del protagonista");
+  const tarjeta = PORTAL.slice(hero - 500, hero + 700);
+  assert(!/Próximamente/.test(tarjeta), "el portal anuncia el protagonista como futuro");
+  assert(/Disponible/.test(tarjeta), "el portal no dice que el protagonista está disponible");
+  assert(/ENTRY_COPY\[hero\.key\]/.test(PORTAL), "el portal no pinta la frase del catálogo");
+
+  // Y el futuro sigue siendo futuro: el catálogo lo dice, y la portada lo pinta
+  // a partir de ahí.
+  const catalogo = leer("lib/modules/catalog.ts");
+  const i = catalogo.indexOf('key: "construccion"');
+  assert(i > 0, "el catálogo perdió Construcción");
+  assert(/status: "coming_soon"/.test(catalogo.slice(i, i + 500)),
+    "Construcción dejó de ser un módulo futuro en el catálogo");
+  assert(/activo \? "Disponible" : "Próximamente"/.test(PORTAL),
+    "la portada dejó de pintar el estado del catálogo");
 });
 
 // ===========================================================================

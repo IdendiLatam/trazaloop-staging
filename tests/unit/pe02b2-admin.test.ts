@@ -40,11 +40,13 @@ console.log("\nPE-02B2 · La consola de contenido\n");
 console.log("A · La migración, y dónde toca");
 // ===========================================================================
 
-check("A1. Es la 0156 y es la única nueva", () => {
-  const nuevas = readdirSync("supabase/migrations")
-    .filter((f) => /^01(5[6-9]|[6-9]\d)_/.test(f));
-  assert(nuevas.length === 1, `hay ${nuevas.length} migraciones nuevas: ${nuevas.join(", ")}`);
-  assert(nuevas[0].startsWith("0156_platform_legal"), `se llama ${nuevas[0]}`);
+check("A1. PE-02B2 aportó UNA migración, y es la del endurecimiento legal", () => {
+  // Contar «cuántas hay por encima de 0155» era una fotografía: PE-02B3 la
+  // rompió al sembrar el contenido en 0157 sin cambiar nada de aquí.
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  const mias = migraciones.filter((f) => /legal_documents_hardening/i.test(f));
+  assert(mias.length === 1, `PE-02B2 aportó ${mias.length} migraciones: ${mias.join(", ")}`);
+  assert(mias[0] === "0156_platform_legal_documents_hardening.sql", `se llama ${mias[0]}`);
 });
 
 check("A2. No se tocó 0155 ni ninguna histórica", () => {
@@ -72,8 +74,13 @@ check("A3. Está autorizada en las listas blancas", () => {
 });
 
 check("A4. No se creó la migración de ayuda contextual · §31", () => {
-  const existe = readdirSync("supabase/migrations").some((f) => f.startsWith("0157"));
-  assert(!existe, "se creó 0157 y la ayuda contextual es B4");
+  // El encargo lo decía como «no hay 0157» porque entonces ese número estaba
+  // reservado a la ayuda contextual. PE-02B3 lo usó para sembrar el contenido
+  // inicial de la FAQ, así que el número dejó de ser la promesa: la promesa es
+  // que la ayuda contextual sigue sin existir.
+  const ayuda = readdirSync("supabase/migrations")
+    .filter((f) => /contextual_help|help_items|page_help/i.test(f));
+  assert(ayuda.length === 0, `se creó la ayuda contextual: ${ayuda.join(", ")}`);
   for (const t of ["help_items", "help_item_revisions", "tutorial", "video"]) {
     assert(!SQL.includes(`create table public.${t}`), `se creó ${t}`);
   }
@@ -394,12 +401,19 @@ check("H5. Y la ficha legal dice que lo publicado no se corrige", () => {
 console.log("\nI · Lo que este tramo NO hace");
 // ===========================================================================
 
-check("I1. Sin FAQ pública ni centro de ayuda · §30", () => {
-  for (const r of ["app/faq", "app/(app)/(shell)/faq", "app/ayuda"]) {
+check("I1. La consola no se convirtió en la FAQ pública · §30", () => {
+  // B2 no construyó pantallas de consumo; B3 sí, y es lo previsto. Lo que sigue
+  // valiendo es que la CONSOLA no se lea como producto: sus pantallas viven en
+  // /platform y no enlazan al revés.
+  const enConsola = ["app/(app)/platform/faq/page.tsx",
+    "app/(app)/platform/faq/[id]/page.tsx"];
+  for (const r of enConsola) {
     let existe = true;
     try { statSync(r); } catch { existe = false; }
-    assert(!existe, `se creó ${r} y las pantallas de consumo son B3`);
+    assert(existe, `desapareció ${r}`);
   }
+  assert(!LISTA.includes('href="/faq"') && !FICHA.includes('href="/faq"'),
+    "la consola enlaza a la FAQ pública como si fuera su continuación");
 });
 
 check("I2. Sin ayuda contextual · §31", () => {
@@ -411,13 +425,15 @@ check("I2. Sin ayuda contextual · §31", () => {
     "se migraron las once ayudas de partes interesadas, y eso es B4");
 });
 
-check("I3. Sin los carryovers de PE-01 · §32", () => {
-  const portada = leer("app/page.tsx");
-  assert(/grid gap-4 sm:grid-cols-2/.test(portada),
-    "se tocó la jerarquía de la portada pública, y eso es B6");
-  const puerta = leer("app/(app)/modules/page.tsx");
-  assert(/hora del servidor/.test(puerta),
-    "se cambió la copia de /modules, y eso es B6");
+check("I3. Los carryovers de PE-01 no los hizo este tramo", () => {
+  // B2 no debía tocarlos, y no los tocó: los cerró PE-02B3, que es donde el
+  // humano los pidió después de la revisión. Lo que se comprueba aquí es que
+  // ninguna pantalla de la CONSOLA los arrastró.
+  for (const [n, src] of [["la lista", LISTA], ["la ficha", FICHA],
+    ["la lista legal", LEGAL_LISTA]] as const) {
+    assert(!/Módulos especializados|modulo-principal/.test(src),
+      `${n} pinta la jerarquía de la portada pública`);
+  }
 });
 
 check("I4. Sin planes, precios ni pagos", () => {
@@ -429,18 +445,28 @@ check("I4. Sin planes, precios ni pagos", () => {
   }
 });
 
-check("I5. Ninguna pantalla nueva vive fuera de /platform", () => {
-  const nuevas: string[] = [];
+check("I5. Ninguna pantalla de ADMINISTRACIÓN vive fuera de /platform", () => {
+  // PE-02B3 añadió /faq, que es de consumo y es pública a propósito. Lo que esta
+  // comprobación protege es lo otro: que ninguna pantalla que EDITE contenido de
+  // la plataforma se haya salido de la consola.
+  const editoras: string[] = [];
   const walk = (dir: string) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p);
-      else if (e.name === "page.tsx" && /faq|legal-admin/.test(p)) nuevas.push(p);
+      else if (e.name === "page.tsx") {
+        const src = leer(p);
+        if (/faq-admin|legal-admin|CreateFaq|FaqDraftForm|CreateLegalVersionForm/.test(src)) {
+          editoras.push(p);
+        }
+      }
     }
   };
   walk("app");
-  const fuera = nuevas.filter((p) => !p.includes("platform"));
-  assert(fuera.length === 0, `hay pantallas de administración fuera de plataforma: ${fuera.join(", ")}`);
+  const fuera = editoras.filter((p) => !p.includes("platform"));
+  assert(editoras.length >= 3, `solo se encontraron ${editoras.length} pantallas de edición`);
+  assert(fuera.length === 0,
+    `hay pantallas de administración fuera de plataforma: ${fuera.join(", ")}`);
 });
 
 console.log(`\nPE-02B2 · consola (código): ${passed} en verde, ${failed} en rojo\n`);

@@ -33,10 +33,19 @@ check("A1. PE-02B1 aportó UNA migración, y es la 0155", () => {
   // Antes esto contaba «cuántas migraciones hay por encima de 0154», que es una
   // fotografía: PE-02B2 la rompió al añadir la suya sin cambiar nada de aquí.
   // La promesa de este tramo es la suya: aportó una, y es la de la FAQ.
+  // «Las migraciones cuyo nombre lleva faq» dejó de identificar a este tramo en
+  // cuanto PE-02B3 sembró el contenido inicial en 0157. Lo que sigue siendo
+  // suyo, y es lo que promete, es la migración de CIMIENTOS: la que crea las
+  // tablas.
   const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
-  const mias = migraciones.filter((f) => /faq/i.test(f));
+  const mias = migraciones.filter((f) => /faq_foundation/i.test(f));
   assert(mias.length === 1, `PE-02B1 aportó ${mias.length} migraciones: ${mias.join(", ")}`);
   assert(mias[0] === "0155_platform_faq_foundation.sql", `se llama ${mias[0]}`);
+  // Y sigue siendo la única que crea las tablas de la FAQ.
+  const creanTablas = migraciones.filter(
+    (f) => /create table public\.faq_/.test(leer(`supabase/migrations/${f}`)));
+  assert(creanTablas.length === 1 && creanTablas[0] === mias[0],
+    `crean tablas de FAQ: ${creanTablas.join(", ")}`);
 });
 
 check("A2. Y no creó la de ayuda contextual", () => {
@@ -333,22 +342,28 @@ check("G1. Sin cliente administrativo en ningún camino de FAQ", () => {
   // y falso en cuanto B2 construyó la consola—. Ahora se comprueba la promesa:
   // ni la migración ni la capa que la usa recurren a service_role.
   assert(!/service_role/i.test(SQL), "la migración menciona service_role");
+  // Se mira el CÓDIGO, no los comentarios: una capa puede —y debe— explicar por
+  // qué no usa el cliente administrativo.
+  const sinComentarios = (src: string) => src
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   for (const f of readdirSync("lib/db").filter((x) => /faq/i.test(x))) {
-    const src = leer(`lib/db/${f}`);
+    const src = sinComentarios(leer(`lib/db/${f}`));
     assert(!/createAdminClient|service_role/i.test(src),
       `lib/db/${f} usa el cliente administrativo para la FAQ`);
   }
 });
 
-check("G2. Sin FAQ pública: lo que se construyó vive en la consola", () => {
-  // B1 no tenía ninguna pantalla; B2 añadió la de administración, que es suya.
-  // Lo que sigue sin existir —y es lo que esta comprobación protege— es la FAQ
-  // que consume el público: esa es B3.
-  for (const r of ["app/faq", "app/(app)/(shell)/faq", "app/ayuda"]) {
-    let existe = true;
-    try { readdirSync(r); } catch { existe = false; }
-    assert(!existe, `se creó ${r}, y la FAQ pública es B3`);
-  }
+check("G2. La FAQ pública se lee por las vistas de B1, no por sus tablas", () => {
+  // B1 no tenía pantallas; B2 añadió la consola y B3 la FAQ pública. Lo que esta
+  // comprobación protege ya no es que no existan —existen, y es lo previsto—,
+  // sino que ninguna de las dos se saltó el contrato de lectura de B1: se lee
+  // por las vistas, que no contienen borradores, historia ni procedencia.
+  const consumidora = leer("lib/db/faq-public.ts");
+  assert(/v_faq_public/.test(consumidora) && /v_faq_authenticated/.test(consumidora),
+    "la FAQ pública no usa las vistas de 0155");
+  const tablas = [...consumidora.matchAll(/from\("(faq_[a-z_]+)"\)/g)].map((m) => m[1]);
+  assert(tablas.length === 0,
+    `la FAQ pública consulta tablas directamente: ${tablas.join(", ")}`);
 });
 
 check("G3. Sin tabla de vídeos ni de ayuda contextual", () => {

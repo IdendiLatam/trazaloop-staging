@@ -40,7 +40,8 @@ import { resolveModuleEntryHref, type CommercialModule, type CommercialModuleKey
 import type { DerivedModuleState } from "@/lib/modules/access";
 import { isEnterableState } from "@/lib/modules/messages";
 import {
-  ENTRY_COPY, NO_ACTIVE_MODULES_BODY, NO_ACTIVE_MODULES_TITLE, PLATFORM_TAGLINE,
+  ENTRY_COPY, MODULE_ACCESS_FOOTNOTE, NO_ACTIVE_MODULES_BODY,
+  NO_ACTIVE_MODULES_TITLE, PLATFORM_TAGLINE,
   RESOLUTION_FAILED_BODY, RESOLUTION_FAILED_TITLE, enterLabel, heroModule,
   overviewOf, specializedModules,
 } from "@/lib/modules/entry";
@@ -174,9 +175,10 @@ export default async function ModulesPortalPage() {
       </section>
 
       <p className="text-xs text-ink-soft">
-        El estado de cada módulo se resuelve con la hora del servidor y con lo que tu empresa
-        tiene hoy. Entrar a un módulo no decide qué puedes hacer dentro: eso lo determina tu
-        rol.
+        {MODULE_ACCESS_FOOTNOTE}{" "}
+        <Link href="/faq" className="text-loop hover:underline">
+          Preguntas frecuentes
+        </Link>
       </p>
     </div>
   );

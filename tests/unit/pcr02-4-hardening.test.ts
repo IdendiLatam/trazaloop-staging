@@ -297,6 +297,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0154_quality_intelligence_integrated_sources.sql",
     "0155_platform_faq_foundation.sql",
     "0156_platform_legal_documents_hardening.sql",
+    "0157_platform_faq_initial_content.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

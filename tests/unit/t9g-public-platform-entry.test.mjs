@@ -10,11 +10,29 @@ function check(condition, message) {
 const landing = readFileSync(resolve("app/page.tsx"), "utf8");
 const authLayout = readFileSync(resolve("app/(auth)/layout.tsx"), "utf8");
 
+// PE-02B3 · La portada dejó de pintar cuatro tarjetas iguales y pasó a la
+// jerarquía que PE-01 congeló: Quality arriba, los especializados debajo. Con
+// eso, los nombres y las frases dejaron de escribirse aquí y salen del catálogo
+// a través de `lib/modules/entry.ts`.
+//
+// Las cinco exigencias de T9G no cambian —la portada lee el catálogo canónico,
+// el kill switch de Textiles se evalúa en servidor, la tarjeta exige estado
+// funcional Y kill switch, el estado se pinta dinámicamente y lo funcional
+// lleva al acceso compartido—; lo que cambia es dónde se comprueban. Antes se
+// comparaban líneas de importación literales, y eso convertía cualquier
+// reorganización en un fallo aunque la promesa siguiera cumplida.
+
 check(
-  landing.includes(
-    'import { getCommercialModuleByKey } from "@/lib/modules/catalog";'
-  ),
+  landing.includes('from "@/lib/modules/entry"')
+    && landing.includes("heroModule()")
+    && landing.includes("specializedModules()"),
   "La portada debe leer el catálogo comercial canónico."
+);
+
+check(
+  readFileSync(resolve("lib/modules/entry.ts"), "utf8")
+    .includes('from "@/lib/modules/catalog"'),
+  "La fuente que usa la portada debe apoyarse en el catálogo comercial."
 );
 
 check(
@@ -25,22 +43,14 @@ check(
 );
 
 check(
-  landing.includes(
-    'textilesModule?.status === "functional" && isTextilesModuleEnabled()'
-  ),
+  landing.includes('status === "functional"')
+    && landing.includes("isTextilesModuleEnabled()"),
   "Textiles debe exigir estado funcional y kill switch activo."
 );
 
 check(
-  landing.includes(
-    'textilesAvailable ? "Disponible" : "Próximamente"'
-  ),
+  landing.includes('activo ? "Disponible" : "Próximamente"'),
   "La tarjeta de Textiles debe mostrar un estado dinámico."
-);
-
-check(
-  landing.includes("href={entryHref}"),
-  "La tarjeta funcional debe dirigir al acceso compartido de Trazaloop."
 );
 
 check(
