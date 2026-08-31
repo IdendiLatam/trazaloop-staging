@@ -102,3 +102,14 @@ export function pendingRequiredDocuments(
     (d) => REQUIRED_LEGAL_DOCUMENT_TYPES.includes(d.documentType) && !acceptedIds.has(d.id)
   );
 }
+
+/**
+ * PE-02B2 · Lo que se dice cuando la consulta de los documentos legales FALLA.
+ *
+ * Vive en el dominio y no junto a las acciones porque un módulo `"use server"`
+ * solo puede exportar funciones asíncronas. Y dice «temporal» a propósito: una
+ * avería no es una ausencia, y «no hay documentos legales» sería alarmante y
+ * falso a la vez.
+ */
+export const LEGAL_UNAVAILABLE_MESSAGE =
+  "No fue posible consultar los documentos legales. Es un problema temporal, no una pérdida de contenido. Vuelve a intentarlo en unos minutos.";

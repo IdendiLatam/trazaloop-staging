@@ -78,7 +78,7 @@ nuevas, estas pruebas siguen valiendo.
 
 | Grupo | Qué |
 |---|---|
-| A | Una sola migración nueva, es la 0155, **no hay 0156**, no toca migraciones históricas, y está autorizada en las 17 listas blancas |
+| A | PE-02B1 aportó **una** migración y es la 0155, no creó la de ayuda contextual, no toca migraciones históricas, y está autorizada en las listas blancas |
 | B | La forma de PEH-02: cuatro tablas, la identidad sin texto, vigencia y huella en la revisión, el idioma fuera de la identidad, el borrador aparte, inmutabilidad por disparador |
 | C | Los tres estados; publicar exige superadministrador; se cierra antes de abrir; retirar no borra; restaurar escribe en el borrador |
 | D | Los cinco estados de verificación; el rechazo es una excepción; la política externa se fecha y **no** está escrita en el código; la clasificación normativa es la de 0136 |

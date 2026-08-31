@@ -29,16 +29,24 @@ console.log("\nPE-02B1 · Los cimientos de la FAQ\n");
 console.log("A · Una migración, y donde toca");
 // ===========================================================================
 
-check("A1. Es la 0155 y es la única nueva", () => {
-  const nuevas = readdirSync("supabase/migrations")
-    .filter((f) => /^01(5[5-9]|[6-9]\d)_/.test(f));
-  assert(nuevas.length === 1, `hay ${nuevas.length} migraciones nuevas: ${nuevas.join(", ")}`);
-  assert(nuevas[0] === "0155_platform_faq_foundation.sql", `se llama ${nuevas[0]}`);
+check("A1. PE-02B1 aportó UNA migración, y es la 0155", () => {
+  // Antes esto contaba «cuántas migraciones hay por encima de 0154», que es una
+  // fotografía: PE-02B2 la rompió al añadir la suya sin cambiar nada de aquí.
+  // La promesa de este tramo es la suya: aportó una, y es la de la FAQ.
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  const mias = migraciones.filter((f) => /faq/i.test(f));
+  assert(mias.length === 1, `PE-02B1 aportó ${mias.length} migraciones: ${mias.join(", ")}`);
+  assert(mias[0] === "0155_platform_faq_foundation.sql", `se llama ${mias[0]}`);
 });
 
-check("A2. No hay 0156: la ayuda contextual no es este tramo", () => {
-  const existe = readdirSync("supabase/migrations").some((f) => f.startsWith("0156"));
-  assert(!existe, "se creó 0156 y §20 dice que no");
+check("A2. Y no creó la de ayuda contextual", () => {
+  // El encargo de B1 lo decía como «no hay 0156», porque entonces ese número
+  // estaba reservado a la ayuda contextual. PE-02B2 lo usó para endurecer los
+  // documentos legales, así que el número dejó de ser la promesa. La promesa es
+  // que la ayuda contextual sigue sin existir.
+  const ayuda = readdirSync("supabase/migrations")
+    .filter((f) => /contextual_help|help_items|page_help/i.test(f));
+  assert(ayuda.length === 0, `se creó la ayuda contextual: ${ayuda.join(", ")}`);
 });
 
 check("A3. No se tocó ninguna migración histórica", () => {
@@ -58,7 +66,7 @@ check("A4. Está autorizada en las listas blancas", () => {
   // ruta—. Quien la abre para leerla escribe `supabase/migrations/0154…`, que
   // es otra cosa: contarla aquí exigiría autorizar una migración en un archivo
   // que no autoriza nada.
-  const esElemento = /["']0154_quality_intelligence_integrated_sources\.sql["']/;
+  const esElemento = /^\s*["']0154_quality_intelligence_integrated_sources\.sql["'],?\s*$/m;
   const conLista = readdirSync("tests/unit")
     .map((f) => `tests/unit/${f}`)
     .concat(["tests/release/v1-release.test.ts", "tests/passports/textiles-passports-share.test.ts"])
@@ -67,7 +75,7 @@ check("A4. Está autorizada en las listas blancas", () => {
     });
   assert(conLista.length > 0, "no se encontró ninguna lista blanca");
   const sinAutorizar = conLista.filter(
-    (p) => !/["']0155_platform_faq_foundation\.sql["']/.test(leer(p)));
+    (p) => !/^\s*["']0155_platform_faq_foundation\.sql["'],?\s*$/m.test(leer(p)));
   assert(sinAutorizar.length === 0,
     `sin autorizar en: ${sinAutorizar.join(", ")}`);
 });
@@ -319,18 +327,27 @@ console.log("\nG · Lo que este tramo NO hace");
 // ===========================================================================
 
 check("G1. Sin cliente administrativo en ningún camino de FAQ", () => {
+  // Lo que B1 prometía era que su MIGRACIÓN no abriera un atajo con la clave de
+  // servicio, y eso sigue siendo cierto. Antes esto se comprobaba exigiendo que
+  // no existiera capa de datos de FAQ —cierto mientras B1 era el último tramo,
+  // y falso en cuanto B2 construyó la consola—. Ahora se comprueba la promesa:
+  // ni la migración ni la capa que la usa recurren a service_role.
   assert(!/service_role/i.test(SQL), "la migración menciona service_role");
-  const codigo = readdirSync("lib/db").filter((f) => /faq/i.test(f));
-  assert(codigo.length === 0,
-    `hay capa de datos de FAQ y B1 es solo esquema: ${codigo.join(", ")}`);
+  for (const f of readdirSync("lib/db").filter((x) => /faq/i.test(x))) {
+    const src = leer(`lib/db/${f}`);
+    assert(!/createAdminClient|service_role/i.test(src),
+      `lib/db/${f} usa el cliente administrativo para la FAQ`);
+  }
 });
 
-check("G2. Sin pantallas: ni pública ni de administración", () => {
-  const rutas = ["app/faq", "app/(app)/platform/faq"];
-  for (const r of rutas) {
+check("G2. Sin FAQ pública: lo que se construyó vive en la consola", () => {
+  // B1 no tenía ninguna pantalla; B2 añadió la de administración, que es suya.
+  // Lo que sigue sin existir —y es lo que esta comprobación protege— es la FAQ
+  // que consume el público: esa es B3.
+  for (const r of ["app/faq", "app/(app)/(shell)/faq", "app/ayuda"]) {
     let existe = true;
     try { readdirSync(r); } catch { existe = false; }
-    assert(!existe, `se creó ${r} y B1 no tiene pantallas`);
+    assert(!existe, `se creó ${r}, y la FAQ pública es B3`);
   }
 });
 

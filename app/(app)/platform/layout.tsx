@@ -50,6 +50,22 @@ export default async function PlatformLayout({
           >
             Estructuras TrazaDocs
           </Link>
+          {/* PE-02B2 · El contenido que la plataforma publica para todas las
+              empresas. Se ofrece también a `support`, que puede consultarlo y
+              su historia; quien escribe es el superadministrador, y eso lo
+              decide la base, no este menú. */}
+          <Link
+            href="/platform/faq"
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            Preguntas frecuentes
+          </Link>
+          <Link
+            href="/platform/legal"
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            Documentos legales
+          </Link>
           <Link
             href="/select-org"
             className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"

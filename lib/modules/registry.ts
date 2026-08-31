@@ -111,6 +111,9 @@ export const PLATFORM_GROUP: ModuleNavGroup = {
     { label: "Administración de plataforma", href: "/platform" },
     { label: "Nueva empresa", href: "/platform/organizations/new" },
     { label: "Estructuras TrazaDocs", href: "/platform/trazadocs" },
+    // PE-02B2 · El contenido que la plataforma publica para todas las empresas.
+    { label: "Preguntas frecuentes", href: "/platform/faq" },
+    { label: "Documentos legales", href: "/platform/legal" },
     { label: "Tickets de soporte", href: "/platform/support" },
   ],
 };

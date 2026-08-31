@@ -399,8 +399,14 @@ migración:
 
 Y una segunda, **separable**, para la ayuda contextual:
 
+> **Corrección posterior (PE-02B2).** Este número era un pronóstico, no una
+> invariante. `0156` acabó siendo el endurecimiento de los documentos legales
+> —un hueco de esquema real que PE-02B1 encontró y reportó—, así que la ayuda
+> contextual pasa a **0157** si llega a hacer falta. Ver
+> [PE_02B2_LEGAL_DOCUMENT_HARDENING.md](./PE_02B2_LEGAL_DOCUMENT_HARDENING.md) §8.
+
 ```
-0156  help_items
+0157  help_items
       help_item_revisions
       + help_publish_item(...)
       + política de lectura autenticada por módulo/página

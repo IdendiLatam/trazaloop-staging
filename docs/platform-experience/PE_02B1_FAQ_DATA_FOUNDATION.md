@@ -184,7 +184,9 @@ B3.
 
 - **No** hay capa de datos de FAQ en `lib/db/` — B1 es esquema.
 - **No** hay ninguna pantalla, ni pública ni de administración.
-- **No** se creó `0156`: la ayuda contextual no es este tramo.
+- **No** se creó una segunda migración: la ayuda contextual no es este tramo.
+  (Cuando se escribió esto, el número reservado para ella era `0156`; PE-02B2 lo
+  usó para el endurecimiento legal y la ayuda contextual pasa a `0157`.)
 - **No** se creó tabla de vídeos ni de tutoriales.
 - **No** se sembró **ninguna pregunta**. Solo las diez categorías.
 - **No** se tocó `legal_documents` — ver

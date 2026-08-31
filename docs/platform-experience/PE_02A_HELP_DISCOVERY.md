@@ -254,3 +254,23 @@ que hay que conservar.
 
 El trabajo de PE-02 es **publicar y administrar contenido que hoy existe en
 archivos, con un motor que hoy existe en la base**. No es una refundación.
+
+---
+
+## 15 · Nota posterior · lo que PE-02B1 y PE-02B2 confirmaron
+
+Dos cosas que este descubrimiento dio por probables y que después se
+comprobaron:
+
+1. **El motor de 0136 sirve.** `0155` lo repitió para la FAQ sin cambiarle una
+   idea: identidad estable, revisiones inmutables con vigencia, publicación como
+   única puerta. Lo único que hubo que añadir fue la barrera de verificación,
+   que 0136 no necesitaba.
+
+2. **`legal_documents` tenía un hueco de verdad.** §4 lo apuntó como carencia de
+   pantalla; PE-02B1 descubrió que además su contenido activo se podía reescribir
+   en su sitio. `0156` lo cerró y la consola llegó en el mismo tramo. Ver
+   [PE_02B2_LEGAL_DOCUMENT_HARDENING.md](./PE_02B2_LEGAL_DOCUMENT_HARDENING.md).
+
+Y una corrección de numeración: la ayuda contextual, si llega a necesitar
+esquema, será **0157**.
