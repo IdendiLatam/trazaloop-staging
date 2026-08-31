@@ -7,6 +7,14 @@ para decidir sobre él.
 
 *31 de agosto de 2026 · sobre el commit `3bd38fc` · **no se publicó nada**.*
 
+> **Describe el borrador tal como estaba al cerrar PE-02B6.1.** PE-02B6.2
+> corrigió después los cuatro bloqueos y el defecto de formato, y verificó el
+> proveedor. Lo que cambió está en
+> [`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md);
+> el texto de las quince respuestas sigue siendo válido salvo el de la 11, que
+> se retocó, y la política ya no lleva los tres restos internos que se listan
+> aquí.
+
 ---
 
 ## Cómo leerlo
@@ -43,9 +51,14 @@ fondo, y las tres impedirían publicar tal cual.
 ```
 
 No hay ningún intérprete de Markdown en el repositorio. El borrador está escrito
-en Markdown —encabezados con `##`, negritas con `**`, y **nueve tablas**—, así
+en Markdown —encabezados con `##`, negritas con `**`, y **seis tablas**—, así
 que el cliente vería veinticinco mil caracteres con los `##`, los `**` y las
 tuberías de las tablas a la vista. Las tablas serían ilegibles.
+
+> **Corregido el 31/08/2026 (PE-02B6.2).** Esta línea decía «nueve tablas».
+> Son **seis**: el número se escribió sin contarlo. Y el defecto de formato ya
+> está resuelto — ver
+> [`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md).
 
 La vigente no tiene el problema porque son cinco párrafos numerados sin formato.
 

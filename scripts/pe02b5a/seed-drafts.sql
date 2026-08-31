@@ -269,7 +269,7 @@ Lo que Trazaloop ha decidido: no activarla. Es una configuración de nuestra cue
 
 Lo que sí se le pide en cada consulta: que no almacene el contenido en sus repositorios. Eso reduce lo que se guarda, pero no es lo mismo que un acuerdo de retención cero — ver la pregunta sobre cuánto tiempo puede conservarlo.',
   'safe', 'verified_with_qualifier',
-  'AI_PROVIDER_POLICY · documentación oficial del proveedor consultada el 2026-08-31 (política del proveedor) + confirmación de la dirección del producto del 2026-08-31 (ajuste de nuestra cuenta). Son dos fuentes distintas y la respuesta las distingue.',
+  'AI_PROVIDER_POLICY · documentación oficial de OpenAI, que es el proveedor verificado en el entorno desplegado (PE-02B6.2), consultada el 2026-08-31 (política del proveedor) + confirmación de la dirección del producto del 2026-08-31 (ajuste de nuestra cuenta). Son dos fuentes distintas y la respuesta las distingue.',
   'La afirmación tiene dos mitades con procedencia distinta: la política del proveedor está verificada en su documentación oficial; que Trazaloop no haya activado la autorización lo confirmó una persona, no el repositorio. Si ese ajuste cambiara, esta respuesta pasa a ser falsa y hay que rehacerla. Y no se puede escribir que el proveedor no entrenará nunca bajo ninguna circunstancia: lo que dice es que no lo hace salvo autorización.',
   'https://developers.openai.com/api/docs/guides/your-data', '2026-08-31');
 
@@ -282,16 +282,16 @@ Lo que sí se le pide en cada consulta: que no almacene el contenido en sus repo
 select pg_temp.sembrar_faq_borrador(
   'seguridad_retencion_proveedor', 'seguridad', 'public', 100, false, 'modules', '{quality}',
   '¿Cuánto tiempo puede conservar el proveedor de IA la información de una consulta?',
-  'Según la documentación oficial del proveedor, las peticiones y respuestas pueden conservarse HASTA 30 DÍAS con fines de prestación del servicio y vigilancia de abusos, salvo que una obligación legal o la protección del servicio exijan más tiempo. Trazaloop no tiene contratado un acuerdo de retención cero, así que ese plazo es el que aplica.',
+  'Hasta 30 días. Según la documentación oficial del proveedor, las preguntas y respuestas pueden conservarse ese tiempo para prestar el servicio y vigilar abusos, y más si una obligación legal o la protección de su servicio lo exigen. Trazaloop no tiene contratado un acuerdo de retención cero, así que ese es el plazo que aplica.',
   '«Hasta 30 días» no significa «siempre 30 días» ni «siempre menos»: es un máximo, con las dos excepciones que la propia política nombra.
 
-Trazaloop pide en cada consulta que el contenido no se almacene en los repositorios de la interfaz de programación. Esa petición reduce lo que se guarda, pero NO es un acuerdo de retención cero: son dos mecanismos distintos, y decimos con claridad que el segundo no lo tenemos.
+En cada consulta, Trazaloop le pide además que no guarde el contenido en sus repositorios. Esa petición reduce lo que se almacena, pero NO es un acuerdo de retención cero: son dos mecanismos distintos, y el segundo no lo tenemos.
 
 Por la misma razón no afirmamos que ninguna persona del proveedor pueda acceder nunca a contenido almacenado por él. Existen controles contractuales para eso y no declaramos tenerlos.
 
 Lo que sí controlamos: qué se envía. Solo la pregunta y el contexto que el servidor seleccionó para responderla, con tus permisos.',
   'safe', 'verified_with_qualifier',
-  'AI_PROVIDER_POLICY §2 · «retained for up to 30 days, unless longer retention is required by law, or is reasonably necessary to protect our services», consultado el 2026-08-31 + confirmación de la dirección del 2026-08-31: no hay retención cero contratada.',
+  'AI_PROVIDER_POLICY §2 · documentación oficial de OpenAI, que es el proveedor verificado en el entorno desplegado (PE-02B6.2): «retained for up to 30 days, unless longer retention is required by law, or is reasonably necessary to protect our services», consultado el 2026-08-31 + confirmación de la dirección del 2026-08-31: no hay retención cero contratada.',
   'La salvedad es doble y no se puede quitar: el plazo es del proveedor y es un máximo con excepciones, y Trazaloop no tiene retención cero. Si algún día se contratara, esta respuesta hay que rehacerla — decir hoy que no la hay es lo que la hace honesta.',
   'https://developers.openai.com/api/docs/guides/your-data', '2026-08-31');
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLegalDocumentAction, listLegalDocumentsAction }
   from "@/server/actions/legal-admin";
+import { LegalContent } from "@/components/legal/legal-content";
 import { LEGAL_UNAVAILABLE_MESSAGE } from "@/lib/domain/legal";
 import {
   EditLegalDraftForm, PublishLegalForm, DiscardLegalDraftForm,
@@ -75,9 +76,12 @@ export default async function PlatformLegalDocumentPage(
         <h2 className="eyebrow">Texto</h2>
         <div className="rounded-lg border border-hairline bg-surface p-5">
           <h3 className="text-base font-semibold text-ink">{document.title}</h3>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink">
-            {document.content}
-          </p>
+          {/* PE-02B6.2 · El mismo componente que ve el cliente. Si la consola
+              pintara el texto de otra forma, se aprobaría una cosa y se
+              publicaría otra. */}
+          <div className="mt-3">
+            <LegalContent content={document.content} />
+          </div>
         </div>
       </section>
 

@@ -221,10 +221,19 @@ check("D3. El anonimato se acota al modo anónimo", () => {
 console.log("\nE · La política de privacidad sucesora");
 // ===========================================================================
 
-check("E1. Es un borrador y lo dice", () => {
-  assert(/BORRADOR SUCESOR/.test(POLITICA), "no se declara borrador");
-  assert(/No está vigente|no está vigente/.test(POLITICA), "no dice que no está vigente");
+check("E1. Es la sucesora, y su estado NO se escribe dentro del texto", () => {
+  // Hasta PE-02B6.2 esta comprobación exigía un cartel de «BORRADOR SUCESOR»
+  // dentro del documento. Servía mientras el texto solo se leía aquí; el día
+  // que se publicara, ese cartel se lo habría llevado el cliente.
+  //
+  // Que sea un borrador lo dice el metadato del producto —`status` y
+  // `published_at`, comprobados en pe02b62-content—, no el contenido. Lo que
+  // el texto sí tiene que declarar es qué versión es.
   assert(/\*\*Versión comercial:\*\* 1\.1/.test(POLITICA), "no declara la versión sucesora");
+  assert(/\*\*Sucede a:\*\* versión 1\.0/.test(POLITICA), "no dice a qué versión sucede");
+  assert(!/BORRADOR/.test(POLITICA), "el estado editorial se escribió dentro del texto");
+  assert(!/docs\/platform-experience|PE_02B|PE-02B5A/.test(POLITICA),
+    "el documento nombra el repositorio");
 });
 
 check("E2. No inventa identidad legal · la hereda de la v1.0 aprobada", () => {

@@ -28,6 +28,7 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-02B5A | Los borradores de seguridad, privacidad e IA | — | **cerrado** |
 | PE-02B6 | Consolidación y preparación de la revisión | — | **cerrado** |
 | PE-02B6.1 | El paquete editorial, para revisar sin consola | — | **cerrado** |
+| PE-02B6.2 | Correcciones editoriales y pintado del texto legal | — | **cerrado** |
 | PE-02B5B | **Publicación** | — | **NO EMPEZADO** |
 
 ### El estado de PE-02, en dos líneas
@@ -48,6 +49,9 @@ Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 - **sin consola** — [`PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md`](PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md),
   el texto exacto de la política y de las quince respuestas, con hoja de decisión.
 
+Y lo que se corrigió después de aquella revisión, en
+[`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md).
+
 ---
 
 ## Confirmaciones que solo puede dar una persona
@@ -56,7 +60,8 @@ Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 |---|---|
 | ¿Autorización de uso de datos para entrenamiento? | **respondida** · no · 2026-08-31 |
 | ¿Retención cero contratada? | **respondida** · no · 2026-08-31 |
-| ¿Qué proveedor de IA está contratado en producción? | **abierta** · no bloquea publicar |
+| ¿Qué proveedor de IA usa el entorno desplegado? | **respondida** · OpenAI · 2026-08-31 |
+| ¿Se nombra al proveedor en el texto público? | **abierta** · no bloquea publicar |
 | ¿Se publica la política de privacidad v1.1? | **abierta** · bloquea B5B |
 | ¿Se publican las quince respuestas de seguridad? | **abierta** · bloquea B5B |
 
