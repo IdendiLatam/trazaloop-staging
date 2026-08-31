@@ -138,20 +138,38 @@ async function main() {
     assert(error, "se pudo reescribir una versión archivada");
   });
 
-  await check("D. Las aceptaciones de la v1 se conservan enteras", async () => {
-    const { data: v1 } = await admin.from("legal_documents")
-      .select("id").eq("document_type", "privacy").eq("version", "v1").single();
-    const { count } = await admin.from("user_legal_acceptances")
-      .select("id", { count: "exact", head: true })
-      .eq("legal_document_id", (v1 as { id: string }).id);
-    assert((count ?? 0) > 0, "la v1 se quedó sin aceptaciones");
-    // Y ninguna se movió a la v1.1: eso sería reinterpretar un consentimiento.
-    const { data: filas } = await admin.from("user_legal_acceptances")
-      .select("version").eq("legal_document_id", (v1 as { id: string }).id).limit(50);
-    for (const f of (filas ?? []) as { version: string }[]) {
-      assert(f.version === "v1", `una aceptación de la v1 quedó marcada «${f.version}»`);
-    }
-  });
+  await check("D. Una aceptación de la v1 se conserva, y sigue siendo de la v1",
+    async () => {
+      // La comprobación se fabrica su propio pasado en vez de contar lo que
+      // haya en la base. Contar dependía de que alguien hubiera aceptado antes
+      // de publicar, y sobre una base recién replayada eso es cero — que es
+      // correcto, y no demuestra ni desmiente nada.
+      const persona = await nuevaPersona("pe02b5b-conserva");
+      const { data: v1 } = await admin.from("legal_documents")
+        .select("id, document_type, version")
+        .eq("document_type", "privacy").eq("version", "v1").single();
+      const d = v1 as { id: string; document_type: string; version: string };
+      const { error } = await admin.from("user_legal_acceptances").insert({
+        user_id: persona.id, legal_document_id: d.id,
+        document_type: d.document_type, version: d.version });
+      assert(!error, `preparar la aceptación histórica: ${error?.message}`);
+
+      // Sigue ahí, apuntando al documento archivado y marcada con SU versión.
+      const { data: suyas } = await admin.from("user_legal_acceptances")
+        .select("version, legal_document_id").eq("user_id", persona.id);
+      assert(suyas && suyas.length === 1, `hay ${suyas?.length} aceptaciones`);
+      const f = suyas![0] as { version: string; legal_document_id: string };
+      assert(f.version === "v1", `quedó marcada «${f.version}»`);
+      assert(f.legal_document_id === d.id, "cambió de documento");
+
+      // Y ninguna aceptación de la v1 se movió a la v1.1: eso sería
+      // reinterpretar un consentimiento que nadie volvió a dar.
+      const { data: todas } = await admin.from("user_legal_acceptances")
+        .select("version").eq("legal_document_id", d.id).limit(50);
+      for (const x of (todas ?? []) as { version: string }[]) {
+        assert(x.version === "v1", `una aceptación de la v1 quedó marcada «${x.version}»`);
+      }
+    });
 
   await check("E. Y una aceptación de la v1 NO cuenta como aceptación de la v1.1",
     async () => {

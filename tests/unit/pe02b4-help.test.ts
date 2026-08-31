@@ -72,10 +72,18 @@ check("A3. La ayuda administrada llega por el MISMO contrato", () => {
 console.log("\nB · La migración");
 // ===========================================================================
 
-check("B1. Es la 0158 y es la única nueva", () => {
-  const nuevas = readdirSync("supabase/migrations").filter((f) => /^015[8-9]|^01[6-9]\d/.test(f));
-  assert(nuevas.length === 1, `hay ${nuevas.length} nuevas: ${nuevas.join(", ")}`);
-  assert(nuevas[0].startsWith("0158_platform_contextual_help"), `se llama ${nuevas[0]}`);
+check("B1. La ayuda contextual cabe en UNA migración, la 0158", () => {
+  // Esta comprobación exigía que la 0158 fuera la última del repositorio. Servía
+  // mientras PE-02B4 era el último tramo; PE-03B1 añadió la 0159 y la
+  // afirmación pasó a ser una foto del calendario, no una promesa.
+  //
+  // Lo que sí sigue siendo promesa: que la ayuda contextual se construyó en una
+  // sola migración y que nadie le ha añadido otra por detrás. Si un día hiciera
+  // falta una segunda, sería una decisión, no un descuido.
+  const deAyuda = readdirSync("supabase/migrations")
+    .filter((f) => /contextual_help|_help_/.test(f));
+  assert(deAyuda.length === 1, `hay ${deAyuda.length} migraciones de ayuda: ${deAyuda.join(", ")}`);
+  assert(deAyuda[0] === "0158_platform_contextual_help.sql", `se llama ${deAyuda[0]}`);
 });
 
 check("B2. No toca las migraciones de la FAQ ni las legales", () => {
@@ -423,16 +431,24 @@ check("H5. En pantalla estrecha sigue estando", () => {
 console.log("\nI · Lo que este tramo NO hace");
 // ===========================================================================
 
-check("I1. Sin vídeos ni tutoriales · PE-03", () => {
+check("I1. La ayuda contextual no tiene motor de vídeo propio", () => {
+  // Antes esto decía «sin vídeos ni tutoriales, eso es PE-03». PE-03B1 los
+  // construyó, así que la afirmación caducó.
+  //
+  // Lo que se conserva es lo que de verdad protegía, y que PET-34 dejó
+  // congelado: el botón «i» y el vídeo responden a preguntas distintas —qué es
+  // esto, frente a cómo se usa esta pantalla— y NO se duplican. La ayuda
+  // contextual no guarda medios, y el motor de tutoriales vive aparte.
   for (const t of ["tutorial", "video", "media_asset"]) {
-    assert(!SQL.includes(`create table public.${t}`), `se creó ${t}`);
+    assert(!SQL.includes(`create table public.${t}`), `0158 creó ${t}`);
   }
-  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
-    .flatMap((e) => e.isDirectory() ? walk(`${dir}/${e.name}`)
-      : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : []);
-  const infractores = walk("lib").concat(walk("server"))
-    .filter((f) => /export .*(Tutorial|VideoAsset)/.test(leer(f)));
-  assert(infractores.length === 0, `se empezaron los tutoriales: ${infractores.join(", ")}`);
+  for (const columna of ["video_url", "media_path", "poster", "duration"]) {
+    assert(!new RegExp(`\\b${columna}\\b`, "i").test(SQL),
+      `la ayuda contextual guarda «${columna}»: está duplicando el motor de tutoriales`);
+  }
+  // Y la lectura de la ayuda no consulta tutoriales, ni al revés.
+  assert(!/tutorial/i.test(leer("lib/db/contextual-help.ts")),
+    "la lectura de la ayuda contextual consulta tutoriales");
 });
 
 check("I2. Sin FAQ de seguridad ni política de privacidad · B5", () => {

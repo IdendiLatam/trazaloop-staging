@@ -38,11 +38,19 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | Tramo | Qué hizo | Migración | Estado |
 |---|---|---|---|
 | PE-03A | Descubrimiento, arquitectura de medios y congelación de UX | — | **cerrado** · pendiente de revisión humana |
-| PE-03B1 | Datos, cubo y RLS | 1 prevista | no empezado |
+| PE-03B1 | Datos, cubo y RLS | **0159** | **cerrado** · 2026-08-31 |
 | PE-03B2 | La consola de tutoriales | — | no empezado |
 | PE-03B3 | El botón y el reproductor | — | no empezado |
 | PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
 | PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+
+Los seis de PE-03B1:
+[datos](PE_03B1_TUTORIAL_DATA_FOUNDATION.md) ·
+[almacenamiento](PE_03B1_MEDIA_STORAGE.md) ·
+[subida](PE_03B1_UPLOAD_SECURITY.md) ·
+[versiones](PE_03B1_VERSION_HISTORY.md) ·
+[reproducción](PE_03B1_PLAYBACK.md) ·
+[pruebas](PE_03B1_TEST_MATRIX.md).
 
 Los seis documentos de PE-03A:
 [descubrimiento](PE_03A_TUTORIAL_DISCOVERY.md) ·
@@ -99,8 +107,8 @@ Y lo que se corrigió después de aquella revisión, en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0158** |
-| Staging | **0158** |
+| Local | **0159** |
+| Staging | **0159** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

@@ -418,6 +418,11 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0156_platform_legal_documents_hardening.sql",
     "0157_platform_faq_initial_content.sql",
     "0158_platform_contextual_help.sql",
+    // PE-03B1: cimientos del tutorial audiovisual.
+    "0159_platform_tutorial_media_foundation.sql",
+    // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
+    // inmutables, cubo privado tutorial-media y reserva de subida.
+    "0159_platform_tutorial_media_foundation.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -444,6 +449,8 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0156_platform_legal_documents_hardening.sql",
     "0157_platform_faq_initial_content.sql",
     "0158_platform_contextual_help.sql",
+    // PE-03B1: cimientos del tutorial audiovisual.
+    "0159_platform_tutorial_media_foundation.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
