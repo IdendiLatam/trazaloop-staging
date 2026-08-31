@@ -17,6 +17,13 @@
 -- en Staging mientras alguien lo lee, y desaparecer o publicarse en B5B según
 -- lo que esa persona decida. El encargo además fija la cabecera en 0158.
 --
+-- ACTUALIZADO EN PE-02B6
+--
+-- La dirección del producto confirmó dos cosas el 2026-08-31: que Trazaloop no
+-- ha activado el uso de datos para entrenamiento, y que no tiene retención cero
+-- contratada. Las dos respuestas que dependían de eso ya no están bloqueadas —
+-- siguen siendo borradores, porque publicarlas es de B5B—.
+--
 -- Se aplica con:
 --   psql "$URL" -v ON_ERROR_STOP=1 -f scripts/pe02b5a/seed-drafts.sql
 -- ============================================================================
@@ -241,36 +248,51 @@ En cada petición se le solicita además que no almacene el contenido en sus rep
   'safe', 'verified',
   'PE-02B5A §10 y AI_PROVIDER_POLICY §3 · el adaptador envía instructions + input; store:false; sin herramientas.');
 
--- 10 · Entrenamiento · NO PUBLICABLE hasta confirmar la cuenta
+-- 10 · Entrenamiento
+--
+-- PE-02B6 · La dirección del producto confirmó el 2026-08-31 que Trazaloop NO
+-- ha activado la autorización de uso de datos para entrenamiento. Eso es lo que
+-- faltaba: la política del proveedor decía «no, por defecto» —que es del
+-- proveedor— y ahora se puede añadir el ajuste de NUESTRA cuenta, que es lo que
+-- una empresa quiere saber. Pasa de bloqueada a publicable CON salvedad.
 select pg_temp.sembrar_faq_borrador(
   'seguridad_entrenamiento_modelos', 'seguridad', 'public', 90, true, 'modules', '{quality}',
   '¿Mis datos se utilizan para entrenar modelos de inteligencia artificial?',
-  'Trazaloop no utiliza la información de tu empresa para entrenar modelos propios, y no la comparte con otras empresas. Sobre el proveedor externo: su documentación oficial establece que los datos enviados a su interfaz de programación no se usan para entrenar ni mejorar sus modelos, salvo que el cliente lo autorice expresamente.',
-  'Conviene separar tres cosas.
+  'No. Trazaloop no entrena modelos con la información de tu empresa, y no ha activado la autorización que permitiría al proveedor usarla para entrenar los suyos. Su documentación oficial establece que los datos enviados a su interfaz de programación no se usan para entrenar ni mejorar sus modelos salvo que el cliente lo autorice expresamente, y Trazaloop no lo ha autorizado.',
+  'Conviene separar tres cosas, porque se confunden con facilidad.
 
-Lo que hace Trazaloop: no entrenamos modelos con tu información.
+Lo que hace Trazaloop: no entrenamos modelos con tu información, ni propios ni de nadie.
 
-Lo que dice la política del proveedor: por defecto, lo que se le envía por la interfaz de programación no alimenta el entrenamiento de sus modelos.
+Lo que dice la política del proveedor: por defecto, lo que se le envía por su interfaz de programación no alimenta el entrenamiento de sus modelos. Esa autorización existe y es del cliente activarla.
 
-Lo que Trazaloop pide en cada consulta: que no almacene el contenido. Esa petición no equivale a un acuerdo de retención cero, que es otra cosa y se contrata aparte.',
-  'safe', 'external_policy_verification_required',
-  'AI_PROVIDER_POLICY · documentación oficial del proveedor consultada el 2026-08-31. FALTA confirmar el proveedor contratado en producción y el ajuste de la cuenta respecto del uso para entrenamiento.',
-  'No se puede publicar hasta que una persona confirme el proveedor de producción y que la cuenta no autorizó el uso de datos para entrenamiento. Deducirlo del valor por defecto sería inventarlo.',
+Lo que Trazaloop ha decidido: no activarla. Es una configuración de nuestra cuenta, no una promesa del proveedor.
+
+Lo que sí se le pide en cada consulta: que no almacene el contenido en sus repositorios. Eso reduce lo que se guarda, pero no es lo mismo que un acuerdo de retención cero — ver la pregunta sobre cuánto tiempo puede conservarlo.',
+  'safe', 'verified_with_qualifier',
+  'AI_PROVIDER_POLICY · documentación oficial del proveedor consultada el 2026-08-31 (política del proveedor) + confirmación de la dirección del producto del 2026-08-31 (ajuste de nuestra cuenta). Son dos fuentes distintas y la respuesta las distingue.',
+  'La afirmación tiene dos mitades con procedencia distinta: la política del proveedor está verificada en su documentación oficial; que Trazaloop no haya activado la autorización lo confirmó una persona, no el repositorio. Si ese ajuste cambiara, esta respuesta pasa a ser falsa y hay que rehacerla. Y no se puede escribir que el proveedor no entrenará nunca bajo ninguna circunstancia: lo que dice es que no lo hace salvo autorización.',
   'https://developers.openai.com/api/docs/guides/your-data', '2026-08-31');
 
--- 11 · Conservación en el proveedor · NO PUBLICABLE hasta confirmar
+-- 11 · Conservación en el proveedor
+--
+-- PE-02B6 · La dirección confirmó el 2026-08-31 que Trazaloop NO tiene retención
+-- cero contratada. Eso no bloquea la respuesta: la desbloquea, porque ya se
+-- puede decir con certeza lo que antes solo se podía insinuar — que no la hay, y
+-- que por tanto aplica el plazo del proveedor.
 select pg_temp.sembrar_faq_borrador(
   'seguridad_retencion_proveedor', 'seguridad', 'public', 100, false, 'modules', '{quality}',
   '¿Cuánto tiempo puede conservar el proveedor de IA la información de una consulta?',
-  'Según la documentación oficial del proveedor, las peticiones y respuestas pueden conservarse HASTA 30 DÍAS con fines de prestación del servicio y vigilancia de abusos, salvo que una obligación legal o la protección del servicio exijan más tiempo.',
-  '«Hasta 30 días» no significa «siempre 30 días» ni «siempre menos»: es un máximo con excepciones que la propia política nombra.
+  'Según la documentación oficial del proveedor, las peticiones y respuestas pueden conservarse HASTA 30 DÍAS con fines de prestación del servicio y vigilancia de abusos, salvo que una obligación legal o la protección del servicio exijan más tiempo. Trazaloop no tiene contratado un acuerdo de retención cero, así que ese plazo es el que aplica.',
+  '«Hasta 30 días» no significa «siempre 30 días» ni «siempre menos»: es un máximo, con las dos excepciones que la propia política nombra.
 
-Trazaloop solicita en cada consulta que el contenido no se almacene en los repositorios de la interfaz de programación. Esa solicitud reduce lo que se guarda, pero no es lo mismo que un acuerdo de retención cero, que se contrata aparte y del que no afirmamos disponer.
+Trazaloop pide en cada consulta que el contenido no se almacene en los repositorios de la interfaz de programación. Esa petición reduce lo que se guarda, pero NO es un acuerdo de retención cero: son dos mecanismos distintos, y decimos con claridad que el segundo no lo tenemos.
 
-Tampoco afirmamos que ninguna persona del proveedor pueda acceder nunca a contenido almacenado por él: existen controles específicos para eso, y no declaramos tenerlos contratados.',
-  'safe', 'external_policy_verification_required',
-  'AI_PROVIDER_POLICY §2 · «retained for up to 30 days, unless longer retention is required by law, or is reasonably necessary to protect our services», consultado el 2026-08-31.',
-  'Pendiente de confirmar el proveedor de producción y si existe acuerdo de retención cero o exclusión de revisión humana.',
+Por la misma razón no afirmamos que ninguna persona del proveedor pueda acceder nunca a contenido almacenado por él. Existen controles contractuales para eso y no declaramos tenerlos.
+
+Lo que sí controlamos: qué se envía. Solo la pregunta y el contexto que el servidor seleccionó para responderla, con tus permisos.',
+  'safe', 'verified_with_qualifier',
+  'AI_PROVIDER_POLICY §2 · «retained for up to 30 days, unless longer retention is required by law, or is reasonably necessary to protect our services», consultado el 2026-08-31 + confirmación de la dirección del 2026-08-31: no hay retención cero contratada.',
+  'La salvedad es doble y no se puede quitar: el plazo es del proveedor y es un máximo con excepciones, y Trazaloop no tiene retención cero. Si algún día se contratara, esta respuesta hay que rehacerla — decir hoy que no la hay es lo que la hace honesta.',
   'https://developers.openai.com/api/docs/guides/your-data', '2026-08-31');
 
 -- 12 · Acceso del modelo a la base

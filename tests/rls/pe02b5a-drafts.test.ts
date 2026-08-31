@@ -111,17 +111,74 @@ async function main() {
   console.log("\nB · La barrera hace su trabajo");
   // =========================================================================
 
-  await check("B1. Las dos que dependen del proveedor NO se pueden publicar", async () => {
-    for (const slug of ["seguridad_entrenamiento_modelos", "seguridad_retencion_proveedor"]) {
-      const { data } = await sa.from("faq_entries").select("id").eq("slug", slug).single();
-      const id = (data as { id: string }).id;
-      const { error } = await sa.rpc("faq_publish_entry",
-        { p_entry_id: id, p_language: "es", p_change_note: "intento" });
-      assert(error, `«${slug}» se pudo publicar y depende de una confirmación humana`);
-      assert(/no se puede publicar/i.test(error!.message),
-        `el rechazo de «${slug}» no se explica: ${error!.message}`);
-    }
-  });
+  await check("B1. La barrera rechaza lo que depende de una confirmación externa",
+    async () => {
+      // ESTA COMPROBACIÓN SE HACÍA SOBRE LAS DOS RESPUESTAS REALES, Y ESTABA MAL.
+      //
+      // Intentaba publicarlas esperando el rechazo. Mientras dependieron de una
+      // confirmación humana, funcionó. El 2026-08-31 llegó la confirmación, la
+      // barrera dejó de bloquearlas… y el intento PUBLICÓ una respuesta de
+      // seguridad en la base. Una comprobación pensada para vigilar que nada se
+      // publicara fue lo único que publicó algo.
+      //
+      // La lección es del tipo de las que se repiten: una prueba que provoca el
+      // efecto que vigila solo es segura mientras su suposición aguante. Así que
+      // la barrera se comprueba ahora sobre una entrada de usar y tirar, y las
+      // dos reales se miran sin tocarlas.
+      const { data: cat } = await sa.from("faq_categories").select("id")
+        .eq("code", "seguridad").single();
+      assert(cat, "no existe la categoría de seguridad");
+      const slugDesechable = `qa_barrera_${sello}`;
+      const { data: creada, error: eCrea } = await sa.from("faq_entries")
+        .insert({ slug: slugDesechable, category_id: (cat as { id: string }).id,
+                  visibility: "authenticated", sort_order: 9999, status: "draft" })
+        .select("id").single();
+      assert(!eCrea && creada, `crear la desechable: ${eCrea?.message}`);
+      const idDesechable = (creada as { id: string }).id;
+      try {
+        for (const estado of ["external_policy_verification_required", "not_verified",
+          "must_not_claim"]) {
+          const { error: eBorrador } = await sa.from("faq_entry_drafts").upsert({
+            entry_id: idDesechable, language: "es",
+            question: "¿Pregunta de prueba de la barrera?",
+            answer_short: "Respuesta de prueba.",
+            normative_class: "safe",
+            verification_status: estado,
+            source_basis: "Prueba de la barrera de publicación de PE-02B5A.",
+          }, { onConflict: "entry_id,language" });
+          assert(!eBorrador, `preparar el borrador en «${estado}»: ${eBorrador?.message}`);
+          const { error } = await sa.rpc("faq_publish_entry",
+            { p_entry_id: idDesechable, p_language: "es", p_change_note: "intento" });
+          assert(error, `la barrera dejó publicar algo en «${estado}»`);
+          assert(/no se puede publicar/i.test(error!.message),
+            `el rechazo de «${estado}» no se explica: ${error!.message}`);
+        }
+      } finally {
+        // Nunca llegó a publicarse, así que no hay revisión que respetar.
+        await sa.from("faq_entry_drafts").delete().eq("entry_id", idDesechable);
+        await sa.from("faq_entries").delete().eq("id", idDesechable);
+      }
+    });
+
+  await check("B1b. Y las dos que dependían del proveedor ya están resueltas",
+    async () => {
+      // Sin publicarlas. Lo que se comprueba es que la confirmación del
+      // 2026-08-31 quedó escrita y con salvedad, no que la barrera las deje pasar.
+      for (const slug of ["seguridad_entrenamiento_modelos", "seguridad_retencion_proveedor"]) {
+        const { data: e } = await sa.from("faq_entries").select("id, status")
+          .eq("slug", slug).single();
+        assert((e as { status: string }).status === "draft",
+          `«${slug}» ya no es un borrador`);
+        const { data } = await sa.from("faq_entry_drafts")
+          .select("verification_status, verification_note")
+          .eq("entry_id", (e as { id: string }).id).eq("language", "es").single();
+        const d = data as { verification_status: string; verification_note: string | null };
+        assert(d.verification_status === "verified_with_qualifier",
+          `«${slug}» está en «${d.verification_status}» y la confirmación humana exige salvedad`);
+        assert((d.verification_note ?? "").length >= 10,
+          `«${slug}» está con salvedad y no la tiene escrita: la base la rechazaría`);
+      }
+    });
 
   await check("B2. La del equipo de Trazaloop exige su salvedad", async () => {
     const { data } = await sa.from("faq_entry_drafts")

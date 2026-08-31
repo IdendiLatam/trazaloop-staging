@@ -148,12 +148,24 @@ async function main() {
   // =========================================================================
 
   await check("Y. Lleva a la FAQ, y la FAQ abre", async () => {
+    // Desde PE-02B6 hay DOS entradas «Ayuda» en la misma pantalla: la de la
+    // barra superior, que va a `/faq` a secas, y la del menú lateral, que
+    // arrastra el módulo —`/faq?m=quality`— para no devolver a nadie al shell
+    // de CPR. Las dos son correctas, así que se comprueban las dos en vez de
+    // quedarse con la primera que aparezca en el HTML.
     const r = await get("/quality");
-    const enlace = links(r.body).find((l) => /^ayuda$/i.test(l.text));
-    assert(enlace?.href === "/faq", `lleva a ${enlace?.href}`);
-    const faq = await get(enlace!.href);
-    assert(faq.status === 200, `la ayuda dio ${faq.status}`);
-    assert(has(faq.body, "¿En qué podemos ayudarte?"), "no llegó a la FAQ");
+    const entradas = links(r.body).filter((l) => /^ayuda$/i.test(l.text));
+    assert(entradas.length >= 1, "no hay ninguna entrada «Ayuda»");
+    for (const enlace of entradas) {
+      assert(/^\/faq(\?|$)/.test(enlace.href),
+        `una entrada «Ayuda» lleva a ${enlace.href}`);
+      const faq = await get(enlace.href);
+      assert(faq.status === 200, `${enlace.href} dio ${faq.status}`);
+      assert(has(faq.body, "¿En qué podemos ayudarte?"),
+        `${enlace.href} no llegó a la FAQ`);
+    }
+    assert(entradas.some((l) => l.href === "/faq"),
+      "ninguna entrada «Ayuda» lleva a la FAQ sin arrastrar el módulo");
   });
 
   await check("Y2. Y se llama «Ayuda», no «FAQ»", async () => {

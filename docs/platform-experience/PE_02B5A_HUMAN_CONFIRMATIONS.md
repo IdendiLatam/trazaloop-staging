@@ -7,6 +7,12 @@ responde**.
 Ninguna bloquea las trece respuestas restantes: están verificadas y podrían
 publicarse en B5B por su cuenta.
 
+> **Actualización del 31 de agosto de 2026 (PE-02B6).** Las preguntas **2** y
+> **3** están **respondidas**, y las dos con un no. Se dejan aquí con su
+> planteamiento original —debajo de cada una— porque lo que se preguntó explica
+> por qué la respuesta se escribió como se escribió. La **1** sigue abierta y no
+> bloquea publicar: solo decide si la FAQ puede nombrar al proveedor.
+
 ---
 
 ## 1 · ¿Qué proveedor de IA está contratado en producción?
@@ -40,6 +46,19 @@ mirando el ajuste de uso de datos para mejora de modelos.
 `external_policy_verification_required` y **la base rechaza publicarla**. Es la
 barrera de 0155 funcionando, no un olvido.
 
+### RESPONDIDA · 2026-08-31 · **NO**
+
+Trazaloop **no ha activado** ninguna autorización de uso de datos para
+entrenamiento ni de compartición para mejora de modelos.
+
+La respuesta pasó de `external_policy_verification_required` a
+`verified_with_qualifier`, y la salvedad dice de dónde viene cada mitad: la
+política del proveedor, de su documentación pública; el ajuste de la cuenta, de
+una persona. Sigue **sin publicarse**, porque publicar es de B5B.
+
+Lo que la respuesta **no** dice: que el proveedor no entrenará nunca. Su política
+dice «salvo autorización», y esa autorización es nuestra.
+
 ---
 
 ## 3 · ¿Hay retención cero o exclusión de revisión humana contratadas?
@@ -54,6 +73,18 @@ que son mecanismos distintos.
 
 **Si no se responde:** la respuesta dice «hasta 30 días» con sus excepciones, sin
 mencionar retención cero. Es correcta así.
+
+### RESPONDIDA · 2026-08-31 · **NO**
+
+Trazaloop **no tiene contratado** un acuerdo de retención cero.
+
+Así que el plazo de hasta 30 días es el que aplica de verdad, y la respuesta lo
+dice en voz alta en lugar de callarlo. Mantiene la distinción de la
+documentación oficial: pedir que no se almacene **no es** retención cero.
+
+Pasó a `verified_with_qualifier` y sigue **sin publicarse**. Si algún día se
+contratara retención cero, esta respuesta hay que rehacerla: decir hoy que no la
+hay es lo que la hace honesta.
 
 ---
 

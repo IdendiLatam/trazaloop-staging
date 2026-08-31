@@ -186,8 +186,10 @@ export default async function ModulesPortalPage() {
 
       <p className="text-xs text-ink-soft">
         {MODULE_ACCESS_FOOTNOTE}{" "}
+        {/* PE-02B6 · «Ayuda», igual que en la barra superior: dentro de
+            Trazaloop la entrada global se llama siempre así. */}
         <Link href="/faq" className="text-loop hover:underline">
-          Preguntas frecuentes
+          Ayuda
         </Link>
       </p>
     </div>

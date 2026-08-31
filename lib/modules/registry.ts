@@ -101,12 +101,19 @@ export const SISTEMA_GROUP: ModuleNavGroup = {
     { label: "Equipo", href: "/team" },
     { label: "Datos de empresa", href: "/settings/company" },
     { label: "Mi perfil", href: "/settings/profile" },
-    // PE-02B3 · La FAQ es TRANSVERSAL: no pertenece a Quality, ni a PCR, ni a
-    // Textiles. Ponerla dentro de un módulo la haría desaparecer para quien no
-    // lo tenga, y las preguntas de cuenta, empresa o documentos valen para
+    // PE-02B3 · La ayuda es TRANSVERSAL: no pertenece a Quality, ni a PCR, ni
+    // a Textiles. Ponerla dentro de un módulo la haría desaparecer para quien
+    // no lo tenga, y las preguntas de cuenta, empresa o documentos valen para
     // todos. Va antes que el soporte a propósito: primero se busca, y si no
     // está, se pregunta.
-    { label: "Preguntas frecuentes", href: "/faq" },
+    //
+    // PE-02B6 · Se llama «Ayuda», igual que la entrada de la barra superior.
+    // Antes decía «Preguntas frecuentes» y convivía con un «Ayuda» que llevaba
+    // al mismo sitio: dos nombres para una cosa hacen dudar de si son dos
+    // cosas. Fuera, en la web pública, sigue llamándose «Preguntas frecuentes»,
+    // que es como se busca desde fuera; dentro es «Ayuda», que es lo que va a
+    // crecer con el tutorial de la pantalla y el soporte.
+    { label: "Ayuda", href: "/faq" },
     { label: "Centro de soporte", href: "/support" },
   ],
 };

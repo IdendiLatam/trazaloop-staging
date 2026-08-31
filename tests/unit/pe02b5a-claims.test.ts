@@ -140,9 +140,15 @@ check("C1. La retención se dice como «hasta», con sus excepciones", () => {
 check("C2. `store:false` NO se describe como retención cero", () => {
   assert(/no (es|equivale) (lo mismo que |a )?un acuerdo de retención cero|no es lo mismo que un acuerdo de retención cero/i
     .test(TEXTO_FAQ), "no se aclara que pedir que no se almacene no es retención cero");
+  // La prohibición es AFIRMAR que la tenemos. Desde el 2026-08-31 el texto dice
+  // lo contrario —«no hay retención cero contratada»— y esa frase contiene la
+  // que se busca, así que hay que exigir que NO venga precedida de negación.
   const t = TEXTO_FAQ.toLowerCase();
-  assert(!/retención cero (contratada|garantizada)/.test(t),
-    "se afirma tener retención cero contratada");
+  const afirmaciones = [...t.matchAll(/retención cero (contratada|garantizada)/g)]
+    .filter((m) => !/\b(no|sin|ningún|ninguna)\b[^.]{0,40}$/.test(t.slice(0, m.index)));
+  assert(afirmaciones.length === 0, "se afirma tener retención cero contratada");
+  assert(/no (hay|tiene|tenemos|se tiene)[^.]{0,30}retención cero/.test(t),
+    "no se dice que NO hay retención cero contratada, que es la confirmación del 2026-08-31");
   // Y el documento del proveedor lo deja escrito con la cita oficial.
   assert(/ZDR implica `store:false`, pero `store:false` NO implica ZDR/.test(PROVEEDOR),
     "el documento del proveedor no distingue ZDR de store:false");
@@ -155,11 +161,20 @@ check("C3. El entrenamiento se atribuye al proveedor, no a nosotros", () => {
     "no se atribuye la afirmación al proveedor");
   assert(/salvo que el cliente lo autorice/i.test(respuesta),
     "se omite la salvedad del «salvo que se autorice»");
-  assert(/external_policy_verification_required/.test(respuesta),
-    "no está marcada como pendiente de verificación externa");
-  // Y no se afirma el ajuste de NUESTRA cuenta.
-  assert(!/Trazaloop no ha activado|no hemos activado el uso/i.test(respuesta),
-    "se afirma el ajuste de la cuenta, que no consta");
+  // Hasta el 2026-08-31 esta respuesta estaba bloqueada porque el ajuste de
+  // NUESTRA cuenta no constaba en ninguna parte del repositorio. Ya consta: lo
+  // confirmó una persona. Lo que sigue siendo obligatorio es que las dos
+  // mitades se lean por separado, porque es lo que hace la respuesta creíble.
+  assert(/verified_with_qualifier/.test(respuesta),
+    "no viaja con salvedad: la confirmación humana no es documentación pública");
+  assert(/no ha activado/i.test(respuesta),
+    "no se dice que Trazaloop no activó la autorización");
+  assert(/lo confirmó una persona, no el repositorio/i.test(respuesta),
+    "la salvedad no dice que esa mitad viene de una persona y no de una fuente pública");
+  // Y lo que no se puede prometer sigue sin prometerse: la política del
+  // proveedor dice «salvo autorización», así que un «nunca» sería nuestro, no suyo.
+  assert(!/nunca (entrenará|se entrena|utilizará)/i.test(respuesta),
+    "se promete en nombre del proveedor un «nunca» que su política no dice");
 });
 
 check("C4. La fuente es oficial, y lleva fecha", () => {
