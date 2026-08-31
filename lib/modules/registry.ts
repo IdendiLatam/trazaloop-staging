@@ -33,8 +33,28 @@ export const SHELL_MODULE_KEYS = ["cpr", "textiles", "quality"] as const;
 
 export type ShellModuleKey = (typeof SHELL_MODULE_KEYS)[number];
 
+/**
+ * PE-01B · PE-D3 · La superficie NEUTRA de plataforma.
+ *
+ * No es un módulo: es «ninguno todavía». Existe porque el shell tenía que
+ * resolver SIEMPRE un módulo, y a falta de otro caía en PCR. Una URL
+ * transversal escrita a mano —`/team`, `/settings/company`, `/support`— o
+ * guardada en marcadores enseñaba el menú, la identidad y las normas de PCR a
+ * una empresa que solo tiene Quality.
+ *
+ * No entra en `SHELL_MODULE_KEYS` ni en `SHELL_MODULES`: no tiene asignación,
+ * no tiene entitlement y no se puede «llevar» en el parámetro `m`.
+ */
+export const PLATFORM_SURFACE_KEY = "platform" as const;
+
+/** La puerta. Literal aquí para no importar de `domain/team` y crear un ciclo;
+ *  una prueba comprueba que las dos coinciden. */
+const MODULE_SELECTOR_PATH_INTERNAL = "/modules";
+
+export type ShellSurfaceKey = ShellModuleKey | typeof PLATFORM_SURFACE_KEY;
+
 export type ShellModuleDefinition = {
-  key: ShellModuleKey;
+  key: ShellSurfaceKey;
   /** Nombre comercial del módulo (tarjetas, sidebar, títulos). */
   name: string;
   /** Identidad visible en el encabezado del shell. CPR muestra sus normas;
@@ -174,6 +194,12 @@ export const CPR_SHELL_MODULE: ShellModuleDefinition = {
     "/implementation",
     "/imports",
     "/trazadocs",
+    // PE-01B · PE-D3 · `/onboarding` vive bajo (cpr) y faltaba en esta lista.
+    // No se notaba porque CPR era el módulo por DEFECTO: cualquier ruta suya
+    // que se olvidara aquí resolvía a CPR igual. Al quitar ese defecto, el
+    // olvido se vuelve visible —una pantalla de PCR con el shell neutro—, que
+    // es exactamente para lo que sirve quitar un valor por defecto.
+    "/onboarding",
   ],
   topLevel: NAV_TOP_LEVEL,
   groups: [TRAZABILIDAD_GROUP, AUDIT_PREP_GROUP, TRAZADOCS_GROUP],
@@ -457,6 +483,27 @@ export const QUALITY_SHELL_MODULE: ShellModuleDefinition = {
 // ---------------------------------------------------------------------------
 
 /** Registro completo. CPR va último a propósito: es el módulo por defecto. */
+/**
+ * Trazaloop sin módulo: la puerta. Se usa cuando la pantalla es transversal y
+ * nadie ha dicho desde qué módulo se llegó.
+ *
+ * Sin grupos y sin entradas propias: el menú queda con lo transversal —Sistema,
+ * y Plataforma si procede— y con la salida al selector. Es lo honesto: no se
+ * puede enseñar la navegación de un módulo que quizá la empresa no tenga.
+ */
+export const PLATFORM_SHELL_SURFACE: ShellModuleDefinition = {
+  key: PLATFORM_SURFACE_KEY,
+  name: "Trazaloop",
+  headerBadge: "Trazaloop",
+  homePath: MODULE_SELECTOR_PATH_INTERNAL,
+  // Un documento sin módulo de origen se abre en la lista de documentos de
+  // Quality solo si la empresa lo tiene; sin módulo activo no se enlaza.
+  documentPath: () => MODULE_SELECTOR_PATH_INTERNAL,
+  pathPrefixes: [],
+  topLevel: [],
+  groups: [],
+};
+
 export const SHELL_MODULES: readonly ShellModuleDefinition[] = [
   TEXTILES_SHELL_MODULE,
   QUALITY_SHELL_MODULE,
@@ -491,7 +538,12 @@ export function isShellModuleKey(value: string | null | undefined): value is She
  *    transversales: `/dashboard?m=quality` es una pantalla de PCR y debe
  *    mostrarse como tal.
  * 3. Si la ruta es transversal y se recuerda un módulo, se conserva ese.
- * 4. Si no, CPR.
+ * 4. Si no, la superficie NEUTRA de plataforma.
+ *
+ * PE-01B · PE-D3 · El paso 4 decía «si no, CPR». Era un valor por defecto de
+ * cuando PCR era el único módulo, y con tres módulos cuenta una mentira: la
+ * persona que abre `/team` desde un marcador ve el shell de PCR aunque su
+ * empresa no lo tenga. El shell ya no inventa un módulo.
  */
 function claimsPath(mod: ShellModuleDefinition, p: string): boolean {
   return mod.pathPrefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
@@ -508,9 +560,14 @@ export function resolveShellModuleForPath(
   }
   if (claimsPath(CPR_SHELL_MODULE, p)) return CPR_SHELL_MODULE;
   if (isShellModuleKey(moduleParam)) {
-    return SHELL_MODULES.find((m) => m.key === moduleParam) ?? CPR_SHELL_MODULE;
+    return SHELL_MODULES.find((m) => m.key === moduleParam) ?? PLATFORM_SHELL_SURFACE;
   }
-  return CPR_SHELL_MODULE;
+  return PLATFORM_SHELL_SURFACE;
+}
+
+/** ¿Esta superficie es la neutra, sin módulo activo? */
+export function isPlatformSurface(mod: Pick<ShellModuleDefinition, "key">): boolean {
+  return mod.key === PLATFORM_SURFACE_KEY;
 }
 
 /**
@@ -542,9 +599,12 @@ export function activeShellModuleFrom(
  * limpias y el comportamiento anterior se conserva intacto. Un enlace que ya
  * pertenece a un módulo tampoco se toca — su propia ruta ya lo dice.
  */
-export function moduleAwareHref(href: string, moduleKey: ShellModuleKey): string {
+export function moduleAwareHref(href: string, moduleKey: ShellSurfaceKey): string {
+  // Sin módulo activo no hay nada que conservar: decorar con `m=platform`
+  // inventaría un módulo que no existe.
+  if (moduleKey === PLATFORM_SURFACE_KEY) return href;
   if (moduleKey === CPR_SHELL_MODULE.key) return href;
-  if (resolveShellModuleForPath(href).key !== CPR_SHELL_MODULE.key) return href;
+  if (resolveShellModuleForPath(href).key !== PLATFORM_SURFACE_KEY) return href;
   const separator = href.includes("?") ? "&" : "?";
   return `${href}${separator}${SHELL_MODULE_PARAM}=${moduleKey}`;
 }

@@ -28,7 +28,17 @@ export type DerivedModuleState =
   | "disabled" // enabled = false (deshabilitación administrativa)
   | "globally_disabled" // kill switch global apagado
   | "coming_soon" // módulo no funcional
-  | "not_assigned"; // sin fila de asignación
+  | "not_assigned" // sin fila de asignación
+  /**
+   * PE-01B · No se pudo AVERIGUAR si hay asignación.
+   *
+   * No es un estado comercial: es la ausencia de respuesta. Antes de PE-01B no
+   * existía, y por eso un fallo de lectura acababa presentándose como
+   * `not_assigned` —«este módulo no está asignado a la empresa»—, que es una
+   * afirmación sobre el contrato de la empresa hecha a partir de un corte de
+   * red. Ver PE-D1.
+   */
+  | "unavailable";
 
 /** Motivo de bloqueo (para mensajes claros; nunca errores SQL). */
 export type ModuleAccessReason =
@@ -37,7 +47,8 @@ export type ModuleAccessReason =
   | "globally_disabled"
   | "not_assigned"
   | "disabled"
-  | "demo_expired";
+  | "demo_expired"
+  | "unavailable";
 
 /** La asignación empresa-módulo, tal como vive en organization_modules. */
 export type ModuleAssignment = {
@@ -54,6 +65,14 @@ export type ModuleAccessInput = {
   killSwitchActive: boolean;
   /** La fila de asignación, o null si la empresa no la tiene. */
   assignment: ModuleAssignment | null;
+  /**
+   * PE-01B · La lectura de la asignación NO se pudo completar.
+   *
+   * Distinto de `assignment: null`, que significa «se leyó y no hay fila».
+   * Ausente o `false` mantiene el comportamiento anterior exactamente, así que
+   * ningún llamador previo cambia de resultado.
+   */
+  assignmentUnavailable?: boolean;
   /** "Ahora" — SIEMPRE hora del servidor/BD. */
   now: Date;
 };
@@ -87,6 +106,13 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   }
   if (!killSwitchActive) {
     return deny("globally_disabled", "globally_disabled", assignment?.accessMode ?? null);
+  }
+  // PE-01B · Va ANTES que `not_assigned` y por un motivo: si no se pudo leer,
+  // no se sabe si hay asignación, y decir que no la hay sería inventarse la
+  // respuesta. Se deniega —fallar cerrado es lo correcto para autorizar— pero
+  // el motivo que se comunica es el verdadero.
+  if (input.assignmentUnavailable) {
+    return deny("unavailable", "unavailable", null);
   }
   if (!assignment) {
     return deny("not_assigned", "not_assigned", null);

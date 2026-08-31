@@ -53,8 +53,12 @@ check("B1. Una ruta transversal CONSERVA el módulo desde el que se navega", () 
   // defecto, y la persona que entraba a «Equipo» desde Quality aparecía en el
   // shell de PCR sin haber pedido cambiar de módulo.
   for (const href of ["/team", "/settings/company", "/settings/profile", "/support"]) {
+    // PE-01B · PE-D3 · Antes esto exigía «cae en CPR», que era como se
+    // reconocía una ruta transversal cuando PCR era el valor por defecto del
+    // shell. La promesa —que estas rutas no pertenecen a ningún módulo— no
+    // cambia; lo que cambia es que ya no se resuelven inventando uno.
     assert(
-      resolveShellModuleForPath(href).key === "cpr",
+      resolveShellModuleForPath(href).key === "platform",
       `${href} no debería pertenecer a ningún módulo`
     );
     assert(
@@ -77,10 +81,11 @@ check("B2. La RUTA manda sobre el parámetro: no se puede secuestrar un módulo"
     "el dashboard es de CPR: la ruta manda");
 });
 
-check("B3. Un valor de módulo inventado se ignora y se cae a CPR", () => {
-  for (const raw of ["hacker", "", null, undefined, "QUALITY", "quality "]) {
+check("B3. Un valor de módulo inventado se ignora y no activa ninguno", () => {
+  for (const raw of ["hacker", "", null, undefined, "QUALITY", "quality ", "platform"]) {
     assert(!isShellModuleKey(raw), `${JSON.stringify(raw)} no debería ser una clave válida`);
-    assert(resolveShellModuleForPath("/team", raw).key === "cpr",
+    // PE-01B · Y tampoco se cae en PCR: se queda en la superficie neutra.
+    assert(resolveShellModuleForPath("/team", raw).key === "platform",
       `${JSON.stringify(raw)} no debía activar ningún módulo`);
   }
   // Es un parámetro de PRESENTACIÓN: no concede acceso a nada. El guard de
@@ -109,7 +114,7 @@ check("B5. El grupo «Sistema» ya no incluye rutas exclusivas de un módulo", (
   // selector de módulos.
   for (const item of SISTEMA_GROUP.items) {
     assert(
-      resolveShellModuleForPath(item.href).key === "cpr" &&
+      resolveShellModuleForPath(item.href).key === "platform" &&
         !item.href.startsWith("/textiles") &&
         !item.href.startsWith("/quality"),
       `${item.href} no es transversal`
@@ -177,7 +182,10 @@ check("G1. Quality FULL + habilitado + kill switch ON → «Entrar» a /quality"
     now: new Date("2026-08-20T12:00:00Z"),
   });
   assert(access.allowed && access.derivedState === "full", `estado inesperado: ${access.derivedState}`);
-  assert(DERIVED_STATE_LABEL.full === "Plan Full", "la etiqueta visible cambió");
+  // PE-01B · La etiqueta pasó de «Plan Full» a «Activo»: `full` es un modo de
+  // acceso POR MÓDULO, no el plan de la empresa, y llamarlo plan mezclaba el
+  // acceso con lo comercial. El estado interno no cambió.
+  assert(DERIVED_STATE_LABEL.full === "Activo", "la etiqueta visible cambió");
   assert(
     resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) }) === "/quality",
     "la tarjeta no resuelve /quality"

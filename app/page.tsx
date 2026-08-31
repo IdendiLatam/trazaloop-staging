@@ -4,8 +4,8 @@
 // destino del botón "Entrar" a la plataforma.
 //
 // Sprint T1 (DL-16/DL-17): el hero comunica "Trazaloop" — la PLATAFORMA
-// modular — y los módulos (CPR y Textiles disponibles;
-// Quality/Construcción próximamente) se presentan en las tarjetas de abajo.
+// modular — y los módulos se presentan en las tarjetas de abajo.
+// PE-01B: PCR, Textiles y Quality disponibles; Construcción próximamente.
 // Trazaloop CPR es
 // el primer módulo, nunca "toda la plataforma".
 export const dynamic = "force-dynamic";
@@ -153,21 +153,24 @@ export default async function PublicLandingPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-paper p-5 opacity-70">
-            <span className="inline-flex w-fit rounded-full border border-hairline bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-soft">
-              Próximamente
+          {/* PE-01B · Quality dejó de estar «próximamente» hace trece sprints y
+              el portal público seguía anunciándolo así: era el único sitio donde
+              el producto se contradecía a sí mismo. */}
+          <div className="flex flex-col gap-2 rounded-lg border border-loop/30 bg-loop/5 p-5">
+            <span className="inline-flex w-fit rounded-full border border-loop/30 bg-surface px-2 py-0.5 text-[11px] font-medium text-loop-deep">
+              Disponible
             </span>
             <span className="text-lg font-semibold">Trazaloop Quality</span>
             <span className="text-sm text-ink-soft">
-              Gestión documental y soporte para sistemas de gestión de calidad. {COMING_SOON_MESSAGE}
+              Gestiona procesos, riesgos, objetivos, personas, proveedores, auditorías y mejora
+              continua desde un entorno conectado y trazable.
             </span>
-            <button
-              type="button"
-              disabled
-              className="mt-2 w-fit cursor-not-allowed rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm text-ink-soft"
+            <Link
+              href={entryHref}
+              className="mt-2 text-sm font-medium text-loop hover:underline"
             >
-              Próximamente
-            </button>
+              Entrar →
+            </Link>
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-paper p-5 opacity-70">

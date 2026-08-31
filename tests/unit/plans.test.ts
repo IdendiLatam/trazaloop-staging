@@ -266,7 +266,15 @@ check("Extra: /modules existe con Trazaloop PCR disponible y el resto próximame
   assert(catalog.includes("Trazaloop Textiles"), "el catálogo debía incluir Trazaloop Textiles");
   assert(catalog.includes("Trazaloop Quality"), "el catálogo debía incluir Trazaloop Quality");
   assert(catalog.includes("Trazaloop Construcción"), "el catálogo debía incluir Trazaloop Construcción");
-  assert(modulesPage.includes("COMMERCIAL_MODULES"), "la página debía renderizar el catálogo canónico");
+  // PE-01B · La puerta sigue consumiendo el catálogo canónico, ahora a través
+  // de `lib/modules/entry.ts`, que es quien decide el protagonista y el orden.
+  // La promesa —una sola fuente de módulos, nunca una segunda lista a mano— no
+  // cambia; lo que cambia es por dónde entra.
+  const entry = fs.readFileSync(path.resolve(__dirname, "../../lib/modules/entry.ts"), "utf8");
+  assert(entry.includes("COMMERCIAL_MODULES"), "la puerta dejó de leer el catálogo canónico");
+  assert(modulesPage.includes("heroModule") && modulesPage.includes("specializedModules"),
+    "la página debía renderizar el catálogo canónico");
+  assert(!/name: "Trazaloop/.test(modulesPage), "la página escribe nombres de módulo a mano");
   assert(messages.includes("Próximamente"), "los módulos no funcionales debían poder mostrar 'Próximamente'");
 });
 

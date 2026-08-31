@@ -266,7 +266,14 @@ check("21. /modules mantiene CPR disponible y los demás módulos deshabilitados
   // status (functional / coming_soon) viven en lib/modules/catalog.ts.
   const source = readSource("../../app/(app)/modules/page.tsx");
   const catalog = readSource("../../lib/modules/catalog.ts");
-  assert(source.includes("COMMERCIAL_MODULES") && source.includes("getActiveOrgModuleStatuses"), "/modules debía consumir el catálogo canónico y el estado en servidor");
+  // PE-01B · La puerta consume el catálogo a través de `lib/modules/entry.ts`,
+  // que decide protagonista y orden. La invariante —una sola fuente de módulos y
+  // el estado resuelto en SERVIDOR— no cambia; cambia por dónde entra.
+  const entry = readSource("../../lib/modules/entry.ts");
+  assert(entry.includes("COMMERCIAL_MODULES"), "la puerta dejó de leer el catálogo canónico");
+  assert(source.includes("getActiveOrgModuleStatuses"), "/modules debía resolver el estado en servidor");
+  assert(source.includes("heroModule") && source.includes("specializedModules"),
+    "/modules debía consumir el catálogo canónico y el estado en servidor");
   assert(catalog.includes("Trazaloop PCR"), "el catálogo debía incluir Trazaloop PCR (PCR-01: denominación comercial)");
   for (const mod of ["Trazaloop Textiles", "Trazaloop Quality", "Trazaloop Construcción"]) {
     assert(catalog.includes(mod), `el catálogo debía incluir ${mod}`);

@@ -178,10 +178,14 @@ check("10. Sin 'Próximamente' engañoso para bloqueos reales; solo para módulo
   // 'Próximamente' es la etiqueta EXCLUSIVA del estado coming_soon.
   assert(messages.includes('coming_soon: "Próximamente"'), "'Próximamente' solo etiqueta coming_soon");
   // El demo vencido, deshabilitado y sin asignación tienen etiquetas propias.
+  // PE-01B · Tres etiquetas se reescribieron: «Módulo deshabilitado» no decía
+  // quién lo deshabilitó ni si se perdían datos, y «Sin asignar» es vocabulario
+  // de administración. La invariante que esta prueba protege —cada bloqueo con
+  // su etiqueta PROPIA, y «Próximamente» solo para lo que no existe— no cambia.
   assert(
     messages.includes('demo_expired: "Prueba finalizada"') &&
-      messages.includes('disabled: "Módulo deshabilitado"') &&
-      messages.includes('not_assigned: "Sin asignar"'),
+      messages.includes('disabled: "Acceso suspendido"') &&
+      messages.includes('not_assigned: "No incluido"'),
     "los bloqueos reales no deben rotularse 'Próximamente'"
   );
 });

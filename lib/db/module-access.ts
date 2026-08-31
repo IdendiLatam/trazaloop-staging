@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlanLimits, listPlanDefinitions } from "@/lib/db/plans";
@@ -47,23 +49,68 @@ function isKillSwitchActive(mod: CommercialModule): boolean {
   return isModuleKillSwitchActive(mod);
 }
 
+/**
+ * PE-01B · El resultado de BUSCAR la asignación, que son tres cosas y no dos.
+ *
+ * Antes esta función devolvía `ModuleAssignment | null` y descartaba el `error`
+ * de la lectura. Así, un corte de red, una denegación de RLS o un fallo de
+ * PostgREST devolvían `null`, y `null` significa —para la regla pura— «la
+ * empresa no tiene este módulo asignado». La tarjeta del selector acababa
+ * diciendo «este módulo no está asignado a la empresa»: una afirmación sobre el
+ * contrato de la empresa construida a partir de una avería.
+ *
+ * Es el defecto PE-D1, y es el mismo que Quality persiguió cinco veces —12.2F,
+ * 13B1, 13B2, 13B3, 13B4—. La puerta de entrada de la plataforma lo tenía
+ * todavía, que es donde más caro sale: quien lee «no lo tienes» cierra el
+ * navegador.
+ */
+export type AssignmentLookup =
+  | { status: "found"; assignment: ModuleAssignment }
+  | { status: "absent" }
+  | { status: "unavailable" };
+
+/**
+ * PE-01B · El cliente es inyectable, y solo por una razón.
+ *
+ * Sin él, la suite contra base real no puede comprobar NADA de esto: la ruta
+ * normal construye el cliente desde las cookies de la petición, y fuera de una
+ * petición eso lanza. Es decir, la única comprobación que importa aquí —que un
+ * fallo de lectura no se presenta como una decisión comercial— quedaría sin
+ * probar contra la base de verdad.
+ *
+ * En producción el parámetro no se pasa nunca: la ruta por defecto sigue siendo
+ * la sesión real, con su RLS. Mismo patrón que lib/db/quality-suppliers.ts.
+ */
+type Db = SupabaseClient;
+
+async function db(client?: Db): Promise<Db> {
+  return client ?? ((await createServerClient()) as unknown as Db);
+}
+
 /** Fila de asignación de la organización (bajo RLS de la sesión real). */
 export async function getOrganizationModuleAssignment(
   organizationId: string,
-  moduleCode: string
-): Promise<ModuleAssignment | null> {
-  const supabase = await createServerClient();
-  const { data } = await supabase
+  moduleCode: string,
+  client?: Db
+): Promise<AssignmentLookup> {
+  const supabase = await db(client);
+  const { data, error } = await supabase
     .from("organization_modules")
     .select("enabled, access_mode, access_expires_at")
     .eq("organization_id", organizationId)
     .eq("module_code", moduleCode)
     .maybeSingle();
-  if (!data) return null;
+  // El error se MIRA. No hay ninguna otra forma de distinguir «se leyó y no
+  // hay» de «no se pudo leer».
+  if (error) return { status: "unavailable" };
+  if (!data) return { status: "absent" };
   return {
-    enabled: Boolean(data.enabled),
-    accessMode: data.access_mode as ModuleAccessMode,
-    accessExpiresAt: (data.access_expires_at as string | null) ?? null,
+    status: "found",
+    assignment: {
+      enabled: Boolean(data.enabled),
+      accessMode: data.access_mode as ModuleAccessMode,
+      accessExpiresAt: (data.access_expires_at as string | null) ?? null,
+    },
   };
 }
 
@@ -74,7 +121,8 @@ export async function getOrganizationModuleAssignment(
  */
 export async function resolveModuleAccessForOrg(
   organizationId: string,
-  moduleCode: string
+  moduleCode: string,
+  client?: Db
 ): Promise<ModuleAccessDecision> {
   const mod = getCommercialModuleByCode(moduleCode);
   if (!mod) {
@@ -85,11 +133,19 @@ export async function resolveModuleAccessForOrg(
       now: new Date(),
     });
   }
-  const assignment = await getOrganizationModuleAssignment(organizationId, moduleCode);
+  // Una excepción de la capa de datos —red caída, cliente sin construir— es
+  // exactamente lo mismo que un `error` devuelto: no se sabe. Se trata igual.
+  let lookup: AssignmentLookup;
+  try {
+    lookup = await getOrganizationModuleAssignment(organizationId, moduleCode, client);
+  } catch {
+    lookup = { status: "unavailable" };
+  }
   return resolveModuleAccess({
     isFunctional: mod.status === "functional",
     killSwitchActive: isKillSwitchActive(mod),
-    assignment,
+    assignment: lookup.status === "found" ? lookup.assignment : null,
+    assignmentUnavailable: lookup.status === "unavailable",
     now: new Date(),
   });
 }
@@ -337,14 +393,15 @@ export type OrgModuleStatus = {
 };
 
 export async function getActiveOrgModuleStatuses(
-  organizationId: string
+  organizationId: string,
+  client?: Db
 ): Promise<OrgModuleStatus[]> {
   return Promise.all(
     COMMERCIAL_MODULES.map(async (mod) => ({
       key: mod.key,
       moduleCode: mod.moduleCode,
       name: mod.name,
-      access: await resolveModuleAccessForOrg(organizationId, mod.moduleCode),
+      access: await resolveModuleAccessForOrg(organizationId, mod.moduleCode, client),
     }))
   );
 }
@@ -497,8 +554,10 @@ export type DemoTrialSummary = {
   notice: DemoNoticeKind;
 };
 
-export async function getDemoTrialSummary(organizationId: string): Promise<DemoTrialSummary> {
-  const statuses = await getActiveOrgModuleStatuses(organizationId);
+export async function getDemoTrialSummary(
+  organizationId: string, client?: Db
+): Promise<DemoTrialSummary> {
+  const statuses = await getActiveOrgModuleStatuses(organizationId, client);
   const activeTrials = statuses
     .filter((s) => s.access.derivedState === "demo_active" && s.access.expiresAt)
     .map((s) => ({ name: s.name, expiresAt: s.access.expiresAt as string }));

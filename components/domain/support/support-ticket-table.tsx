@@ -3,7 +3,7 @@ import type { SupportTicketSummaryRow } from "@/lib/db/support";
 import { TICKET_CATEGORY_LABEL, TICKET_MODULE_LABEL, type TicketCategory, type TicketModule } from "@/lib/domain/support";
 import { TicketStatusBadge, TicketPriorityBadge, SlaStatusBadge } from "./ticket-badges";
 import { EmptyState } from "@/components/ui/empty-state";
-import { moduleAwareHref, type ShellModuleKey } from "@/lib/modules/registry";
+import { moduleAwareHref, type ShellSurfaceKey } from "@/lib/modules/registry";
 
 /**
  * PT-03A · `moduleKey` viaja como propiedad y no se resuelve aquí dentro: la
@@ -16,7 +16,7 @@ export function SupportTicketTable({
   moduleKey = "cpr",
 }: {
   tickets: SupportTicketSummaryRow[];
-  moduleKey?: ShellModuleKey;
+  moduleKey?: ShellSurfaceKey;
 }) {
   if (tickets.length === 0) {
     return (

@@ -38,7 +38,7 @@ const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
 
 console.log("Trazaloop · T9E: navegación contextual por módulo\n");
 
-check("1. /textiles y todas sus subrutas resuelven el módulo Textil; el resto CPR", () => {
+check("1. /textiles y sus subrutas son Textil; las de CPR son CPR; lo demás, ninguno", () => {
   assert(resolveShellModuleForPath("/textiles").key === "textiles", "/textiles debía ser Textil");
   assert(
     resolveShellModuleForPath("/textiles/catalogs/fibers").key === "textiles",
@@ -47,13 +47,18 @@ check("1. /textiles y todas sus subrutas resuelven el módulo Textil; el resto C
   assert(resolveShellModuleForPath("/dashboard").key === "cpr", "/dashboard debía ser CPR");
   assert(resolveShellModuleForPath("/trazadocs").key === "cpr", "/trazadocs debía ser CPR");
   assert(resolveShellModuleForPath("/catalog").key === "cpr", "/catalog (CPR) debía ser CPR");
-  assert(resolveShellModuleForPath("").key === "cpr", "ruta vacía cae en CPR (módulo por defecto)");
-  assert(resolveShellModuleForPath(null).key === "cpr", "null cae en CPR sin lanzar");
+  // PE-01B · PE-D3 · Una ruta que no reclama ningún módulo ya NO cae en CPR:
+  // ese valor por defecto venía de cuando PCR era el único módulo, y hacía que
+  // una URL transversal enseñara el shell de PCR a una empresa que no lo tiene.
+  // Lo que se comprueba sigue siendo lo mismo —que no lanza y que no se
+  // confunde con Textiles—; lo que cambia es que no se inventa un módulo.
+  assert(resolveShellModuleForPath("").key === "platform", "la ruta vacía no pertenece a nadie");
+  assert(resolveShellModuleForPath(null).key === "platform", "null no pertenece a nadie, y no lanza");
 });
 
 check("2. La coincidencia es por prefijo estricto, nunca por subcadena", () => {
-  assert(resolveShellModuleForPath("/textiles-x").key === "cpr", "'/textiles-x' no es el módulo Textil");
-  assert(resolveShellModuleForPath("/textilesx/algo").key === "cpr", "'/textilesx' no es el módulo Textil");
+  assert(resolveShellModuleForPath("/textiles-x").key !== "textiles", "'/textiles-x' no es el módulo Textil");
+  assert(resolveShellModuleForPath("/textilesx/algo").key !== "textiles", "'/textilesx' no es el módulo Textil");
 });
 
 check("3. El menú funcional Textil no contiene ninguna ruta CPR", () => {

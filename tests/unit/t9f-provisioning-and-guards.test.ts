@@ -160,9 +160,20 @@ check("13. lib/db/module-access.ts es server-only y usa el cliente admin solo pa
   assert(/import "server-only"/.test(src), "debe ser server-only");
   assert(src.includes("createAdminClient()"), "usa el cliente admin para la lectura de plataforma");
   // La resolución del acceso del propio usuario usa la sesión (RLS), no admin.
+  //
+  // PE-01B movió la construcción del cliente a un ayudante —`db(client)`— para
+  // que la suite contra base real pueda inyectar la sesión de la persona de
+  // prueba. La PROMESA no cambia y aquí se comprueba entera: por defecto se
+  // construye el cliente de SESIÓN, y por ningún camino entra el administrativo.
   const resolveFn = src.slice(src.indexOf("export async function getOrganizationModuleAssignment"));
   const resolveBody = resolveFn.slice(0, resolveFn.indexOf("export async function", 10));
-  assert(resolveBody.includes("createServerClient()") && !resolveBody.includes("createAdminClient"), "el acceso propio debe leerse bajo RLS de la sesión");
+  assert(resolveBody.includes("await db(client)"), "el acceso propio debe construir su cliente por el camino de la sesión");
+  assert(!resolveBody.includes("createAdminClient"), "el acceso propio debe leerse bajo RLS de la sesión");
+  const helper = src.slice(src.indexOf("async function db(client?: Db)"));
+  assert(/return client \?\? \(\(await createServerClient\(\)\)/.test(helper.slice(0, 200)),
+    "sin cliente inyectado, el acceso propio debe caer en createServerClient()");
+  assert(!helper.slice(0, 200).includes("createAdminClient"),
+    "el ayudante del acceso propio no puede caer en el cliente administrativo");
 });
 
 if (failed > 0) {

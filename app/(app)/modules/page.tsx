@@ -1,15 +1,27 @@
 // Ruta protegida: depende de cookies/sesión/Supabase → nunca se
 // prerenderiza en build (Sprint 3.1).
-//
-// Portal de módulos. Sprint T9F: cada tarjeta muestra el ESTADO COMERCIAL
-// REAL resuelto por la regla canónica (lib/modules/access.ts):
-// Demo temporal (con vencimiento), Demo permanente, Full, Extra, Prueba
-// finalizada, Módulo deshabilitado, Temporalmente no disponible (kill switch)
-// o Próximamente (no funcional). Jamás "Próximamente" cuando el motivo real
-// es un Demo vencido, una asignación deshabilitada, la falta de asignación o
-// un flag global apagado. La barrera real sigue siendo el guard de servidor
-// de cada módulo (nunca esta UI).
 export const dynamic = "force-dynamic";
+
+// Trazaloop · PE-01B · LA PUERTA DE TRAZALOOP.
+//
+// QUÉ ERA Y QUÉ ES
+//
+// Era «Elige un módulo»: cuatro tarjetas iguales en una rejilla de dos, ordenadas
+// por estado para que la única entrable no cayera bajo el pliegue. Con cuatro
+// módulos del mismo tamaño no se podía saber cuál es el producto principal.
+//
+// Ahora Quality ocupa arriba y entero, y PCR, Textiles y Construcción van debajo
+// en una fila secundaria. La jerarquía la da el TAMAÑO, no un adorno: no hace
+// falta un distintivo que diga «principal» si se ve.
+//
+// Y la jerarquía es del PRODUCTO, no del contrato: Quality sigue arriba aunque
+// la empresa no lo tenga. Que se pueda entrar o no lo dice su estado.
+//
+// LO QUE ESTA PANTALLA NO HACE (PE-01)
+//
+// No vende, no cobra, no explica planes, no enseña vídeos y no responde
+// preguntas. Eso es PE-02…PE-05, y hasta que existan no hay ni un botón que lo
+// insinúe: un enlace a una página que no existe es peor que ningún enlace.
 
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/require-session";
@@ -18,174 +30,129 @@ import { getPostAuthDestinationAction } from "@/server/actions/team";
 import { moduleEntryDestinationPath } from "@/lib/domain/team";
 import { Wordmark } from "@/components/layout/logo";
 import { getActiveOrganization } from "@/lib/db/organizations";
-import { getActiveOrgModuleStatuses, getDemoTrialSummary, type OrgModuleStatus } from "@/lib/db/module-access";
+import { getActiveOrgModuleStatuses, getDemoTrialSummary } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
 import {
-  COMMERCIAL_MODULES,
-  resolveModuleEntryHref,
-  type CommercialModuleKey,
-} from "@/lib/modules/catalog";
+  HeroModuleCard, SpecializedModuleCard, type ModuleEntryModel,
+} from "@/components/domain/modules/module-entry";
+import { resolveModuleEntryHref, type CommercialModule, type CommercialModuleKey }
+  from "@/lib/modules/catalog";
 import type { DerivedModuleState } from "@/lib/modules/access";
-import { formatRemainingTrial } from "@/lib/modules/access";
+import { isEnterableState } from "@/lib/modules/messages";
 import {
-  DERIVED_STATE_LABEL,
-  DERIVED_STATE_HINT,
-  isEnterableState,
-  sortModulesForSelector,
-} from "@/lib/modules/messages";
+  ENTRY_COPY, NO_ACTIVE_MODULES_BODY, NO_ACTIVE_MODULES_TITLE, PLATFORM_TAGLINE,
+  RESOLUTION_FAILED_BODY, RESOLUTION_FAILED_TITLE, enterLabel, heroModule,
+  overviewOf, specializedModules,
+} from "@/lib/modules/entry";
 
-function formatExpiry(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("es-CO", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function ModuleCard({
-  name,
-  tagline,
-  state,
-  expiresAt,
-  href,
-}: {
-  name: string;
-  tagline: string;
-  state: DerivedModuleState;
-  expiresAt: string | null;
-  href: string | null;
-}) {
-  const enterable = isEnterableState(state) && href !== null;
-  const now = new Date();
-  const remaining = state === "demo_active" && expiresAt ? formatRemainingTrial(expiresAt, now) : null;
-
-  const badgeTone = enterable
-    ? "border-loop/30 bg-surface text-loop-deep"
-    : state === "demo_expired" || state === "disabled"
-      ? "border-amber/40 bg-amber/10 text-amber"
-      : "border-hairline bg-surface text-ink-soft";
-
-  const body = (
-    <>
-      <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeTone}`}>
-        {DERIVED_STATE_LABEL[state]}
-      </span>
-      <span className="text-lg font-semibold">{name}</span>
-      {state === "demo_active" && expiresAt ? (
-        <span className="text-sm text-ink-soft">
-          Vence el {formatExpiry(expiresAt)}.{remaining ? ` Queda ${remaining}.` : ""}
-        </span>
-      ) : (
-        <span className="text-sm text-ink-soft">{tagline}</span>
-      )}
-      <span className="text-xs text-ink-soft">{DERIVED_STATE_HINT[state]}</span>
-      {enterable ? <span className="mt-2 text-sm font-medium text-loop">Entrar →</span> : null}
-    </>
-  );
-
-  if (enterable) {
-    return (
-      <Link
-        href={href}
-        className="flex flex-col gap-2 rounded-lg border border-loop/30 bg-loop/5 p-5 transition-colors hover:border-loop"
-      >
-        {body}
-      </Link>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-hairline bg-paper p-5 opacity-90">
-      {body}
-    </div>
-  );
-}
+export const metadata = { title: "Módulos · Trazaloop" };
 
 export default async function ModulesPortalPage() {
   await requireSession();
   await requireLegalAcceptance("/modules");
 
-  // Destino de CPR: dashboard si ya hay empresa activa, select-org si hay
-  // varias o ninguna, accept-invite si hay invitación pendiente. Nunca /modules.
-  const destination = await getPostAuthDestinationAction();
-  const cprHref = moduleEntryDestinationPath(destination);
-
   const activeOrg = await getActiveOrganization();
-  const statuses: OrgModuleStatus[] = activeOrg
+
+  // La entrada a PCR es la única que no se conoce de antemano: depende de si
+  // hay empresa activa, varias, o una invitación pendiente.
+  const destination = await getPostAuthDestinationAction();
+  const runtimeHrefByKey: Partial<Record<CommercialModuleKey, string>> = {
+    cpr: moduleEntryDestinationPath(destination),
+  };
+
+  const statuses = activeOrg
     ? await getActiveOrgModuleStatuses(activeOrg.organizationId)
     : [];
   const stateByKey = new Map(statuses.map((s) => [s.key, s]));
+
+  const modelo = (mod: CommercialModule): ModuleEntryModel => {
+    const status = stateByKey.get(mod.key);
+    // Sin empresa activa no se puede afirmar nada del acceso: los funcionales
+    // se presentan sin resolver y los futuros como lo que son.
+    const state: DerivedModuleState = status
+      ? status.access.derivedState
+      : mod.status === "functional"
+        ? "unavailable"
+        : "coming_soon";
+    return {
+      key: mod.key,
+      name: mod.name,
+      copy: ENTRY_COPY[mod.key],
+      state,
+      expiresAt: status?.access.expiresAt ?? null,
+      href: resolveModuleEntryHref({
+        mod,
+        isEnterable: isEnterableState(state),
+        runtimeHref: runtimeHrefByKey[mod.key],
+      }),
+      enterLabel: enterLabel(mod),
+    };
+  };
+
+  const hero = modelo(heroModule());
+  const especializados = specializedModules().map(modelo);
+  const resumen = overviewOf([hero, ...especializados].map((m) => m.state));
+
   const demoTrials = activeOrg
     ? await getDemoTrialSummary(activeOrg.organizationId)
     : { activeTrials: [], expiredModules: [], hasEnterableModule: false, notice: "none" as const };
 
-  // Destinos que NO pueden conocerse de antemano porque dependen de la sesión.
-  // Hoy solo CPR: su entrada es el dashboard, salvo que falte empresa activa o
-  // haya una invitación pendiente. Cualquier otro módulo resuelve por catálogo
-  // — no debe añadirse aquí, o volvería el defecto que esto vino a corregir.
-  const runtimeHrefByKey: Partial<Record<CommercialModuleKey, string>> = {
-    cpr: cprHref,
-  };
-
-  // Las tarjetas se resuelven ANTES de pintarse para poder ordenarlas por su
-  // estado. Los módulos a los que la empresa SÍ puede entrar van primero: con
-  // el orden fijo del catálogo, una empresa con los dos primeros bloqueados
-  // encontraba el único módulo utilizable en la segunda fila, y su «Entrar →»
-  // —la última línea de la tarjeta— caía por debajo del borde de la pantalla.
-  // El criterio es el ESTADO, nunca la clave: un módulo futuro entra solo.
-  const cards = sortModulesForSelector(
-    COMMERCIAL_MODULES.map((mod) => {
-      const status = stateByKey.get(mod.key);
-      // Sin empresa activa: los funcionales piden empresa; los no
-      // funcionales se muestran como Próximamente.
-      const state: DerivedModuleState = status
-        ? status.access.derivedState
-        : mod.status === "functional"
-          ? "not_assigned"
-          : "coming_soon";
-      return {
-        key: mod.key,
-        name: mod.name,
-        tagline: mod.description,
-        state,
-        expiresAt: status?.access.expiresAt ?? null,
-        href: resolveModuleEntryHref({
-          mod,
-          isEnterable: isEnterableState(state),
-          runtimeHref: runtimeHrefByKey[mod.key],
-        }),
-      };
-    }),
-    (card) => isEnterableState(card.state) && card.href !== null
-  );
-
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6">
-      <header className="space-y-2">
-        <Wordmark />
-        <p className="eyebrow">Módulos</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Elige un módulo</h1>
-        <p className="max-w-2xl text-sm text-ink-soft">
-          Una sola cuenta de Trazaloop da acceso a todos los módulos disponibles — la sesión se
-          comparte entre ellos.
-        </p>
-        {!activeOrg && (
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Wordmark />
+          {activeOrg ? (
+            <Link
+              href="/select-org"
+              className="inline-flex items-center gap-2 rounded-full border border-loop/30 bg-loop/5 px-3 py-1.5 text-sm font-semibold text-loop-deep hover:border-loop"
+            >
+              <span className="h-2 w-2 rounded-full bg-loop" aria-hidden="true" />
+              {activeOrg.organizationName}
+              <span className="text-xs font-normal text-ink-soft">cambiar empresa</span>
+            </Link>
+          ) : null}
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Trazaloop</h1>
+        <p className="max-w-2xl text-sm text-ink-soft">{PLATFORM_TAGLINE}</p>
+        {!activeOrg ? (
           <p className="text-sm text-amber">
             Selecciona primero tu empresa para ver el estado de tus módulos.{" "}
             <Link href="/select-org" className="font-medium underline">
               Seleccionar empresa
             </Link>
           </p>
-        )}
+        ) : null}
       </header>
 
-      {/* Sin enlace al selector: ya estamos en él. */}
+      {/* Que NO se pudiera comprobar nada y que NO haya nada activo son dos
+          cosas distintas, y confundirlas es el defecto PE-D1 en grande: decirle
+          a alguien que no tiene módulos cuando lo que pasó es que no se pudo
+          preguntar. */}
+      {activeOrg && resumen.allUnavailable ? (
+        <section
+          aria-labelledby="sin-resolver"
+          role="status"
+          className="rounded-lg border border-amber/40 bg-amber/10 p-4"
+        >
+          <h2 id="sin-resolver" className="text-sm font-semibold text-amber">
+            {RESOLUTION_FAILED_TITLE}
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">{RESOLUTION_FAILED_BODY}</p>
+        </section>
+      ) : activeOrg && !resumen.hasEnterable ? (
+        <section
+          aria-labelledby="sin-modulos"
+          className="rounded-lg border border-hairline bg-surface p-4"
+        >
+          <h2 id="sin-modulos" className="text-sm font-semibold">
+            {NO_ACTIVE_MODULES_TITLE}
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">{NO_ACTIVE_MODULES_BODY}</p>
+        </section>
+      ) : null}
+
+      {/* En el propio selector el aviso no ofrece enlace al selector. */}
       <DemoTrialBanner
         trials={demoTrials.activeTrials}
         expiredModules={demoTrials.expiredModules}
@@ -193,22 +160,23 @@ export default async function ModulesPortalPage() {
         showModulesLink={false}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {cards.map((card) => (
-          <ModuleCard
-            key={card.key}
-            name={card.name}
-            tagline={card.tagline}
-            state={card.state}
-            expiresAt={card.expiresAt}
-            href={card.href}
-          />
-        ))}
-      </div>
+      <HeroModuleCard model={hero} />
+
+      <section aria-labelledby="especializados" className="space-y-3">
+        <h2 id="especializados" className="text-sm font-semibold text-ink-soft">
+          Módulos especializados
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {especializados.map((m) => (
+            <SpecializedModuleCard key={m.key} model={m} />
+          ))}
+        </div>
+      </section>
 
       <p className="text-xs text-ink-soft">
-        El estado de cada módulo se resuelve con la hora del servidor. Los módulos marcados como
-        &quot;Próximamente&quot; aún no tienen funcionalidad interna construida.
+        El estado de cada módulo se resuelve con la hora del servidor y con lo que tu empresa
+        tiene hoy. Entrar a un módulo no decide qué puedes hacer dentro: eso lo determina tu
+        rol.
       </p>
     </div>
   );

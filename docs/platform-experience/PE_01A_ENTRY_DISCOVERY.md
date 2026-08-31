@@ -108,6 +108,11 @@ ruido persistente, no un error de contenido.
 
 ## 6 · Lo que SÍ está roto · tres hallazgos
 
+> **Estado (PE-01B):** los tres están **resueltos**. Lo que sigue se conserva tal
+> como se escribió —es el diagnóstico, no el parte de reparación— y cada
+> hallazgo lleva al final cómo quedó. Detalle en
+> [PE_01B_IMPLEMENTATION.md](./PE_01B_IMPLEMENTATION.md) §3.
+
 ### 6.1 · Un fallo de lectura se presenta como «no tienes el módulo» · **PE-D1**
 
 `lib/db/module-access.ts:51`
@@ -126,12 +131,20 @@ una **decisión comercial**. Es exactamente el fallo que Quality persiguió cinc
 
 Gravedad: alta. Es la primera pantalla que ve alguien después de entrar.
 
+**Resuelto en PE-01B.** La búsqueda devuelve tres respuestas (`found` / `absent` /
+`unavailable`), la regla pura evalúa «no se sabe» **antes** que «no hay», y la
+puerta lo dice sin afirmar nada sobre lo contratado. Cubierto por
+`pe01-modules-access` P, P2, P3, P4, P5 y por `pe01-modules-ui` K1–K3.
+
 ### 6.2 · La plataforma devuelve a PCR a quien no es staff · **PE-D2**
 
 `lib/auth/require-platform-staff.ts:18` → `redirect("/dashboard")`
 
 Alguien sin permiso de plataforma que abre `/platform/*` acaba en la portada de **PCR**,
 tenga PCR o no. Si no lo tiene, el guard de PCR lo devuelve al selector: un rebote.
+
+**Resuelto en PE-01B.** Ahora redirige a `MODULE_SELECTOR_PATH`. Cubierto por
+`pe01-modules` E7.
 
 ### 6.3 · El shell transversal cae en PCR por omisión · **PE-D3**
 
@@ -141,6 +154,11 @@ Mitigado con el parámetro `?m=`, que los enlaces internos arrastran. Pero una U
 transversal escrita a mano, guardada en marcadores o llegada por correo —`/team`,
 `/settings/company`, `/support`— muestra **el shell de PCR** a una empresa que solo tiene
 Quality: menú de PCR, identidad de PCR, normas de PCR.
+
+**Resuelto en PE-01B.** Existe una superficie neutra de plataforma
+(`PLATFORM_SURFACE_KEY`) y el repuesto pasa a ser esa. Quitar el repuesto de PCR
+**destapó** que `/onboarding` —que sí es de PCR— no figuraba en sus prefijos: se
+añadió. Cubierto por `pe01-modules` E1–E6 y por el recorrido HTTP R1.
 
 ---
 
@@ -222,3 +240,26 @@ historia de negocio; convertirla en telemetría de páginas sería el mismo erro
 
 El trabajo de PE-01 es **jerarquía, honestidad de estados y tres fugas concretas**. No es
 una refundación.
+
+---
+
+## 14 · Cierre · qué hizo PE-01B con este inventario
+
+| | Deuda de §12 | Cómo quedó |
+|---|---|---|
+| 1 | Las cuatro tarjetas eran iguales | **Hecha** · protagonista + tres especializados, con jerarquía comprobada (`pe01-modules-ui` L2, L3) |
+| 2 | «Elige un módulo», sin decir qué es Trazaloop | **Hecha** · «Trazaloop» + una frase de plataforma |
+| 3 | La frase de Quality se quedó en QUALITY-01 | **Hecha** · la frase la congeló el humano; está en `ENTRY_COPY` |
+| 4 | La frase de PCR metía dos normas y siete funciones | **Hecha** · reescritas las cuatro |
+| 5 | La banda de pruebas se veía dentro de un módulo que no está en prueba | **Hecha** · salió del shell y vive en la puerta |
+| 6 | «Demo permanente» junto al plan gratuito de PE-04 | **Aplazada a PE-04**, como se decidió |
+| 7 | El portal público decía que Quality estaba por llegar | **Hecha** · distintivo «Disponible», frase acordada y entrada real |
+| 8 | «Trazaloop CPR» vs «PCR» en lo visible | **Hecha** en lo visible; los identificadores internos siguen siendo `cpr` |
+| 9 | `moduleEntryDestinationPath` → `/dashboard` | **Sin tocar**, como se decidió: es la entrada real de PCR |
+| 10 | Ningún estado de fallo en el selector | **Hecha** · el décimo estado, `unavailable` |
+| 11 | Sin mensaje para «no tienes ningún módulo» | **Hecha** · `NO_ACTIVE_MODULES_*`, sin bucle y sin venta |
+| 12 | «Crear cuenta Demo» por kill switch | **Sin tocar** |
+
+Los tres hallazgos de §6 —PE-D1, PE-D2, PE-D3— están resueltos y con regresión.
+Ver [PE_01B_IMPLEMENTATION.md](./PE_01B_IMPLEMENTATION.md) y
+[PE_01B_TEST_MATRIX.md](./PE_01B_TEST_MATRIX.md).

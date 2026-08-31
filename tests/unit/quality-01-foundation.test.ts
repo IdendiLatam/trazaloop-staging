@@ -252,7 +252,7 @@ check("A. Quality FULL + funcional + kill switch ON → tarjeta con entrada a /q
 
   const href = resolveModuleEntryHref({ mod: QUALITY_MOD, isEnterable: isEnterableState(access.derivedState) });
   assert(href === "/quality", `la tarjeta debía enlazar /quality, enlazó ${href}`);
-  assert(DERIVED_STATE_LABEL[access.derivedState] === "Plan Full", "la etiqueta visible debía ser «Plan Full»");
+  assert(DERIVED_STATE_LABEL[access.derivedState] === "Activo", "la etiqueta visible debía ser «Activo»");
 });
 
 check("A2. Lo mismo con Demo vigente y con Extra: también se puede entrar", () => {

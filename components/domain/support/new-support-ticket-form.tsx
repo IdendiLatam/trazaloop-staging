@@ -8,7 +8,7 @@ import { TICKET_CATEGORIES, TICKET_CATEGORY_LABEL, TICKET_MODULES, TICKET_MODULE
 import { Field, SelectField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
-import { moduleAwareHref, type ShellModuleKey } from "@/lib/modules/registry";
+import { moduleAwareHref, type ShellSurfaceKey } from "@/lib/modules/registry";
 
 const initial: SupportActionState = { error: null };
 const CATEGORY_OPTIONS = TICKET_CATEGORIES.map((c) => ({ value: c, label: TICKET_CATEGORY_LABEL[c] }));
@@ -24,7 +24,7 @@ export function NewSupportTicketForm({
   defaultCategory?: string;
   /** PT-03A · El módulo desde el que se llegó. Sin esto, el salto al ticket
    *  recién creado devolvía el shell a PCR justo después de crearlo. */
-  moduleKey?: ShellModuleKey;
+  moduleKey?: ShellSurfaceKey;
 }) {
   const [state, formAction, pending] = useActionState(createSupportTicketAction, initial);
   const router = useRouter();

@@ -9,11 +9,9 @@ import { requireSession } from "@/lib/auth/require-session";
 import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { checkPlatformStatus } from "@/lib/db/platform";
-import { getDemoTrialSummary } from "@/lib/db/module-access";
-import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
 import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
-import { ModuleHeaderBadge, ModuleAwareSettingsLink } from "@/components/layout/module-badge";
+import { ModuleHeaderBadge, ModuleAwareSettingsLink, ModuleSwitcher } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
 import Link from "next/link";
 
@@ -41,8 +39,17 @@ export default async function ShellLayout({
     redirect("/select-org");
   }
 
-  // T9F: aviso del Demo temporal (48 h) — compartido en todo el shell.
-  const demoTrials = await getDemoTrialSummary(activeOrg.organizationId);
+  // PE-01B · §14 · El aviso de pruebas SALE del shell compartido.
+  //
+  // Vivía aquí, así que se leía en todas las pantallas de todos los módulos:
+  // alguien trabajando en Quality con acceso completo leía una y otra vez que
+  // «algunas pruebas de módulos han finalizado», hablando de una prueba de PCR
+  // que no le afectaba. El contenido era correcto —habla de módulos, no de la
+  // cuenta— y el sitio no.
+  //
+  // Ahora vive en la puerta (`/modules`), donde la pregunta «qué tengo» es la
+  // pregunta de la pantalla. Dentro de un módulo, el estado de ESE módulo lo
+  // comunica su propio guard.
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
@@ -107,22 +114,16 @@ export default async function ShellLayout({
               aria-hidden="true"
             />
             {activeOrg.organizationName}
-            <span className="text-xs font-normal text-ink-soft">cambiar</span>
+            <span className="text-xs font-normal text-ink-soft">cambiar empresa</span>
           </Link>
           <div className="flex items-center gap-3">
+            <ModuleSwitcher />
             <ModuleAwareSettingsLink />
             <ModuleHeaderBadge />
           </div>
         </header>
 
-        <main className="flex-1 space-y-4 p-6">
-          <DemoTrialBanner
-            trials={demoTrials.activeTrials}
-            expiredModules={demoTrials.expiredModules}
-            notice={demoTrials.notice}
-          />
-          {children}
-        </main>
+        <main className="flex-1 space-y-4 p-6">{children}</main>
       </div>
     </div>
   );

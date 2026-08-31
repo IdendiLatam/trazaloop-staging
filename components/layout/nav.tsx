@@ -8,10 +8,11 @@ import {
   SHELL_MODULE_PARAM,
   moduleAwareHref,
   resolveShellModuleForPath,
+  isPlatformSurface,
   isShellNavLinkActive,
   type ModuleNavLink,
   type ModuleNavGroup,
-  type ShellModuleKey,
+  type ShellSurfaceKey,
 } from "@/lib/modules/registry";
 
 /**
@@ -45,7 +46,7 @@ function NavItem({
 }: {
   item: ModuleNavLink;
   active: boolean;
-  moduleKey: ShellModuleKey;
+  moduleKey: ShellSurfaceKey;
 }) {
   return (
     <Link
@@ -70,7 +71,7 @@ function NavGroupSection({
 }: {
   group: ModuleNavGroup;
   pathname: string;
-  moduleKey: ShellModuleKey;
+  moduleKey: ShellSurfaceKey;
 }) {
   return (
     <details open className="group">
@@ -127,9 +128,13 @@ export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}
         <NavGroupSection group={PLATFORM_GROUP} pathname={pathname} moduleKey={activeModule.key} />
       ) : null}
       {/* Volver al inicio del módulo activo: desde una pantalla transversal es
-          la salida natural, y sin ella la única vuelta era el selector. */}
-      {activeModule.key !== "cpr" &&
-      resolveShellModuleForPath(pathname).key === "cpr" ? (
+          la salida natural, y sin ella la única vuelta era el selector.
+          PE-01B · La condición era «la ruta resuelve a CPR», que es como se
+          reconocía una pantalla transversal cuando CPR era el valor por
+          defecto. Ahora una pantalla transversal resuelve a la superficie
+          neutra, y la pregunta se hace directamente. */}
+      {!isPlatformSurface(activeModule) &&
+      isPlatformSurface(resolveShellModuleForPath(pathname)) ? (
         <Link
           href={activeModule.homePath}
           className="block rounded-md px-3 py-2 text-xs font-medium text-emerald-100/70 hover:bg-white/10 hover:text-white"

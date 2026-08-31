@@ -72,10 +72,14 @@ const TRANSVERSALES = [
   "/settings/profile", "/settings/company", "/modules", "/select-org",
 ];
 
-check("A1. Sin el parámetro, TODA ruta transversal resuelve PCR", () => {
+check("A1. Sin el parámetro, ninguna ruta transversal pertenece a un módulo", () => {
+  // PE-01B · PE-D3 · Antes esto decía «resuelve PCR», porque PCR era el módulo
+  // por defecto del shell. Una URL transversal escrita a mano enseñaba el menú
+  // y la identidad de PCR a una empresa que no lo tiene. Ahora resuelven a la
+  // superficie neutra: el shell ya no inventa un módulo.
   for (const p of TRANSVERSALES) {
     const k = resolveShellModuleForPath(p, null).key;
-    assert(k === "cpr", `${p} resolvió ${k}, se esperaba el defecto cpr`);
+    assert(k === "platform", `${p} resolvió ${k}, y no pertenece a ningún módulo`);
   }
 });
 
@@ -254,7 +258,7 @@ check("D1. Ningún menú de módulo enlaza a una ruta de otro módulo", () => {
 check("D2. Desde cualquier módulo, toda transversal conserva la identidad", () => {
   for (const { nombre, modulos } of COMBINACIONES) {
     for (const key of modulos) {
-      if (key === "cpr") continue;  // CPR es el defecto: no hay identidad que perder
+      if (key === "cpr") continue;  // CPR no decora: sus enlaces ya son suyos
       for (const p of TRANSVERSALES) {
         const destino = moduleAwareHref(p, key);
         const param = new URLSearchParams(destino.split("?")[1] ?? "").get(SHELL_MODULE_PARAM);
@@ -267,7 +271,7 @@ check("D2. Desde cualquier módulo, toda transversal conserva la identidad", () 
 
 check("D3. El grupo transversal no contiene ninguna ruta de módulo", () => {
   for (const item of SISTEMA_GROUP.items) {
-    assert(resolveShellModuleForPath(item.href, null).key === "cpr",
+    assert(resolveShellModuleForPath(item.href, null).key === "platform",
       `«${item.label}» (${item.href}) pertenece a un módulo: no es transversal`);
     // Y por tanto DEBE poder decorarse.
     assert(moduleAwareHref(item.href, "textiles").includes(`${SHELL_MODULE_PARAM}=textiles`),

@@ -8,15 +8,16 @@ import type { DerivedModuleState, ModuleAccessReason } from "./access";
 
 /** Etiqueta corta del estado visible (tarjetas del selector, tabla superadmin). */
 export const DERIVED_STATE_LABEL: Record<DerivedModuleState, string> = {
-  demo_active: "Demo",
-  demo_permanent: "Demo permanente",
+  demo_active: "Prueba",
+  demo_permanent: "Acceso de prueba",
   demo_expired: "Prueba finalizada",
-  full: "Plan Full",
-  extra: "Plan Extra",
-  disabled: "Módulo deshabilitado",
+  full: "Activo",
+  extra: "Activo · almacenamiento ampliado",
+  disabled: "Acceso suspendido",
   globally_disabled: "Temporalmente no disponible",
   coming_soon: "Próximamente",
-  not_assigned: "Sin asignar",
+  not_assigned: "No incluido",
+  unavailable: "No se pudo verificar",
 };
 
 /** Frase breve secundaria para la tarjeta del selector. */
@@ -29,7 +30,11 @@ export const DERIVED_STATE_HINT: Record<DerivedModuleState, string> = {
   disabled: "La empresa no tiene acceso a este módulo. Los datos se conservan.",
   globally_disabled: "El módulo no está disponible por el momento.",
   coming_soon: "Este módulo estará disponible próximamente.",
-  not_assigned: "Este módulo no está asignado a la empresa.",
+  not_assigned: "Este módulo no forma parte del acceso de tu empresa.",
+  // PE-01B · NUNCA dice si el módulo está o no contratado, porque no se sabe.
+  // Y no filtra el error técnico: quien lee esto no puede hacer nada con un
+  // código de PostgREST.
+  unavailable: "No fue posible verificar el acceso a este módulo. Vuelve a intentarlo.",
 };
 
 /** ¿El estado permite entrar al módulo? (espejo de allowed, para la UI). */
@@ -50,6 +55,8 @@ export function moduleAccessDeniedMessage(moduleName: string, reason: ModuleAcce
       return `${moduleName} estará disponible próximamente.`;
     case "not_assigned":
       return `${moduleName} no está asignado a esta empresa.`;
+    case "unavailable":
+      return `No fue posible verificar tu acceso a ${moduleName}. Vuelve a intentarlo.`;
     default:
       return `No tienes acceso a ${moduleName}.`;
   }
@@ -109,8 +116,11 @@ export type ModuleNoticeInput = { state: DerivedModuleState };
  * tuvo— y tampoco puede salvar a la cuenta de un aviso general.
  */
 export function classifyDemoNotice(modules: ModuleNoticeInput[]): DemoNoticeKind {
+  // PE-01B · `unavailable` tampoco entra: de un módulo que no se pudo leer no
+  // se sabe si estaba en prueba, así que no puede sostener ningún aviso.
   const applicable = modules.filter(
     (m) => m.state !== "coming_soon" && m.state !== "not_assigned"
+      && m.state !== "unavailable"
   );
   const expired = applicable.some((m) => m.state === "demo_expired");
   const enterable = applicable.some((m) => isEnterableState(m.state));
