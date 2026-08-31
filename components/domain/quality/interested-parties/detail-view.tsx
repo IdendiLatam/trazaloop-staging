@@ -14,6 +14,7 @@ import { MonitoringSection } from "./monitoring-section";
 import { ReviewsSection } from "./reviews-section";
 import { HistorySection } from "./history-section";
 import { HistoricalBadge, RelevanceBadge, SubjectKindBadge } from "./badges";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 
 /**
  * QUALITY-12.3B3A · La ficha de una parte interesada.
@@ -46,6 +47,7 @@ export function InterestedPartyDetail({
   assessment, history, requirements, processLinks, strategies, allStrategies, reviews,
   processes, positions, refs, refLabels, customer, supplier,
   relKind, relQuery, relOptions, basePath, listPath, canManage, asOf,
+  help,
 }: {
   assessment: AssessmentRow;
   history: AssessmentRow[];
@@ -71,6 +73,9 @@ export function InterestedPartyDetail({
   listPath: string;
   canManage: boolean;
   asOf: string | null;
+  /** PE-02B4 · La ayuda administrada de ESTA pantalla, cargada una sola vez.
+   *  Llega ya resuelta: los componentes de abajo no consultan nada. */
+  help?: InterestedPartiesHelp;
 }) {
   const editable = puedeEscribir({ canManage, asOf });
 
@@ -116,12 +121,14 @@ export function InterestedPartyDetail({
       </nav>
 
       <AssessmentSection
+        help={help}
         assessment={assessment}
         canMutate={editable}
         historyCount={history.length}
       />
 
       <RequirementsSection
+        help={help}
         assessmentId={assessment.id}
         requirements={requirements}
         processLinks={processLinks}
@@ -130,6 +137,7 @@ export function InterestedPartyDetail({
       />
 
       <StrategiesSection
+        help={help}
         assessmentId={assessment.id}
         strategies={strategies}
         requirements={requirements}
@@ -152,6 +160,7 @@ export function InterestedPartyDetail({
       />
 
       <ReviewsSection
+        help={help}
         assessmentId={assessment.id}
         strategies={strategies}
         reviews={reviews}
@@ -159,6 +168,7 @@ export function InterestedPartyDetail({
       />
 
       <HistorySection
+        help={help}
         history={history}
         requirements={requirements}
         strategies={allStrategies}

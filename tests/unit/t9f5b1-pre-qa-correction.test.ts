@@ -509,6 +509,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0155_platform_faq_foundation.sql",
     "0156_platform_legal_documents_hardening.sql",
     "0157_platform_faq_initial_content.sql",
+    "0158_platform_contextual_help.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

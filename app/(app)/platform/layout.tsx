@@ -61,10 +61,22 @@ export default async function PlatformLayout({
             Preguntas frecuentes
           </Link>
           <Link
+            href="/platform/help"
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            Ayuda del producto
+          </Link>
+          <Link
             href="/platform/legal"
             className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
           >
             Documentos legales
+          </Link>
+          <Link
+            href="/faq"
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            Ayuda
           </Link>
           <Link
             href="/select-org"

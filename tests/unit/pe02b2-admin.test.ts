@@ -78,9 +78,13 @@ check("A4. No se creó la migración de ayuda contextual · §31", () => {
   // reservado a la ayuda contextual. PE-02B3 lo usó para sembrar el contenido
   // inicial de la FAQ, así que el número dejó de ser la promesa: la promesa es
   // que la ayuda contextual sigue sin existir.
-  const ayuda = readdirSync("supabase/migrations")
-    .filter((f) => /contextual_help|help_items|page_help/i.test(f));
-  assert(ayuda.length === 0, `se creó la ayuda contextual: ${ayuda.join(", ")}`);
+  // PE-02B4 creó la ayuda contextual en 0158, que es lo previsto. Lo que esta
+  // comprobación protege es que no la creara ESTE tramo: su migración no
+  // menciona ninguna de sus tablas.
+  const ayuda = ["help_items", "help_item_revisions", "help_item_drafts"];
+  for (const t of ayuda) {
+    assert(!SQL.includes(t), `la migración de este tramo toca «${t}»`);
+  }
   for (const t of ["help_items", "help_item_revisions", "tutorial", "video"]) {
     assert(!SQL.includes(`create table public.${t}`), `se creó ${t}`);
   }
@@ -416,13 +420,15 @@ check("I1. La consola no se convirtió en la FAQ pública · §30", () => {
     "la consola enlaza a la FAQ pública como si fuera su continuación");
 });
 
-check("I2. Sin ayuda contextual · §31", () => {
-  const dominio = readdirSync("lib/domain");
-  assert(!dominio.some((f) => /contextual-help|page-help/.test(f)),
-    "se empezó la ayuda contextual");
-  const partes = leer("lib/domain/quality-interested-parties.ts");
-  assert(/INTERESTED_PARTIES_HELP/.test(partes),
-    "se migraron las once ayudas de partes interesadas, y eso es B4");
+check("I2. La ayuda contextual no la trajo este tramo · §31", () => {
+  // PE-02B4 la construyó, que es lo previsto. Lo que esta comprobación protege
+  // es que la CONSOLA DE CONTENIDO de B2 —FAQ y documentos legales— no se haya
+  // enredado con ella: son tres recursos y cada uno tiene su sitio.
+  for (const [n, src] of [["la capa de FAQ", CAPA_FAQ], ["la capa legal", CAPA_LEGAL],
+    ["las acciones de FAQ", ACC_FAQ], ["las acciones legales", ACC_LEGAL]] as const) {
+    assert(!/help_items|contextual-help|help-platform/.test(src),
+      `${n} se enredó con la ayuda contextual`);
+  }
 });
 
 check("I3. Los carryovers de PE-01 no los hizo este tramo", () => {

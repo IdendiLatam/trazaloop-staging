@@ -9,6 +9,7 @@ import {
   RELEVANCE_LABEL, RELEVANCE_STATES, REQUIREMENT_KINDS, REQUIREMENT_KIND_LABEL,
   type EntryKind, type LinkKind, type RelevanceState, type RequirementKind,
 } from "@/lib/domain/quality-interested-parties";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 import type {
   RequirementProcessRow, RequirementRow,
 } from "@/lib/db/quality-interested-parties";
@@ -44,6 +45,7 @@ const inputClass =
  */
 export function RequirementsSection({
   assessmentId, requirements, processLinks, processes, canMutate,
+  help,
 }: {
   /** A QUÉ análisis pertenece lo que se registre aquí.
    *
@@ -57,6 +59,8 @@ export function RequirementsSection({
   processLinks: RequirementProcessRow[];
   processes: { id: string; name: string }[];
   canMutate: boolean;
+  /** PE-02B4 · La ayuda administrada de la pantalla, ya cargada. */
+  help?: InterestedPartiesHelp;
 }) {
   const [alta, altaAction] = useActionState(createRequirementAction, inicial);
   const [entryKind, setEntryKind] = useState<EntryKind>("need");
@@ -67,7 +71,7 @@ export function RequirementsSection({
     <section id="requisitos" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Necesidades, expectativas y requisitos</h2>
-        <SectionHint hint={interestedPartiesHint("requirement")} />
+        <SectionHint hint={interestedPartiesHint("requirement", help)} />
       </div>
       <p className="text-sm text-ink-soft">
         Lo que esta parte necesita, lo que espera y lo que obliga. Son tres cosas distintas y
@@ -136,7 +140,7 @@ export function RequirementsSection({
                     <span>
                       <span className="inline-flex items-center gap-1 font-medium">
                         {ENTRY_KIND_LABEL[k]}
-                        <SectionHint hint={interestedPartiesHint(k)} />
+                        <SectionHint hint={interestedPartiesHint(k, help)} />
                       </span>
                       <span className="block text-xs text-ink-soft">{AYUDA_TIPO[k]}</span>
                     </span>

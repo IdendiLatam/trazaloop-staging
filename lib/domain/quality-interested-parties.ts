@@ -634,10 +634,72 @@ export const INTERESTED_PARTIES_HELP = {
 
 export type InterestedPartiesHelpKey = keyof typeof INTERESTED_PARTIES_HELP;
 
-/** El hint ya resuelto, con la forma que espera el componente compartido. Sin
- *  puerta comercial: esto no es contenido administrado. */
+/**
+ * El hint ya resuelto, con la forma que espera el componente compartido.
+ *
+ * PE-02B4 · Estos once textos SE ADMINISTRAN desde la plataforma: viven en
+ * `help_items` con su pantalla y su elemento, y se corrigen sin desplegar. Lo
+ * que queda aquí es el respaldo para cuando la ayuda administrada no llegó —
+ * porque no se ha configurado en ese entorno, o porque la consulta falló—.
+ *
+ * NO es doble verdad: cuando hay ayuda administrada, manda ella y esta constante
+ * no se consulta. La constante es lo que se enseña mientras tanto, y su día
+ * llegará a su fin cuando el traslado esté verificado en todos los entornos.
+ *
+ * `help` es el mapa que la pantalla cargó UNA vez para toda la pantalla. Si no
+ * se pasa, se usa el texto de siempre.
+ */
+/**
+ * PE-02B4 · La pantalla de partes interesadas, en el vocabulario de pantallas.
+ *
+ * Es la MISMA clave que usará PE-03 para el tutorial de esta pantalla: no habrá
+ * una segunda familia. Vive aquí, junto al dominio que la usa, y está declarada
+ * en el registro canónico de `lib/modules/page-keys.ts`.
+ */
+export const INTERESTED_PARTIES_PAGE_KEY = "quality.context.interested_parties";
+
+/**
+ * Traduce lo que devolvió la base al mapa que esperan los componentes.
+ *
+ * La base direcciona por `tipo:objetivo` —`section:overview`, `field:relevance`—
+ * porque un campo y una sección pueden llamarse igual. Los componentes piden por
+ * el nombre de siempre, así que aquí se busca en los cuatro tipos y se queda con
+ * el primero que exista.
+ *
+ * Sin ayuda administrada devuelve un mapa vacío, y cada `interestedPartiesHint`
+ * cae en el texto de siempre. Es lo que hace que una avería NO se lea como «esta
+ * pantalla no tiene ayuda».
+ */
+export function interestedPartiesHelpMap(
+  pageHelp: Record<string, {
+    title: string; explanation: string; example: string | null;
+    technicalReference: string | null;
+  }> | null,
+  toHint: (h: {
+    title: string; explanation: string; example: string | null;
+    technicalReference: string | null;
+  } | null) => { restricted: false; title: null; text: string } | null
+): InterestedPartiesHelp {
+  if (!pageHelp) return {};
+  const mapa: InterestedPartiesHelp = {};
+  for (const clave of Object.keys(INTERESTED_PARTIES_HELP) as InterestedPartiesHelpKey[]) {
+    for (const tipo of ["section", "field", "concept", "page"]) {
+      const encontrado = pageHelp[`${tipo}:${clave}`];
+      if (encontrado) { mapa[clave] = toHint(encontrado); break; }
+    }
+  }
+  return mapa;
+}
+
+/** El mapa de ayuda administrada de esta pantalla, por clave de ayuda. */
+export type InterestedPartiesHelp =
+  Record<string, { restricted: false; title: null; text: string } | null>;
+
 export function interestedPartiesHint(
-  key: InterestedPartiesHelpKey
-): { restricted: false; title: null; text: string } {
+  key: InterestedPartiesHelpKey,
+  help?: InterestedPartiesHelp
+): { restricted: false; title: null; text: string } | null {
+  const administrada = help?.[key];
+  if (administrada) return administrada;
   return { restricted: false, title: null, text: INTERESTED_PARTIES_HELP[key] };
 }

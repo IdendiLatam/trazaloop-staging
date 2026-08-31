@@ -3,6 +3,7 @@ import {
   ENTRY_KIND_LABEL, interestedPartiesHint, RELEVANCE_LABEL, REVIEW_VERDICT_LABEL,
   type EntryKind, type ReviewVerdict,
 } from "@/lib/domain/quality-interested-parties";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 import type {
   AssessmentRow, RequirementRow, ReviewRow, StrategyRow,
 } from "@/lib/db/quality-interested-parties";
@@ -28,6 +29,7 @@ import { Badge, StrategyStatusBadge } from "./badges";
  */
 export function HistorySection({
   history, requirements, strategies, reviews, asOf, basePath,
+  help,
 }: {
   history: AssessmentRow[];
   requirements: RequirementRow[];
@@ -35,6 +37,8 @@ export function HistorySection({
   reviews: ReviewRow[];
   asOf: string | null;
   basePath: string;
+  /** PE-02B4 · La ayuda administrada de la pantalla, ya cargada. */
+  help?: InterestedPartiesHelp;
 }) {
   const retirados = requirements.filter((r) => r.effectiveTo !== null);
   const cerradas = strategies.filter((s) => s.effectiveTo !== null);
@@ -43,7 +47,7 @@ export function HistorySection({
     <section id="historia" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Historia</h2>
-        <SectionHint hint={interestedPartiesHint("history")} />
+        <SectionHint hint={interestedPartiesHint("history", help)} />
       </div>
 
       <form method="get" action={basePath} className="flex flex-wrap items-end gap-2 rounded-lg border border-hairline bg-surface p-4">

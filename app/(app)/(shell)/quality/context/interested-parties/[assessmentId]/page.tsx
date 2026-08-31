@@ -17,6 +17,10 @@ import {
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import { AskCopilotButton } from "@/components/domain/quality/copilot/ask-button";
 import { InterestedPartyDetail } from "@/components/domain/quality/interested-parties/detail-view";
+import { getPageHelp } from "@/lib/db/contextual-help";
+import { helpToHint } from "@/lib/domain/contextual-help";
+import { INTERESTED_PARTIES_PAGE_KEY, interestedPartiesHelpMap }
+  from "@/lib/domain/quality-interested-parties";
 import { HistorySection } from "@/components/domain/quality/interested-parties/history-section";
 
 export const metadata = { title: "Parte interesada" };
@@ -105,6 +109,12 @@ export default async function InterestedPartyDetailPage({
 
   const refLabels = await resolvePeripheralLabels(org.organizationId, refs);
 
+  // PE-02B4 · UNA consulta para toda la pantalla, sin importar cuántos botones
+  // «i» tenga. Añadir uno más no añade una consulta más.
+  const ayudaPagina = await getPageHelp(INTERESTED_PARTIES_PAGE_KEY);
+  const ayuda = interestedPartiesHelpMap(
+    ayudaPagina.status === "ok" ? ayudaPagina.help : null, helpToHint);
+
   return (
     <div className="max-w-5xl space-y-4">
       {/* Las dos puertas de salida del dominio, arriba y juntas: preguntar a
@@ -133,6 +143,7 @@ export default async function InterestedPartyDetailPage({
       </div>
 
       <InterestedPartyDetail
+        help={ayuda}
         assessment={vigente}
         history={detalle.history}
         requirements={detalle.requirements}

@@ -74,7 +74,17 @@ export default async function SelectOrgPage({
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-8 p-6">
       <header className="space-y-4">
-        <Wordmark />
+        <div className="flex items-center justify-between gap-3">
+          <Wordmark />
+          {/* PE-02B4 · También aquí: elegir empresa es de las pantallas donde
+              más fácil es quedarse sin saber qué hacer. */}
+          <Link
+            href="/faq"
+            className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
+          >
+            Ayuda
+          </Link>
+        </div>
         <div>
           <p className="eyebrow">Espacio de trabajo</p>
           <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>

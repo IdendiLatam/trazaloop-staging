@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   interestedPartiesHint, REVIEW_VERDICT_LABEL, type ReviewVerdict,
 } from "@/lib/domain/quality-interested-parties";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 import type { ReviewRow, StrategyRow } from "@/lib/db/quality-interested-parties";
 import { recordReviewAction, type IpActionState } from "@/server/actions/quality-interested-parties";
 import { SectionHint } from "@/components/ui/section-hint";
@@ -31,11 +32,14 @@ const inputClass =
  */
 export function ReviewsSection({
   assessmentId, strategies, reviews, canMutate,
+  help,
 }: {
   assessmentId: string;
   strategies: StrategyRow[];
   reviews: ReviewRow[];
   canMutate: boolean;
+  /** PE-02B4 · La ayuda administrada de la pantalla, ya cargada. */
+  help?: InterestedPartiesHelp;
 }) {
   const [estado, accion] = useActionState(recordReviewAction, inicial);
   const [veredicto, setVeredicto] = useState<ReviewVerdict>("no_changes");
@@ -45,7 +49,7 @@ export function ReviewsSection({
     <section id="revisiones" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Revisiones</h2>
-        <SectionHint hint={interestedPartiesHint("review")} />
+        <SectionHint hint={interestedPartiesHint("review", help)} />
       </div>
       <p className="text-sm text-ink-soft">
         Cuándo se volvió a mirar esta parte, qué se concluyó y cuándo toca la próxima.

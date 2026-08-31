@@ -25,7 +25,18 @@ export default async function ProfileSettingsPage() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-6 p-6">
-      <Wordmark />
+      <div className="flex items-center justify-between gap-3">
+        <Wordmark />
+        {/* PE-02B4 · Esta pantalla vive fuera del shell a propósito, así que no
+            hereda su barra superior: la entrada de ayuda se pone aquí para que
+            no desaparezca al entrar en el perfil. */}
+        <Link
+          href="/faq"
+          className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
+        >
+          Ayuda
+        </Link>
+      </div>
       <header className="space-y-1">
         <p className="eyebrow">Configuración</p>
         <h1 className="text-2xl font-semibold tracking-tight">Mi perfil</h1>

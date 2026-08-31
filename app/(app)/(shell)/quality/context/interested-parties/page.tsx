@@ -13,6 +13,10 @@ import {
   type RelevanceState, type ReviewState, type SubjectKind,
 } from "@/lib/domain/quality-interested-parties";
 import { SectionHint } from "@/components/ui/section-hint";
+import { getPageHelp } from "@/lib/db/contextual-help";
+import { helpToHint } from "@/lib/domain/contextual-help";
+import { INTERESTED_PARTIES_PAGE_KEY, interestedPartiesHelpMap }
+  from "@/lib/domain/quality-interested-parties";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import { InterestedPartiesSubnav } from "@/components/domain/quality/interested-parties/subnav";
 import { InterestedPartiesSummaryCards } from "@/components/domain/quality/interested-parties/summary-cards";
@@ -66,13 +70,17 @@ export default async function InterestedPartiesPage({
   const monitoring = await monitoringForAssessments(
     org.organizationId, pagina.rows.map((r) => r.id));
 
+  const ayudaPagina = await getPageHelp(INTERESTED_PARTIES_PAGE_KEY);
+  const ayuda = interestedPartiesHelpMap(
+    ayudaPagina.status === "ok" ? ayudaPagina.help : null, helpToHint);
+
   return (
     <div className="max-w-5xl space-y-6">
       <header className="space-y-2">
         <p className="eyebrow">Trazaloop Quality</p>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Partes interesadas</h1>
-          <SectionHint hint={interestedPartiesHint("overview")} />
+          <SectionHint hint={interestedPartiesHint("overview", ayuda)} />
         </div>
         <p className="text-sm text-ink-soft">
           Identificar, comprender y gestionar las partes interesadas y sus necesidades,

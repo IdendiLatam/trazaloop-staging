@@ -115,9 +115,13 @@ check("AJ. Las ayudas están puestas donde se necesitan, no en una sola esquina"
     const src = leer(`${COMP}/${archivo}`);
     assert(src.includes("SectionHint"), `${archivo} no usa el botón «i» compartido`);
     for (const k of claves) {
-      const directa = src.includes(`interestedPartiesHint("${k}")`);
+      // PE-02B4 · La llamada pasó a recibir también el mapa de ayuda
+      // ADMINISTRADA de la pantalla —`interestedPartiesHint("overview", ayuda)`—
+      // así que buscar la llamada exacta con un solo argumento dejó de
+      // encontrarla. La promesa no cambia: cada sección ofrece SUS ayudas.
+      const directa = new RegExp(`interestedPartiesHint\\("${k}"`).test(src);
       // Las de tipo de entrada se resuelven por variable dentro del bucle.
-      const porVariable = src.includes("interestedPartiesHint(k)");
+      const porVariable = /interestedPartiesHint\(k\b/.test(src);
       assert(directa || porVariable, `${archivo} no ofrece la ayuda «${k}»`);
     }
   }
@@ -132,12 +136,22 @@ check("AK. Se reutiliza el componente compartido, sin infraestructura nueva", ()
     const src = leer(`${COMP}/${archivo}`);
     assert(src.includes('from "@/components/ui/section-hint"'),
       `${archivo} no usa el componente compartido`);
+    // Sigue valiendo: la guía de autoría de TrazaDocs es OTRA cosa —tiene su
+    // alcance y su puerta comercial— y estos componentes no deben usarla. La
+    // ayuda contextual administrable de PE-02B4 es infraestructura distinta.
     assert(!/authoring-guidance|resolveHintForViewer/.test(src),
-      `${archivo} se enganchó a la infraestructura de guías administradas`);
+      `${archivo} se enganchó a la guía de autoría de TrazaDocs`);
   }
   // Y el hint que se entrega tiene la forma que espera el componente.
+  //
+  // PE-02B4 · La función pasa a poder devolver `null` porque ahora acepta la
+  // ayuda ADMINISTRADA: si un día una ayuda se retira desde la consola, no hay
+  // texto que enseñar y el botón «i» no se pinta, que es lo que ya hacía cuando
+  // una sección no tenía contenido. Sin ayuda administrada devuelve el texto de
+  // siempre, y eso es lo que se comprueba aquí.
   const h = interestedPartiesHint("overview");
-  assert(h.restricted === false && h.title === null && typeof h.text === "string",
+  assert(h !== null, "sin ayuda administrada debía devolver el texto de siempre");
+  assert(h!.restricted === false && h!.title === null && typeof h!.text === "string",
     "el hint no tiene la forma que espera SectionHint");
 });
 

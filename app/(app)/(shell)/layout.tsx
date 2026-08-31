@@ -117,6 +117,19 @@ export default async function ShellLayout({
             <span className="text-xs font-normal text-ink-soft">cambiar empresa</span>
           </Link>
           <div className="flex items-center gap-3">
+            {/* PE-02B4 · La ayuda, SIEMPRE visible.
+                La revisión humana de B3 encontró que al entrar desaparecía: la
+                FAQ estaba en la portada pública y en el menú lateral, pero la
+                barra superior —donde se mira cuando uno se atasca— no la tenía.
+                Va aquí, en todas las pantallas del shell, y se llama «Ayuda» y
+                no «FAQ» porque PE-03 sumará el tutorial de la pantalla y el
+                soporte al mismo sitio. */}
+            <Link
+              href="/faq"
+              className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
+            >
+              Ayuda
+            </Link>
             <ModuleSwitcher />
             <ModuleAwareSettingsLink />
             <ModuleHeaderBadge />

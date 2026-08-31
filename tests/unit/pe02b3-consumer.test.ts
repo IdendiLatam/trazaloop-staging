@@ -307,10 +307,13 @@ check("E5. El foco se ve", () => {
 console.log("\nF · El contenido sembrado");
 // ===========================================================================
 
-check("F1. Es una migración, es la 0157, y no crea esquema", () => {
-  const nuevas = readdirSync("supabase/migrations").filter((f) => /^015[7-9]|^01[6-9]\d/.test(f));
-  assert(nuevas.length === 1, `hay ${nuevas.length} migraciones nuevas: ${nuevas.join(", ")}`);
-  assert(nuevas[0].startsWith("0157_platform_faq_initial_content"), `se llama ${nuevas[0]}`);
+check("F1. PE-02B3 aportó UNA migración, y no crea esquema", () => {
+  // Contar «cuántas hay por encima de 0156» era una fotografía: PE-02B4 la
+  // rompió al añadir la ayuda contextual en 0158 sin cambiar nada de aquí.
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  const mias = migraciones.filter((f) => /faq_initial_content/i.test(f));
+  assert(mias.length === 1, `PE-02B3 aportó ${mias.length} migraciones: ${mias.join(", ")}`);
+  assert(mias[0] === "0157_platform_faq_initial_content.sql", `se llama ${mias[0]}`);
   assert(!/create table|alter table|create policy|drop policy/i.test(SQL),
     "0157 crea o cambia esquema, y solo debía sembrar contenido");
 });

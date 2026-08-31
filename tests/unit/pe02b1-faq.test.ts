@@ -53,9 +53,13 @@ check("A2. Y no creó la de ayuda contextual", () => {
   // estaba reservado a la ayuda contextual. PE-02B2 lo usó para endurecer los
   // documentos legales, así que el número dejó de ser la promesa. La promesa es
   // que la ayuda contextual sigue sin existir.
-  const ayuda = readdirSync("supabase/migrations")
-    .filter((f) => /contextual_help|help_items|page_help/i.test(f));
-  assert(ayuda.length === 0, `se creó la ayuda contextual: ${ayuda.join(", ")}`);
+  // PE-02B4 creó la ayuda contextual en 0158, que es lo previsto. Lo que esta
+  // comprobación protege es que no la creara ESTE tramo: su migración no
+  // menciona ninguna de sus tablas.
+  const ayuda = ["help_items", "help_item_revisions", "help_item_drafts"];
+  for (const t of ayuda) {
+    assert(!SQL.includes(t), `la migración de este tramo toca «${t}»`);
+  }
 });
 
 check("A3. No se tocó ninguna migración histórica", () => {

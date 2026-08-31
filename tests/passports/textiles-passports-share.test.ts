@@ -131,6 +131,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0155_platform_faq_foundation.sql",
     "0156_platform_legal_documents_hardening.sql",
     "0157_platform_faq_initial_content.sql",
+    "0158_platform_contextual_help.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

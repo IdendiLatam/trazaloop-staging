@@ -7,6 +7,7 @@ import {
   interestedPartiesHint, RELEVANCE_LABEL, RELEVANCE_STATES, SUGGESTED_METHOD, priorityView,
   type RelevanceState,
 } from "@/lib/domain/quality-interested-parties";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 import type { AssessmentRow } from "@/lib/db/quality-interested-parties";
 import { supersedeAssessmentAction, type IpActionState } from "@/server/actions/quality-interested-parties";
 import { SectionHint } from "@/components/ui/section-hint";
@@ -32,10 +33,13 @@ const inputClass =
  */
 export function AssessmentSection({
   assessment, canMutate, historyCount,
+  help,
 }: {
   assessment: AssessmentRow;
   canMutate: boolean;
   historyCount: number;
+  /** PE-02B4 · La ayuda administrada de la pantalla, ya cargada. */
+  help?: InterestedPartiesHelp;
 }) {
   const [estado, accion] = useActionState(supersedeAssessmentAction, inicial);
   const [confirmando, setConfirmando] = useState(false);
@@ -53,14 +57,14 @@ export function AssessmentSection({
     <section id="resumen" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Resumen del análisis</h2>
-        <SectionHint hint={interestedPartiesHint("overview")} />
+        <SectionHint hint={interestedPartiesHint("overview", help)} />
       </div>
 
       <dl className="grid gap-3 rounded-lg border border-hairline bg-surface p-4 sm:grid-cols-2">
         <div>
           <dt className="flex items-center gap-1 text-xs font-medium text-ink-soft">
             Pertinencia
-            <SectionHint hint={interestedPartiesHint("relevance")} />
+            <SectionHint hint={interestedPartiesHint("relevance", help)} />
           </dt>
           <dd className="mt-1"><RelevanceBadge status={assessment.relevanceStatus} /></dd>
         </div>
@@ -158,8 +162,8 @@ export function AssessmentSection({
               <legend className="px-1 text-xs font-medium text-ink">
                 <span className="inline-flex items-center gap-1">
                   Prioridad (opcional)
-                  <SectionHint hint={interestedPartiesHint("influence")} />
-                  <SectionHint hint={interestedPartiesHint("impact")} />
+                  <SectionHint hint={interestedPartiesHint("influence", help)} />
+                  <SectionHint hint={interestedPartiesHint("impact", help)} />
                 </span>
               </legend>
               <label className="block space-y-1">

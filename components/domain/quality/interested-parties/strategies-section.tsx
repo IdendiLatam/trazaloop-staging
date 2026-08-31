@@ -8,6 +8,7 @@ import {
   interestedPartiesHint, MONITORING_METHODS, MONITORING_METHOD_LABEL, STRATEGY_SCOPE_LABEL,
   strategyScope, type MonitoringMethod,
 } from "@/lib/domain/quality-interested-parties";
+import type { InterestedPartiesHelp } from "@/lib/domain/quality-interested-parties";
 import type { RequirementRow, StrategyRow } from "@/lib/db/quality-interested-parties";
 import {
   attachStrategyRequirementAction, createStrategyAction, detachStrategyRequirementAction,
@@ -39,12 +40,15 @@ const inputClass =
  */
 export function StrategiesSection({
   assessmentId, strategies, requirements, positions, canMutate,
+  help,
 }: {
   assessmentId: string;
   strategies: StrategyRow[];
   requirements: RequirementRow[];
   positions: { id: string; name: string }[];
   canMutate: boolean;
+  /** PE-02B4 · La ayuda administrada de la pantalla, ya cargada. */
+  help?: InterestedPartiesHelp;
 }) {
   const [alta, altaAction] = useActionState(createStrategyAction, inicial);
   const [alcance, setAlcance] = useState<"general" | "specific">("general");
@@ -55,7 +59,7 @@ export function StrategiesSection({
     <section id="estrategias" className="space-y-4 scroll-mt-20">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold">Estrategias</h2>
-        <SectionHint hint={interestedPartiesHint("strategy")} />
+        <SectionHint hint={interestedPartiesHint("strategy", help)} />
       </div>
       <p className="text-sm text-ink-soft">
         Qué se hace con esta parte interesada: para qué, cómo, quién responde y cada cuánto se
@@ -174,7 +178,7 @@ export function StrategiesSection({
               <label className="block space-y-1">
                 <span className="flex items-center gap-1 text-xs font-medium text-ink">
                   Método de seguimiento
-                  <SectionHint hint={interestedPartiesHint("monitoring")} />
+                  <SectionHint hint={interestedPartiesHint("monitoring", help)} />
                 </span>
                 <select name="monitoring_method" className={inputClass} defaultValue="">
                   <option value="">Sin definir</option>

@@ -103,6 +103,15 @@ export default async function ModulesPortalPage() {
       <header className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Wordmark />
+          <div className="flex flex-wrap items-center gap-3">
+            {/* PE-02B4 · La ayuda, también en la puerta: es la primera pantalla
+                que se ve al entrar, y es donde más se pregunta «¿y esto?». */}
+            <Link
+              href="/faq"
+              className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
+            >
+              Ayuda
+            </Link>
           {activeOrg ? (
             <Link
               href="/select-org"
@@ -113,6 +122,7 @@ export default async function ModulesPortalPage() {
               <span className="text-xs font-normal text-ink-soft">cambiar empresa</span>
             </Link>
           ) : null}
+          </div>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">Trazaloop</h1>
         <p className="max-w-2xl text-sm text-ink-soft">{PLATFORM_TAGLINE}</p>
