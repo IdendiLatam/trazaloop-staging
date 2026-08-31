@@ -27,6 +27,7 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-02B4 | La ayuda contextual · 11 ayudas | 0158 | **cerrado** |
 | PE-02B5A | Los borradores de seguridad, privacidad e IA | — | **cerrado** |
 | PE-02B6 | Consolidación y preparación de la revisión | — | **cerrado** |
+| PE-02B6.1 | El paquete editorial, para revisar sin consola | — | **cerrado** |
 | PE-02B5B | **Publicación** | — | **NO EMPEZADO** |
 
 ### El estado de PE-02, en dos líneas
@@ -38,9 +39,14 @@ Lo que está listo y no se ve: la sucesora de la política de privacidad
 (`v1.1-draft`) y quince respuestas de seguridad. Todo en borrador, a propósito.
 
 Lo que abre la puerta de B5B está en
-[`PE_02B6_B5B_PUBLICATION_PLAN.md`](PE_02B6_B5B_PUBLICATION_PLAN.md); lo que hay
-que revisar, en
-[`PE_02B6_HUMAN_REVIEW_PACKAGE.md`](PE_02B6_HUMAN_REVIEW_PACKAGE.md).
+[`PE_02B6_B5B_PUBLICATION_PLAN.md`](PE_02B6_B5B_PUBLICATION_PLAN.md).
+
+Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
+
+- **con consola** — [`PE_02B6_HUMAN_REVIEW_PACKAGE.md`](PE_02B6_HUMAN_REVIEW_PACKAGE.md),
+  un recorrido de una hora por las pantallas;
+- **sin consola** — [`PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md`](PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md),
+  el texto exacto de la política y de las quince respuestas, con hoja de decisión.
 
 ---
 

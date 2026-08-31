@@ -31,7 +31,13 @@ En Local y en Staging. Se revisan en `/platform/faq` filtrando por esa categorí
 lo que el repositorio no puede saber — y bloqueadas de verdad: el intento de
 publicarlas está probado y falla.
 
-Nueve públicas y seis con sesión. Las públicas son las que alguien consulta
+> **Actualización del 31 de agosto de 2026 (PE-02B6).** Las dos confirmaciones
+> llegaron, las dos negativas, y las dos respuestas pasaron a
+> `verified_with_qualifier`. **Ya no están bloqueadas**: las quince podrían
+> publicarse. Siguen en borrador porque publicar es de B5B y depende de la
+> aprobación editorial. Ver [`PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md`](PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md).
+
+Diez públicas y cinco con sesión. Las públicas son las que alguien consulta
 **antes** de decidir si confía; las de sesión hablan del uso diario.
 
 ---

@@ -49,7 +49,7 @@ borrara al editar, la base rechazaría publicarlas.
 ### Paso 4 · Comprobar que la categoría aparece
 
 Al publicar la primera pública, **Seguridad y privacidad** empieza a ofrecerse en
-`/faq`: las categorías sin contenido no se muestran. Nueve son públicas y seis
+`/faq`: las categorías sin contenido no se muestran. Diez son públicas y cinco
 exigen sesión, así que un visitante verá menos que alguien dentro.
 
 ### Paso 5 · Humo humano final de PE-02

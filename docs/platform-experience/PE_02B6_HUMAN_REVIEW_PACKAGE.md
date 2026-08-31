@@ -6,6 +6,12 @@ está reunida aquí para que se pueda tomar de una vez en lugar de en cinco rato
 **Calcula una hora.** Los puntos A–D son de uso; los E–H son de texto y son los
 que de verdad hay que leer despacio.
 
+> **Esta guía supone que se puede entrar a la consola de Staging.** Si no se
+> puede, [`PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md`](PE_02B6_1_HUMAN_EDITORIAL_REVIEW.md)
+> trae el texto exacto de todo lo que hay que revisar y una hoja de decisión, sin
+> necesidad de entrar a ninguna pantalla. Los puntos A y B —cómo se sienten las
+> consolas— siguen exigiendo la consola; el resto no.
+
 ---
 
 ## Antes de empezar
