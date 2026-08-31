@@ -31,6 +31,27 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-02B6.2 | Correcciones editoriales y pintado del texto legal | — | **cerrado** |
 | PE-02B5B | **Publicación en Staging** | — | **cerrado** · 2026-08-31 |
 
+---
+
+## PE-03 · Tutoriales y bienvenida audiovisual
+
+| Tramo | Qué hizo | Migración | Estado |
+|---|---|---|---|
+| PE-03A | Descubrimiento, arquitectura de medios y congelación de UX | — | **cerrado** · pendiente de revisión humana |
+| PE-03B1 | Datos, cubo y RLS | 1 prevista | no empezado |
+| PE-03B2 | La consola de tutoriales | — | no empezado |
+| PE-03B3 | El botón y el reproductor | — | no empezado |
+| PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
+| PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+
+Los seis documentos de PE-03A:
+[descubrimiento](PE_03A_TUTORIAL_DISCOVERY.md) ·
+[almacenamiento](PE_03A_MEDIA_STORAGE_ARCHITECTURE.md) ·
+[versionado](PE_03A_TUTORIAL_VERSIONING.md) ·
+[bienvenida](PE_03A_WELCOME_ONBOARDING.md) ·
+[cobertura](PE_03A_PAGE_KEY_COVERAGE.md) ·
+[pruebas](PE_03A_TEST_STRATEGY.md).
+
 ### El estado de PE-02, en dos líneas
 
 > **PE-02: CERRADO en Staging.**
