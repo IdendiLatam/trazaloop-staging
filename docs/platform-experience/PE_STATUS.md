@@ -1,9 +1,9 @@
 # Experiencia de plataforma · dónde está cada cosa
 
-Una sola página para no tener que abrir los ochenta y nueve documentos de
+Una sola página para no tener que abrir los ciento ocho documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-03.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04A.*
 
 ---
 
@@ -123,6 +123,40 @@ Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 
 Y lo que se corrigió después de aquella revisión, en
 [`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md).
+
+---
+
+## PE-04 · Planes, límites y uso
+
+| Tramo | Qué hizo | Migración | Estado |
+|---|---|---|---|
+| PE-04A | Descubrimiento y arquitectura comercial · 36 decisiones | — | **cerrado** · 2026-09-01 · pendiente de revisión humana |
+| PE-04B1…B6 | Implementación | previstas | no empezado |
+
+Los diez de PE-04A:
+[descubrimiento](PE_04A_CURRENT_PLAN_DISCOVERY.md) ·
+[Demo y Free](PE_04A_DEMO_FREE_ARCHITECTURE.md) ·
+[catálogo y revisiones](PE_04A_PLAN_REVISION_MODEL.md) ·
+[almacenamiento](PE_04A_STORAGE_USAGE_ARCHITECTURE.md) ·
+[inteligencia](PE_04A_AI_USAGE_ARCHITECTURE.md) ·
+[uso diario](PE_04A_DAILY_USE_ARCHITECTURE.md) ·
+[soporte](PE_04A_SUPPORT_ENTITLEMENTS.md) ·
+[migración de empresas](PE_04A_EXISTING_ORG_MIGRATION.md) ·
+[seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
+[pruebas](PE_04A_TEST_STRATEGY.md).
+Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### El defecto Full → «Plan Demo · 50 MB», con causa
+
+> **Reproducido, y no es cosmético del todo.** Hay **dos** fuentes de verdad de
+> plan: `organization_modules.access_mode` —que es la autoridad desde T9F.1 y la
+> que aplica el servidor— y `organization_subscriptions.plan_code`, que
+> `create_organization` deja en `demo` y **nadie vuelve a tocar**. La vista de
+> uso lee la segunda, y de ahí salen «Plan Demo» y los 50 MB.
+>
+> **La cuota que se aplica de verdad es la correcta** (`begin_cpr_storage_upload`
+> lee el `access_mode` del módulo). Lo que está mal es lo que se enseña. En la
+> base local, **el 100 % de las empresas** tiene las dos fuentes en desacuerdo.
 
 ---
 
