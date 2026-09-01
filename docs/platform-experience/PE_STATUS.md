@@ -1,9 +1,9 @@
 # Experiencia de plataforma · dónde está cada cosa
 
-Una sola página para no tener que abrir los ciento ocho documentos de
+Una sola página para no tener que abrir los ciento quince documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04A.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B1.*
 
 ---
 
@@ -131,7 +131,17 @@ Y lo que se corrigió después de aquella revisión, en
 | Tramo | Qué hizo | Migración | Estado |
 |---|---|---|---|
 | PE-04A | Descubrimiento y arquitectura comercial · 36 decisiones | — | **cerrado** · 2026-09-01 · pendiente de revisión humana |
-| PE-04B1…B6 | Implementación | previstas | no empezado |
+| PE-04B1 | Catálogo canónico, revisiones y resolutor en sombra | **0162** | **cerrado** · 2026-09-01 |
+| PE-04B2…B6 | Migración de empresas y aplicación de límites | previstas | no empezado |
+
+Los siete de PE-04B1:
+[catálogo](PE_04B1_PLAN_CATALOG.md) ·
+[revisiones y precio](PE_04B1_PLAN_REVISIONS.md) ·
+[asignaciones](PE_04B1_ASSIGNMENT_MODEL.md) ·
+[resolutor](PE_04B1_EFFECTIVE_RESOLVER.md) ·
+[la prueba](PE_04B1_TRIAL_MODEL.md) ·
+[comparación en sombra](PE_04B1_SHADOW_COMPARISON.md) ·
+[pruebas](PE_04B1_TEST_MATRIX.md).
 
 Los diez de PE-04A:
 [descubrimiento](PE_04A_CURRENT_PLAN_DISCOVERY.md) ·
@@ -145,6 +155,25 @@ Los diez de PE-04A:
 [seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
 [pruebas](PE_04A_TEST_STRATEGY.md).
 Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### PE-04B1 · los cimientos, en paralelo
+
+> **0162 no cambia el comportamiento de ninguna empresa.** Ni una. Crea el
+> catálogo canónico —`free`, `full`, `extra`—, las revisiones inmutables, las
+> asignaciones con vigencia y un resolutor que devuelve **tres** respuestas:
+> `found`, `absent` y **`unavailable`**.
+>
+> Los valores se **copiaron** del catálogo de hoy, byte a byte: Free hereda los
+> límites del `demo` legacy, y Full y Extra los suyos. El precio de Full queda en
+> 4000/40000 céntimos **antes de impuestos**; el de Extra, explícitamente **sin
+> configurar**, que no es lo mismo que gratis.
+>
+> La autoridad sigue en el modelo de hoy. Cambiarla es **PE-04B2**, y antes hay
+> que mirar el informe de la [comparación en sombra](PE_04B1_SHADOW_COMPARISON.md):
+> en la base local, **15 de 20 filas** tienen las dos fuentes viejas en
+> desacuerdo.
+
+---
 
 ### El defecto Full → «Plan Demo · 50 MB», con causa
 
@@ -227,8 +256,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0161** |
-| Staging | **0161** |
+| Local | **0162** |
+| Staging | **0162** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

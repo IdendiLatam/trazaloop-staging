@@ -154,16 +154,23 @@ check("D3. El guion de la bienvenida dice qué NO incluir", () => {
 console.log("\nE · Producción sigue donde estaba");
 // ===========================================================================
 
-check("E1. Ninguna migración nueva por encima de 0161", () => {
-  const migraciones = readdirSync("supabase/migrations")
-    .filter((f) => f.endsWith(".sql")).map((f) => f.slice(0, 4)).sort();
-  const cabecera = migraciones[migraciones.length - 1];
-  assert(cabecera === "0161", `la cabecera es ${cabecera} y se esperaba 0161`);
+check("E1. PE-03 no añadió ninguna migración por encima de 0161", () => {
+  // Comprobaba que la cabecera FUERA 0161, que es una fotografía: PE-04B1
+  // añadió 0162 sin tocar nada de PE-03 y la rompió sin razón.
+  //
+  // Lo que sigue siendo promesa es que PE-03 cerró en 0161: ninguna migración
+  // posterior lleva su nombre.
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  assert(migraciones.some((f) => f.startsWith("0161")), "desapareció 0161");
+  const posteriores = migraciones.filter((f) => f.slice(0, 4) > "0161");
+  const dePe03 = posteriores.filter((f) => /tutorial|welcome|pe03/i.test(f));
+  assert(dePe03.length === 0,
+    `hay migraciones de PE-03 por encima de 0161: ${dePe03.join(", ")}`);
 });
 
-check("E2. Y el estado declara las tres cabeceras", () => {
-  assert(/\| Local \| \*\*0161\*\* \|/.test(ESTADO), "PE_STATUS no dice Local 0161");
-  assert(/\| Staging \| \*\*0161\*\* \|/.test(ESTADO), "PE_STATUS no dice Staging 0161");
+check("E2. Y el estado declara Producción en 0111", () => {
+  // Local y Staging avanzan con cada tramo; Producción es la que no se toca, y
+  // es la única cabecera que este cierre puede seguir afirmando.
   assert(/\| Producción \| \*\*0111\*\* \|/.test(ESTADO), "PE_STATUS no dice Producción 0111");
 });
 
