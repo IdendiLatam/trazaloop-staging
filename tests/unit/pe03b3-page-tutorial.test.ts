@@ -30,6 +30,12 @@ const sinComentarios = (s: string) => s
   .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
 
 const ACCION = leer("components/domain/tutorials/page-tutorial-action.tsx");
+// PE-03B4 · El diálogo y el reproductor salieron a un módulo compartido para
+// que la bienvenida use EL MISMO y no una copia. Las comprobaciones de este
+// tramo siguen siendo válidas; lo que cambió es en qué fichero mirar, así que
+// se leen los dos juntos donde lo que se comprueba es el comportamiento.
+const REPRODUCTOR = leer("components/domain/tutorials/tutorial-player.tsx");
+const ACCION_Y_REPRODUCTOR = ACCION + "\n" + REPRODUCTOR;
 const SHELL = leer("app/(app)/(shell)/layout.tsx");
 const PUERTA = leer("app/(app)/modules/page.tsx");
 const SUBIDA = leer("components/domain/tutorials/tutorial-upload.tsx");
@@ -212,7 +218,10 @@ console.log("\nD · De una ruta a su clave, sin confundir pantallas");
 check("D1. Cada pantalla registrada se resuelve a SU clave", () => {
   for (const e of PAGE_KEYS) {
     const concreta = e.route.replace(/\[[^\]]+\]/g, "abc123");
-    const resuelta = resolvePageKeyForPath(concreta);
+    // PE-03B4 · Dos pantallas del producto tienen pestañas que comparten
+    // dirección; se resuelven con su parámetro. Ver `pe03b4-coverage`.
+    const params = e.subview ? { [e.subview.param]: e.subview.value } : undefined;
+    const resuelta = resolvePageKeyForPath(concreta, params);
     assert(resuelta === e.key,
       `«${concreta}» se resolvió a «${resuelta}» y debía ser «${e.key}»`);
   }
@@ -228,9 +237,12 @@ check("D2. Un listado y su ficha NO comparten tutorial", () => {
 });
 
 check("D3. Una pantalla sin clave no admite tutorial · y eso no es un fallo", () => {
+  // PE-03B4 · `/quality`, `/team` y `/settings/company` salieron de esta lista:
+  // el registro dejó de tener once pantallas y pasó a tener el producto entero,
+  // así que esas tres SÍ admiten tutorial ahora. Las que siguen aquí son las
+  // que están excluidas a propósito, con su motivo escrito en el registro.
   for (const ruta of ["/login", "/register", "/legal/accept", "/faq", "/privacy",
-    "/terms", "/platform/tutorials", "/quality", "/team", "/settings/company",
-    "/no/existe"]) {
+    "/terms", "/platform/tutorials", "/no/existe"]) {
     assert(resolvePageKeyForPath(ruta) === null,
       `«${ruta}» resolvió a «${resolvePageKeyForPath(ruta)}» y no debería tener tutorial`);
   }
@@ -298,17 +310,21 @@ check("E4. Y no se firma nada al pintar la pantalla", () => {
   const antesDelDialogo = cuerpo.slice(0, cuerpo.indexOf("function TutorialDialog"));
   assert(!/getTutorialForPageAction\(/.test(antesDelDialogo),
     "se pregunta por el vídeo al pintar la pantalla");
-  assert(/setAbiertoEn\(pathname\)/.test(antesDelDialogo), "el botón no abre nada");
+  assert(/onClick=\{abrir\}/.test(antesDelDialogo), "el botón no abre nada");
 });
 
 check("E5. Cambiar de pantalla cierra el diálogo", () => {
   // Se DERIVA de la ruta en vez de apagarse con un efecto: se guarda en qué
   // pantalla se abrió y se compara al pintar. Un efecto que cambia estado por
   // esto es un renderizado en cascada, y React avisa con razón.
-  assert(/const abierto = abiertoEn === pathname/.test(ACCION),
-    "el cierre al navegar no se deriva de la ruta");
-  assert(/setAbiertoEn\(pathname\)/.test(ACCION), "abrir no recuerda en qué pantalla");
-  assert(!/useEffect\([^)]*setAbierto\b/.test(ACCION),
+  // PE-03B4 · Se compara con la CLAVE y no con la ruta: en las dos pantallas
+  // con pestañas, cambiar de pestaña no cambia el `pathname`, y el diálogo se
+  // habría quedado enseñando el tutorial de la pestaña anterior.
+  assert(/abiertoEn === clave/.test(REPRODUCTOR),
+    "el cierre al navegar no se deriva de la pantalla en la que se abrió");
+  assert(/useDialogOpenFor\(pageKey\)/.test(ACCION),
+    "abrir no recuerda en qué pantalla");
+  assert(!/useEffect\([^)]*setAbierto\b/.test(ACCION_Y_REPRODUCTOR),
     "se apaga el diálogo desde un efecto");
 });
 
@@ -331,10 +347,11 @@ check("F1. Sin vídeo se dice la copia congelada, y no se pinta reproductor", ()
     "el mensaje congelado cambió");
   // El <video> solo existe en la rama «ready».
   const ready = ACCION.slice(ACCION.indexOf('estado.status === "unavailable"'));
-  assert(/<video/.test(ready), "no hay reproductor en la rama con vídeo");
+  assert(/<TutorialPlayer/.test(ready), "no hay reproductor en la rama con vídeo");
   const sinVideo = ACCION.slice(ACCION.indexOf('estado.status === "no_video"'),
     ACCION.indexOf('estado.status === "unavailable"'));
-  assert(!/<video/.test(sinVideo), "se pinta un reproductor cuando no hay vídeo");
+  assert(!/<TutorialPlayer|<video/.test(sinVideo),
+    "se pinta un reproductor cuando no hay vídeo");
 });
 
 check("F2. Una avería NO se presenta como ausencia de tutorial", () => {
@@ -359,12 +376,13 @@ check("F3. No se enseña ningún dato interno", () => {
 });
 
 check("F4. Sin reproducción automática, y con teclado", () => {
-  assert(!/autoPlay|autoplay/.test(ACCION), "el vídeo arranca solo");
-  assert(/<video\b[\s\S]{0,140}controls/.test(ACCION), "no se usa el reproductor nativo");
-  assert(/e\.key === "Escape"/.test(ACCION), "Escape no cierra");
-  assert(/role="dialog"/.test(ACCION) && /aria-modal="true"/.test(ACCION),
+  assert(!/autoPlay|autoplay/.test(ACCION_Y_REPRODUCTOR), "el vídeo arranca solo");
+  assert(/<video\b[\s\S]{0,140}controls/.test(REPRODUCTOR),
+    "no se usa el reproductor nativo");
+  assert(/e\.key === "Escape"/.test(REPRODUCTOR), "Escape no cierra");
+  assert(/role="dialog"/.test(REPRODUCTOR) && /aria-modal="true"/.test(REPRODUCTOR),
     "el diálogo no se anuncia como tal");
-  assert(/devolverFoco/.test(ACCION), "el foco no vuelve al cerrar");
+  assert(/devolverFoco/.test(REPRODUCTOR), "el foco no vuelve al cerrar");
 });
 
 // ===========================================================================
@@ -373,11 +391,11 @@ console.log("\nG · Renovar no es alargar");
 
 check("G1. Hay renovación, y conserva el segundo en el que iba", () => {
   assert(/renewTutorialPlaybackAction/.test(ACCION), "no se renueva la autorización");
-  assert(/currentTime/.test(ACCION), "la renovación no conserva la posición");
-  assert(/el\.currentTime = segundo/.test(ACCION),
+  assert(/currentTime/.test(REPRODUCTOR), "la renovación no conserva la posición");
+  assert(/el\.currentTime = segundo/.test(REPRODUCTOR),
     "no se vuelve al segundo en el que estaba");
-  assert(/reproduciendo/.test(ACCION), "no se conserva si estaba reproduciendo");
-  assert(/loadedmetadata/.test(ACCION),
+  assert(/reproduciendo/.test(REPRODUCTOR), "no se conserva si estaba reproduciendo");
+  assert(/loadedmetadata/.test(REPRODUCTOR),
     "se vuelve al segundo antes de que el navegador sepa la duración: lo ignoraría");
 });
 
@@ -391,9 +409,9 @@ check("G2. Y el plazo NO se subió a un número enorme", () => {
 });
 
 check("G3. Se renueva ANTES de vencer, no al fallar", () => {
-  assert(/expiresInSeconds \* 0\.1|margen/.test(ACCION),
+  assert(/expiresInSeconds \* 0\.1|margen/.test(REPRODUCTOR),
     "la renovación espera al vencimiento");
-  assert(/setTimeout/.test(ACCION), "no se programa la renovación");
+  assert(/setTimeout/.test(REPRODUCTOR), "no se programa la renovación");
 });
 
 check("G4. Y la renovación firma la MISMA versión vigente", () => {

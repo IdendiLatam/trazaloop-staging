@@ -30,6 +30,7 @@ import { getPostAuthDestinationAction } from "@/server/actions/team";
 import { moduleEntryDestinationPath } from "@/lib/domain/team";
 import { Wordmark } from "@/components/layout/logo";
 import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
+import { WelcomeVideo } from "@/components/domain/tutorials/welcome-video";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { getActiveOrgModuleStatuses, getDemoTrialSummary } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
@@ -50,7 +51,7 @@ import {
 export const metadata = { title: "Módulos · Trazaloop" };
 
 export default async function ModulesPortalPage() {
-  await requireSession();
+  const { user } = await requireSession();
   await requireLegalAcceptance("/modules");
 
   const activeOrg = await getActiveOrganization();
@@ -101,6 +102,18 @@ export default async function ModulesPortalPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
+      {/* PE-03B4 · La bienvenida, y SOLO aquí.
+          Esta es la primera pantalla normal después de entrar, y las puertas
+          obligatorias ya quedaron atrás: `requireLegalAcceptance` está arriba, y
+          se exige además empresa activa para no tapar el selector con un vídeo.
+
+          Montarlo en cada pantalla de cada módulo lo habría hecho reaparecer al
+          navegar, que es la forma de convertir un saludo en una molestia.
+
+          Si no hay vídeo publicado, si la persona pidió no volver a verlo o si
+          algo falla, el componente no pinta nada. La bienvenida acompaña; no es
+          una puerta que haya que cruzar. */}
+      {activeOrg ? <WelcomeVideo userId={user.id} /> : null}
       <header className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Wordmark />

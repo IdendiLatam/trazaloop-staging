@@ -399,10 +399,21 @@ check("J1. La consola no pinta el botón de las pantallas de producto", () => {
     "el shell escribe el botón a mano en vez de usar el componente");
 });
 
-check("J2. Sin ventana de bienvenida · eso es B4", () => {
-  const puerta = leer("app/(app)/modules/page.tsx");
-  assert(!/welcome|bienvenida/i.test(sinComentarios(puerta)),
-    "la puerta ya muestra la bienvenida: eso es B4");
+check("J2. La consola no monta la ventana de bienvenida", () => {
+  // Esto comprobaba que la puerta NO mostrara la bienvenida, porque en PE-03B2
+  // todavía no existía. PE-03B4 la construyó y la puso justo ahí, así que
+  // exigir su ausencia sería comprobar el calendario.
+  //
+  // La frontera que sigue siendo real es la de siempre: la consola ADMINISTRA
+  // el vídeo de bienvenida y no lo enseña. Ninguno de sus ficheros lo monta.
+  for (const src of [LISTA, FICHA, FORMS, SUBIDA]) {
+    assert(!/WelcomeVideo/.test(sinComentarios(src)),
+      "la consola monta la ventana de bienvenida");
+  }
+  // Y sigue administrándolo: la identidad de bienvenida se sube y se publica
+  // desde aquí, como cualquier otra.
+  assert(/welcome/i.test(sinComentarios(LISTA)),
+    "la consola dejó de distinguir el vídeo de bienvenida");
 });
 
 check("J3. Sin preferencias por persona · eso es B4", () => {

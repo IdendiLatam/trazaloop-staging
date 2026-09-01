@@ -1,5 +1,19 @@
 # PE-03B3 · Qué pantallas tienen tutorial, y qué pasa con las demás
 
+> **SUPERSEDED POR PE-03B4 · 31 de agosto de 2026**
+>
+> Este documento describe el registro de **once pantallas** y explica por qué en
+> aquel momento eran once. El propietario del producto pidió después el producto
+> entero, y PE-03B4 lo llevó a **152 claves sobre 150 rutas**, con 37 pantallas
+> excluidas a propósito.
+>
+> El texto se conserva tal como se escribió: la resolución de ruta a clave que
+> describe sigue siendo la que rige, y la explicación de por qué once era una
+> primera ola es lo que da sentido a lo que vino después. La cobertura de hoy
+> está en
+> [PE_03B4_COMPLETE_TUTORIAL_COVERAGE.md](PE_03B4_COMPLETE_TUTORIAL_COVERAGE.md).
+
+
 El registro de claves tiene **once entradas**. El shell tiene **147 pantallas**.
 Ese hueco no es un descuido: es la decisión, y este documento la explica.
 

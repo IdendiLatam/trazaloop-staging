@@ -176,7 +176,7 @@ renovación firma la versión vigente y no una que se le pida.
 |---|---|
 | `npm run test:all` | **EXIT 0** |
 | `npx tsc --noEmit` | **EXIT 0** |
-| `npm run lint` | **0 errores, 0 avisos** |
+| `npm run lint` | **0 errores** (68 avisos heredados, ninguno nuevo) |
 | `npm run build` | **EXIT 0** |
 | Reejecución limpia `0001 → 0160` | **0 fallos**, cabecera 0160, 152 migraciones |
 | Suites de base de PE-03B1 · B2 · B3 | 15 + 15 + 15 + 18 + 10 + 11 + 13 en verde |

@@ -66,6 +66,17 @@ export default async function PlatformLayout({
           >
             Ayuda del producto
           </Link>
+          {/* PE-03B4 · GAP 1 · Faltaba, y era una omisión de verdad.
+              PE-03B2 añadió «Tutoriales» al menú del shell de empresa
+              (PLATFORM_GROUP) y se olvidó de este, que es el menú de la propia
+              consola. Resultado: quien estaba administrando la plataforma no
+              tenía por dónde llegar a los tutoriales sin escribir la URL. */}
+          <Link
+            href="/platform/tutorials"
+            className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            Tutoriales
+          </Link>
           <Link
             href="/platform/legal"
             className="block rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-white/10"

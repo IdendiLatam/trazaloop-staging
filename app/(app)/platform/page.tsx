@@ -105,6 +105,40 @@ export default async function PlatformPage() {
           detalle vive en /platform/support y en cada empresa (Ver
           implementación) para no duplicar el motor de tickets. */}
 
+      {/* PE-03B4 · GAP 1 · Las consolas de contenido, a la vista.
+          Existían las cinco y ninguna se nombraba en esta página: para llegar a
+          los tutoriales había que encontrarlos en la barra lateral o saberse la
+          dirección. Un panel que no enseña sus destinos obliga a recordarlos. */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Contenido de la plataforma</h2>
+        <p className="text-sm text-ink-soft">
+          Lo que Trazaloop publica para todas las empresas.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            { href: "/platform/tutorials", title: "Tutoriales",
+              hint: "Los vídeos de cada pantalla y el de bienvenida." },
+            { href: "/platform/faq", title: "Preguntas frecuentes",
+              hint: "Las respuestas que ve cualquiera, dentro y fuera." },
+            { href: "/platform/help", title: "Ayuda del producto",
+              hint: "La ayuda contextual de cada pantalla." },
+            { href: "/platform/legal", title: "Documentos legales",
+              hint: "Términos y política de privacidad, con su historia." },
+            { href: "/platform/trazadocs", title: "Estructuras TrazaDocs",
+              hint: "Las plantillas documentales que heredan las empresas." },
+          ].map((c) => (
+            <Link
+              key={c.href}
+              href={c.href}
+              className="block rounded-lg border border-hairline bg-surface p-4 hover:border-loop"
+            >
+              <span className="block text-sm font-semibold text-ink">{c.title}</span>
+              <span className="mt-1 block text-xs text-ink-soft">{c.hint}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {/* 5. Accesos rápidos + personal de plataforma. */}
       <section className="space-y-3">
         <h2 className="eyebrow">Personal de plataforma</h2>

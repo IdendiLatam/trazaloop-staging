@@ -1,9 +1,9 @@
 # Experiencia de plataforma · dónde está cada cosa
 
-Una sola página para no tener que abrir los ochenta y dos documentos de
+Una sola página para no tener que abrir los ochenta y nueve documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 31 de agosto de 2026, al cierre de PE-03B3.*
+*Actualizado el 31 de agosto de 2026, al cierre de PE-03B4.*
 
 ---
 
@@ -42,8 +42,17 @@ Una sola página para no tener que abrir los ochenta y dos documentos de
 | PE-03B2 | La consola de tutoriales | — | **cerrado** · 2026-08-31 |
 | — | Incidente de la sonda de QA en Staging: [informe](PE_03_QA_PROBE_INCIDENT.md) | — | **corregido** · 2026-08-31 |
 | PE-03B3 | El botón y el reproductor · **el tope de tamaño, revocado** | **0160** | **cerrado** · 2026-08-31 · pendiente de prueba humana |
-| PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
+| PE-03B4 | Bienvenida, preferencia por persona · **cobertura completa y acceso de plataforma** | **0161** | **cerrado** · 2026-08-31 · pendiente de prueba humana |
 | PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+
+Los siete de PE-03B4:
+[bienvenida](PE_03B4_WELCOME_VIDEO.md) ·
+[preferencias de persona](PE_03B4_USER_PREFERENCES.md) ·
+[cobertura completa](PE_03B4_COMPLETE_TUTORIAL_COVERAGE.md) ·
+[acceso del personal de plataforma](PE_03B4_PLATFORM_STAFF_ACCESS.md) ·
+[retirada de qa-a](PE_03B4_SUPERADMIN_RETIREMENT.md) ·
+[pruebas](PE_03B4_TEST_MATRIX.md) ·
+[revisión humana](PE_03B4_HUMAN_VALIDATION.md).
 
 Los siete de PE-03B3:
 [el tutorial de pantalla](PE_03B3_PAGE_TUTORIAL_EXPERIENCE.md) ·
@@ -108,6 +117,18 @@ Y lo que se corrigió después de aquella revisión, en
 
 ---
 
+### La cobertura de tutoriales, completa
+
+> **De 11 pantallas a 152.** Cada pantalla funcional de Quality, PCR y Textiles
+> puede tener su vídeo; las 37 que no, están excluidas con su motivo escrito.
+
+Que una pantalla no tenga vídeo **no es un fallo**: el tramo hizo posible
+grabarlos, no los grabó. Una prueba recorre `app/` y falla si nace una pantalla
+que nadie clasificó, así que esto no se puede quedar viejo en silencio. El
+detalle, en [`PE_03B4_COMPLETE_TUTORIAL_COVERAGE.md`](PE_03B4_COMPLETE_TUTORIAL_COVERAGE.md).
+
+---
+
 ### El tope de tamaño de los tutoriales, revocado
 
 > **PE-03B1 congeló 200 MB por archivo. PE-03B3 lo revocó, y no lo sustituyó
@@ -136,6 +157,9 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 | ¿Hay una duración máxima por vídeo? | **respondida** · no · 2026-08-31 |
 | ¿Ver un tutorial depende del plan contratado? | **respondida** · no · 2026-08-31 |
 | ¿Entró `idendilatam@gmail.com` al Preview? | **abierta** · bloquea revocar `qa-a` |
+| ¿Se autoriza retirar a `qa-a`? | **respondida** · sí · 2026-08-31 |
+| ¿«No volver a mostrar» sobrevive a una versión nueva? | **respondida** · sí · 2026-08-31 |
+| ¿Cerrar la bienvenida la suprime para siempre? | **respondida** · no · solo la sesión |
 
 ---
 
@@ -143,8 +167,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0160** |
-| Staging | **0160** |
+| Local | **0161** |
+| Staging | **0161** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
@@ -157,10 +181,10 @@ un paso de B5B: es una decisión aparte que empieza por aplicar 49 migraciones.
 - [`PE_02B6_DEFERRED_HELP_BACKLOG.md`](PE_02B6_DEFERRED_HELP_BACKLOG.md) — las
   siete familias de pantalla sin ayuda contextual administrada, y por qué no se
   inventó contenido para ellas.
-- PE-03B4 · la ventana de bienvenida y la preferencia por persona. No empieza
-  hasta que la prueba humana de PE-03B3 esté hecha.
-- Revocar `qa-a@trazaloop-staging.local`. Sigue activo a propósito: es la puerta
-  de repuesto hasta que se confirme que `idendilatam@gmail.com` entra bien.
-- PE-03B5 · cobertura. Hoy hay tutoriales posibles en **11** de las 147
-  pantallas del shell; ver
-  [`PE_03B3_PAGE_KEY_COVERAGE.md`](PE_03B3_PAGE_KEY_COVERAGE.md).
+- **Retirar `qa-a@trazaloop-staging.local`.** La operación está escrita, probada
+  y **no ejecutada**: necesita credenciales de Staging que no viven en el
+  repositorio. Ver
+  [`PE_03B4_SUPERADMIN_RETIREMENT.md`](PE_03B4_SUPERADMIN_RETIREMENT.md).
+- **Grabar los vídeos.** Hay 152 pantallas listas para recibir uno y ninguna lo
+  tiene todavía. Es trabajo editorial, no técnico.
+- PE-03B5 · endurecimiento. La cobertura ya no está pendiente: la cerró B4.

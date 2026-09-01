@@ -189,8 +189,15 @@ check("C2. Sus claves empiezan por un módulo canónico", () => {
 check("C3. La ruta es informativa, no identidad", () => {
   assert(/no forma parte de la identidad/.test(REGISTRO),
     "el registro no dice que la ruta es informativa");
-  const claves = [...REGISTRO.matchAll(/key: "([a-z0-9_.]+)"/g)].map((m) => m[1]);
-  const rutas = [...REGISTRO.matchAll(/route: "([^"]+)"/g)].map((m) => m[1]);
+  // PE-03B4 · Se lee SOLO el bloque de PAGE_KEYS. El fichero tiene ahora una
+  // segunda lista —las pantallas excluidas a propósito—, y esas declaran ruta
+  // sin clave: contarlas juntas daría 187 rutas para 152 claves y haría fallar
+  // esta comprobación por una razón que no tiene nada que ver con lo que mide.
+  const BLOQUE = REGISTRO.slice(
+    REGISTRO.indexOf("export const PAGE_KEYS"),
+    REGISTRO.indexOf("export function resolvePageKeyForPath"));
+  const claves = [...BLOQUE.matchAll(/key: "([a-z0-9_.]+)"/g)].map((m) => m[1]);
+  const rutas = [...BLOQUE.matchAll(/route: "([^"]+)"/g)].map((m) => m[1]);
   assert(claves.length === rutas.length, "no todas las pantallas declaran su ruta");
   // Que una clave sencilla coincida con su ruta es natural y no prueba nada.
   // Lo que se comprueba es que la clave NO SE DERIVE de la ruta: si lo hiciera,

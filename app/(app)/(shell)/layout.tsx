@@ -14,6 +14,7 @@ import { AppNav } from "@/components/layout/nav";
 import { ModuleHeaderBadge, ModuleAwareSettingsLink, ModuleSwitcher } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
 import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
+import { PlatformTutorialsLink } from "@/components/domain/tutorials/platform-tutorials-link";
 import Link from "next/link";
 
 /**
@@ -135,6 +136,11 @@ export default async function ShellLayout({
                 componente no pinta nada. Y no pregunta por el vídeo hasta que
                 alguien lo pulsa. */}
             <PageTutorialAction />
+            {/* PE-03B4 · GAP 1 · El acceso a ADMINISTRAR tutoriales, para quien
+                puede. Estaba al fondo de un grupo plegable de la barra lateral:
+                existía y no se encontraba. Solo se pinta para personal de
+                plataforma; una persona normal de la empresa no ve nada. */}
+            <PlatformTutorialsLink isStaff={platformStatus.isStaff} />
             <Link
               href="/faq"
               className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"

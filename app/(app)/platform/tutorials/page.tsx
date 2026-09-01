@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { listTutorialsAction } from "@/server/actions/tutorials-admin";
 import { CreateTutorialForm } from "@/components/domain/tutorials/tutorial-admin-forms";
-import { PAGE_KEYS } from "@/lib/modules/page-keys";
+import { PAGE_KEYS, PAGE_KEY_EXCLUSIONS } from "@/lib/modules/page-keys";
 import { COMMERCIAL_MODULES } from "@/lib/modules/catalog";
 import {
   TUTORIAL_CONSOLE_UNAVAILABLE, TUTORIAL_FILE_STATE_LABEL, tutorialCoverageLabel,
@@ -52,6 +52,30 @@ export default async function PlatformTutorialsPage(
   // porcentaje de los tutoriales creados lo tiene.
   const conVideo = dePagina.filter((r) => r.current).length;
 
+  // PE-03B4 · La cobertura, POR MÓDULO.
+  //
+  // El total solo decía «cuántas». Con 152 pantallas registradas eso ya no
+  // ayuda a decidir por dónde seguir grabando: lo que hace falta saber es qué
+  // módulo va por detrás.
+  const creadoPorClave = new Map(dePagina.map((r) => [r.pageKey, r]));
+  const porModulo = [
+    ...COMMERCIAL_MODULES.map((m) => ({ key: m.key, name: m.name })),
+    { key: "platform", name: "Transversal" },
+  ]
+    .map((m) => {
+      const pantallas = PAGE_KEYS.filter((p) => p.module === m.key);
+      const creados = pantallas.filter((p) => creadoPorClave.has(p.key));
+      return {
+        ...m,
+        pantallas: pantallas.length,
+        conTutorial: creados.length,
+        conVideo: creados.filter((p) => creadoPorClave.get(p.key)?.current).length,
+      };
+    })
+    // Un módulo sin ninguna pantalla registrada no se enseña: sería una fila de
+    // ceros que no dice nada. Construcción todavía no tiene producto.
+    .filter((m) => m.pantallas > 0);
+
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <header className="space-y-1">
@@ -89,9 +113,43 @@ export default async function PlatformTutorialsPage(
             <p className="text-sm text-ink-soft">con vídeo publicado</p>
           </div>
         </div>
+        <div className="overflow-x-auto rounded-lg border border-hairline bg-surface">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Cobertura de tutoriales por módulo</caption>
+            <thead>
+              <tr className="border-b border-hairline text-left text-xs uppercase tracking-wider text-ink-soft">
+                <th scope="col" className="px-4 py-2 font-semibold">Módulo</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Pantallas</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Con tutorial</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Con vídeo</th>
+                <th scope="col" className="px-4 py-2 font-semibold">Sin vídeo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {porModulo.map((m) => (
+                <tr key={m.key} className="border-b border-hairline last:border-0">
+                  <th scope="row" className="px-4 py-2 text-left font-medium text-ink">
+                    {m.name}
+                  </th>
+                  <td className="code px-4 py-2">{m.pantallas}</td>
+                  <td className="code px-4 py-2">{m.conTutorial}</td>
+                  <td className="code px-4 py-2">{m.conVideo}</td>
+                  <td className="code px-4 py-2">{m.pantallas - m.conVideo}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p className="text-sm text-ink-soft">
           Que una pantalla no tenga vídeo no es un fallo: mientras no lo tenga,
           dice que el tutorial está en actualización.
+        </p>
+        <p className="text-sm text-ink-soft">
+          Hay además{" "}
+          <strong className="font-medium text-ink">{PAGE_KEY_EXCLUSIONS.length}</strong>{" "}
+          pantallas excluidas a propósito —autenticación, textos legales,
+          superficies de impresión y esta misma consola—, y no cuentan como
+          cobertura pendiente.
         </p>
       </section>
 
