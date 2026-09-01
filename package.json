@@ -271,7 +271,8 @@
     "test:pe03b1-playback": "tsx --conditions=react-server tests/rls/pe03b1-playback.test.ts",
     "test:pe03b2": "tsx tests/unit/pe03b2-tutorial-console.test.ts",
     "test:pe03b2-admin": "tsx --conditions=react-server tests/rls/pe03b2-tutorial-admin.test.ts",
-    "test:pe03b2-e2e": "tsx tests/e2e/pe03b2-tutorials.test.ts"
+    "test:pe03b2-e2e": "tsx tests/e2e/pe03b2-tutorials.test.ts",
+    "test:pe03-probe-cleanup": "tsx --conditions=react-server tests/rls/pe03-probe-cleanup.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

@@ -40,6 +40,7 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-03A | Descubrimiento, arquitectura de medios y congelación de UX | — | **cerrado** · pendiente de revisión humana |
 | PE-03B1 | Datos, cubo y RLS | **0159** | **cerrado** · 2026-08-31 |
 | PE-03B2 | La consola de tutoriales | — | **cerrado** · 2026-08-31 |
+| — | Incidente de la sonda de QA en Staging: [informe](PE_03_QA_PROBE_INCIDENT.md) | — | **corregido** · 2026-08-31 |
 | PE-03B3 | El botón y el reproductor | — | no empezado |
 | PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
 | PE-03B5 | Cobertura y endurecimiento | — | no empezado |
