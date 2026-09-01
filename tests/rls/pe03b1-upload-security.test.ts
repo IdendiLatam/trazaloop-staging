@@ -89,7 +89,7 @@ async function main() {
       const bytes = mp4();
       const { data, error } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "ok.mp4", p_mime: "video/mp4",
-        p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+        p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
       assert(!error && data && data.length === 1, `reservar: ${error?.message}`);
       const f = data[0] as { object_path: string; version_id: string };
       // Y la ruta la eligió la base: tutorial / versión / nombre.
@@ -100,7 +100,7 @@ async function main() {
     await check("B. Soporte NO. Ve, no escribe", async () => {
       const { error } = await soporte.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "intruso.mp4", p_mime: "video/mp4",
-        p_size_bytes: 1000, p_ttl_seconds: 900 });
+        p_size_bytes: 1000, p_ttl_seconds: 3600 });
       assert(error, "soporte pudo reservar una subida");
       assert(/administración de plataforma/i.test(error!.message),
         `el rechazo no se explica: ${error!.message}`);
@@ -112,7 +112,7 @@ async function main() {
     await check("C. Una persona normal tampoco, ni ve nada", async () => {
       const { error } = await normal.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "intruso.mp4", p_mime: "video/mp4",
-        p_size_bytes: 1000, p_ttl_seconds: 900 });
+        p_size_bytes: 1000, p_ttl_seconds: 3600 });
       assert(error, "una persona normal pudo reservar una subida");
       const { data } = await normal.cli.from("platform_tutorials").select("id");
       assert(!data || data.length === 0, "una persona normal ve los tutoriales");
@@ -127,33 +127,42 @@ async function main() {
       // nombre malicioso se sale de su carpeta.
       const { data } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "../../../otro-cubo/x.mp4",
-        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 900 });
+        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 3600 });
       const ruta = String((data as { object_path: string }[])[0].object_path);
       assert(ruta.startsWith(`${tutorialId}/`), `la ruta escapó: «${ruta}»`);
       assert(ruta.split("/").length === 3, `la ruta tiene ${ruta.split("/").length} segmentos`);
       assert(!ruta.includes(".."), "la ruta conserva un salto de carpeta");
     });
 
-    await check("E. Un archivo vacío o demasiado grande no se reserva", async () => {
-      for (const [size, motivo] of [[0, "vacío"], [-5, "negativo"],
-        [200 * 1024 * 1024 + 1, "de más de 200 MB"]] as [number, string][]) {
+    await check("E. Un archivo vacío no se reserva; uno grande sí", async () => {
+      // PE-03B1 comprobaba aquí un tope de 200 MB. El propietario del producto
+      // lo REVOCÓ en PE-03B3 sin sustituirlo, así que exigirlo hoy sería
+      // defender una regla que ya no existe.
+      //
+      // Lo que sobrevive es lo que nunca dependió del tope: un archivo sin
+      // bytes no es un vídeo, y un número negativo no es un tamaño.
+      for (const [size, motivo] of [[0, "vacío"], [-5, "negativo"]] as [number, string][]) {
         const { error } = await sa.cli.rpc("tutorial_reserve_upload", {
           p_tutorial_id: tutorialId, p_filename: "x.mp4", p_mime: "video/mp4",
-          p_size_bytes: size, p_ttl_seconds: 900 });
+          p_size_bytes: size, p_ttl_seconds: 3600 });
         assert(error, `se reservó un archivo ${motivo}`);
       }
-      // Y 200 MB justos sí. El límite es un tope, no un miedo.
-      const { error: eJusto } = await sa.cli.rpc("tutorial_reserve_upload", {
-        p_tutorial_id: tutorialId, p_filename: "grande.mp4", p_mime: "video/mp4",
-        p_size_bytes: 200 * 1024 * 1024, p_ttl_seconds: 900 });
-      assert(!eJusto, `se rechazaron 200 MB justos: ${eJusto?.message}`);
+      // Y lo que antes se rechazaba, ahora se acepta. Se comprueba con un
+      // tamaño que el tope viejo prohibía y con otro muy por encima, para que
+      // la prueba falle si alguien reintroduce un número arbitrario.
+      for (const grande of [200 * 1024 * 1024 + 1, 8 * 1024 * 1024 * 1024]) {
+        const { error } = await sa.cli.rpc("tutorial_reserve_upload", {
+          p_tutorial_id: tutorialId, p_filename: "grande.mp4", p_mime: "video/mp4",
+          p_size_bytes: grande, p_ttl_seconds: 3600 });
+        assert(!error, `se rechazaron ${grande} bytes: ${error?.message}`);
+      }
     });
 
     await check("F. Un formato que no se reproduce, tampoco", async () => {
       for (const mime of ["video/quicktime", "application/pdf", "video/ogg", "text/plain"]) {
         const { error } = await sa.cli.rpc("tutorial_reserve_upload", {
           p_tutorial_id: tutorialId, p_filename: "x.mp4", p_mime: mime,
-          p_size_bytes: 1000, p_ttl_seconds: 900 });
+          p_size_bytes: 1000, p_ttl_seconds: 3600 });
         assert(error, `se reservó una subida de «${mime}»`);
       }
     });
@@ -161,7 +170,7 @@ async function main() {
     await check("G. Y no se reserva sobre un tutorial retirado o inexistente", async () => {
       const { error: eNada } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: "00000000-0000-0000-0000-000000000000", p_filename: "x.mp4",
-        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 900 });
+        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 3600 });
       assert(eNada, "se reservó sobre un tutorial que no existe");
     });
 
@@ -173,7 +182,7 @@ async function main() {
       const bytes = mp4();
       const { data } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "mentira.mp4", p_mime: "video/mp4",
-        p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+        p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
       const f = (data as { version_id: string; object_path: string }[])[0];
       // Devuelve el estado en vez de lanzar: si lanzara, la excepción desharía
       // con la transacción la marca de fallo que acaba de escribir. Se descubrió
@@ -204,7 +213,7 @@ async function main() {
     await check("J. Una reserva sin subida no produce tutorial visible", async () => {
       const { data } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "nunca-subido.mp4",
-        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 900 });
+        p_mime: "video/mp4", p_size_bytes: 1000, p_ttl_seconds: 3600 });
       const f = (data as { version_id: string }[])[0];
       const { data: vista } = await normal.cli.from("v_tutorial_current")
         .select("version_id").eq("page_key", CLAVE);
@@ -246,7 +255,7 @@ async function main() {
       const bytes = mp4();
       const { data } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "buena.mp4", p_mime: "video/mp4",
-        p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+        p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
       const f = (data as { object_path: string }[])[0];
       const { error } = await sa.cli.storage.from(BUCKET)
         .upload(f.object_path, bytes, { contentType: "video/mp4", upsert: false });
@@ -266,7 +275,7 @@ async function main() {
       const { data: reservaNormal, error } = await normal.cli
         .rpc("tutorial_reserve_upload", {
           p_tutorial_id: tutorialId, p_filename: "x.mp4", p_mime: "video/mp4",
-          p_size_bytes: 1000, p_ttl_seconds: 900 });
+          p_size_bytes: 1000, p_ttl_seconds: 3600 });
       assert(error && !reservaNormal,
         "una persona normal obtuvo una reserva, que es lo único que hace falta");
 

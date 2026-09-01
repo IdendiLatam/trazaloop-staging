@@ -17,8 +17,26 @@
  * hasta que lo intentara.
  */
 
-/** Decisión humana congelada en PE-03B1. */
-export const TUTORIAL_MAX_FILE_BYTES = 200 * 1024 * 1024;
+/**
+ * TRAZALOOP NO LE PONE TOPE AL TAMAÑO DE UN TUTORIAL.
+ *
+ * PE-03B1 congeló 200 MB y PE-03B3 lo revocó. No se sustituye por otro número:
+ * 500 MB o 2 GB serían igual de inventados, y la razón por la que existía —«un
+ * tutorial dura tres minutos»— resultó no ser una regla del producto.
+ *
+ * Lo que queda es el techo del PROVEEDOR, y es otra cosa:
+ *
+ *   · subida estándar → el `file_size_limit` global del proyecto de Supabase.
+ *     En el stack local son 50 MiB (`supabase/config.toml`); en el alojado se
+ *     configura en el panel y no se ve desde la base.
+ *   · subida reanudable → lo que el propio servicio anuncia en `tus-max-size`:
+ *     52 428 800 000 bytes —≈ 48,8 GiB— medidos en el stack local.
+ *
+ * Se dice aquí para que nadie lea el segundo como si fuera el primero.
+ */
+export const TUTORIAL_INFRASTRUCTURE_NOTE =
+  "No hay un límite de tamaño definido por Trazaloop. La carga está sujeta a la "
+  + "capacidad técnica del servicio de almacenamiento.";
 
 /**
  * Los dos únicos formatos que un navegador reproduce sin ayuda.
@@ -38,8 +56,6 @@ export function extensionForTutorialMime(mime: TutorialMimeType): ".mp4" | ".web
   return mime === "video/mp4" ? ".mp4" : ".webm";
 }
 
-export const TUTORIAL_TOO_LARGE_MESSAGE =
-  "El vídeo supera el tamaño máximo permitido (200 MB).";
 export const TUTORIAL_BAD_FORMAT_MESSAGE =
   "Solo se admiten vídeos en formato MP4 o WebM.";
 export const TUTORIAL_EMPTY_MESSAGE = "El archivo parece vacío.";
@@ -55,19 +71,21 @@ export type TutorialFileRejection =
   | { ok: false; message: string };
 
 /**
- * Comprueba nombre, tipo declarado y tamaño. **No** mira los bytes: eso es
- * `detectTutorialSignature`, que se hace aparte porque necesita leerlos.
+ * Comprueba nombre y tipo declarado, y que el archivo no esté vacío.
+ *
+ * **No** mira los bytes: eso es `detectTutorialSignature`, que se hace aparte
+ * porque necesita leerlos. Y **no** mira si es grande: Trazaloop no le pone
+ * tope.
  */
 export function validateTutorialFileDeclaration(input: {
   filename: string;
   mime: string;
   sizeBytes: number;
 }): TutorialFileRejection {
+  // Vacío sigue sin ser un vídeo. Y no hay techo: comprobar un tamaño máximo
+  // aquí volvería a poner una regla de producto que se retiró.
   if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) {
     return { ok: false, message: TUTORIAL_EMPTY_MESSAGE };
-  }
-  if (input.sizeBytes > TUTORIAL_MAX_FILE_BYTES) {
-    return { ok: false, message: TUTORIAL_TOO_LARGE_MESSAGE };
   }
   if (!isTutorialMimeType(input.mime)) {
     return { ok: false, message: TUTORIAL_BAD_FORMAT_MESSAGE };
@@ -91,14 +109,23 @@ function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean
 /** Cuántos bytes hacen falta para decidir. Se lee un prefijo, no el archivo. */
 export const TUTORIAL_SIGNATURE_PREFIX_BYTES = 4096;
 
+/**
+ * El tamaño de referencia con el que se lee un vídeo para resumirlo.
+ *
+ * Vive aquí y no junto a la verificación porque es un dato puro, y porque una
+ * prueba tiene que poder afirmar que el pico de memoria está acotado sin
+ * arrastrar un módulo de servidor.
+ */
+export const TUTORIAL_HASH_CHUNK_BYTES = 64 * 1024;
+
 export type TutorialDetectedType = "mp4" | "webm" | "unknown";
 
 /**
  * Mira los primeros bytes y dice qué es de verdad.
  *
- * **Lee un prefijo, no el archivo.** Cargar 200 MB en memoria para mirar doce
- * bytes convertiría cada subida en un pico de memoria del servidor, y con dos
- * a la vez se nota.
+ * **Lee un prefijo, no el archivo.** Cargar un vídeo entero en memoria para
+ * mirar doce bytes convertiría cada subida en un pico de memoria del servidor —
+ * y desde que no hay tope de tamaño, «entero» puede ser cualquier cosa.
  *
  * MP4 · un contenedor ISO-BMFF empieza por un átomo `ftyp` en el byte 4. El
  * tamaño que lo precede varía, así que se busca la marca donde está, no el
@@ -170,11 +197,25 @@ export function tutorialObjectPath(
  * plazo tiene que cubrir la sesión entera, no la duración del vídeo: quien lo
  * deja abierto y vuelve, al adelantar pide otro rango con la misma URL.
  *
+ * PE-03B3 lo mantiene como PLAZO DE SEGURIDAD y añade la mitad que faltaba:
+ * renovarlo. Sin renovación, dos horas serían un máximo escondido de duración
+ * de vídeo, y este producto ya no le pone máximo a la duración.
+ *
  * Dos horas cubren eso de sobra y siguen siendo un enlace que muere el mismo
  * día. Firmar cuesta unos 18 ms, así que se firma al abrir el reproductor y no
  * al pintar la página: una pantalla con el botón no gasta nada.
  */
 export const TUTORIAL_PLAYBACK_TTL_SECONDS = 2 * 60 * 60;
 
-/** El plazo de la reserva de subida. */
-export const TUTORIAL_UPLOAD_TTL_SECONDS = 15 * 60;
+/**
+ * El horizonte de la reserva. **No es un plazo de subida.**
+ *
+ * Antes eran quince minutos y la política de Storage exigía que no hubieran
+ * vencido, lo que convertía el plazo en un máximo escondido de duración de
+ * subida: un vídeo grande por una red lenta dejaba de poder subirse a mitad,
+ * por reloj. PE-03B3 sacó la caducidad de la autorización.
+ *
+ * Ahora significa a partir de cuándo una reserva abandonada se puede recoger, y
+ * por eso son horas y no minutos.
+ */
+export const TUTORIAL_UPLOAD_HORIZON_SECONDS = 24 * 60 * 60;

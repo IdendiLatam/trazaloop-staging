@@ -1,5 +1,18 @@
 # PE-03B2 · Qué se comprobó
 
+> **SUPERSEDED BY PRODUCT OWNER DECISION · 31 de agosto de 2026**
+>
+> Este documento describe el tope de **200 MB por archivo** que regía cuando se
+> escribió. El propietario del producto lo **revocó en PE-03B3, sin sustituirlo
+> por otro número**, y también dejó dicho que Trazaloop **no impone una duración
+> máxima**.
+>
+> El texto se conserva tal como se escribió: es el informe de lo que se hizo
+> entonces, y reescribirlo dejaría sin explicación las decisiones que sí se
+> tomaron con esa regla puesta. Lo que hoy rige está en
+> [PE_03B3_LARGE_MEDIA_ARCHITECTURE.md](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+
 **63 comprobaciones**, tres suites.
 
 | Suite | Nivel | Checks |
@@ -76,6 +89,8 @@ y el único que ejercita la frontera de PE-03B1. No se simula la subida.
 | **AD** recargar no convierte una reserva en subida hecha | `admin` P3b · el estado vive en la base |
 | **AE** una fallida no se publica | B1 `upload` I |
 | **AF** descartar solo lo nunca publicado | `console` F2 · acción |
+
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
 
 ---
 

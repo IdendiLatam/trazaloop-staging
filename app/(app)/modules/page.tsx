@@ -29,6 +29,7 @@ import { requireLegalAcceptance } from "@/lib/auth/require-legal-acceptance";
 import { getPostAuthDestinationAction } from "@/server/actions/team";
 import { moduleEntryDestinationPath } from "@/lib/domain/team";
 import { Wordmark } from "@/components/layout/logo";
+import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
 import { getActiveOrganization } from "@/lib/db/organizations";
 import { getActiveOrgModuleStatuses, getDemoTrialSummary } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
@@ -106,6 +107,11 @@ export default async function ModulesPortalPage() {
           <div className="flex flex-wrap items-center gap-3">
             {/* PE-02B4 · La ayuda, también en la puerta: es la primera pantalla
                 que se ve al entrar, y es donde más se pregunta «¿y esto?». */}
+            {/* PE-03B3 · La puerta está FUERA del shell —tiene su propia
+                cabecera—, así que el botón de la barra no llega aquí. Se pone a
+                mano en esta pantalla y solo en esta: es la que se ve siempre, y
+                es una, no ciento cuarenta y siete. */}
+            <PageTutorialAction />
             <Link
               href="/faq"
               className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"

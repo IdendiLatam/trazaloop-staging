@@ -108,8 +108,12 @@ export function tutorialUploadErrorMessage(raw: string | null | undefined): stri
   if (/row-level security|not authorized|unauthorized|permission/.test(m)) {
     return "El almacenamiento rechazó la subida. Vuelve a empezar.";
   }
-  if (/exceeded|too large|payload/.test(m)) {
-    return "El vídeo supera el tamaño máximo permitido (200 MB).";
+  if (/exceeded|too large|payload|maximum allowed size/.test(m)) {
+    // El límite ya no es de Trazaloop, así que el mensaje no puede dar un
+    // número como si fuera una regla del producto: sería mentira y además
+    // caducaría en cuanto el proveedor cambiara el suyo.
+    return "El servicio de almacenamiento rechazó el archivo por su tamaño. "
+      + "No es un límite de Trazaloop: es la capacidad técnica del servicio.";
   }
   if (/mime|content type|invalid/.test(m)) {
     return "Solo se admiten vídeos en formato MP4 o WebM.";

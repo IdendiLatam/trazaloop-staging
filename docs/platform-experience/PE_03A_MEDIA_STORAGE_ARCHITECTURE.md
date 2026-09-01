@@ -1,5 +1,18 @@
 # PE-03A · Dónde viven los vídeos, y cómo llegan y salen
 
+> **SUPERSEDED BY PRODUCT OWNER DECISION · 31 de agosto de 2026**
+>
+> Este documento describe el tope de **200 MB por archivo** que regía cuando se
+> escribió. El propietario del producto lo **revocó en PE-03B3, sin sustituirlo
+> por otro número**, y también dejó dicho que Trazaloop **no impone una duración
+> máxima**.
+>
+> El texto se conserva tal como se escribió: es el informe de lo que se hizo
+> entonces, y reescribirlo dejaría sin explicación las decisiones que sí se
+> tomaron con esa regla puesta. Lo que hoy rige está en
+> [PE_03B3_LARGE_MEDIA_ARCHITECTURE.md](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+
 Los tutoriales son **contenido de plataforma**: los administra Trazaloop, no las
 empresas. Eso decide casi todo lo que sigue.
 
@@ -129,6 +142,8 @@ Lo que aporta la arquitectura:
 **Recomendación: 200 MB por archivo**, con el tope declarado en la reserva y
 comprobado otra vez al finalizar. Es holgado para un tutorial largo y sigue
 siendo un techo que impide subir una película por error.
+
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
 
 ---
 

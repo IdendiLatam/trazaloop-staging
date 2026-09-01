@@ -71,7 +71,12 @@ console.log("\nB · Los bytes NO vuelven a pasar por Next.js");
 // ===========================================================================
 
 check("B1. La subida usa la URL firmada, no una Server Action", () => {
-  assert(/uploadToSignedUrl/.test(SUBIDA),
+  // PE-03B2 subía con `uploadToSignedUrl`. PE-03B3 cambió el transporte a
+  // reanudable por trozos, porque el envío de una sola petición está acotado
+  // por el límite global del proyecto y reintentarlo entero es inviable en un
+  // vídeo grande. Lo que NO cambió —y es lo que esta prueba defiende— es que
+  // los bytes van del navegador a Storage sin pasar por Next.js.
+  assert(/uploadToSignedUrl|uploadResumable/.test(SUBIDA),
     "la subida no usa el transporte directo a Storage");
   // El archivo jamás entra en un FormData que viaje al servidor.
   const codigo = sinComentarios(SUBIDA);
@@ -240,8 +245,14 @@ check("F2. La excepción está aislada, declarada y acotada", () => {
 check("F3. Y el navegador nunca recibe una credencial", () => {
   assert(!/SERVICE_ROLE|service_role/.test(SUBIDA),
     "el componente de subida menciona service_role");
-  // Lo único que baja es un token para una ruta y un rato.
-  assert(/reserva\.token/.test(SUBIDA), "el navegador no usa el token de la reserva");
+  // Lo único que el navegador usa para escribir es una autorización acotada a
+  // una ruta: o el token de la reserva (PE-03B2) o su propia sesión (PE-03B3).
+  //
+  // La segunda es MÁS estricta, no menos: 0099 demostró que una URL firmada se
+  // autoriza sola y no ejerce la política INSERT del cubo, mientras que el
+  // transporte reanudable va con el JWT de la sesión y sí la ejerce.
+  assert(/reserva\.token|access_token/.test(SUBIDA),
+    "el navegador no usa el token de la reserva");
   assert(!/createAdminClient/.test(SUBIDA), "el navegador usa el cliente administrativo");
 });
 
@@ -311,7 +322,10 @@ check("I1. El error del almacenamiento no se enseña en crudo", () => {
   const traducidos = [
     ["The signed URL has expired", "caduc"],
     ["new row violates row-level security policy", "rechazó"],
-    ["Payload too large", "200 MB"],
+    // Ya no se comprueba «200 MB»: PE-03B3 retiró ese tope y el mensaje no
+    // puede dar un número como si fuera una regla del producto. Lo que sí debe
+    // decir es de quién es el límite.
+    ["Payload too large", "almacenamiento"],
     ["invalid mime type", "MP4 o WebM"],
   ];
   for (const [crudo, esperado] of traducidos) {
@@ -320,6 +334,11 @@ check("I1. El error del almacenamiento no se enseña en crudo", () => {
       `«${crudo}» se traduce a «${m}»`);
     assert(!m.includes("row-level") && !m.includes("policy"),
       "el mensaje filtra detalles internos");
+  }
+  // Y ningún mensaje inventa un tope de Trazaloop en megas o gigas.
+  for (const crudo of ["Payload too large", "maximum allowed size exceeded"]) {
+    assert(!/\d+\s*(MB|GB|MiB|GiB)/i.test(tutorialUploadErrorMessage(crudo)),
+      `«${crudo}» anuncia un tope que Trazaloop ya no impone`);
   }
 });
 
@@ -357,10 +376,27 @@ check("I4. Los estados del archivo se nombran para quien mira", () => {
 console.log("\nJ · Lo que este tramo NO hace");
 // ===========================================================================
 
-check("J1. Sin botón en las pantallas de producto · eso es B3", () => {
-  const shell = leer("app/(app)/(shell)/layout.tsx");
-  assert(!/Ver video tutorial|tutorial/i.test(sinComentarios(shell)),
-    "el shell ya tiene el botón de tutorial: eso es B3");
+check("J1. La consola no pinta el botón de las pantallas de producto", () => {
+  // Esto comprobaba que el shell NO tuviera el botón, porque en PE-03B2 el
+  // tutorial de pantalla todavía no existía. PE-03B3 lo construyó y lo puso
+  // justo ahí, así que exigir su ausencia sería comprobar el calendario.
+  //
+  // La frontera que sigue siendo real es la otra: la consola es para
+  // ADMINISTRAR tutoriales, no para verlos. Ninguno de sus ficheros pinta el
+  // botón de la pantalla ni consulta el tutorial de la página en curso.
+  for (const src of [LISTA, FICHA, FORMS, SUBIDA]) {
+    const codigo = sinComentarios(src);
+    assert(!/PageTutorialAction|Ver video tutorial/.test(codigo),
+      "la consola pinta el botón de la pantalla");
+    assert(!/getTutorialForPageAction|resolvePageKeyForPath/.test(codigo),
+      "la consola resuelve el tutorial de la pantalla en curso");
+  }
+  // Y el shell lo ofrece a través de UN componente compartido, no copiado.
+  const shell = sinComentarios(leer("app/(app)/(shell)/layout.tsx"));
+  assert(/<PageTutorialAction\s*\/>/.test(shell),
+    "el shell dejó de ofrecer el tutorial de la pantalla");
+  assert(!/Ver video tutorial/.test(shell),
+    "el shell escribe el botón a mano en vez de usar el componente");
 });
 
 check("J2. Sin ventana de bienvenida · eso es B4", () => {

@@ -468,8 +468,25 @@ check("H2. Ni precios, ni almacenamiento, ni cuotas", () => {
 });
 
 check("H3. Sin marcadores de lo que todavía no existe", () => {
-  for (const p of ["FAQ", "tutorial", "vídeo", "video", "Próximamente en Trazaloop"]) {
-    assert(!(PAGINA_CODIGO + TARJETAS_CODIGO).includes(p), `hay un marcador falso: «${p}»`);
+  // La promesa de PE-01B era que la puerta no insinuara funciones inexistentes:
+  // «un enlace a una página que no existe es peor que ningún enlace».
+  //
+  // La lista original nombraba «FAQ», «tutorial» y «vídeo» porque en aquel
+  // momento ninguna de las tres existía. PE-02 construyó la ayuda y PE-03B3 el
+  // tutorial de pantalla, así que nombrarlas hoy sería comprobar el calendario,
+  // no la promesa.
+  //
+  // Lo que se comprueba ahora es lo que sí sigue siendo promesa: nada se
+  // anuncia como futuro, y todo lo que la puerta ofrece existe de verdad.
+  const codigo = PAGINA_CODIGO + TARJETAS_CODIGO;
+  for (const p of ["Próximamente en Trazaloop", "muy pronto", "en desarrollo",
+    "disponible pronto"]) {
+    assert(!codigo.includes(p), `hay un marcador falso: «${p}»`);
+  }
+  // Y si ofrece el tutorial de pantalla, es porque el componente existe.
+  if (/PageTutorialAction/.test(codigo)) {
+    assert(existsSync("components/domain/tutorials/page-tutorial-action.tsx"),
+      "la puerta ofrece un tutorial cuyo componente no existe");
   }
 });
 

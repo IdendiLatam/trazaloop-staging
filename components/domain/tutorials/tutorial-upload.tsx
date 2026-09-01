@@ -12,8 +12,9 @@ import {
   type TutorialUploadStep,
 } from "@/lib/domain/tutorial-admin";
 import {
-  TUTORIAL_MAX_FILE_BYTES, validateTutorialFileDeclaration, isTutorialMimeType,
+  validateTutorialFileDeclaration, isTutorialMimeType, TUTORIAL_INFRASTRUCTURE_NOTE,
 } from "@/lib/domain/tutorial-media";
+import { uploadResumable, type ResumableProgress } from "@/lib/storage/resumable-upload";
 
 /**
  * Trazaloop · PE-03B2 · Subir un vídeo.
@@ -45,6 +46,7 @@ export function TutorialUploadForm({
   const [step, setStep] = useState<TutorialUploadStep>("idle");
   const [error, setError] = useState<string | null>(null);
   const [nombre, setNombre] = useState<string | null>(null);
+  const [avance, setAvance] = useState<ResumableProgress | null>(null);
 
   const ocupado = step === "reserving" || step === "uploading" || step === "verifying";
 
@@ -52,8 +54,9 @@ export function TutorialUploadForm({
     setError(null);
     setNombre(`${file.name} · ${humanFileSize(file.size)}`);
 
-    // Validación temprana, por cortesía. La autoritativa es la del servidor y
-    // la del cubo: esta solo evita un viaje inútil.
+    // Validación temprana, por cortesía. La autoritativa es la del servidor.
+    // NO se comprueba el tamaño: Trazaloop no le pone tope, y comprobarlo aquí
+    // volvería a poner una regla que se retiró.
     const mime = file.type || "";
     const declarado = validateTutorialFileDeclaration({
       filename: file.name, mime, sizeBytes: file.size,
@@ -71,19 +74,40 @@ export function TutorialUploadForm({
     });
     if (!reserva.ok) { setStep("error"); setError(reserva.message); return; }
 
+    // El transporte es REANUDABLE, y no por comodidad: la subida estándar está
+    // acotada por el límite global del proyecto, y una sola petición que falla
+    // al 90 % vuelve a empezar. Ver `lib/storage/resumable-upload.ts`.
+    //
+    // Se autentica con la sesión de la propia persona, así que la política
+    // INSERT del cubo SÍ se ejerce — al contrario que con una URL firmada, que
+    // 0099 demostró que la esquiva.
     setStep("uploading");
+    setAvance({ uploadedBytes: 0, totalBytes: file.size, ratio: 0 });
     const supabase = createBrowserClient();
-    const { error: eSubida } = await supabase.storage
-      .from("tutorial-media")
-      .uploadToSignedUrl(reserva.objectPath, reserva.token, file, {
-        contentType: mime,
-      });
-    if (eSubida) {
+    const { data: sesion } = await supabase.auth.getSession();
+    const token = sesion.session?.access_token;
+    if (!token) {
+      await failTutorialUploadAction(reserva.versionId);
+      setStep("error");
+      setError("Tu sesión caducó. Vuelve a entrar y repite la subida.");
+      return;
+    }
+
+    const subida = await uploadResumable({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+      accessToken: token,
+      bucketId: "tutorial-media",
+      objectPath: reserva.objectPath,
+      file,
+      contentType: mime,
+      onProgress: setAvance,
+    });
+    if (!subida.ok) {
       // La reserva se marca fallida en vez de quedarse viva para siempre. Una
       // reserva viva es una ruta que sigue admitiendo escritura.
       await failTutorialUploadAction(reserva.versionId);
       setStep("error");
-      setError(tutorialUploadErrorMessage(eSubida.message));
+      setError(tutorialUploadErrorMessage(subida.message));
       router.refresh();
       return;
     }
@@ -100,6 +124,7 @@ export function TutorialUploadForm({
     }
 
     setStep("done");
+    setAvance(null);
     router.refresh();
   }
 
@@ -108,10 +133,11 @@ export function TutorialUploadForm({
       <div>
         <h3 className="text-sm font-semibold text-ink">Subir una versión nueva</h3>
         <p className="mt-1 text-sm text-ink-soft">
-          MP4 o WebM, hasta {Math.floor(TUTORIAL_MAX_FILE_BYTES / (1024 * 1024))} MB.
-          Subir <strong className="font-medium text-ink">no publica</strong>: la
-          versión queda lista para revisar y se publica después.
+          MP4 o WebM. Subir{" "}
+          <strong className="font-medium text-ink">no publica</strong>: la versión
+          queda lista para revisar y se publica después.
         </p>
+        <p className="mt-1 text-xs text-ink-soft">{TUTORIAL_INFRASTRUCTURE_NOTE}</p>
       </div>
 
       <label className="block">
@@ -148,10 +174,28 @@ export function TutorialUploadForm({
         ) : (
           <span className="text-ink">
             {TUTORIAL_UPLOAD_STEP_LABEL[step]}
+            {step === "uploading" && avance
+              ? <span className="text-ink-soft">
+                  {" "}· {Math.round(avance.ratio * 100)} %
+                  {" "}({humanFileSize(avance.uploadedBytes)} de {humanFileSize(avance.totalBytes)})
+                </span>
+              : null}
             {nombre ? <span className="text-ink-soft"> · {nombre}</span> : null}
           </span>
         )}
       </p>
+
+      {/* La barra acompaña al texto; no lo sustituye. Un porcentaje que solo se
+          ve en color no lo lee quien usa un lector de pantalla. */}
+      {step === "uploading" && avance ? (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-hairline"
+          role="progressbar" aria-valuemin={0} aria-valuemax={100}
+          aria-valuenow={Math.round(avance.ratio * 100)}
+          aria-label="Progreso de la subida">
+          <div className="h-full bg-loop transition-all"
+            style={{ width: `${Math.round(avance.ratio * 100)}%` }} />
+        </div>
+      ) : null}
 
       {step === "error" ? (
         <button

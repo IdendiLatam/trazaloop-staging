@@ -1,5 +1,18 @@
 # PE-03B2 · Subir un vídeo
 
+> **SUPERSEDED BY PRODUCT OWNER DECISION · 31 de agosto de 2026**
+>
+> Este documento describe el tope de **200 MB por archivo** que regía cuando se
+> escribió. El propietario del producto lo **revocó en PE-03B3, sin sustituirlo
+> por otro número**, y también dejó dicho que Trazaloop **no impone una duración
+> máxima**.
+>
+> El texto se conserva tal como se escribió: es el informe de lo que se hizo
+> entonces, y reescribirlo dejaría sin explicación las decisiones que sí se
+> tomaron con esa regla puesta. Lo que hoy rige está en
+> [PE_03B3_LARGE_MEDIA_ARCHITECTURE.md](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+
 ---
 
 ## 1 · Los cuatro pasos, y dónde ocurre cada uno
@@ -55,6 +68,8 @@ un color**: lleva su símbolo y su texto.
 
 `.mp4` y `.webm`, hasta 200 MB.
 
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
+
 | Dónde | Qué comprueba |
 |---|---|
 | El campo `accept` | filtra el diálogo del sistema |
@@ -83,6 +98,8 @@ construido por dentro.
 | Demasiado grande | «El vídeo supera el tamaño máximo permitido (200 MB).» |
 | Formato no admitido | «Solo se admiten vídeos en formato MP4 o WebM.» |
 | No cuadró con lo reservado | «El archivo subido no coincide con lo reservado. Vuelve a intentarlo.» |
+
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
 
 Y siempre queda un botón de **Volver a intentarlo**.
 

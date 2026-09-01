@@ -76,7 +76,7 @@ async function subirVersion(
   const bytes = mp4(marca);
   const { data, error } = await sa.rpc("tutorial_reserve_upload", {
     p_tutorial_id: tutorialId, p_filename: `qa-${marca}.mp4`,
-    p_mime: "video/mp4", p_size_bytes: bytes.byteLength, p_ttl_seconds: 900,
+    p_mime: "video/mp4", p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600,
   });
   assert(!error && data && data.length === 1, `reservar: ${error?.message}`);
   const fila = data[0] as { version_id: string; object_path: string };
@@ -197,7 +197,7 @@ async function main() {
       const bytes = mp4(9);
       const { data } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "sin-subir.mp4",
-        p_mime: "video/mp4", p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+        p_mime: "video/mp4", p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
       const reservada = (data as { version_id: string }[])[0];
       const { error } = await sa.cli.rpc("tutorial_publish_version",
         { p_version_id: reservada.version_id, p_change_note: null });

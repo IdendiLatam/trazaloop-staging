@@ -171,7 +171,7 @@ async function main() {
   const bytes = video(5);
   const { data: reserva } = await sa.cli.rpc("tutorial_reserve_upload", {
     p_tutorial_id: tutorialId, p_filename: "riesgos.mp4", p_mime: "video/mp4",
-    p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+    p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
   const r = (reserva as { version_id: string; object_path: string }[])[0];
   const { data: firma } = await sa.cli.storage.from(BUCKET)
     .createSignedUploadUrl(r.object_path);
@@ -318,7 +318,7 @@ async function main() {
       const bytes2 = video(9);
       const { data: res2 } = await sa.cli.rpc("tutorial_reserve_upload", {
         p_tutorial_id: tutorialId, p_filename: "riesgos-2.mp4", p_mime: "video/mp4",
-        p_size_bytes: bytes2.byteLength, p_ttl_seconds: 900 });
+        p_size_bytes: bytes2.byteLength, p_ttl_seconds: 3600 });
       const r2 = (res2 as { version_id: string; object_path: string }[])[0];
       const { data: f2 } = await sa.cli.storage.from(BUCKET)
         .createSignedUploadUrl(r2.object_path);

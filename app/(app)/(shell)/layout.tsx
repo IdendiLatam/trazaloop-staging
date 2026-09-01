@@ -13,6 +13,7 @@ import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
 import { ModuleHeaderBadge, ModuleAwareSettingsLink, ModuleSwitcher } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
+import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
 import Link from "next/link";
 
 /**
@@ -124,6 +125,16 @@ export default async function ShellLayout({
                 Va aquí, en todas las pantallas del shell, y se llama «Ayuda» y
                 no «FAQ» porque PE-03 sumará el tutorial de la pantalla y el
                 soporte al mismo sitio. */}
+            {/* PE-03B3 · El tutorial de ESTA pantalla, junto a la ayuda general.
+                Aquí y no en las 147 cabeceras de página: no existe ninguna
+                compartida, así que ponerlo ahí sería tocar 147 ficheros y que la
+                148 naciera sin él. Este sitio ya estaba reservado por escrito
+                desde PE-02B4.
+
+                Solo aparece en pantallas registradas: en las demás el
+                componente no pinta nada. Y no pregunta por el vídeo hasta que
+                alguien lo pulsa. */}
+            <PageTutorialAction />
             <Link
               href="/faq"
               className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"

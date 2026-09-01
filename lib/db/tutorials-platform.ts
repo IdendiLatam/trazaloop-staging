@@ -5,14 +5,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
 import { isKnownPageKey, getPageKey } from "@/lib/modules/page-keys";
 import {
-  TUTORIAL_UPLOAD_TTL_SECONDS,
-  TUTORIAL_SIGNATURE_PREFIX_BYTES,
-  detectTutorialSignature,
-  signatureMatchesMime,
+  TUTORIAL_UPLOAD_HORIZON_SECONDS,
   validateTutorialFileDeclaration,
   TUTORIAL_SIGNATURE_MESSAGE,
   type TutorialMimeType,
 } from "@/lib/domain/tutorial-media";
+import { verifyTutorialObject } from "@/lib/db/tutorial-integrity";
 
 /**
  * Trazaloop · PE-03B1 · Administrar tutoriales.
@@ -146,7 +144,7 @@ export async function reserveTutorialUpload(
     p_filename: input.filename,
     p_mime: input.mime,
     p_size_bytes: input.sizeBytes,
-    p_ttl_seconds: TUTORIAL_UPLOAD_TTL_SECONDS,
+    p_ttl_seconds: TUTORIAL_UPLOAD_HORIZON_SECONDS,
   });
   if (error) return { ok: false, message: error.message };
 
@@ -180,14 +178,13 @@ export async function reserveTutorialUpload(
  * la ruta a una reserva pero **no inspecciona el contenido** —lo dejó escrito
  * 0099—, así que este paso es el único que sabe qué se subió de verdad.
  *
- * La firma binaria se comprueba sobre un **prefijo**. Cargar 200 MB en memoria
- * para mirar doce bytes convertiría cada subida en un pico de memoria del
- * servidor, y con dos a la vez se nota.
+ * Desde PE-03B3 se hace **en flujo**: el resumen se calcula trozo a trozo y el
+ * pico de memoria es un trozo, no el vídeo. Sin eso, retirar el tope de tamaño
+ * habría convertido cada finalización en un pico de memoria del tamaño del
+ * archivo — y ahora un archivo puede ser cualquier cosa.
  *
- * El resumen SHA-256 sí exige leer el archivo entero: es lo que significa un
- * resumen. Se hace en flujo, y con `crypto.subtle` sobre el búfer que Storage
- * devuelve — que para 200 MB es el techo de esta implementación y se dice en la
- * documentación en vez de descubrirse en producción.
+ * Tamaño real, resumen y firma binaria salen de **una sola pasada**: leer dos
+ * veces duplicaría el tráfico contra el almacenamiento.
  */
 export async function finalizeTutorialUpload(
   input: { versionId: string; objectPath: string; declaredMime: TutorialMimeType },
@@ -195,38 +192,28 @@ export async function finalizeTutorialUpload(
 ): Promise<{ ok: true; versionId: string } | { ok: false; message: string }> {
   const supabase = await db(client);
 
-  // 1 · El prefijo, para la firma binaria. Un rango, no el archivo.
-  const { data: prefijo, error: ePrefijo } = await supabase.storage
-    .from("tutorial-media")
-    .download(input.objectPath, {
-      // @ts-expect-error el SDK acepta cabeceras de rango por opciones no tipadas
-      headers: { Range: `bytes=0-${TUTORIAL_SIGNATURE_PREFIX_BYTES - 1}` },
-    });
-  if (ePrefijo || !prefijo) {
+  // Se firma una lectura y se verifica EN FLUJO. Ver `tutorial-integrity.ts`:
+  // el pico de memoria es un trozo, no el vídeo. PE-03B1 cargaba el archivo
+  // entero, que con un tope de 200 MB era caro y desde PE-03B3 —sin tope— sería
+  // insostenible.
+  const { data: firma, error: eFirma } = await supabase.storage
+    .from("tutorial-media").createSignedUrl(input.objectPath, 60 * 30);
+  if (eFirma || !firma?.signedUrl) {
     await marcarFallida(supabase, input.versionId);
     return { ok: false, message: "No se pudo leer el archivo subido." };
   }
-  const cabecera = new Uint8Array(await prefijo.arrayBuffer());
-  const detectado = detectTutorialSignature(cabecera);
-  if (!signatureMatchesMime(detectado, input.declaredMime)) {
-    await marcarFallida(supabase, input.versionId);
-    return { ok: false, message: TUTORIAL_SIGNATURE_MESSAGE };
-  }
 
-  // 2 · El archivo entero, para el tamaño real y el resumen.
-  const { data: completo, error: eCompleto } = await supabase.storage
-    .from("tutorial-media").download(input.objectPath);
-  if (eCompleto || !completo) {
+  const verificado = await verifyTutorialObject(firma.signedUrl, input.declaredMime);
+  if (!verificado.ok) {
     await marcarFallida(supabase, input.versionId);
+    if (verificado.reason === "signature_mismatch") {
+      return { ok: false, message: TUTORIAL_SIGNATURE_MESSAGE };
+    }
+    if (verificado.reason === "empty") {
+      return { ok: false, message: "El archivo subido está vacío." };
+    }
     return { ok: false, message: "No se pudo leer el archivo subido." };
   }
-  const bytes = new Uint8Array(await completo.arrayBuffer());
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const hash = [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-
-  // El tipo REAL es el que Storage guardó, no el que dijo el navegador.
-  const realMime = (completo as Blob).type || input.declaredMime;
 
   // La función devuelve el ESTADO, no lanza. Un archivo que no cuadra con lo
   // reservado es un resultado —de un cliente roto o de uno hostil—, no una
@@ -234,9 +221,9 @@ export async function finalizeTutorialUpload(
   // con la transacción la marca de fallo que acababa de escribir.
   const { data: estado, error } = await supabase.rpc("tutorial_finalize_upload", {
     p_version_id: input.versionId,
-    p_real_size: bytes.byteLength,
-    p_real_mime: realMime,
-    p_content_hash: hash,
+    p_real_size: verificado.sizeBytes,
+    p_real_mime: input.declaredMime,
+    p_content_hash: verificado.sha256,
     p_duration_seconds: null,
   });
   if (error) return { ok: false, message: error.message };

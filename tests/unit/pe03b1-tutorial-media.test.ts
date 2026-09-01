@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 
 import {
-  TUTORIAL_MAX_FILE_BYTES, TUTORIAL_MIME_TYPES, TUTORIAL_PLAYBACK_TTL_SECONDS,
+  TUTORIAL_MIME_TYPES, TUTORIAL_PLAYBACK_TTL_SECONDS,
   TUTORIAL_SIGNATURE_PREFIX_BYTES, TUTORIAL_UNAVAILABLE_MESSAGE,
   detectTutorialSignature, isTutorialMimeType, safeTutorialFilename,
   signatureMatchesMime, tutorialObjectPath, validateTutorialFileDeclaration,
@@ -26,6 +26,7 @@ function check(n: string, fn: () => void) {
 
 const MIGRACION = readFileSync(
   "supabase/migrations/0159_platform_tutorial_media_foundation.sql", "utf8");
+const leerMigracion = (n: string) => readFileSync(`supabase/migrations/${n}`, "utf8");
 
 /** Un MP4 mínimo: cuatro bytes de tamaño y el átomo «ftyp» en el desplazamiento 4. */
 function mp4Sintetico(relleno = 64): Uint8Array {
@@ -62,15 +63,15 @@ check("A2. Un archivo vacío no", () => {
   }
 });
 
-check("A3. Doscientos megas sí; uno más, no", () => {
-  const justo = validateTutorialFileDeclaration({
-    filename: "x.mp4", mime: "video/mp4", sizeBytes: TUTORIAL_MAX_FILE_BYTES });
-  assert(justo.ok, "se rechazó un archivo de exactamente 200 MB");
-  const pasado = validateTutorialFileDeclaration({
-    filename: "x.mp4", mime: "video/mp4", sizeBytes: TUTORIAL_MAX_FILE_BYTES + 1 });
-  assert(!pasado.ok, "se aceptó un archivo de más de 200 MB");
-  assert(TUTORIAL_MAX_FILE_BYTES === 200 * 1024 * 1024,
-    `el tope es ${TUTORIAL_MAX_FILE_BYTES} y la decisión humana fueron 200 MB`);
+check("A3. Trazaloop NO le pone tope al tamaño", () => {
+  // PE-03B1 congeló 200 MB y PE-03B3 lo revocó. Esta comprobación cambió de
+  // sentido a propósito: antes exigía el tope, ahora exige que no vuelva.
+  for (const grande of [200 * 1024 * 1024, 500 * 1024 * 1024,
+    2 * 1024 * 1024 * 1024, 20 * 1024 * 1024 * 1024]) {
+    const r = validateTutorialFileDeclaration({
+      filename: "x.mp4", mime: "video/mp4", sizeBytes: grande });
+    assert(r.ok, `se rechazó un archivo de ${Math.round(grande / 1024 / 1024)} MB`);
+  }
 });
 
 check("A4. Un formato que el navegador no reproduce, tampoco", () => {
@@ -121,8 +122,8 @@ check("A7. Y el archivo que MIENTE en su nombre y su tipo se cae aquí", () => {
 });
 
 check("A8. La firma se decide con un prefijo, no con el archivo entero", () => {
-  // Leer 200 MB en memoria para mirar doce bytes convertiría cada subida en un
-  // pico de memoria del servidor.
+  // Leer un vídeo entero en memoria para mirar doce bytes convertiría cada
+  // subida en un pico de memoria del servidor — y ya no hay techo que lo acote.
   assert(TUTORIAL_SIGNATURE_PREFIX_BYTES <= 65536,
     `el prefijo son ${TUTORIAL_SIGNATURE_PREFIX_BYTES} bytes y eso ya no es un prefijo`);
   const grande = mp4Sintetico(TUTORIAL_SIGNATURE_PREFIX_BYTES);
@@ -232,14 +233,40 @@ check("D1. Sin organization_id, y por eso fuera de toda cuota", () => {
     "una tabla de tutoriales apunta a organizations");
 });
 
-check("D2. El cubo es privado, y con sus dos topes declarados", () => {
+check("D2. El cubo es privado, y ya no declara tope de tamaño", () => {
   assert(/insert into storage\.buckets[\s\S]{0,200}'tutorial-media'[\s\S]{0,120}false/
     .test(MIGRACION), "el cubo de tutoriales no se crea privado");
-  assert(MIGRACION.includes("200 * 1024 * 1024,\n        array['video/mp4', 'video/webm']")
-    || /file_size_limit[\s\S]{0,200}200 \* 1024 \* 1024/.test(MIGRACION),
-    "el cubo no declara el tope de tamaño");
   assert(MIGRACION.includes("on conflict (id) do nothing"),
     "la creación del cubo no es idempotente: un replay la rompería");
+  // 0159 lo creó con 200 MB; 0160 lo retiró. Se comprueba sobre la 0160, que es
+  // la que manda ahora. No se reescribe la 0159: está aplicada y es inmutable.
+  const m0160 = leerMigracion("0160_platform_tutorial_unbounded_media.sql");
+  assert(/update storage\.buckets[\s\S]{0,120}file_size_limit = null/.test(m0160),
+    "0160 no retira el tope del cubo");
+  assert(/array\['video\/mp4', 'video\/webm'\]/.test(MIGRACION),
+    "el cubo dejó de declarar los formatos, que sí son una regla del producto");
+});
+
+check("D2b. Y 0160 retira el tope de todos los sitios donde vivía", () => {
+  const m = leerMigracion("0160_platform_tutorial_unbounded_media.sql");
+  // Los dos CHECK quedan solo con «> 0»: vacío sigue sin ser un vídeo.
+  assert(/check \(declared_size_bytes > 0\)/.test(m), "el CHECK de tamaño sigue con techo");
+  assert(/real_size_bytes is null or real_size_bytes > 0/.test(m),
+    "el CHECK del tamaño real sigue con techo");
+  // Y la función de reserva ya no compara contra ningún número.
+  const reserva = m.slice(m.indexOf("function public.tutorial_reserve_upload"),
+    m.indexOf("revoke all on function public.tutorial_reserve_upload"));
+  assert(!/p_size_bytes >/.test(reserva), "la reserva sigue comparando el tamaño con un techo");
+  assert(/p_size_bytes <= 0/.test(reserva), "la reserva dejó de rechazar un archivo vacío");
+});
+
+check("D2c. Y la caducidad de la reserva deja de autorizar", () => {
+  // Era un máximo escondido: un vídeo grande por una red lenta dejaba de poder
+  // subirse a mitad, por reloj.
+  const m = leerMigracion("0160_platform_tutorial_unbounded_media.sql");
+  const fn = m.slice(m.indexOf("function public.tutorial_media_has_reservation"));
+  assert(!/upload_expires_at/.test(fn.slice(0, fn.indexOf("$$;"))),
+    "la política de escritura sigue mirando el reloj de la reserva");
 });
 
 check("D3. Sin política de UPDATE ni de DELETE sobre el cubo", () => {

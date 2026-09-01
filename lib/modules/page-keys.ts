@@ -171,3 +171,63 @@ export function isWellFormedPageKey(key: string): boolean {
   if (!PAGE_KEY_PATTERN.test(key)) return false;
   return PAGE_KEY_MODULES.includes(key.split(".")[0]);
 }
+
+// ===========================================================================
+// PE-03B3 · DE UNA RUTA A SU CLAVE
+// ===========================================================================
+
+/**
+ * Qué clave de pantalla corresponde a una dirección.
+ *
+ * LA RUTA NO ES LA IDENTIDAD, Y ESTO NO LA CONVIERTE EN UNA
+ *
+ * La distinción que PE-02 congeló sigue en pie: la identidad de un tutorial es
+ * su clave. Lo que hace esta función es lo contrario de identificar por ruta —
+ * mira dónde está la persona AHORA y consulta el registro para saber qué clave
+ * aplica ahí.
+ *
+ * Si mañana una pantalla se muda de dirección, se actualiza su `route` en el
+ * registro y nada más: la clave no cambia, y con ella no cambian ni el tutorial,
+ * ni su historia, ni la ayuda contextual que cuelga de la misma clave.
+ *
+ *
+ * POR QUÉ SE ELIGE LA COINCIDENCIA MÁS LARGA
+ *
+ * `/quality/processes` y `/quality/processes/[id]` son dos entradas distintas.
+ * Con una comparación por prefijo a secas, la ficha de un proceso recibiría el
+ * tutorial del listado — un vídeo de otra pantalla, que es peor que ninguno.
+ *
+ * Se compara segmento a segmento y gana la ruta MÁS ESPECÍFICA que encaja. Y si
+ * ninguna encaja del todo, no se devuelve nada: una pantalla sin clave no
+ * admite tutorial, y eso es una respuesta, no un fallo.
+ */
+export function resolvePageKeyForPath(pathname: string): string | null {
+  const partes = pathname.split("?")[0].split("#")[0]
+    .split("/").filter((s) => s.length > 0);
+
+  let mejor: { key: string; segmentos: number } | null = null;
+
+  for (const entrada of PAGE_KEYS) {
+    const patron = entrada.route.split("/").filter((s) => s.length > 0);
+    if (patron.length !== partes.length) continue;
+
+    let encaja = true;
+    for (let i = 0; i < patron.length; i += 1) {
+      const p = patron[i];
+      // `[id]` casa con cualquier segmento; el resto tiene que ser literal.
+      if (p.startsWith("[") && p.endsWith("]")) continue;
+      if (p !== partes[i]) { encaja = false; break; }
+    }
+    if (!encaja) continue;
+
+    // A igualdad de longitud gana la que tiene menos comodines: una ruta
+    // literal describe la pantalla mejor que una con parámetros.
+    const comodines = patron.filter((p) => p.startsWith("[")).length;
+    const especificidad = patron.length * 10 - comodines;
+    if (!mejor || especificidad > mejor.segmentos) {
+      mejor = { key: entrada.key, segmentos: especificidad };
+    }
+  }
+
+  return mejor?.key ?? null;
+}

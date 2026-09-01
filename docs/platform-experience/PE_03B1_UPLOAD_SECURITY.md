@@ -1,5 +1,18 @@
 # PE-03B1 · Quién sube un vídeo, y dónde
 
+> **SUPERSEDED BY PRODUCT OWNER DECISION · 31 de agosto de 2026**
+>
+> Este documento describe el tope de **200 MB por archivo** que regía cuando se
+> escribió. El propietario del producto lo **revocó en PE-03B3, sin sustituirlo
+> por otro número**, y también dejó dicho que Trazaloop **no impone una duración
+> máxima**.
+>
+> El texto se conserva tal como se escribió: es el informe de lo que se hizo
+> entonces, y reescribirlo dejaría sin explicación las decisiones que sí se
+> tomaron con esa regla puesta. Lo que hoy rige está en
+> [PE_03B3_LARGE_MEDIA_ARCHITECTURE.md](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+
 Este documento existe para decir una cosa incómoda con claridad, porque
 escribirla mal sería peor que no escribirla.
 
@@ -158,6 +171,8 @@ de PDF. Solo el tercero lo detiene.
 en memoria para mirar doce bytes convertiría cada subida en un pico de memoria
 del servidor, y con dos a la vez se nota.
 
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
+
 ---
 
 ## 7 · Doscientos megas
@@ -178,6 +193,8 @@ barrera de tamaño que un token firmado no rodea.
 **200 MB justos se aceptan**; uno más, no. Un límite que rechaza el caso justo
 es un límite mal puesto.
 
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
+
 ---
 
 ## 8 · Lo que queda por hacer, dicho
@@ -185,6 +202,8 @@ es un límite mal puesto.
 **El resumen SHA-256 se calcula sobre el archivo entero en memoria.** Es lo que
 significa un resumen, pero para 200 MB es el techo de esta implementación: un
 pico de memoria del servidor por cada finalización.
+
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
 
 Hoy no importa —las finalizaciones son escasas y las hace una persona—, pero se
 dice aquí en vez de descubrirse en producción. Si algún día se suben vídeos

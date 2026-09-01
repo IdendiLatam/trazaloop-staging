@@ -1,5 +1,18 @@
 # PE-03B1 · El cubo
 
+> **SUPERSEDED BY PRODUCT OWNER DECISION · 31 de agosto de 2026**
+>
+> Este documento describe el tope de **200 MB por archivo** que regía cuando se
+> escribió. El propietario del producto lo **revocó en PE-03B3, sin sustituirlo
+> por otro número**, y también dejó dicho que Trazaloop **no impone una duración
+> máxima**.
+>
+> El texto se conserva tal como se escribió: es el informe de lo que se hizo
+> entonces, y reescribirlo dejaría sin explicación las decisiones que sí se
+> tomaron con esa regla puesta. Lo que hoy rige está en
+> [PE_03B3_LARGE_MEDIA_ARCHITECTURE.md](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+
 `tutorial-media`. Nuevo, privado, y con sus dos topes declarados en el propio
 cubo.
 
@@ -57,6 +70,8 @@ A diferencia de los otros tres, este cubo **sí** declara límites:
 file_size_limit    = 200 MB
 allowed_mime_types = {video/mp4, video/webm}
 ```
+
+> **SUPERSEDED · PE-03B3.** El tope de 200 MB ya no existe.
 
 Los otros no los declaran porque su tamaño depende del plan de cada empresa.
 Aquí el tope es uno solo y es del producto, así que se declara en el sitio más

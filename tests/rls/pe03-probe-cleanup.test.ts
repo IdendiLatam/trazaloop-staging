@@ -112,7 +112,7 @@ async function main() {
     const bytes = mp4(marca);
     const { data } = await sa.rpc("tutorial_reserve_upload", {
       p_tutorial_id: tutorialId, p_filename: `qa-${marca}.mp4`, p_mime: "video/mp4",
-      p_size_bytes: bytes.byteLength, p_ttl_seconds: 900 });
+      p_size_bytes: bytes.byteLength, p_ttl_seconds: 3600 });
     const f = (data as { version_id: string; object_path: string }[])[0];
     await admin.storage.from(BUCKET)
       .upload(f.object_path, bytes, { contentType: "video/mp4", upsert: false });

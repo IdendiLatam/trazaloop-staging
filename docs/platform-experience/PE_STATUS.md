@@ -1,9 +1,9 @@
 # Experiencia de plataforma · dónde está cada cosa
 
-Una sola página para no tener que abrir los cuarenta y nueve documentos de
+Una sola página para no tener que abrir los ochenta y dos documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 31 de agosto de 2026, al cierre de PE-02B6.*
+*Actualizado el 31 de agosto de 2026, al cierre de PE-03B3.*
 
 ---
 
@@ -41,9 +41,18 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 | PE-03B1 | Datos, cubo y RLS | **0159** | **cerrado** · 2026-08-31 |
 | PE-03B2 | La consola de tutoriales | — | **cerrado** · 2026-08-31 |
 | — | Incidente de la sonda de QA en Staging: [informe](PE_03_QA_PROBE_INCIDENT.md) | — | **corregido** · 2026-08-31 |
-| PE-03B3 | El botón y el reproductor | — | no empezado |
+| PE-03B3 | El botón y el reproductor · **el tope de tamaño, revocado** | **0160** | **cerrado** · 2026-08-31 · pendiente de prueba humana |
 | PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
 | PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+
+Los siete de PE-03B3:
+[el tutorial de pantalla](PE_03B3_PAGE_TUTORIAL_EXPERIENCE.md) ·
+[medios sin tope](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md) ·
+[renovación](PE_03B3_PLAYBACK_RENEWAL.md) ·
+[traspaso de superadministrador](PE_03B3_SUPERADMIN_HANDOVER.md) ·
+[cobertura de claves](PE_03B3_PAGE_KEY_COVERAGE.md) ·
+[pruebas](PE_03B3_TEST_MATRIX.md) ·
+[revisión humana](PE_03B3_HUMAN_VALIDATION.md).
 
 Los seis de PE-03B2:
 [consola](PE_03B2_SUPERADMIN_TUTORIALS.md) ·
@@ -72,7 +81,7 @@ Los seis documentos de PE-03A:
 ### El estado de PE-02, en dos líneas
 
 > **PE-02: CERRADO en Staging.**
-> **Producción: no empezado, y empieza por aplicar 47 migraciones.**
+> **Producción: no empezado, y empieza por aplicar 49 migraciones.**
 
 La política de privacidad **v1.1 está vigente** desde el 31 de agosto de 2026 y
 las **quince respuestas de seguridad están publicadas**. La v1 quedó archivada con
@@ -99,6 +108,20 @@ Y lo que se corrigió después de aquella revisión, en
 
 ---
 
+### El tope de tamaño de los tutoriales, revocado
+
+> **PE-03B1 congeló 200 MB por archivo. PE-03B3 lo revocó, y no lo sustituyó
+> por otro número.** Tampoco hay duración máxima.
+
+Es una decisión del propietario del producto, del 31 de agosto de 2026. Los seis
+documentos anteriores que describen aquel tope llevan un aviso de
+`SUPERSEDED BY PRODUCT OWNER DECISION` y **conservan su texto**: son el informe
+de lo que se hizo entonces, y reescribirlos dejaría sin explicación las
+decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
+[`PE_03B3_LARGE_MEDIA_ARCHITECTURE.md`](PE_03B3_LARGE_MEDIA_ARCHITECTURE.md).
+
+---
+
 ## Confirmaciones que solo puede dar una persona
 
 | | Estado |
@@ -109,6 +132,10 @@ Y lo que se corrigió después de aquella revisión, en
 | ¿Se nombra al proveedor en el texto público? | **abierta** · no bloquea publicar |
 | ¿Se publica la política de privacidad v1.1? | **respondida** · sí · publicada 2026-08-31 |
 | ¿Se publican las quince respuestas de seguridad? | **respondida** · sí · publicadas 2026-08-31 |
+| ¿Hay un tamaño máximo por vídeo de tutorial? | **respondida** · no · revocado 2026-08-31 |
+| ¿Hay una duración máxima por vídeo? | **respondida** · no · 2026-08-31 |
+| ¿Ver un tutorial depende del plan contratado? | **respondida** · no · 2026-08-31 |
+| ¿Entró `idendilatam@gmail.com` al Preview? | **abierta** · bloquea revocar `qa-a` |
 
 ---
 
@@ -116,12 +143,12 @@ Y lo que se corrigió después de aquella revisión, en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0159** |
-| Staging | **0159** |
+| Local | **0160** |
+| Staging | **0160** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
-un paso de B5B: es una decisión aparte que empieza por aplicar 47 migraciones.
+un paso de B5B: es una decisión aparte que empieza por aplicar 49 migraciones.
 
 ---
 
@@ -130,5 +157,10 @@ un paso de B5B: es una decisión aparte que empieza por aplicar 47 migraciones.
 - [`PE_02B6_DEFERRED_HELP_BACKLOG.md`](PE_02B6_DEFERRED_HELP_BACKLOG.md) — las
   siete familias de pantalla sin ayuda contextual administrada, y por qué no se
   inventó contenido para ellas.
-- PE-03 · tutorial de pantalla y soporte. Reutilizará `PAGE_KEYS`, que por eso
-  vive en `lib/modules/` y no dentro de la ayuda.
+- PE-03B4 · la ventana de bienvenida y la preferencia por persona. No empieza
+  hasta que la prueba humana de PE-03B3 esté hecha.
+- Revocar `qa-a@trazaloop-staging.local`. Sigue activo a propósito: es la puerta
+  de repuesto hasta que se confirme que `idendilatam@gmail.com` entra bien.
+- PE-03B5 · cobertura. Hoy hay tutoriales posibles en **11** de las 147
+  pantallas del shell; ver
+  [`PE_03B3_PAGE_KEY_COVERAGE.md`](PE_03B3_PAGE_KEY_COVERAGE.md).

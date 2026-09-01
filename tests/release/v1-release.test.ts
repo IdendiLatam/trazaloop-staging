@@ -140,9 +140,13 @@ const QUALITY_01_ALLOWED = new Set([
     "0158_platform_contextual_help.sql",
     // PE-03B1: cimientos del tutorial audiovisual.
     "0159_platform_tutorial_media_foundation.sql",
+    // PE-03B3: Trazaloop retira su tope de 200 MB por archivo.
+    "0160_platform_tutorial_unbounded_media.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
+    // PE-03B3: Trazaloop retira su tope de 200 MB por archivo.
+    "0160_platform_tutorial_unbounded_media.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -1240,6 +1244,8 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0158_platform_contextual_help.sql",
     // PE-03B1: cimientos del tutorial audiovisual.
     "0159_platform_tutorial_media_foundation.sql",
+    // PE-03B3: Trazaloop retira su tope de 200 MB por archivo.
+    "0160_platform_tutorial_unbounded_media.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
