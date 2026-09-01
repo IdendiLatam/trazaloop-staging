@@ -177,7 +177,13 @@ check("5. Fail-safe: si plan_definitions no se pudo leer se conserva la cuota le
   assert(zeroed === EXPECTED_QUOTAS.demo, "una cuota no positiva no debía anular el control");
 });
 
-check("6. checkStorageAvailable deriva la cuota del plan efectivo (no de usage.storageLimitBytes)", () => {
+check("6. checkStorageAvailable deriva la cuota del plan efectivo (PE-04B3: la canónica de empresa)", () => {
+  // RH-01.2 arregló que la cuota saliera del plan EFECTIVO y no de la copia
+  // legacy. PE-04B3 va un paso más allá y la saca del catálogo comercial
+  // canónico (`plan_revision_limits`), con el uso de toda la empresa —no el de
+  // una vista que ignoraba versiones, reservas y huérfanos—. Lo que RH-01
+  // protegía sigue protegido: una empresa Full ya no queda bloqueada por los
+  // 50 MB heredados de Demo, y el control tampoco desaparece.
   const src = readRepoFile("server/actions/plans.ts");
   const body = src.slice(
     src.indexOf("export async function checkStorageAvailable"),
@@ -185,20 +191,29 @@ check("6. checkStorageAvailable deriva la cuota del plan efectivo (no de usage.s
   );
   assert(body.length > 0, "no se pudo aislar el cuerpo de checkStorageAvailable");
   assert(
-    body.includes("getOrganizationEffectivePlanCode(org.organizationId)"),
-    "debía resolver el plan EFECTIVO igual que checkResourceLimit/checkFeatureEnabled"
-  );
-  assert(body.includes("listPlanDefinitions()"), "debía leer las cuotas de plan_definitions");
-  assert(
-    body.includes("resolveEffectiveStorageLimitBytes("),
-    "debía usar el helper puro de resolución de cuota"
+    body.includes("getOrganizationStorageStatus(org.organizationId)"),
+    "debía resolver capacidad con el estado canónico de la empresa (0164)"
   );
   assert(
-    /hasStorageAvailable\(\s*usage\.storageUsedBytes,\s*limitBytes,/.test(body),
-    "la comparación debía usar la cuota efectiva (limitBytes), no usage.storageLimitBytes"
+    !body.includes("resolveEffectiveStorageLimitBytes(") && !body.includes("listPlanDefinitions()"),
+    "ya no debía derivar la cuota de plan_definitions: eso era el puente legacy"
+  );
+  assert(
+    !body.includes("commercialTierToLegacyPlanCode("),
+    "el puente free→demo debía quedar fuera del camino de almacenamiento"
+  );
+  assert(
+    !body.includes("usage.storageUsedBytes"),
+    "el uso ya no puede salir de la vista legacy incompleta"
   );
   assert(body.includes("STORAGE_LIMIT_MESSAGE"), "el control de almacenamiento NO debía quitarse");
-  // El uso sigue siendo el agregado org-wide y el estado administrativo sigue bloqueando.
+  // No poder comprobar la capacidad NIEGA: nunca se interpreta como cero.
+  assert(
+    /QUOTA_UNAVAILABLE[\s\S]{0,200}allowed: false/.test(body) ||
+      /!storage \|\| storage\.state === "QUOTA_UNAVAILABLE"/.test(body),
+    "un fallo de lectura o una cuota no verificable debía denegar"
+  );
+  // El estado administrativo sigue bloqueando (eje independiente del comercial).
   assert(body.includes("checkPlanStatusBlocking(usage)"), "suspended/cancelled debía seguir bloqueando");
 });
 
@@ -207,9 +222,18 @@ check("7. MAX_LOGO_SIZE_BYTES y la subida del logo quedan intactos", () => {
     readRepoFile("lib/domain/settings.ts").includes("export const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024;"),
     "MAX_LOGO_SIZE_BYTES no debía cambiar"
   );
+  // PE-04B3 · La subida del logo dejó de ser una comprobación previa optimista
+  // y pasa por la RESERVA canónica, con los bytes que de verdad se escriben.
+  // Lo que RH-01 exigía —que el logo no se subiera sin mirar la cuota— se
+  // conserva y se refuerza; lo que cambia es quién la mira.
+  const settings = readRepoFile("server/actions/settings.ts");
   assert(
-    readRepoFile("server/actions/settings.ts").includes("checkStorageAvailable(file.size)"),
-    "la subida del logo debía seguir pasando por checkStorageAvailable"
+    settings.includes("guardLogoStorage(org.organizationId, bytes.byteLength)"),
+    "la subida del logo debía pasar por la reserva canónica de PE-04B3"
+  );
+  assert(
+    !settings.includes("checkStorageAvailable(file.size)"),
+    "no debía quedar la comprobación previa contra la vista legacy"
   );
 });
 
@@ -313,9 +337,16 @@ check("10. El detalle de empresa encabeza con el plan efectivo y usa SUS límite
     detailAction.includes("getOrganizationEffectivePlanCode(organizationId)"),
     "la action debía resolver el plan efectivo"
   );
+  // PE-04B3 · La consola enseña LA MISMA cuota que el servidor exige: la
+  // canónica de la empresa (0164). Mientras la derivara de `plan_definitions`
+  // podía enseñar un número y el producto aplicar otro.
   assert(
-    detailAction.includes("resolveEffectiveStorageLimitBytes("),
-    "la cuota devuelta debía derivarse del plan efectivo, igual que la que aplica el servidor"
+    detailAction.includes("getOrganizationStorageStatus(organizationId)"),
+    "la cuota devuelta debía derivarse del estado canónico, igual que la que aplica el servidor"
+  );
+  assert(
+    !detailAction.includes("resolveEffectiveStorageLimitBytes("),
+    "seguía derivando la cuota del catálogo legacy"
   );
 });
 
@@ -873,6 +904,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -884,6 +916,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

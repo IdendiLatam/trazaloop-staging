@@ -78,8 +78,18 @@ check("B2. Un fallo devuelve `null`, no un plan", () => {
 });
 
 check("B3. Y quien llama DENIEGA ante ese null", () => {
+  // Los dos ejes que aún resuelven un `tier` (conteos y funciones) deniegan
+  // ante un plan indeterminado. El tercero —el almacenamiento— dejó de
+  // resolver un tier en PE-04B3: pide el estado canónico de la empresa y
+  // deniega igual, con su propio mensaje de «no se pudo comprobar».
   const n = (PLANS_ACTIONS.match(/if \(tier === null\) return \{ allowed: false/g) ?? []).length;
-  assert(n >= 3, `solo ${n} comprobaciones deniegan ante un plan indeterminado`);
+  assert(n >= 2, `solo ${n} comprobaciones deniegan ante un plan indeterminado`);
+  assert(
+    /!storage \|\| storage\.state === "QUOTA_UNAVAILABLE"/.test(PLANS_ACTIONS),
+    "el camino de almacenamiento no deniega ante una capacidad indeterminada"
+  );
+  assert(/STORAGE_UNVERIFIABLE_MESSAGE/.test(PLANS_ACTIONS),
+    "no hay un mensaje propio para «no se pudo comprobar la capacidad»");
   assert(/PLAN_UNVERIFIABLE_MESSAGE/.test(PLANS_ACTIONS),
     "no hay un mensaje propio para «no se pudo comprobar»");
   // Y el mensaje NO dice que el plan no lo permite: sería mentir.

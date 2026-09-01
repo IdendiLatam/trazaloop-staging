@@ -259,7 +259,13 @@ check("26. La carga se bloquea cuando el uso no es verificable: checkModuleStora
   assert(!/storageUsedBytes \?\? 0/.test(src), "prohibido convertir errores en cero");
   assert(/if \(!usage\.ok\)/.test(src), "el check exige resultado verificado");
   assert(src.includes("No fue posible verificar la capacidad de almacenamiento disponible. Inténtalo nuevamente."), "mensaje contractual en español");
-  assert(/storageObjectConflicts > 0/.test(src), "los conflictos de tamaño también fallan cerrados");
+  // PE-04B3 · El mismo invariante, con la contabilidad canónica de empresa: un
+  // tamaño contradictorio o desconocido deja el estado en QUOTA_UNAVAILABLE y
+  // la carga se bloquea. Cambió dónde se mide, no que se falle cerrado.
+  assert(/conflictCount > 0/.test(src), "los conflictos de tamaño también fallan cerrados");
+  assert(/QUOTA_UNAVAILABLE/.test(src), "un estado no verificable debe bloquear la carga");
+  assert(/inconsistent_data/.test(src) && /unknown_sizes/.test(src),
+    "se pierde la razón por la que no se pudo verificar");
   // La capa de lectura tampoco esconde errores tras null/0:
   const usageSrc = stripTs(read("lib/db/module-usage.ts"));
   assert(/ok: false, reason:/.test(usageSrc), "la capa de uso devuelve un resultado discriminado");
@@ -522,6 +528,7 @@ check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA post
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -533,6 +540,7 @@ check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA post
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

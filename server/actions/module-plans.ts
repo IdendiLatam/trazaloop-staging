@@ -2,8 +2,8 @@
 
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { resolveModuleAccessForOrg } from "@/lib/db/module-access";
-import { fetchOrganizationModuleUsage } from "@/lib/db/module-usage";
-import { getOrganizationUsage, getPlanLimits, listPlanDefinitions } from "@/lib/db/plans";
+import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
+import { getOrganizationUsage, getPlanLimits } from "@/lib/db/plans";
 import {
   CPR_MODULE_CODE,
   TEXTILES_MODULE_CODE,
@@ -249,47 +249,49 @@ export async function getModuleStorageUsage(moduleCode: string): Promise<ModuleS
   }
   const ok = gate.ok;
 
-  const definitions = await listPlanDefinitions();
-  const planCode = accessModeToPlanCode(ok.accessMode);
-  const storageLimitBytes = definitions.find((d) => d.code === planCode)?.storageLimitBytes;
-  if (
-    storageLimitBytes === undefined ||
-    !Number.isFinite(storageLimitBytes) ||
-    storageLimitBytes < 0
-  ) {
+  // PE-04B3 · A partir de 0164 la CAPACIDAD ya no es del módulo: es la única
+  // de la empresa. El módulo sigue decidiendo el ACCESO (arriba, resolveModuleGate)
+  // —son dos ejes distintos—, pero los bytes disponibles son los mismos para
+  // PCR, Textiles y el logo. Antes cada módulo creía tener su propio cupo
+  // completo, de modo que una empresa Full disponía en la práctica del doble
+  // de lo contratado, y el logo no descontaba de ninguno.
+  const status = await getOrganizationStorageStatus(ok.organizationId);
+  if (!status) {
+    logUsageFailure("cuota de almacenamiento", moduleCode, "source_unavailable");
+    return { ok: false, reason: "source_unavailable", userMessage: STORAGE_VERIFY_MESSAGE };
+  }
+  if (status.state === "QUOTA_UNAVAILABLE") {
+    // Cuatro maneras de no poder afirmar capacidad —plan ausente, plan
+    // ilegible, límite sin configurar, uso no verificable— y una sola
+    // respuesta: bloquear. Ninguna de ellas es «cero bytes usados».
+    const reason =
+      status.reason !== "usage_unverifiable"
+        ? "source_unavailable"
+        : status.conflictCount > 0
+          ? "inconsistent_data"
+          : status.unknownSizeCount > 0
+            ? "unknown_sizes"
+            : "inconsistent_data";
+    logUsageFailure("cuota de almacenamiento", moduleCode, reason);
+    return { ok: false, reason, userMessage: STORAGE_VERIFY_MESSAGE };
+  }
+
+  // «Ilimitado» se representa con Infinity: nunca con 0 ni con null, que es
+  // como un límite sin configurar acabaría leyéndose como «sin espacio».
+  const limitBytes = status.limitState === "unlimited" ? Number.POSITIVE_INFINITY : status.quotaBytes;
+  if (limitBytes === null || !(limitBytes >= 0)) {
     logUsageFailure("cuota de almacenamiento", moduleCode, "source_unavailable");
     return { ok: false, reason: "source_unavailable", userMessage: STORAGE_VERIFY_MESSAGE };
   }
 
-  const usage = await fetchOrganizationModuleUsage(ok.organizationId, moduleCode);
-  if (!usage.ok) {
-    logUsageFailure("cuota de almacenamiento", moduleCode, usage.reason);
-    return { ok: false, reason: usage.reason, userMessage: STORAGE_VERIFY_MESSAGE };
-  }
-  if (usage.usage.storageObjectConflicts > 0) {
-    // Referencias con tamaños contradictorios para el mismo objeto físico:
-    // el uso reportado toma el máximo (conservador), pero autorizar cargas
-    // NUEVAS con datos inconsistentes está prohibido (fail-closed).
-    logUsageFailure("cuota de almacenamiento", moduleCode, "inconsistent_data");
-    return { ok: false, reason: "inconsistent_data", userMessage: STORAGE_VERIFY_MESSAGE };
-  }
-  if (usage.usage.storageUnknownSizeCount > 0) {
-    // T9F.3 · Bloqueador F: objetos con ruta física y tamaño DESCONOCIDO.
-    // Jamás se interpretan como cero: bloquean nuevas cargas hasta que la
-    // reconciliación (scripts/t9f3-size-reconciliation) confirme tamaños.
-    logUsageFailure("cuota de almacenamiento", moduleCode, "unknown_sizes");
-    return { ok: false, reason: "unknown_sizes", userMessage: STORAGE_VERIFY_MESSAGE };
-  }
-  const usedBytes = usage.usage.storageUsedBytes;
-  const reservedBytes = usage.usage.storageReservedBytes;
   return {
     ok: true,
-    usedBytes,
-    reservedBytes,
-    limitBytes: storageLimitBytes,
-    // T9F.3: las reservas activas COMPROMETEN capacidad — el disponible las
-    // resta (misma aritmética que begin/finalize en la propia BD).
-    availableBytes: Math.max(0, storageLimitBytes - usedBytes - reservedBytes),
+    usedBytes: status.committedBytes,
+    reservedBytes: status.reservedBytes,
+    limitBytes,
+    // Las reservas activas COMPROMETEN capacidad — el disponible las resta
+    // (misma aritmética que la reserva de la propia BD).
+    availableBytes: Math.max(0, limitBytes - status.usedBytes),
   };
 }
 

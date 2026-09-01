@@ -148,6 +148,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -159,6 +160,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -1264,6 +1266,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0162_commercial_plan_foundation.sql",
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
+    "0164_canonical_organization_storage_quota.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

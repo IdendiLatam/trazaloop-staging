@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B2.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B3.*
 
 ---
 
@@ -133,7 +133,17 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-04A | Descubrimiento y arquitectura comercial · 36 decisiones | — | **cerrado** · 2026-09-01 · pendiente de revisión humana |
 | PE-04B1 | Catálogo canónico, revisiones y resolutor en sombra | **0162** | **cerrado** · 2026-09-01 |
 | PE-04B2 | Base comercial cerrada, migración de empresas y cambio de autoridad | **0163** | **cerrado** · 2026-09-01 |
-| PE-04B3…B6 | Aplicación de cuota, IA, tiempo activo y soporte | previstas | no empezado |
+| PE-04B3 | Cuota de almacenamiento única por empresa, reserva y seguridad por encima del límite | **0164** | **cerrado** · 2026-09-01 |
+| PE-04B4…B6 | IA, tiempo activo y soporte | previstas | no empezado |
+
+Los siete de PE-04B3:
+[inventario](PE_04B3_STORAGE_INVENTORY.md) ·
+[cuota canónica](PE_04B3_CANONICAL_QUOTA.md) ·
+[reservas](PE_04B3_ORGANIZATION_RESERVATIONS.md) ·
+[bajar de plan](PE_04B3_DOWNGRADE_OVERLIMIT.md) ·
+[reconciliación](PE_04B3_STORAGE_RECONCILIATION.md) ·
+[guardia de bypass](PE_04B3_BYPASS_GUARD.md) ·
+[pruebas](PE_04B3_TEST_MATRIX.md).
 
 Los ocho de PE-04B2:
 [base comercial](PE_04B2_FINAL_COMMERCIAL_BASELINE.md) ·
@@ -166,6 +176,28 @@ Los diez de PE-04A:
 [seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
 [pruebas](PE_04A_TEST_STRATEGY.md).
 Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### PE-04B3 · una sola cuota, y el fin del cupo doble
+
+El inventario encontró algo que la arquitectura de PE-04A daba por bueno: **la
+cuota de almacenamiento no era de la empresa, era de cada módulo**. Una empresa
+Full con PCR y Textiles disponía de 500 MiB *en cada uno*, y el logo —que no
+aparecía en la contabilidad que usaban esos dos módulos para decidir— no
+descontaba de ninguno. Además convivían dos números de «uso» distintos para la
+misma empresa: uno ignoraba las versiones históricas de TrazaDocs, las reservas
+vivas y los huérfanos; el otro era completo pero por módulo.
+
+0164 deja **una** función de uso, **una** de cuota, **un** estado y **una**
+reserva, con un solo `advisory lock` por empresa. PCR, Textiles y el logo
+compiten por el mismo cupo, y está demostrado ejecutando el camino real:
+`begin_textile_evidence_upload_v2` rechaza una carga por bytes que ocupó PCR.
+
+Bajar de plan **no borra nada**: la empresa queda `OVER_LIMIT`, puede seguir
+leyendo, descargando y borrando, y no puede subir hasta que quepa.
+
+El puente `free→demo` de PE-04B2 salió del camino de almacenamiento. Sobreviven
+dos usos, ambos de otro eje —límites de conteo y funciones habilitadas—, que se
+retiran en PE-04B4.
 
 ### PE-04B2 · la base comercial, y el fin de la doble verdad
 
@@ -287,8 +319,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0163** |
-| Staging | **0163** |
+| Local | **0164** |
+| Staging | **0164** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

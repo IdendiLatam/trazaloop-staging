@@ -325,12 +325,23 @@ const UNLIMITED: FunctionalLimit[] = DEMO_LIMITS.map((l) => ({
 check("20-23/40. Los helpers por módulo resuelven límites y cuota desde el plan DEL MÓDULO, jamás desde organization_subscriptions", () => {
   const src = stripTs(read("server/actions/module-plans.ts"));
   assert(src.includes("accessModeToPlanCode"), "los límites deben derivar del access_mode del módulo");
-  // T9F.2: el uso llega por la capa TIPADA fail-closed y la decisión de
-  // límites por la RPC en BD (check_module_resource_allowance) — mismo
-  // invariante: la fuente es la vista por módulo de 0101, nunca el legacy.
+  // T9F.2: la decisión de límites de CONTEO la toma la RPC en BD
+  // (check_module_resource_allowance) sobre la vista por módulo de 0101,
+  // nunca el legacy.
   assert(
-    src.includes("fetchOrganizationModuleUsage") && src.includes("check_module_resource_allowance"),
-    "el uso debe leerse de la vista por módulo (0101) con resultado verificado"
+    src.includes("check_module_resource_allowance"),
+    "los límites de conteo deben decidirse en BD sobre la vista por módulo (0101)"
+  );
+  // PE-04B3: la CAPACIDAD dejó de ser del módulo. El cupo de bytes es uno solo
+  // por empresa (0164) y lo lee el estado canónico; el módulo sigue decidiendo
+  // el ACCESO y sus límites de conteo. Son ejes distintos y solo uno cambió.
+  assert(
+    src.includes("getOrganizationStorageStatus("),
+    "la capacidad debe salir del estado canónico de la empresa, no de un cupo por módulo"
+  );
+  assert(
+    !src.includes("fetchOrganizationModuleUsage"),
+    "el uso por módulo ya no puede decidir capacidad: discreparía de lo que exige la base"
   );
   assert(!/legacyUsage\.(planCode|storage)/.test(src), "el plan/almacenamiento legacy no puede usarse en decisiones");
   assert(!src.includes("organization_subscriptions"), "no debe consultarse organization_subscriptions");

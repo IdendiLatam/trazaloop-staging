@@ -119,6 +119,24 @@ export async function uploadCompanyLogo(
     return { error: "No fue posible subir el logo. Intenta de nuevo.", storagePath: null };
   }
 
+  // PE-04B3 · La extensión forma parte de la ruta, así que `upsert` solo
+  // reemplaza cuando el formato NO cambia: subir un PNG y después un WEBP
+  // dejaba el PNG anterior en el bucket, sin fila que lo referenciara y sin
+  // candidato huérfano. Eran bytes que seguían ocupando y que nadie medía.
+  // Se retiran los restos del prefijo del logo distintos del recién escrito;
+  // si el borrado falla, el objeto NO desaparece de la contabilidad: el uso
+  // canónico mide el prefijo físico, de modo que sigue contando y la
+  // reconciliación lo ve como UNTRACKED_OBJECT.
+  const { data: previos } = await supabase.storage
+    .from("organization-assets")
+    .list(`${orgId}/logo`);
+  const sobrantes = (previos ?? [])
+    .map((f) => `${orgId}/logo/${f.name}`)
+    .filter((p) => p !== path);
+  if (sobrantes.length > 0) {
+    await supabase.storage.from("organization-assets").remove(sobrantes);
+  }
+
   // Sprint 10A (Parte 6): tamaño real del archivo, para medir uso de
   // almacenamiento contra la cuota del plan.
   const { data, error } = await supabase

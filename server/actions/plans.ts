@@ -16,8 +16,6 @@ import {
 import {
   canCreateResource,
   isPlanFeatureEnabled,
-  hasStorageAvailable,
-  resolveEffectiveStorageLimitBytes,
   canChangeOrganizationPlan,
   buildResourceLimitMessage,
   buildPlanStatusMessage,
@@ -37,7 +35,16 @@ import { isPlanCode, isPlanStatus, commercialTierToLegacyPlanCode, type Resource
  */
 const PLAN_UNVERIFIABLE_MESSAGE =
   "No se pudo comprobar el plan de tu empresa ahora mismo. Vuelve a intentarlo en un momento.";
+import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
 import type { OrganizationPlanUsage } from "@/lib/plans/usage";
+
+/**
+ * PE-04B3 · Lo que se dice cuando no se pudo comprobar la CAPACIDAD. No es
+ * «te quedaste sin espacio» —eso afirmaría algo que no se sabe— ni se deja
+ * pasar.
+ */
+const STORAGE_UNVERIFIABLE_MESSAGE =
+  "No se pudo comprobar la capacidad de almacenamiento de tu empresa ahora mismo. No se subió nada; vuelve a intentarlo en un momento.";
 
 /**
  * Trazaloop · Sprint 10A · Server actions de planes.
@@ -147,29 +154,34 @@ export async function checkFeatureEnabled(
 
 export async function checkStorageAvailable(bytesToAdd: number): Promise<{ allowed: boolean; error: string | null }> {
   const org = await requireActiveOrg();
+
+  // Eje ADMINISTRATIVO (suspended/cancelled). Sigue sin bloquear ante un fallo
+  // de lectura de la vista legacy: ese eje no es el del almacenamiento.
   const usage = await getOrganizationUsage(org.organizationId);
-  if (!usage) return { allowed: true, error: null };
+  if (usage) {
+    const statusCheck = checkPlanStatusBlocking(usage);
+    if (!statusCheck.allowed) return statusCheck;
+  }
 
-  const statusCheck = checkPlanStatusBlocking(usage);
-  if (!statusCheck.allowed) return statusCheck;
+  // PE-04B3 · Eje COMERCIAL. Una sola cuota por empresa, un solo uso y un solo
+  // estado, los de 0164. Se retira el puente free→demo de B2: la cuota ya no
+  // se traduce a un plan legacy para leerla de `plan_definitions`, sale de
+  // `plan_revision_limits.storage_bytes`. Y se retira el uso de la vista
+  // legacy, que ignoraba versiones de TrazaDocs, reservas vivas y huérfanos.
+  //
+  // FAIL-CLOSED: no poder comprobar la capacidad NIEGA. Dejar pasar ante un
+  // fallo de lectura es exactamente cómo se abren los desbordes que después
+  // nadie sabe explicar.
+  const storage = await getOrganizationStorageStatus(org.organizationId);
+  if (!storage || storage.state === "QUOTA_UNAVAILABLE") {
+    return { allowed: false, error: STORAGE_UNVERIFIABLE_MESSAGE };
+  }
+  if (storage.limitState === "unlimited") return { allowed: true, error: null };
+  if (storage.quotaBytes === null) {
+    return { allowed: false, error: STORAGE_UNVERIFIABLE_MESSAGE };
+  }
 
-  // RH-01.2: la CUOTA sale del plan EFECTIVO por módulos (0103), igual que en
-  // checkResourceLimit/checkFeatureEnabled. El USO sigue siendo el agregado
-  // org-wide de la vista legacy (es el que corresponde al almacenamiento
-  // global no atribuido a módulo, p. ej. el logo de empresa). Antes se
-  // comparaba ese uso contra la cuota legacy: una empresa Full/Extra quedaba
-  // bloqueada por los 50 MB del Demo heredado. El control se conserva: Demo
-  // efectivo sigue con 50 MB.
-  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
-  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
-  const planDefinitions = await listPlanDefinitions();
-  const limitBytes = resolveEffectiveStorageLimitBytes(
-    planDefinitions,
-    commercialTierToLegacyPlanCode(tier),
-    usage.storageLimitBytes
-  );
-
-  const allowed = hasStorageAvailable(usage.storageUsedBytes, limitBytes, bytesToAdd);
+  const allowed = storage.usedBytes + bytesToAdd <= storage.quotaBytes;
   return { allowed, error: allowed ? null : STORAGE_LIMIT_MESSAGE };
 }
 
@@ -250,15 +262,21 @@ export async function getOrganizationPlanDetailAction(
     getOrganizationEffectivePlanCode(organizationId),
   ]);
   const usage = allUsage.find((u) => u.organizationId === organizationId) ?? null;
+  // PE-04B3 · La consola enseña la MISMA cuota que el servidor aplica: la
+  // canónica de la empresa (0164). Mientras la sacara de `plan_definitions` a
+  // través del puente free→demo podía enseñar un número y el producto exigir
+  // otro, que es la familia de defectos que abrió PE-04B2.
+  //
   // Sin plan determinado no se inventa una cuota: se devuelve 0 y la pantalla
   // muestra que no se pudo determinar, en vez de un número de un plan que
-  // quizá no sea el suyo.
-  const effectiveStorageLimitBytes = effectivePlanCode === null ? 0
-    : resolveEffectiveStorageLimitBytes(
-        plans,
-        commercialTierToLegacyPlanCode(effectivePlanCode),
-        usage?.storageLimitBytes ?? 0
-      );
+  // quizá no sea el suyo. Hoy ningún plan tiene almacenamiento ilimitado; si
+  // alguno lo tuviera, la consola tendría que decir «sin límite» en vez de un
+  // número, y eso es un cambio de pantalla, no de cálculo.
+  const storageStatus = await getOrganizationStorageStatus(organizationId);
+  const effectiveStorageLimitBytes =
+    storageStatus && storageStatus.limitState === "finite" && storageStatus.quotaBytes !== null
+      ? storageStatus.quotaBytes
+      : 0;
   return {
     usage,
     history,

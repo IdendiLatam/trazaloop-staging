@@ -177,23 +177,14 @@ export async function insertFileDocument(
   return { id: data.id as string, error: null };
 }
 
-/** Sube el archivo al bucket privado trazadocs-documents. Ruta fija por
- *  versión: {organization_id}/document_files/{document_id}/{version}/{file_name}. */
-/** T9F.4 · §12: la RUTA ya no se construye aquí — la decide la BASE al crear
- *  el intent (begin_cpr_storage_upload) a partir de la fila del documento, y
- *  esta función solo sube los bytes a ESA ruta reservada. */
-export async function uploadFileDocumentFile(
-  objectPath: string,
-  bytes: ArrayBuffer,
-  contentType: string
-): Promise<{ storagePath: string | null; error: string | null }> {
-  const supabase = await createServerClient();
-  const { error } = await supabase.storage
-    .from("trazadocs-documents")
-    .upload(objectPath, bytes, { contentType });
-  if (error) return { storagePath: null, error: "No fue posible subir el archivo. Intenta de nuevo." };
-  return { storagePath: objectPath, error: null };
-}
+/* PE-04B3 · `uploadFileDocumentFile` se retira. Subía a
+ * `trazadocs-documents` SIN intent y SIN reserva, y no la llamaba nadie en
+ * todo el repositorio: era una puerta lateral sin medir esperando a que
+ * alguien la usara. Los bytes de TrazaDocs se suben con
+ * `lib/storage/direct-upload.ts` sobre la ruta que reservó
+ * `begin_cpr_storage_upload`. El guardia de bypass
+ * (tests/unit/pe04b3-bypass-guard) impide reintroducir una escritura a un
+ * bucket de cliente fuera de la lista de caminos con reserva. */
 
 export async function getFileDocumentDownloadUrl(storagePath: string): Promise<string | null> {
   const supabase = await createServerClient();

@@ -11,7 +11,9 @@ import {
 import {
   buildOrganizationProfilePayload, validateOrganizationProfileInput,
 } from "@/lib/domain/organization-profile";
-import { checkStorageAvailable, checkOrganizationCanMutate } from "@/server/actions/plans";
+import { checkOrganizationCanMutate } from "@/server/actions/plans";
+import { guardLogoStorage } from "@/lib/db/organization-storage";
+import { STORAGE_LIMIT_MESSAGE } from "@/lib/plans/limits";
 import { requireSession } from "@/lib/auth/require-session";
 import { assertMyLegalAcceptance } from "@/server/actions/legal";
 import { LEGAL_ACCEPTANCE_REQUIRED_MESSAGE } from "@/lib/domain/legal";
@@ -192,9 +194,12 @@ export async function uploadCompanyLogoAction(
   const validation = validateLogoFile({ size: file.size, type: file.type });
   if (validation.error) return { error: validation.error };
 
-  // Sprint 10A (Parte 8): cuota de almacenamiento del plan.
-  const storageCheck = await checkStorageAvailable(file.size);
-  if (!storageCheck.allowed) return { error: storageCheck.error };
+  // Eje ADMINISTRATIVO. Antes lo cubría de rebote `checkStorageAvailable`;
+  // desde PE-04B3 la cuota la exige `guardLogoStorage`, que solo sabe de
+  // capacidad. Una cuenta suspended/cancelled sigue en solo lectura, y eso
+  // hay que decirlo aquí explícitamente en vez de heredarlo por casualidad.
+  const mutable = await checkOrganizationCanMutate();
+  if (!mutable.allowed) return { error: mutable.error };
 
   const bytes = await file.arrayBuffer();
 
@@ -214,6 +219,23 @@ export async function uploadCompanyLogoAction(
   // de lo que dice ser: así el almacenamiento deja de propagar la mentira.
   const realMime = mimeForKind(kind) ?? file.type;
   const extension = extensionForKind(kind);
+
+  // PE-04B3 · CUOTA. El logo pasa por la MISMA reserva que PCR y Textiles
+  // (`organization_storage_guard`, un lock por empresa), no por una
+  // comprobación previa contra una vista que ignoraba versiones, reservas y
+  // huérfanos. Se comprueba con los bytes que REALMENTE se van a escribir y
+  // descontando lo que el logo nuevo reemplaza: cobrar dos veces el mismo
+  // logo dejaría a una empresa sin poder cambiarlo al llenarse.
+  const guard = await guardLogoStorage(org.organizationId, bytes.byteLength);
+  if (!guard.allowed) {
+    return {
+      error:
+        guard.code === "QUOTA_EXCEEDED"
+          ? STORAGE_LIMIT_MESSAGE
+          : "No se pudo comprobar la capacidad de almacenamiento de tu empresa ahora mismo. No se subió nada; vuelve a intentarlo en un momento.",
+    };
+  }
+
   const { error } = await uploadCompanyLogo(org.organizationId, bytes, realMime, extension);
   if (error) return { error };
 

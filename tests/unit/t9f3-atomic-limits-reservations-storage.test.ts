@@ -248,8 +248,12 @@ check("24-26. Tamaño desconocido/negativo o consulta fallida BLOQUEAN: el inté
   assert(!interpretModuleUsageRow({ ...usageRowBase, storage_used_bytes: -1 }).ok, "negativo ⇒ inconsistente");
   assert(!interpretModuleUsageRow(null).ok, "fila ausente ⇒ no disponible (jamás cero)");
   const mp = read("server/actions/module-plans.ts");
-  assert(mp.includes('storageUnknownSizeCount > 0') && mp.includes('"unknown_sizes"'), "desconocidos > 0 bloquea cargas (fail-closed)");
-  assert(mp.includes("storageLimitBytes - usedBytes - reservedBytes"), "el disponible RESTA las reservas activas");
+  // PE-04B3 · El invariante no cambió —desconocidos > 0 bloquea— pero la
+  // contabilidad pasó a ser la canónica de EMPRESA (0164): el estado responde
+  // QUOTA_UNAVAILABLE con razón `usage_unverifiable` y la carga se para ahí.
+  assert(mp.includes('unknownSizeCount') && mp.includes('"unknown_sizes"'), "desconocidos > 0 bloquea cargas (fail-closed)");
+  assert(mp.includes("QUOTA_UNAVAILABLE"), "un uso no verificable debe bloquear la carga");
+  assert(mp.includes("limitBytes - status.usedBytes"), "el disponible RESTA las reservas activas");
   assert(mp.includes("usage.usedBytes + usage.reservedBytes"), "la decisión de carga cuenta usado + reservado");
   assert(BEGIN_V2.includes("STORAGE_UNVERIFIABLE"), "la BD también bloquea el begin ante desconocidos/conflictos");
 });

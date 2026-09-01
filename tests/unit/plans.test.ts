@@ -445,12 +445,17 @@ check("Corrección 8 (caso 14). updateCompanySettingsAction se bloquea si la cue
   const fnBody = settingsSource.slice(fnStart, fnStart + 500);
   assert(fnBody.includes("checkOrganizationCanMutate()"), "updateCompanySettingsAction debía revisar el estado de la suscripción");
 
-  // El logo también queda cubierto: subir usa checkStorageAvailable (que
-  // ya revisa el estado del plan primero, Bloqueante 3 original) y
-  // quitar usa checkOrganizationCanMutate directamente.
+  // El logo también queda cubierto. PE-04B3: la CUOTA pasó a exigirla
+  // `guardLogoStorage` (la reserva canónica, que solo sabe de capacidad), así
+  // que el estado administrativo ya no viaja de rebote dentro de la
+  // comprobación de cuota — se pide aquí, explícito. Se comprueban los dos.
   const uploadStart = settingsSource.indexOf("export async function uploadCompanyLogoAction");
-  const uploadBody = settingsSource.slice(uploadStart, uploadStart + 700);
-  assert(uploadBody.includes("checkStorageAvailable("), "uploadCompanyLogoAction debía seguir revisando cuota (que ya cubre el estado del plan)");
+  const uploadBody = settingsSource.slice(
+    uploadStart,
+    settingsSource.indexOf("export async function removeCompanyLogoAction")
+  );
+  assert(uploadBody.includes("checkOrganizationCanMutate()"), "uploadCompanyLogoAction debía revisar el estado de la suscripción");
+  assert(uploadBody.includes("guardLogoStorage("), "uploadCompanyLogoAction debía seguir revisando la cuota de almacenamiento");
 
   const removeStart = settingsSource.indexOf("export async function removeCompanyLogoAction");
   const removeBody = settingsSource.slice(removeStart, removeStart + 500);
