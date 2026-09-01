@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ochenta y nueve documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 31 de agosto de 2026, al cierre de PE-03B4.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-03.*
 
 ---
 
@@ -43,7 +43,16 @@ Una sola página para no tener que abrir los ochenta y nueve documentos de
 | — | Incidente de la sonda de QA en Staging: [informe](PE_03_QA_PROBE_INCIDENT.md) | — | **corregido** · 2026-08-31 |
 | PE-03B3 | El botón y el reproductor · **el tope de tamaño, revocado** | **0160** | **cerrado** · 2026-08-31 · pendiente de prueba humana |
 | PE-03B4 | Bienvenida, preferencia por persona · **cobertura completa y acceso de plataforma** | **0161** | **cerrado** · 2026-08-31 · pendiente de prueba humana |
-| PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+| PE-03B5 | Cierre: recuento, residuos, endurecimiento y aceptación integrada | — | **cerrado** · 2026-09-01 |
+
+Los siete de PE-03B5:
+[cobertura final](PE_03B5_FINAL_COVERAGE.md) ·
+[residuos de QA](PE_03B5_QA_RESIDUE_AUDIT.md) ·
+[endurecimiento](PE_03B5_HARDENING.md) ·
+[aceptación integrada](PE_03B5_INTEGRATED_ACCEPTANCE.md) ·
+[plan editorial](PE_03B5_TUTORIAL_ROLLOUT_PLAN.md) ·
+[guion de la bienvenida](PE_03B5_WELCOME_VIDEO_BRIEF.md) ·
+[corte de producción](PE_03_PRODUCTION_CUTOVER_CARRYOVERS.md).
 
 Los siete de PE-03B4:
 [bienvenida](PE_03B4_WELCOME_VIDEO.md) ·
@@ -114,6 +123,23 @@ Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 
 Y lo que se corrigió después de aquella revisión, en
 [`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md).
+
+---
+
+### El estado de PE-03, en dos líneas
+
+> **PE-03: CERRADO / PASS.** Arquitectura, medios, consola, tutoriales de
+> pantalla, bienvenida, preferencias, cobertura y endurecimiento, completos.
+> **Producción: sin tocar, en 0111.**
+
+Quedan tres cosas y ninguna bloquea la implementación: **grabar los vídeos**
+(editorial), **los subtítulos** (deuda de accesibilidad, la arquitectura ya los
+admite) y **retirar `qa-a`**, que se aplazó al **corte de producción** — sigue
+activo a propósito, y está escrito en
+[`PE_03_PRODUCTION_CUTOVER_CARRYOVERS.md`](PE_03_PRODUCTION_CUTOVER_CARRYOVERS.md)
+para que aparezca en la lista de verificación de PE-06.
+
+El cierre completo, en [`PE_03_FINAL_CLOSURE.md`](PE_03_FINAL_CLOSURE.md).
 
 ---
 

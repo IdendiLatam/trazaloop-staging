@@ -67,6 +67,24 @@ const password = "Trazaloop-Test-1234";
 const BUCKET = "tutorial-media";
 const objetos: string[] = [];
 
+/**
+ * PE-03B5 · LAS CUENTAS DE ESTA SUITE SE RETIRAN AL TERMINAR.
+ *
+ * El inventario de residuos del cierre encontró que estas suites creaban
+ * superadministradores de plataforma y no los retiraban nunca. Contra la base
+ * local es ruido acumulado; contra un entorno compartido es exactamente lo que
+ * pasó en Staging con la sonda de PE-03B1.
+ *
+ * La regla que sale de aquello: quien crea un acceso privilegiado lo cierra.
+ */
+const personasCreadas: string[] = [];
+async function retirarPersonasDeQa() {
+  for (const id of personasCreadas) {
+    await admin.from("platform_staff").delete().eq("user_id", id);
+    await admin.auth.admin.deleteUser(id);
+  }
+}
+
 async function sesion(prefijo: string, rol: "superadmin" | "support" | null) {
   const email = `${prefijo}-${sello}-${Math.floor(Math.random() * 1e6)}@test.trazaloop.dev`;
   const { data: creada } = await admin.auth.admin.createUser({
@@ -82,6 +100,7 @@ async function sesion(prefijo: string, rol: "superadmin" | "support" | null) {
       .insert({ user_id: creada.user.id, role_code: rol, status: "active" });
   }
   const b64 = Buffer.from(JSON.stringify(data.session), "utf8").toString("base64url");
+  personasCreadas.push(creada.user.id);
   return { id: creada.user.id, cli, cookie: `${AUTH_COOKIE}=base64-${b64}` };
 }
 
@@ -366,6 +385,7 @@ async function main() {
       .is("effective_to", null);
     await admin.from("platform_tutorials")
       .update({ status: "retired" }).eq("id", tutorialId);
+    await retirarPersonasDeQa();
   }
 
   console.log(`\nPE-03B2 · consola (HTTP): ${passed} en verde, ${failed} en rojo\n`);
