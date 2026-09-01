@@ -39,10 +39,18 @@ Una sola página para no tener que abrir los cuarenta y nueve documentos de
 |---|---|---|---|
 | PE-03A | Descubrimiento, arquitectura de medios y congelación de UX | — | **cerrado** · pendiente de revisión humana |
 | PE-03B1 | Datos, cubo y RLS | **0159** | **cerrado** · 2026-08-31 |
-| PE-03B2 | La consola de tutoriales | — | no empezado |
+| PE-03B2 | La consola de tutoriales | — | **cerrado** · 2026-08-31 |
 | PE-03B3 | El botón y el reproductor | — | no empezado |
 | PE-03B4 | Bienvenida y preferencia por persona | 1 prevista | no empezado |
 | PE-03B5 | Cobertura y endurecimiento | — | no empezado |
+
+Los seis de PE-03B2:
+[consola](PE_03B2_SUPERADMIN_TUTORIALS.md) ·
+[subida](PE_03B2_UPLOAD_WORKFLOW.md) ·
+[publicación e historia](PE_03B2_PUBLICATION_HISTORY.md) ·
+[reponer](PE_03B2_RESTORE_WORKFLOW.md) ·
+[pruebas](PE_03B2_TEST_MATRIX.md) ·
+[revisión humana](PE_03B2_HUMAN_VALIDATION.md).
 
 Los seis de PE-03B1:
 [datos](PE_03B1_TUTORIAL_DATA_FOUNDATION.md) ·

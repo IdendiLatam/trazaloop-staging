@@ -332,3 +332,238 @@ export async function listTutorialVersions(
     changeNote: (r.change_note as string | null) ?? null,
   }));
 }
+
+// ===========================================================================
+// LO QUE NECESITA LA CONSOLA · PE-03B2
+// ===========================================================================
+
+export type TutorialConsoleRow = {
+  id: string;
+  tutorialType: "page" | "welcome";
+  pageKey: string | null;
+  moduleKey: string | null;
+  title: string;
+  status: string;
+  /** La versión que se está viendo, si hay alguna. */
+  current: { versionId: string; versionNumber: number; publishedAt: string | null } | null;
+  /** La última candidata verificada y sin publicar. */
+  candidate: { versionId: string; versionNumber: number; fileState: string } | null;
+  /** Cuántas versiones llegaron a publicarse alguna vez. */
+  publishedCount: number;
+  /** Subidas que no cuadraron. Se muestran aparte para poder reintentarlas. */
+  failedCount: number;
+};
+
+export type TutorialListFilters = {
+  search?: string | null;
+  moduleKey?: string | null;
+  tutorialType?: string | null;
+  /** `con_video`, `sin_video`, `con_candidata` */
+  coverage?: string | null;
+};
+
+export type ConsoleRead<T> = { status: "ok"; data: T } | { status: "unavailable" };
+
+/**
+ * La lista de la consola, en TRES consultas.
+ *
+ * No una por fila. Con veinte tutoriales y una consulta por cada uno para saber
+ * su versión vigente, la pantalla haría veintiuna; con cuarenta, cuarenta y una,
+ * y nadie se daría cuenta hasta que fuera lenta. Es la misma decisión que tomó
+ * `listHelpItems` en PE-02B4.
+ */
+export async function listTutorialsForConsole(
+  filters: TutorialListFilters = {}, client?: Db
+): Promise<ConsoleRead<TutorialConsoleRow[]>> {
+  const supabase = await db(client);
+
+  let q = supabase.from("platform_tutorials")
+    .select("id, tutorial_type, page_key, module_key, title, status");
+  if (filters.moduleKey) q = q.eq("module_key", filters.moduleKey);
+  if (filters.tutorialType) q = q.eq("tutorial_type", filters.tutorialType);
+  const texto = (filters.search ?? "").trim().toLowerCase();
+  if (texto.length > 0) {
+    q = q.or(`page_key.ilike.%${texto}%,title.ilike.%${texto}%`);
+  }
+  const { data, error } = await q.order("tutorial_type").order("page_key");
+  if (error) return { status: "unavailable" };
+
+  const filas = (data ?? []) as Record<string, unknown>[];
+  if (filas.length === 0) return { status: "ok", data: [] };
+  const ids = filas.map((r) => String(r.id));
+
+  const { data: versiones, error: eV } = await supabase
+    .from("platform_tutorial_versions")
+    .select("id, tutorial_id, version_number, file_state, effective_from, effective_to, published_at")
+    .in("tutorial_id", ids);
+  if (eV) return { status: "unavailable" };
+
+  const porTutorial = new Map<string, Record<string, unknown>[]>();
+  for (const v of (versiones ?? []) as Record<string, unknown>[]) {
+    const k = String(v.tutorial_id);
+    porTutorial.set(k, [...(porTutorial.get(k) ?? []), v]);
+  }
+
+  const salida: TutorialConsoleRow[] = filas.map((t) => {
+    const vs = porTutorial.get(String(t.id)) ?? [];
+    const vigente = vs.find((v) => v.effective_from !== null && v.effective_to === null);
+    const candidatas = vs
+      .filter((v) => v.effective_from === null && v.file_state === "verified")
+      .sort((a, b) => Number(b.version_number) - Number(a.version_number));
+    return {
+      id: String(t.id),
+      tutorialType: t.tutorial_type as "page" | "welcome",
+      pageKey: (t.page_key as string | null) ?? null,
+      moduleKey: (t.module_key as string | null) ?? null,
+      title: String(t.title),
+      status: String(t.status),
+      current: vigente
+        ? {
+            versionId: String(vigente.id),
+            versionNumber: Number(vigente.version_number),
+            publishedAt: (vigente.published_at as string | null) ?? null,
+          }
+        : null,
+      candidate: candidatas[0]
+        ? {
+            versionId: String(candidatas[0].id),
+            versionNumber: Number(candidatas[0].version_number),
+            fileState: String(candidatas[0].file_state),
+          }
+        : null,
+      publishedCount: vs.filter((v) => v.effective_from !== null).length,
+      failedCount: vs.filter((v) => v.file_state === "failed").length,
+    };
+  });
+
+  // El filtro de cobertura se resuelve aquí porque depende de las versiones,
+  // que ya están cargadas. Volver a la base para esto sería una consulta más
+  // por el mismo dato.
+  const cobertura = filters.coverage ?? null;
+  if (cobertura === "con_video") return { status: "ok", data: salida.filter((r) => r.current) };
+  if (cobertura === "sin_video") return { status: "ok", data: salida.filter((r) => !r.current) };
+  if (cobertura === "con_candidata") {
+    return { status: "ok", data: salida.filter((r) => r.candidate) };
+  }
+  return { status: "ok", data: salida };
+}
+
+export type TutorialVersionDetail = TutorialVersionRow & {
+  originalFilename: string;
+  declaredMime: string;
+  realMime: string | null;
+  durationSeconds: number | null;
+  title: string | null;
+  description: string | null;
+  publishedAt: string | null;
+  uploadExpiresAt: string;
+  uploadedByName: string | null;
+  publishedByName: string | null;
+};
+
+export type TutorialDetail = {
+  tutorial: TutorialSummary;
+  versions: TutorialVersionDetail[];
+};
+
+/** La ficha: el tutorial y TODAS sus versiones. Dos consultas. */
+export async function getTutorialDetail(
+  tutorialId: string, client?: Db
+): Promise<ConsoleRead<TutorialDetail | null>> {
+  const supabase = await db(client);
+  const { data: t, error: eT } = await supabase.from("platform_tutorials")
+    .select("id, tutorial_type, page_key, module_key, title, status")
+    .eq("id", tutorialId).maybeSingle();
+  if (eT) return { status: "unavailable" };
+  if (!t) return { status: "ok", data: null };
+
+  const { data: vs, error: eV } = await supabase.from("platform_tutorial_versions")
+    .select("id, version_number, file_state, object_path, original_filename, declared_mime, real_mime, real_size_bytes, content_hash, duration_seconds, title, description, change_note, effective_from, effective_to, published_at, upload_expires_at, restored_from_version_id, uploaded_by:profiles!platform_tutorial_versions_uploaded_by_fkey(full_name), published_by:profiles!platform_tutorial_versions_published_by_fkey(full_name)")
+    .eq("tutorial_id", tutorialId)
+    .order("version_number", { ascending: false });
+  if (eV) return { status: "unavailable" };
+
+  const fila = t as Record<string, unknown>;
+  return {
+    status: "ok",
+    data: {
+      tutorial: {
+        id: String(fila.id),
+        tutorialType: fila.tutorial_type as "page" | "welcome",
+        pageKey: (fila.page_key as string | null) ?? null,
+        moduleKey: (fila.module_key as string | null) ?? null,
+        title: String(fila.title),
+        status: String(fila.status),
+      },
+      versions: ((vs ?? []) as Record<string, unknown>[]).map((r) => ({
+        id: String(r.id),
+        versionNumber: Number(r.version_number),
+        fileState: String(r.file_state),
+        objectPath: String(r.object_path),
+        originalFilename: String(r.original_filename),
+        declaredMime: String(r.declared_mime),
+        realMime: (r.real_mime as string | null) ?? null,
+        realSizeBytes: (r.real_size_bytes as number | null) ?? null,
+        contentHash: (r.content_hash as string | null) ?? null,
+        durationSeconds: (r.duration_seconds as number | null) ?? null,
+        title: (r.title as string | null) ?? null,
+        description: (r.description as string | null) ?? null,
+        changeNote: (r.change_note as string | null) ?? null,
+        effectiveFrom: (r.effective_from as string | null) ?? null,
+        effectiveTo: (r.effective_to as string | null) ?? null,
+        publishedAt: (r.published_at as string | null) ?? null,
+        uploadExpiresAt: String(r.upload_expires_at),
+        restoredFromVersionId: (r.restored_from_version_id as string | null) ?? null,
+        uploadedByName: (r.uploaded_by as { full_name?: string } | null)?.full_name ?? null,
+        publishedByName: (r.published_by as { full_name?: string } | null)?.full_name ?? null,
+      })),
+    },
+  };
+}
+
+/**
+ * Firma la vista previa de CUALQUIER versión, para personal de plataforma.
+ *
+ * Es deliberadamente distinta de `signTutorialPlayback`: esa resuelve cuál es la
+ * vigente y se niega a firmar otra cosa. Esta firma la que se le pida —incluida
+ * una candidata que nadie más puede ver— y por eso su única barrera es quién
+ * llama.
+ *
+ * No hay cliente administrativo: la política `tutorial_media_staff_select` del
+ * cubo deja leer estos objetos a personal de plataforma, así que la firma la
+ * emite su propia sesión. Si mañana alguien dejara de ser personal, dejaría de
+ * poder firmar sin tocar este código.
+ */
+export async function signTutorialPreview(
+  versionId: string, client?: Db
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  const supabase = await db(client);
+  const { data, error } = await supabase.from("platform_tutorial_versions")
+    .select("object_path, file_state").eq("id", versionId).maybeSingle();
+  if (error) return { ok: false, message: "No se pudo consultar esa versión." };
+  if (!data) return { ok: false, message: "Esa versión no existe o no puedes verla." };
+  const v = data as { object_path: string; file_state: string };
+  if (v.file_state === "reserved") {
+    return { ok: false, message: "Esa versión todavía no tiene archivo subido." };
+  }
+
+  const { data: firma, error: eF } = await supabase.storage
+    .from("tutorial-media").createSignedUrl(v.object_path, 60 * 30);
+  if (eF || !firma?.signedUrl) {
+    return { ok: false, message: "No fue posible preparar la vista previa." };
+  }
+  return { ok: true, url: firma.signedUrl };
+}
+
+/** Marca una reserva como fallida: la subida no llegó, o se abandonó. */
+export async function failTutorialVersion(
+  versionId: string, client?: Db
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await db(client);
+  const { data, error } = await supabase.from("platform_tutorial_versions")
+    .update({ file_state: "failed" }).eq("id", versionId)
+    .is("effective_from", null).select("id");
+  if (error) return { ok: false, message: error.message };
+  if (!data || data.length === 0) return { ok: false, message: TUTORIAL_FORBIDDEN_MESSAGE };
+  return { ok: true };
+}

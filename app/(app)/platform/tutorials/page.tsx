@@ -1,0 +1,266 @@
+export const dynamic = "force-dynamic";
+
+import Link from "next/link";
+
+import { listTutorialsAction } from "@/server/actions/tutorials-admin";
+import { CreateTutorialForm } from "@/components/domain/tutorials/tutorial-admin-forms";
+import { PAGE_KEYS } from "@/lib/modules/page-keys";
+import { COMMERCIAL_MODULES } from "@/lib/modules/catalog";
+import {
+  TUTORIAL_CONSOLE_UNAVAILABLE, TUTORIAL_FILE_STATE_LABEL, tutorialCoverageLabel,
+} from "@/lib/domain/tutorial-admin";
+
+export const metadata = { title: "Tutoriales · Plataforma" };
+
+const uno = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+
+/**
+ * Trazaloop · PE-03B2 · La consola de tutoriales.
+ *
+ * Los filtros se resuelven en el SERVIDOR, como en la consola de ayuda: filtrar
+ * en el navegador sobre una lista parcial enseña «tres resultados» cuando hay
+ * treinta, y nadie lo nota hasta que falta uno.
+ *
+ * La lista se arma con TRES consultas, no una por fila. Ver
+ * `listTutorialsForConsole`.
+ */
+export default async function PlatformTutorialsPage(
+  { searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const params = await searchParams;
+  const filtros = {
+    search: uno(params.q) || null,
+    moduleKey: uno(params.modulo) || null,
+    tutorialType: uno(params.tipo) || null,
+    coverage: uno(params.cobertura) || null,
+  };
+  const { rows, canManage, unavailable } = await listTutorialsAction(filtros);
+
+  const nombrePantalla = (key: string | null) =>
+    (key ? PAGE_KEYS.find((p) => p.key === key)?.label : null) ?? key ?? "—";
+
+  const conTutorial = new Set(rows.map((r) => r.pageKey).filter(Boolean) as string[]);
+  const disponibles = PAGE_KEYS
+    .filter((p) => !conTutorial.has(p.key))
+    .map((p) => ({ key: p.key, label: p.label }));
+
+  const bienvenida = rows.filter((r) => r.tutorialType === "welcome");
+  const dePagina = rows.filter((r) => r.tutorialType === "page");
+
+  // La cobertura se cuenta sobre el REGISTRO, no sobre lo que hay: lo que
+  // interesa saber es cuántas pantallas registradas tienen vídeo, no qué
+  // porcentaje de los tutoriales creados lo tiene.
+  const conVideo = dePagina.filter((r) => r.current).length;
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-8">
+      <header className="space-y-1">
+        <p className="eyebrow">Plataforma</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Tutoriales</h1>
+        <p className="max-w-2xl text-sm text-ink-soft">
+          Los vídeos que explican cada pantalla, y el de bienvenida. Se suben y se
+          publican desde aquí, sin desplegar. Subir un vídeo{" "}
+          <strong className="font-medium text-ink">no lo publica</strong>: primero
+          se revisa.
+        </p>
+      </header>
+
+      {unavailable ? (
+        <div role="status" className="rounded-lg border border-amber/40 bg-amber/5 p-4">
+          <p className="text-sm font-medium text-ink">No se pudo consultar la lista</p>
+          <p className="mt-1 text-sm text-ink-soft">{TUTORIAL_CONSOLE_UNAVAILABLE}</p>
+        </div>
+      ) : null}
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Cobertura</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-hairline bg-surface p-4">
+            <p className="text-2xl font-semibold text-ink">{PAGE_KEYS.length}</p>
+            <p className="text-sm text-ink-soft">pantallas en el registro</p>
+          </div>
+          <div className="rounded-lg border border-hairline bg-surface p-4">
+            <p className="text-2xl font-semibold text-ink">{dePagina.length}</p>
+            <p className="text-sm text-ink-soft">con tutorial creado</p>
+          </div>
+          <div className="rounded-lg border border-hairline bg-surface p-4">
+            <p className="text-2xl font-semibold text-ink">{conVideo}</p>
+            <p className="text-sm text-ink-soft">con vídeo publicado</p>
+          </div>
+        </div>
+        <p className="text-sm text-ink-soft">
+          Que una pantalla no tenga vídeo no es un fallo: mientras no lo tenga,
+          dice que el tutorial está en actualización.
+        </p>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Buscar y filtrar</h2>
+        <form method="get" className="grid gap-3 rounded-lg border border-hairline bg-surface p-4 sm:grid-cols-3">
+          <label className="block sm:col-span-3">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Pantalla o nombre</span>
+            <input name="q" type="search" defaultValue={filtros.search ?? ""}
+              placeholder="parte de la clave de pantalla o del nombre"
+              className="block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:border-loop" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Módulo</span>
+            <select name="modulo" defaultValue={filtros.moduleKey ?? ""}
+              className="block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:border-loop">
+              <option value="">Todos</option>
+              {COMMERCIAL_MODULES.map((m) => (
+                <option key={m.key} value={m.key}>{m.name}</option>
+              ))}
+              <option value="platform">Transversal</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Tipo</span>
+            <select name="tipo" defaultValue={filtros.tutorialType ?? ""}
+              className="block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:border-loop">
+              <option value="">Todos</option>
+              <option value="page">Tutorial de pantalla</option>
+              <option value="welcome">Vídeo de bienvenida</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-ink">Estado del vídeo</span>
+            <select name="cobertura" defaultValue={filtros.coverage ?? ""}
+              className="block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:border-loop">
+              <option value="">Todos</option>
+              <option value="con_video">Con vídeo publicado</option>
+              <option value="con_candidata">Con una versión sin publicar</option>
+              <option value="sin_video">Sin vídeo todavía</option>
+            </select>
+          </label>
+          <div className="flex items-end gap-2 sm:col-span-3">
+            <button type="submit"
+              className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm font-medium hover:border-loop">
+              Filtrar
+            </button>
+            <Link href="/platform/tutorials"
+              className="text-sm text-ink-soft hover:text-loop hover:underline">
+              Limpiar
+            </Link>
+          </div>
+        </form>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Vídeo de bienvenida</h2>
+        {bienvenida.length === 0 ? (
+          <p className="rounded-lg border border-hairline bg-paper p-4 text-sm text-ink-soft">
+            No aparece con los filtros actuales.
+          </p>
+        ) : (
+          bienvenida.map((r) => <FilaTutorial key={r.id} row={r} nombre="Bienvenida a Trazaloop" />)
+        )}
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Tutoriales de pantalla</h2>
+        {dePagina.length === 0 ? (
+          <p className="rounded-lg border border-hairline bg-paper p-4 text-sm text-ink-soft">
+            {filtros.search || filtros.moduleKey || filtros.coverage
+              ? "Ninguno coincide con esos filtros."
+              : "Todavía no hay ningún tutorial de pantalla. Crea el primero abajo."}
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {dePagina.map((r) => (
+              <li key={r.id}>
+                <FilaTutorial row={r} nombre={nombrePantalla(r.pageKey)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {canManage ? (
+        <section className="space-y-3">
+          <h2 className="eyebrow">Crear un tutorial de pantalla</h2>
+          <div className="rounded-lg border border-hairline bg-surface p-5">
+            <CreateTutorialForm pages={disponibles} />
+          </div>
+        </section>
+      ) : (
+        <p className="rounded-lg border border-hairline bg-paper p-4 text-sm text-ink-soft">
+          Tu cuenta puede consultar los tutoriales y su historia, pero no subir ni
+          publicar vídeos.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FilaTutorial({
+  row, nombre,
+}: {
+  row: Awaited<ReturnType<typeof listTutorialsAction>>["rows"][number];
+  nombre: string;
+}) {
+  const cobertura = tutorialCoverageLabel(row);
+  const tono = cobertura.tone === "ok"
+    ? "border-loop/40 bg-loop/5 text-loop-deep"
+    : cobertura.tone === "pending"
+      ? "border-amber/40 bg-amber/5 text-ink"
+      : "border-hairline bg-paper text-ink-soft";
+
+  return (
+    <Link href={`/platform/tutorials/${row.id}`}
+      className="block rounded-lg border border-hairline bg-surface p-4 hover:border-loop">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">{nombre}</p>
+          {row.pageKey ? (
+            <p className="mt-0.5 truncate text-xs text-ink-soft">{row.pageKey}</p>
+          ) : null}
+          <p className="mt-1 text-sm text-ink-soft">{row.title}</p>
+        </div>
+        {/* El estado se dice con palabras, no solo con un color. */}
+        <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${tono}`}>
+          {cobertura.text}
+        </span>
+      </div>
+
+      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-soft">
+        <div>
+          <dt className="inline font-medium text-ink">Publicada: </dt>
+          <dd className="inline">
+            {row.current ? `versión ${row.current.versionNumber}` : "ninguna"}
+          </dd>
+        </div>
+        {row.candidate ? (
+          <div>
+            <dt className="inline font-medium text-ink">Sin publicar: </dt>
+            <dd className="inline">
+              versión {row.candidate.versionNumber} ·{" "}
+              {TUTORIAL_FILE_STATE_LABEL[row.candidate.fileState] ?? row.candidate.fileState}
+            </dd>
+          </div>
+        ) : null}
+        <div>
+          <dt className="inline font-medium text-ink">Historia: </dt>
+          <dd className="inline">
+            {row.publishedCount === 0 ? "sin publicaciones"
+              : `${row.publishedCount} publicación(es)`}
+          </dd>
+        </div>
+        {row.failedCount > 0 ? (
+          <div>
+            <dt className="inline font-medium text-ink">Subidas fallidas: </dt>
+            <dd className="inline">{row.failedCount}</dd>
+          </div>
+        ) : null}
+        {row.status === "retired" ? (
+          <div><dd className="inline font-medium text-ink">Tutorial retirado</dd></div>
+        ) : null}
+      </dl>
+    </Link>
+  );
+}

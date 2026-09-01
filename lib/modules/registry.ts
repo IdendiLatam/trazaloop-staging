@@ -127,6 +127,8 @@ export const PLATFORM_GROUP: ModuleNavGroup = {
     // PE-02B2 · El contenido que la plataforma publica para todas las empresas.
     { label: "Preguntas frecuentes", href: "/platform/faq" },
     { label: "Ayuda del producto", href: "/platform/help" },
+    // PE-03B2 · Los vídeos que explican cada pantalla, y el de bienvenida.
+    { label: "Tutoriales", href: "/platform/tutorials" },
     { label: "Documentos legales", href: "/platform/legal" },
     { label: "Tickets de soporte", href: "/platform/support" },
   ],
