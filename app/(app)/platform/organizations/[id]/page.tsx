@@ -22,7 +22,7 @@ import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { getPlanLimits } from "@/lib/db/plans";
-import { PLAN_LABEL } from "@/lib/plans/types";
+import { PLAN_LABEL, commercialTierToLegacyPlanCode } from "@/lib/plans/types";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
@@ -46,7 +46,13 @@ export default async function PlatformOrganizationDetailPage({
   if (!org) notFound();
   // RH-01.1: los límites que se muestran son los del PLAN EFECTIVO (0103),
   // no los del planCode legacy de organization_subscriptions.
-  const planLimits = await getPlanLimits(planDetail.effectivePlanCode);
+  //
+  // PE-04B2 · Y el plan efectivo puede venir como `null`: «no se pudo
+  // determinar». Entonces NO se enseñan los límites de un plan cualquiera —se
+  // enseña que no se pudo determinar—, que es justo lo contrario de lo que
+  // hacía la consola cuando llamaba «Plan Demo» a un cliente Full.
+  const planLimits = planDetail.effectivePlanCode === null
+    ? [] : await getPlanLimits(commercialTierToLegacyPlanCode(planDetail.effectivePlanCode));
 
   const rows: [string, string | number][] = [
     ["Razón social", org.legalName ?? "No disponible"],
@@ -86,7 +92,9 @@ export default async function PlatformOrganizationDetailPage({
         <p className="flex flex-wrap items-center gap-2 pt-2 text-sm">
           <span className="text-ink-soft">Plan efectivo:</span>
           <span className="rounded-full border border-loop/30 bg-loop/5 px-2.5 py-0.5 font-semibold text-loop-deep">
-            {PLAN_LABEL[planDetail.effectivePlanCode]}
+            {planDetail.effectivePlanCode === null
+              ? "No se pudo determinar"
+              : PLAN_LABEL[planDetail.effectivePlanCode]}
           </span>
         </p>
       </header>
@@ -102,7 +110,7 @@ export default async function PlatformOrganizationDetailPage({
         canManage={moduleDetail.canManage}
       />
 
-      {planDetail.usage ? (
+      {planDetail.usage && planDetail.effectivePlanCode !== null ? (
         <section className="space-y-3">
           <h2 className="eyebrow">Uso agregado · Plan heredado</h2>
           <p className="max-w-2xl text-xs text-ink-soft">
@@ -117,7 +125,7 @@ export default async function PlatformOrganizationDetailPage({
           <PlanUsageCard
             usage={planDetail.usage}
             limits={planLimits}
-            effectivePlanCode={planDetail.effectivePlanCode}
+            effectivePlanCode={planDetail.effectivePlanCode ?? undefined}
             effectiveStorageLimitBytes={planDetail.effectiveStorageLimitBytes}
           />
         </section>

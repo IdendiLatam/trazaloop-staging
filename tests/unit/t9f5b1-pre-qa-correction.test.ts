@@ -518,6 +518,8 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0161_user_product_preferences.sql",
     // PE-04B1: los cimientos comerciales canónicos.
     "0162_commercial_plan_foundation.sql",
+    // PE-04B2: la migración comercial de las empresas.
+    "0163_organization_commercial_migration.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -527,6 +529,8 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0161_user_product_preferences.sql",
     // PE-04B1: los cimientos comerciales canónicos.
     "0162_commercial_plan_foundation.sql",
+    // PE-04B2: la migración comercial de las empresas.
+    "0163_organization_commercial_migration.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

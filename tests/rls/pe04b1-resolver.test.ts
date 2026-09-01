@@ -67,8 +67,19 @@ async function main() {
   const { data: orgId } = await dueño.cli.rpc("create_organization",
     { p_name: `B1R ${sello}` });
   const org = orgId as string;
+
+  // PE-04B2 · Se parte de una empresa SIN asignaciones canónicas.
+  //
+  // Desde 0163, crear una empresa ya le da su base Free y su prueba de Full: es
+  // exactamente lo que B2 construyó. Esta suite comprueba el RESOLUTOR, y para
+  // eso necesita poder poner las asignaciones una a una y ver qué contesta en
+  // cada paso — incluido el paso en el que no hay ninguna.
+  //
+  // Lo que la provisión hace de verdad lo comprueba `pe04b2-baseline`.
+  await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
   const otraOrg = (await (await persona("b1r-otro")).cli
     .rpc("create_organization", { p_name: `B1R otra ${sello}` })).data as string;
+  await admin.from("organization_plan_assignments").delete().eq("organization_id", otraOrg);
 
   const rev = async (code: string) => {
     const { data } = await admin.from("plan_revisions")

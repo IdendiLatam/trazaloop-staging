@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
-import type { PlanCode, PlanLimit, PlanStatus, ResourceCode, SubscriptionPlanHistoryEntry } from "@/lib/plans/types";
+import type { PlanCode, PlanLimit, PlanStatus, ResourceCode, SubscriptionPlanHistoryEntry, CommercialTier } from "@/lib/plans/types";
+import { isCommercialTier } from "@/lib/plans/types";
 import type { OrganizationPlanUsage } from "@/lib/plans/usage";
 
 /**
@@ -135,28 +136,37 @@ export async function changeOrganizationPlan(
  * recursos TRANSVERSALES (equipo: roles_enabled / team_members): la copia
  * legacy de organization_subscriptions queda solo para el estado
  * administrativo de la cuenta (suspended/cancelled) y lecturas informativas.
- * Fail-closed: ante cualquier error se responde 'demo' (jamás se amplían
- * permisos por un fallo de lectura).
+ * PE-04B2 · DESDE 0163 LEE EL MODELO CANÓNICO, y devuelve `free | full |
+ * extra`. La reserva a `organization_subscriptions` desapareció: esa fila es la
+ * que hacía que la consola dijera «Plan Demo» a un cliente que tiene Full.
+ *
+ * Y UN FALLO YA NO ES UN PLAN. Antes devolvía `'demo'` ante cualquier error:
+ * fallaba cerrado —bien— y a la vez MENTÍA sobre la identidad del plan, porque
+ * no distinguía «es el plan más bajo» de «no pude saberlo». Ahora devuelve
+ * `null`, que quien llama tiene que tratar como «no disponible»: denegar lo de
+ * pago igual que ante la ausencia, y **no enseñarlo como si fuera un plan**.
  */
-export async function getOrganizationEffectivePlanCode(orgId: string): Promise<PlanCode> {
+export async function getOrganizationEffectivePlanCode(
+  orgId: string
+): Promise<CommercialTier | null> {
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("get_organization_effective_plan", {
     p_organization_id: orgId,
   });
-  if (error) return "demo";
+  if (error) return null;
   const code = typeof data === "string" ? data : null;
-  return code === "full" || code === "extra" ? code : "demo";
+  return isCommercialTier(code) ? code : null;
 }
 
 /**
  * RH-01.1 · Plan EFECTIVO de varias empresas de una sola pasada, para la
  * consola del superadministrador. La RPC ya autoriza a platform_staff
  * (0103 §2), así que corre con la sesión real — sin service_role. Misma
- * política fail-closed por empresa: un error de lectura responde 'demo'.
+ * PE-04B2 · Un error de lectura responde `null` —«no disponible»—, no un plan.
  */
 export async function listOrganizationEffectivePlanCodes(
   organizationIds: readonly string[]
-): Promise<Record<string, PlanCode>> {
+): Promise<Record<string, CommercialTier | null>> {
   const uniqueIds = Array.from(new Set(organizationIds));
   const entries = await Promise.all(
     uniqueIds.map(async (id) => [id, await getOrganizationEffectivePlanCode(id)] as const)

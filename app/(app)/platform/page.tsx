@@ -31,13 +31,20 @@ export default async function PlatformPage() {
     organizations.map((o) => o.organizationId)
   );
   const usageByOrgId = new Map(usage.map((u) => [u.organizationId, u]));
+  // PE-04B2 · El plan efectivo puede venir como `null` = «no se pudo
+  // determinar», y se pasa tal cual.
+  //
+  // Antes esta línea decía `?? "demo"`: un fallo de lectura se pintaba como
+  // «Plan Demo», indistinguible de una empresa que de verdad está en el suelo.
+  // Es la mitad del defecto que este tramo cierra; la otra mitad era leer la
+  // suscripción legacy, que ya no manda.
   const planByOrgId = Object.fromEntries(
     organizations.map((o) => {
       const u = usageByOrgId.get(o.organizationId) ?? null;
       return [
         o.organizationId,
         {
-          effectivePlanCode: effectivePlanByOrgId[o.organizationId] ?? "demo",
+          effectivePlanCode: effectivePlanByOrgId[o.organizationId] ?? null,
           legacyPlanCode: u?.planCode ?? null,
           storagePercentUsed: u?.storagePercentUsed ?? null,
         },

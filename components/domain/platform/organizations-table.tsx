@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PlatformOrganizationRow } from "@/lib/db/platform";
-import { PLAN_LABEL, type PlanCode } from "@/lib/plans/types";
+import { PLAN_LABEL, type PlanCode, type CommercialTier } from "@/lib/plans/types";
 import { EmptyState } from "@/components/ui/empty-state";
 
 /**
@@ -12,7 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
  * y se rotulan como tal, nunca como el plan vigente.
  */
 type PlanInfo = {
-  effectivePlanCode: PlanCode;
+  /** PE-04B2 · `null` = no se pudo determinar. NO es un plan, y no se pinta como tal. */
+  effectivePlanCode: CommercialTier | null;
   legacyPlanCode: PlanCode | null;
   storagePercentUsed: number | null;
 };
@@ -71,12 +72,21 @@ export function OrganizationsTable({
               <td className="px-3 py-2 text-xs">
                 {plan ? (
                   <span className="inline-flex flex-col">
-                    <span className="font-medium">{PLAN_LABEL[plan.effectivePlanCode]}</span>
+                    <span className="font-medium">
+                      {plan.effectivePlanCode === null
+                        ? "No se pudo determinar"
+                        : PLAN_LABEL[plan.effectivePlanCode]}
+                    </span>
+                    {/* PE-04B2 · Se rotula como LEGACY y NO AUTORITATIVO, con
+                        esas palabras. Antes decía «Plan heredado (histórico /
+                        administrativo)», que es cierto y suave: quien lo leía
+                        seguía viendo dos planes y no sabía cuál creerse.
+                        Desde 0163 esta fila no decide nada comercial. */}
                     <span className="text-[10px] text-ink-soft">
-                      Plan heredado (histórico / administrativo):{" "}
+                      LEGACY · no autoritativo:{" "}
                       {plan.legacyPlanCode ? PLAN_LABEL[plan.legacyPlanCode] : "—"}
                       {plan.storagePercentUsed !== null
-                        ? ` · ${plan.storagePercentUsed}% almacenamiento agregado`
+                        ? ` · ${plan.storagePercentUsed}% almacenamiento agregado (legacy)`
                         : ""}
                     </span>
                   </span>

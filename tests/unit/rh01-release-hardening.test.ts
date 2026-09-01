@@ -24,7 +24,6 @@ import {
   hasStorageAvailable,
 } from "../../lib/plans/limits";
 import { buildEffectiveStorageUsage } from "../../lib/plans/usage";
-import { PLAN_CODES, type PlanCode } from "../../lib/plans/types";
 import {
   normalizeVisibleText,
   normalizeVisibleTexts,
@@ -73,7 +72,14 @@ function walkFiles(relDir: string, matcher: RegExp): string[] {
 // Cuotas comerciales vigentes (seed de 0050). No se modifican en este sprint:
 // se leen de la migración para que el test falle si alguien las tocara.
 const MB = 1048576;
-const EXPECTED_QUOTAS: Record<PlanCode, number> = {
+// PE-04B2 · Los TRES planes que 0050 sembró en las tablas legacy. `free` entró
+// en el vocabulario con el modelo canónico y NO vive en `plan_definitions`, así
+// que exigirlo aquí sería pedirle a 0050 algo que no le toca. Se escribe el
+// tipo estrecho en vez de `Partial<Record<PlanCode, …>>`: un opcional obligaría
+// a comprobar `undefined` en veinte sitios para expresar lo mismo.
+type LegacyPlanCode = "demo" | "full" | "extra";
+const LEGACY_PLAN_CODES: readonly LegacyPlanCode[] = ["demo", "full", "extra"];
+const EXPECTED_QUOTAS: Record<LegacyPlanCode, number> = {
   demo: 50 * MB, // 52428800
   full: 500 * MB, // 524288000
   extra: 5 * 1024 * MB, // 5368709120
@@ -88,7 +94,7 @@ console.log("RH-01.2 · Almacenamiento del logo resuelto por el plan efectivo");
 
 check("1. Las cuotas del seed 0050 siguen siendo Demo 50 MB / Full 500 MB / Extra 5 GB", () => {
   const seed = readRepoFile("supabase/migrations/0050_plans_and_usage.sql");
-  for (const code of PLAN_CODES) {
+  for (const code of LEGACY_PLAN_CODES) {
     const expected = EXPECTED_QUOTAS[code];
     const re = new RegExp(`\\('${code}',[^)]*?,\\s*${expected}\\)`);
     assert(re.test(seed), `la cuota de ${code} debía seguir siendo ${expected} bytes en 0050`);
@@ -96,7 +102,7 @@ check("1. Las cuotas del seed 0050 siguen siendo Demo 50 MB / Full 500 MB / Extr
 });
 
 /** Definiciones tal como las devuelve listPlanDefinitions() (plan_definitions). */
-const PLAN_DEFINITIONS = PLAN_CODES.map((code) => ({
+const PLAN_DEFINITIONS = LEGACY_PLAN_CODES.map((code) => ({
   code,
   storageLimitBytes: EXPECTED_QUOTAS[code],
 }));
@@ -255,9 +261,19 @@ check("9. /platform muestra el PLAN EFECTIVO y degrada el legacy a histórico", 
     "la tabla no debía seguir presentando el planCode legacy como plan vigente"
   );
   assert(table.includes("Plan efectivo"), "el encabezado de la columna debía decir Plan efectivo");
+  // PE-04B2 · El rótulo era «Plan heredado (histórico / administrativo)»: cierto
+  // y suave. Quien lo leía seguía viendo dos planes y no sabía cuál creerse.
+  //
+  // Desde 0163 esa fila NO decide nada comercial, y el rótulo lo dice con esas
+  // palabras. La promesa —«el legacy no se presenta como el plan vigente»— es
+  // la misma; lo que cambió es que ahora se dice sin rodeos.
   assert(
-    /Plan heredado \(hist[óo]rico \/ administrativo\)/i.test(table),
-    "el dato legacy debía quedar rotulado como plan heredado histórico/administrativo (invariante T9F.1 §21)"
+    /LEGACY · no autoritativo/i.test(table),
+    "el dato legacy debía quedar rotulado como LEGACY y no autoritativo"
+  );
+  assert(
+    !/Plan heredado \(hist[óo]rico \/ administrativo\)/i.test(table),
+    "el rótulo suave volvió: sugiere que sigue siendo un plan de la empresa"
   );
 });
 
@@ -267,9 +283,17 @@ check("10. El detalle de empresa encabeza con el plan efectivo y usa SUS límite
     detail.includes("PLAN_LABEL[planDetail.effectivePlanCode]"),
     "el detalle debía mostrar el plan efectivo de forma destacada"
   );
+  // PE-04B2 · El plan efectivo puede venir como `null` = «no se pudo
+  // determinar», y entonces NO se enseñan los límites de un plan cualquiera.
+  // Los límites siguen saliendo del plan EFECTIVO; lo que se añadió es el
+  // camino honesto para cuando no hay plan que enseñar.
   assert(
-    detail.includes("getPlanLimits(planDetail.effectivePlanCode)"),
+    detail.includes("commercialTierToLegacyPlanCode(planDetail.effectivePlanCode)"),
     "los límites mostrados debían ser los del plan EFECTIVO"
+  );
+  assert(
+    detail.includes('planDetail.effectivePlanCode === null'),
+    "un plan indeterminado debía distinguirse, no pintarse como un plan"
   );
   assert(
     !detail.includes("getPlanLimits(planDetail.usage.planCode)"),
@@ -847,6 +871,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0161_user_product_preferences.sql",
     // PE-04B1: los cimientos comerciales canónicos.
     "0162_commercial_plan_foundation.sql",
+    // PE-04B2: la migración comercial de las empresas.
+    "0163_organization_commercial_migration.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -856,6 +882,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0161_user_product_preferences.sql",
     // PE-04B1: los cimientos comerciales canónicos.
     "0162_commercial_plan_foundation.sql",
+    // PE-04B2: la migración comercial de las empresas.
+    "0163_organization_commercial_migration.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

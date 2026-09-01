@@ -26,7 +26,17 @@ import {
   STORAGE_LIMIT_MESSAGE,
   findLimit,
 } from "@/lib/plans/limits";
-import { isPlanCode, isPlanStatus, type ResourceCode, type PlanCode, type SubscriptionPlanHistoryEntry } from "@/lib/plans/types";
+import { isPlanCode, isPlanStatus, commercialTierToLegacyPlanCode, type ResourceCode, type PlanCode, type CommercialTier, type SubscriptionPlanHistoryEntry } from "@/lib/plans/types";
+
+/**
+ * PE-04B2 · Lo que se dice cuando NO SE PUDO determinar el plan.
+ *
+ * No es «tu plan no lo permite» —eso sería mentir sobre lo que la empresa
+ * tiene— ni se deja pasar. Se deniega y se dice que fue un fallo de lectura,
+ * que es lo único cierto. Mismo criterio que `RESOURCE_USAGE_UNVERIFIABLE`.
+ */
+const PLAN_UNVERIFIABLE_MESSAGE =
+  "No se pudo comprobar el plan de tu empresa ahora mismo. Vuelve a intentarlo en un momento.";
 import type { OrganizationPlanUsage } from "@/lib/plans/usage";
 
 /**
@@ -96,8 +106,12 @@ export async function checkResourceLimit(resourceCode: ResourceCode): Promise<{ 
   // resuelve con el plan EFECTIVO por módulos (0103) — organization_
   // subscriptions ya solo aporta el estado administrativo de la cuenta.
   // Demo→Full/Extra habilita de inmediato; Full→Demo vuelve a restringir.
-  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
-  const limits = await getPlanLimits(effectivePlanCode);
+  // PE-04B2 · El plan puede venir como `null` = «no se pudo determinar». Se
+  // DENIEGA y se dice que no se pudo verificar — no se cae al plan más bajo,
+  // que era lo que hacía creer a un cliente Full que era Demo.
+  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
+  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
+  const limits = await getPlanLimits(commercialTierToLegacyPlanCode(tier));
   const limit = findLimit(limits, resourceCode);
   if (!limit) return { allowed: true, error: null };
 
@@ -120,8 +134,9 @@ export async function checkFeatureEnabled(
   // decide si la función está disponible es el EFECTIVO por módulos (0103),
   // nunca la copia obsoleta de organization_subscriptions. Corrige el bug
   // real Demo→Full de invitaciones (roles_enabled) de raíz y en servidor.
-  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
-  const limits = await getPlanLimits(effectivePlanCode);
+  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
+  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
+  const limits = await getPlanLimits(commercialTierToLegacyPlanCode(tier));
   const limit = findLimit(limits, resourceCode);
   if (!limit) return { allowed: true, error: null };
 
@@ -145,11 +160,12 @@ export async function checkStorageAvailable(bytesToAdd: number): Promise<{ allow
   // comparaba ese uso contra la cuota legacy: una empresa Full/Extra quedaba
   // bloqueada por los 50 MB del Demo heredado. El control se conserva: Demo
   // efectivo sigue con 50 MB.
-  const effectivePlanCode = await getOrganizationEffectivePlanCode(org.organizationId);
+  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
+  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
   const planDefinitions = await listPlanDefinitions();
   const limitBytes = resolveEffectiveStorageLimitBytes(
     planDefinitions,
-    effectivePlanCode,
+    commercialTierToLegacyPlanCode(tier),
     usage.storageLimitBytes
   );
 
@@ -217,8 +233,12 @@ export async function getOrganizationPlanDetailAction(
   plans: PlanDefinitionRow[];
   canManage: boolean;
   /** RH-01.1 · Plan comercial VIGENTE (organization_modules, 0103). Es el
-   *  dato que la consola debe presentar; `usage.planCode` es histórico. */
-  effectivePlanCode: PlanCode;
+   *  dato que la consola debe presentar; `usage.planCode` es histórico.
+   *
+   *  PE-04B2 · `null` significa **no se pudo determinar**, y la consola tiene
+   *  que decirlo así. Antes esta ruta caía a `demo` ante un fallo de lectura, y
+   *  eso es exactamente lo que hacía que un cliente Full leyera «Plan Demo». */
+  effectivePlanCode: CommercialTier | null;
   /** RH-01.1/RH-01.2 · Cuota real que aplica el servidor con ese plan. */
   effectiveStorageLimitBytes: number;
 }> {
@@ -230,11 +250,15 @@ export async function getOrganizationPlanDetailAction(
     getOrganizationEffectivePlanCode(organizationId),
   ]);
   const usage = allUsage.find((u) => u.organizationId === organizationId) ?? null;
-  const effectiveStorageLimitBytes = resolveEffectiveStorageLimitBytes(
-    plans,
-    effectivePlanCode,
-    usage?.storageLimitBytes ?? 0
-  );
+  // Sin plan determinado no se inventa una cuota: se devuelve 0 y la pantalla
+  // muestra que no se pudo determinar, en vez de un número de un plan que
+  // quizá no sea el suyo.
+  const effectiveStorageLimitBytes = effectivePlanCode === null ? 0
+    : resolveEffectiveStorageLimitBytes(
+        plans,
+        commercialTierToLegacyPlanCode(effectivePlanCode),
+        usage?.storageLimitBytes ?? 0
+      );
   return {
     usage,
     history,

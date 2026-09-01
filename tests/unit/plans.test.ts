@@ -22,7 +22,7 @@ import {
   SUSPENDED_ACCOUNT_MESSAGE,
   CANCELLED_ACCOUNT_MESSAGE,
 } from "../../lib/plans/limits";
-import { PLAN_CODES, RESOURCE_CODES, isPlanCode, type PlanLimit } from "../../lib/plans/types";
+import { PLAN_CODES, COMMERCIAL_TIERS, RESOURCE_CODES, isPlanCode, type PlanLimit } from "../../lib/plans/types";
 
 let failures = 0;
 function check(name: string, fn: () => void) {
@@ -242,13 +242,28 @@ check("25. No se acepta plan_code desde cliente en create-org normal", () => {
 
 console.log("\nTrazaloop · planes: catálogo de recursos y planes es completo\n");
 
-check("Extra: los 3 códigos de plan son exactamente demo/full/extra", () => {
-  assert(JSON.stringify(PLAN_CODES) === JSON.stringify(["demo", "full", "extra"]), "PLAN_CODES debía ser exactamente demo/full/extra");
+check("Extra: los códigos de plan son los legacy MÁS el suelo canónico", () => {
+  // PE-04B2 · Exigía exactamente demo/full/extra, que era cierto hasta que
+  // existió un plan comercial llamado `free`.
+  //
+  // Ahora conviven dos vocabularios y conviene que se vea: `demo` sobrevive
+  // porque las tablas legacy —plan_definitions, plan_limits— lo siguen usando y
+  // son la fuente de los límites de conteo hasta PE-04B3; `free` es el suelo
+  // comercial canónico. Lo que una empresa puede TENER hoy son los tres de
+  // COMMERCIAL_TIERS, y eso es lo que se comprueba aparte.
+  assert(JSON.stringify(PLAN_CODES) === JSON.stringify(["demo", "free", "full", "extra"]),
+    `PLAN_CODES es ${JSON.stringify(PLAN_CODES)}`);
+  assert(JSON.stringify(COMMERCIAL_TIERS) === JSON.stringify(["free", "full", "extra"]),
+    `COMMERCIAL_TIERS es ${JSON.stringify(COMMERCIAL_TIERS)}`);
+  // Y `demo` NO es un plan que una empresa pueda tener.
+  assert(!(COMMERCIAL_TIERS as readonly string[]).includes("demo"),
+    "«demo» volvió a ser un plan comercial");
 });
 
 check("Extra: los 13 recursos medibles están todos definidos", () => {
   assert(RESOURCE_CODES.length === 13, `debían existir exactamente 13 recursos: ${RESOURCE_CODES.length}`);
-  for (const code of PLAN_CODES) {
+  // Los límites del catálogo LEGACY, que es el que tiene estas tres filas.
+  for (const code of ["demo", "full", "extra"] as const) {
     for (const resource of RESOURCE_CODES) {
       const limits = code === "demo" ? DEMO_LIMITS : FULL_LIMITS;
       assert(findLimit(limits, resource) !== null, `${code} debía tener un límite definido para ${resource}`);

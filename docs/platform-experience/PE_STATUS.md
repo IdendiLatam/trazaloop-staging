@@ -1,9 +1,9 @@
 # Experiencia de plataforma · dónde está cada cosa
 
-Una sola página para no tener que abrir los ciento quince documentos de
+Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B1.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B2.*
 
 ---
 
@@ -132,7 +132,18 @@ Y lo que se corrigió después de aquella revisión, en
 |---|---|---|---|
 | PE-04A | Descubrimiento y arquitectura comercial · 36 decisiones | — | **cerrado** · 2026-09-01 · pendiente de revisión humana |
 | PE-04B1 | Catálogo canónico, revisiones y resolutor en sombra | **0162** | **cerrado** · 2026-09-01 |
-| PE-04B2…B6 | Migración de empresas y aplicación de límites | previstas | no empezado |
+| PE-04B2 | Base comercial cerrada, migración de empresas y cambio de autoridad | **0163** | **cerrado** · 2026-09-01 |
+| PE-04B3…B6 | Aplicación de cuota, IA, tiempo activo y soporte | previstas | no empezado |
+
+Los ocho de PE-04B2:
+[base comercial](PE_04B2_FINAL_COMMERCIAL_BASELINE.md) ·
+[revisiones sucesoras](PE_04B2_SUCCESSOR_PLAN_REVISIONS.md) ·
+[reconocimiento](PE_04B2_MIGRATION_RECOGNITION.md) ·
+[Free y la prueba](PE_04B2_FREE_TRIAL_LIFECYCLE.md) ·
+[asignaciones](PE_04B2_ORGANIZATION_ASSIGNMENTS.md) ·
+[cambio de autoridad](PE_04B2_CANONICAL_CUTOVER.md) ·
+[la deuda Full→Demo](PE_04B2_FULL_DEMO_DEBT.md) ·
+[pruebas](PE_04B2_TEST_MATRIX.md).
 
 Los siete de PE-04B1:
 [catálogo](PE_04B1_PLAN_CATALOG.md) ·
@@ -155,6 +166,26 @@ Los diez de PE-04A:
 [seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
 [pruebas](PE_04A_TEST_STRATEGY.md).
 Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### PE-04B2 · la base comercial, y el fin de la doble verdad
+
+> **Free · USD 0 · 50 MiB · 25 créditos de IA al mes · 30 min activos al día y
+> 300 al mes.**
+> **Full · USD 40 / USD 400 · 500 MiB · 500 créditos · sin límite de tiempo.**
+> **Extra · USD 100 / USD 1 000 · 5 GiB · 2 000 créditos · 2 casos de
+> acompañamiento al mes.**
+> Precios **antes de impuestos**. Una empresa nueva nace con **Free permanente +
+> prueba de Full de 48 h con 50 créditos en total**.
+>
+> **La deuda Full → «Plan Demo · 50 MB» está cerrada.** El plan comercial ya no
+> sale de `organization_subscriptions`, y un fallo de lectura ya no se presenta
+> como un plan: devuelve «no se pudo determinar» y **deniega**.
+>
+> Casi nada de esto se **aplica** todavía: el almacenamiento es **B3**, los
+> créditos y los minutos **B4**, el acompañamiento **B5**, el cobro **PE-05**.
+> B2 guarda la verdad comercial y la pone a mandar.
+
+---
 
 ### PE-04B1 · los cimientos, en paralelo
 
@@ -256,8 +287,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0162** |
-| Staging | **0162** |
+| Local | **0163** |
+| Staging | **0163** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

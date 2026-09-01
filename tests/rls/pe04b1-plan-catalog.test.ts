@@ -184,12 +184,27 @@ async function main() {
       assert(Number(data!.monthly_price_minor) === 0, `free cuesta ${data!.monthly_price_minor}`);
     });
 
-    await check("C3. Extra: SIN CONFIGURAR, que no es lo mismo que gratis", async () => {
-      const { data } = await admin.from("v_public_plan_catalog")
-        .select("price_state, currency, monthly_price_minor").eq("plan_code", "extra").single();
-      assert(data!.price_state === "not_configured", `extra está «${data!.price_state}»`);
-      assert(data!.monthly_price_minor === null, "se inventó un precio para extra");
-      assert(data!.currency === null, "extra tiene moneda sin tener precio");
+    await check("C3. «Sin configurar» existe y no es «gratis»", async () => {
+      // PE-04B2 · Extra ya tiene precio: el propietario del producto lo cerró
+      // en USD 100 después de B1, y una revisión sucesora lo publicó.
+      //
+      // Lo que esta prueba defiende no era «Extra no tiene precio» —eso era el
+      // calendario— sino que el modelo sepa decir «todavía no se ha decidido»
+      // sin que nadie lo lea como 0. Se comprueba sobre la revisión de B1, que
+      // sigue ahí siendo historia, y es la evidencia de que el estado se usó.
+      const { data: b1 } = await admin.from("plan_revisions")
+        .select("price_state, currency, monthly_price_minor")
+        .eq("plan_code", "extra").like("internal_notes", "PE-04B1%").maybeSingle();
+      assert(b1, "desapareció la revisión de B1 de extra");
+      assert(b1!.price_state === "not_configured", `la de B1 está «${b1!.price_state}»`);
+      assert(b1!.monthly_price_minor === null, "la de B1 tiene importe");
+      assert(b1!.currency === null, "la de B1 tiene moneda sin tener precio");
+
+      // Y `free`, que vale 0, está CONFIGURADO: gratis sí es una decisión.
+      const { data: free } = await admin.from("v_public_plan_catalog")
+        .select("price_state, monthly_price_minor").eq("plan_code", "free").single();
+      assert(free!.price_state === "configured" && Number(free!.monthly_price_minor) === 0,
+        "free dejó de distinguirse de «sin precio»");
     });
 
     await check("C4. La base no admite media promesa de precio", async () => {

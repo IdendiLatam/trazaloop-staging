@@ -138,9 +138,26 @@ check("8. lib/db/plans.ts lee el plan efectivo vía la RPC y es fail-closed", ()
       PLANS_DB.includes('rpc("get_organization_effective_plan"'),
     "debía existir getOrganizationEffectivePlanCode sobre la RPC"
   );
+  // PE-04B2 · La promesa era «un fallo NUNCA amplía permisos», y sigue en pie.
+  // Lo que cambió es cómo se cumple: antes devolvía `"demo"`, que fallaba
+  // cerrado y a la vez MENTÍA sobre la identidad del plan — no distinguía «es
+  // el plan más bajo» de «no pude saberlo», y es la mitad del defecto que hacía
+  // que un cliente Full leyera «Plan Demo».
+  //
+  // Ahora devuelve `null`, que quien llama trata como «no disponible»: deniega
+  // igual, y no se puede enseñar como si fuera un plan.
   assert(
-    PLANS_DB.includes('if (error) return "demo";'),
-    "ante error de lectura debía responder demo (jamás ampliar permisos)"
+    PLANS_DB.includes("if (error) return null;"),
+    "ante error de lectura debía responder null (ni un plan, ni ampliar permisos)"
+  );
+  assert(
+    !PLANS_DB.includes('if (error) return "demo";'),
+    "un fallo de lectura vuelve a presentarse como el plan Demo"
+  );
+  // Y quien llama tiene que DENEGAR ante ese null, no dejar pasar.
+  assert(
+    PLANS_ACTIONS.includes("if (tier === null) return { allowed: false"),
+    "un plan indeterminado deja pasar la operación"
   );
 });
 

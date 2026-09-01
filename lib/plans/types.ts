@@ -5,11 +5,50 @@
  * de usuario: nunca se mezclan con TeamRoleCode ni con PlatformRoleCode.
  */
 
-export const PLAN_CODES = ["demo", "full", "extra"] as const;
+/**
+ * PE-04B2 · `free` entra, y `demo` se queda por lo que todavía referencia.
+ *
+ * El plan comercial VIGENTE de una empresa ya solo puede ser `free`, `full` o
+ * `extra`: lo dice `organization_effective_plan_code`, que desde 0163 lee el
+ * modelo canónico. `demo` sobrevive aquí porque las tablas legacy
+ * —`plan_definitions`, `plan_limits`, `organization_subscriptions`— lo siguen
+ * usando, y esas tablas no se borran: son evidencia histórica y la fuente de
+ * los límites de conteo hasta PE-04B3.
+ *
+ * Para lo comercial, el tipo estrecho es `CommercialTier`.
+ */
+export const PLAN_CODES = ["demo", "free", "full", "extra"] as const;
 export type PlanCode = (typeof PLAN_CODES)[number];
+
+/** Los tres planes canónicos. Lo que una empresa puede tener HOY. */
+export const COMMERCIAL_TIERS = ["free", "full", "extra"] as const;
+export type CommercialTier = (typeof COMMERCIAL_TIERS)[number];
+
+export function isCommercialTier(v: string | null | undefined): v is CommercialTier {
+  return !!v && (COMMERCIAL_TIERS as readonly string[]).includes(v);
+}
+
+/**
+ * PE-04B2 · PUENTE TEMPORAL hacia las tablas de límites legacy.
+ *
+ * `plan_limits` y `plan_definitions` siguen siendo la fuente de los límites de
+ * conteo y de la cuota de subida hasta **PE-04B3**, y en ellas el plan más bajo
+ * se llama `demo`. El plan comercial canónico lo llama `free`.
+ *
+ * La traducción es EXACTA, no aproximada: los límites de Free se copiaron de
+ * los de `demo` byte a byte en 0162, y hay una prueba que lo comprueba
+ * comparando las dos tablas.
+ *
+ * **Se retira en PE-04B3**, cuando la cuota y los conteos pasen a leerse de
+ * `plan_revision_limits` y las tablas legacy dejen de consultarse.
+ */
+export function commercialTierToLegacyPlanCode(tier: CommercialTier): PlanCode {
+  return tier === "free" ? "demo" : tier;
+}
 
 export const PLAN_LABEL: Record<PlanCode, string> = {
   demo: "Demo",
+  free: "Free",
   full: "Full",
   extra: "Extra",
 };
