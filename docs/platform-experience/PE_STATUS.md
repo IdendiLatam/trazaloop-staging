@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 2 de septiembre de 2026, en la aceptación integrada de PE-04B6.*
+*Actualizado el 2 de septiembre de 2026, al cierre de PE-05A.*
 
 ---
 
@@ -123,6 +123,40 @@ Para revisar el contenido hay dos caminos, según se pueda entrar a la consola:
 
 Y lo que se corrigió después de aquella revisión, en
 [`PE_02B6_2_FINAL_EDITORIAL_CHANGES.md`](PE_02B6_2_FINAL_EDITORIAL_CHANGES.md).
+
+---
+
+## PE-05 · Precio, cobro y pagos
+
+| Tramo | Qué hizo | Migración | Estado |
+|---|---|---|---|
+| PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
+| PE-05B1…B6 | Cimientos, proveedor, precio final, checkout, consola y precios públicos | previstas | no empezado |
+
+Los doce de PE-05A:
+[descubrimiento y alcance](PE_05A_PAYMENT_DISCOVERY.md) ·
+[proveedor](PE_05A_PROVIDER_ARCHITECTURE.md) ·
+[moneda](PE_05A_CURRENCY_AND_FX.md) ·
+[impuestos](PE_05A_TAX_ARCHITECTURE.md) ·
+[presupuesto](PE_05A_BILLING_QUOTE.md) ·
+[ciclo de vida](PE_05A_SUBSCRIPTION_LIFECYCLE.md) ·
+[webhooks](PE_05A_WEBHOOK_ARCHITECTURE.md) ·
+[cupones](PE_05A_COUPON_ARCHITECTURE.md) ·
+[seguridad](PE_05A_CHECKOUT_SECURITY.md) ·
+[Acompañamiento](PE_05A_ADVISOR_COMMERCIAL_MODEL.md) ·
+[pruebas](PE_05A_TEST_STRATEGY.md) ·
+[decisiones PAY-01…PAY-63](PE_05A_DECISIONS.md).
+
+> **No hay una sola línea de código de pagos en el repositorio.** Se buscó por
+> los once proveedores habituales, por `webhook`, `coupon`, `invoice` y
+> `refund`: cero. PE-05 parte de cero, con dos ganchos que PE-04B1 dejó listos
+> (`source='checkout'` y `grant_kind='sold'`).
+
+> **La decisión que bloquea todo lo demás:** ¿USD 40 compra Full para **toda la
+> empresa** o para **un módulo**? Los cuatro recursos que definen el plan
+> —almacenamiento, Intelligence, tiempo y soporte— ya son de empresa, así que
+> cobrar por módulo obligaría a rehacerlos. Recomendación y números en
+> [PE_05A_PAYMENT_DISCOVERY.md](PE_05A_PAYMENT_DISCOVERY.md).
 
 ---
 
