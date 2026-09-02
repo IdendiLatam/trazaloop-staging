@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 2 de septiembre de 2026, al cierre de PE-05A.*
+*Actualizado el 2 de septiembre de 2026, al cierre de PE-05B1.*
 
 ---
 
@@ -131,7 +131,30 @@ Y lo que se corrigió después de aquella revisión, en
 | Tramo | Qué hizo | Migración | Estado |
 |---|---|---|---|
 | PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
-| PE-05B1…B6 | Cimientos, proveedor, precio final, checkout, consola y precios públicos | previstas | no empezado |
+| PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
+| PE-05B2…B6 | Proveedor y webhooks, precio final, checkout, consola y precios públicos | previstas | no empezado |
+
+Los diez de PE-05B1:
+[cimientos](PE_05B1_BILLING_FOUNDATION.md) ·
+[presupuestos](PE_05B1_QUOTES.md) ·
+[suscripciones](PE_05B1_SUBSCRIPTIONS.md) ·
+[pagos](PE_05B1_PAYMENTS.md) ·
+[tipo de cambio](PE_05B1_FX.md) ·
+[tratamiento fiscal](PE_05B1_TAX_TREATMENT.md) ·
+[la futura exención](PE_05B1_FUTURE_SELF_SERVICE_EXEMPTION.md) ·
+[del pago al derecho](PE_05B1_ENTITLEMENT_INTEGRATION.md) ·
+[seguridad](PE_05B1_SECURITY.md) ·
+[pruebas](PE_05B1_TEST_MATRIX.md).
+
+> **Política fiscal de lanzamiento: 19 % en Full, Extra y Acompañamiento.** El
+> SaaS autogestionable podría llegar a estar exento, pero falta el
+> autodiagnóstico, el visto bueno contable y la aprobación de MinTIC. **No se
+> sembró ninguna regla al 0 %**, ni en borrador. Activarla en Producción sin esas
+> tres cosas es un **bloqueador de corte para PE-06**.
+
+> **No se fijó ningún tipo de cambio.** Inventarlo habría sido inventar un
+> precio: sin tasa vigente el presupuesto falla y lo dice. Hay que fijarla antes
+> de vender en cualquier entorno.
 
 Los doce de PE-05A:
 [descubrimiento y alcance](PE_05A_PAYMENT_DISCOVERY.md) ·
@@ -450,8 +473,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0168** |
-| Staging | **0168** |
+| Local | **0169** |
+| Staging | **0169** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

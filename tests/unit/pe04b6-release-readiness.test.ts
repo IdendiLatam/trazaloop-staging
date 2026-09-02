@@ -212,18 +212,20 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0166_intelligence_and_free_usage_limits.sql",
     "0167_support_entitlements_and_commercial_admin.sql",
     "0168_commercial_plan_assignment_transition.sql",
+    "0169_billing_foundation.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0168_commercial_plan_assignment_transition.sql",
+  assert(cabecera === "0169_billing_foundation.sql",
     `la cabecera es ${cabecera}`);
 });
 
 check("AP2. Las tres últimas llevan el preflight de seguridad de SEC-01", () => {
   for (const m of ["0166_intelligence_and_free_usage_limits.sql",
                    "0167_support_entitlements_and_commercial_admin.sql",
-                   "0168_commercial_plan_assignment_transition.sql"]) {
+                   "0168_commercial_plan_assignment_transition.sql",
+                   "0169_billing_foundation.sql"]) {
     assert(leer(`supabase/migrations/${m}`).includes("SEC01_RLS_PREFLIGHT"),
       `${m} no se niega a promover una base expuesta`);
   }
@@ -244,7 +246,8 @@ check("AP3. Toda tabla de la cadena comercial nace con RLS y política", () => {
     "0165_quality_catalog_rls_hardening.sql",
     "0166_intelligence_and_free_usage_limits.sql",
     "0167_support_entitlements_and_commercial_admin.sql",
-    "0168_commercial_plan_assignment_transition.sql"];
+    "0168_commercial_plan_assignment_transition.sql",
+    "0169_billing_foundation.sql"];
   for (const m of cadena) {
     const src = leer(`supabase/migrations/${m}`);
     const creadas = [...src.matchAll(/create table (?:if not exists )?public\.(\w+)/g)].map((x) => x[1]);
