@@ -10,6 +10,7 @@ import { CPR_MODULE_CODE } from "@/lib/modules/catalog";
 import { OnboardingChecklist } from "@/components/domain/onboarding/onboarding-checklist";
 import { OnboardingProgressCard } from "@/components/domain/onboarding/onboarding-progress-card";
 import { DemoPlanBanner, AccountStatusBanner } from "@/components/domain/onboarding/demo-plan-banner";
+import { getOrganizationEffectivePlanCode } from "@/lib/db/plans";
 
 export default async function OnboardingPage() {
   const org = await requireActiveOrg();
@@ -20,6 +21,12 @@ export default async function OnboardingPage() {
     getModulePlanUsageSummary(org.organizationId, CPR_MODULE_CODE),
   ]);
   const usage = planSummary?.usage ?? null;
+
+  // PE-04B6 · El aviso del plan gratuito se decide con el nivel comercial
+  // CANÓNICO, no con la copia heredada de `organization_subscriptions`.
+  const nivelComercial = await getOrganizationEffectivePlanCode(
+    org.organizationId
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -33,7 +40,7 @@ export default async function OnboardingPage() {
       </header>
 
       {usage ? <AccountStatusBanner planStatus={usage.planStatus} /> : null}
-      {usage ? <DemoPlanBanner planCode={usage.planCode} /> : null}
+      <DemoPlanBanner tier={nivelComercial} />
 
       {status ? (
         <>

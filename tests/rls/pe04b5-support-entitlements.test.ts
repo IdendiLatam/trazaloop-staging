@@ -473,6 +473,10 @@ async function main() {
         internal_notes: "PE-04B5 · borrador de prueba" }).select("id").single();
       assert(!eIns, `crear borrador: ${eIns?.message}`);
       const draftId = (draft as { id: string }).id;
+      // Se guarda fuera del `try` para poder restituir en el `finally`.
+      const { data: vigentePrevia } = await admin.from("plan_revisions").select("id")
+        .eq("plan_code", "full").eq("status", "published").is("effective_to", null).single();
+      const vigenteAntes = (vigentePrevia as { id: string }).id;
       // El borrador nace copiando los límites de la vigente, igual que hace la
       // consola: `plan_publish_revision` (0162) se niega a publicar una
       // revisión que no declare su almacenamiento, y hace bien —publicar una
@@ -490,10 +494,6 @@ async function main() {
         const { error: eEdit } = await sa.cli.from("plan_revisions")
           .update({ monthly_price_minor: 4500 }).eq("id", draftId);
         assert(!eEdit, `no se pudo editar el borrador: ${eEdit?.message}`);
-        const { data: antes } = await admin.from("plan_revisions").select("id, effective_to")
-          .eq("plan_code", "full").eq("status", "published").is("effective_to", null).single();
-        const vigenteAntes = (antes as { id: string }).id;
-
         const { error: ePub } = await sa.cli.rpc("plan_publish_revision", {
           p_revision_id: draftId, p_effective_from: new Date().toISOString() });
         assert(!ePub, `publicar: ${ePub?.message}`);
@@ -504,7 +504,37 @@ async function main() {
         assert(v.effective_to !== null, "la revisión anterior no se cerró");
         assert(v.status === "retired", `la anterior quedó en ${v.status}`);
       } finally {
-        // No se borra la revisión publicada: es historia. Se deja como está.
+        // Una revisión publicada NO se borra: es historia comercial. Pero
+        // tampoco puede quedarse como la oferta vigente de Full con los
+        // números de una prueba. Se restituye por el camino del propio
+        // producto: una sucesora que devuelve los valores congelados.
+        //
+        // El catálogo termina con dos revisiones más —ocurrieron— y con la
+        // oferta correcta arriba, que es lo que importa.
+        const { data: original } = await admin.from("plan_revisions")
+          .select("*").eq("id", vigenteAntes).single();
+        const v = original as Record<string, unknown>;
+        const { data: limitesOriginal } = await admin.from("plan_revision_limits")
+          .select("resource_code, limit_state, limit_value").eq("plan_revision_id", vigenteAntes);
+        const { data: maxAhora } = await admin.from("plan_revisions").select("revision_number")
+          .eq("plan_code", "full").order("revision_number", { ascending: false }).limit(1).single();
+        const { data: restaura } = await admin.from("plan_revisions").insert({
+          plan_code: "full",
+          revision_number: Number((maxAhora as { revision_number: number }).revision_number) + 1,
+          status: "draft", display_name: v.display_name, description: v.description,
+          public_conditions: v.public_conditions, price_state: v.price_state,
+          currency: v.currency, monthly_price_minor: v.monthly_price_minor,
+          annual_price_minor: v.annual_price_minor,
+          internal_notes: "PE-04B5 · restitución de los valores congelados tras la prueba de publicación",
+        }).select("id").single();
+        const restauraId = (restaura as { id: string }).id;
+        await admin.from("plan_revision_limits").insert(
+          ((limitesOriginal ?? []) as Record<string, unknown>[]).map((l) => ({
+            plan_revision_id: restauraId, resource_code: l.resource_code,
+            limit_state: l.limit_state, limit_value: l.limit_value })));
+        const { error: eRest } = await sa.cli.rpc("plan_publish_revision",
+          { p_revision_id: restauraId, p_effective_from: new Date().toISOString() });
+        if (eRest) console.error(`  ⚠ no se restituyó la revisión vigente de Full: ${eRest.message}`);
       }
     });
 
@@ -599,6 +629,7 @@ async function main() {
     await admin.from("support_tickets").delete().in("organization_id", [org, otraOrg]);
     await admin.from("commercial_assignment_events").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organizations").delete().in("id", [org, otraOrg]);
     for (const id of personasCreadas) {
       await admin.from("platform_staff").delete().eq("user_id", id);

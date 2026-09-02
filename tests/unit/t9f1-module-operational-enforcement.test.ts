@@ -324,7 +324,15 @@ const UNLIMITED: FunctionalLimit[] = DEMO_LIMITS.map((l) => ({
 
 check("20-23/40. Los helpers por módulo resuelven límites y cuota desde el plan DEL MÓDULO, jamás desde organization_subscriptions", () => {
   const src = stripTs(read("server/actions/module-plans.ts"));
-  assert(src.includes("accessModeToPlanCode"), "los límites deben derivar del access_mode del módulo");
+  // PE-04B6 · Los límites del módulo se resuelven ya con el plan efectivo DEL
+  // MÓDULO del catálogo canónico (`plan_effective_for_module`, 0162), no
+  // traduciendo el `access_mode` a un código de plan heredado. Lo que T9F.1
+  // protegía —que NO se resuelvan desde `organization_subscriptions`— sigue
+  // protegido, y además ya no se resuelven desde el catálogo legacy.
+  assert(src.includes("resolveModulePlan("),
+    "los límites deben derivar del plan efectivo DEL MÓDULO");
+  assert(!src.includes("getPlanLimits("),
+    "los límites del módulo volvieron al catálogo legacy");
   // T9F.2: la decisión de límites de CONTEO la toma la RPC en BD
   // (check_module_resource_allowance) sobre la vista por módulo de 0101,
   // nunca el legacy.

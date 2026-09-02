@@ -218,7 +218,13 @@ async function main() {
         `se forzó RLS sobre el propietario en: ${siete.map((f) => f.table_name).join(", ")}`);
     });
   } finally {
-    await admin.from("organizations").delete().in("id", [org, otraOrg]);
+    // Las asignaciones comerciales referencian a la empresa con
+    // `on delete restrict`: sin retirarlas antes, el borrado falla EN SILENCIO
+    // y la empresa sintética se queda en la base para siempre.
+    await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);
+    const { error: eOrg } = await admin.from("organizations").delete().in("id", [org, otraOrg]);
+    if (eOrg) console.error(`  ⚠ no se pudieron retirar las empresas de prueba: ${eOrg.message}`);
     for (const id of personasCreadas) {
       await admin.from("platform_staff").delete().eq("user_id", id);
       await admin.auth.admin.deleteUser(id);

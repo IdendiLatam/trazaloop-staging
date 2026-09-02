@@ -150,43 +150,19 @@ export async function resolveModuleAccessForOrg(
   });
 }
 
-/**
- * Entitlements del módulo (límites funcionales + cuota de almacenamiento) a
- * partir de su access_mode, REUTILIZANDO plan_limits/plan_definitions (0050).
- * Si el acceso no está permitido, igual devuelve los entitlements del modo
- * asignado para mostrarlos, pero `access.allowed` indica el bloqueo real.
+/* PE-04B6 · `getModuleEntitlements` se retira.
+ *
+ * Resolvía los entitlements de un módulo traduciendo su `access_mode` a un
+ * código de plan LEGACY para leerlos de `plan_limits`. No la llamaba nadie —ni
+ * producto, ni pruebas— y desde 0166 la autoridad de esos límites es el
+ * catálogo canónico. Una función muerta que sabe resolver límites comerciales
+ * es una invitación a volver a usarla.
+ *
+ * Lo que sigue vivo y por qué: `resolveOrganizationModuleEntitlements` y
+ * `getModulePlanUsageSummary` alimentan las tarjetas de USO del panel de PCR.
+ * Son presentación heredada, no autoridad: nada de lo que deciden bloquea una
+ * escritura.
  */
-export async function getModuleEntitlements(
-  organizationId: string,
-  moduleCode: string
-): Promise<{ access: ModuleAccessDecision; entitlements: ModuleEntitlements | null }> {
-  const access = await resolveModuleAccessForOrg(organizationId, moduleCode);
-  const mode = access.accessMode;
-  if (mode === null) return { access, entitlements: null };
-
-  const [limits, definitions] = await Promise.all([getPlanLimits(mode), listPlanDefinitions()]);
-  const def = definitions.find((d) => d.code === mode);
-  const storageLimitBytes = def?.storageLimitBytes ?? 0;
-  const entitlements = buildModuleEntitlements(
-    mode,
-    limits.map((l) => ({
-      resourceCode: l.resourceCode,
-      limitValue: l.limitValue,
-      isUnlimited: l.isUnlimited,
-    })),
-    storageLimitBytes
-  );
-  return { access, entitlements };
-}
-
-// ---------------------------------------------------------------------------
-// T9F.1 · API CANÓNICA de entitlements OPERATIVOS por módulo.
-// Resuelve desde organization_modules + catálogo de módulos + catálogo de
-// planes (plan_limits/plan_definitions, 0050) + uso REAL del módulo
-// (v_organization_module_usage, 0101). JAMÁS desde organization_subscriptions:
-// el plan legacy org-wide no gobierna acceso, límites ni cuotas de CPR o
-// Textiles.
-// ---------------------------------------------------------------------------
 
 export type ModuleEntitlementsResolution = {
   organizationId: string;

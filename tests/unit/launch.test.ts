@@ -240,12 +240,19 @@ check("Extra: el checklist resuelve exactamente los 7 pasos definidos, en orden,
 
 console.log("\nTrazaloop · lanzamiento: banners de plan (Parte 8/16)\n");
 
-check("18-19. El banner Demo aparece solo en Demo, nunca en Full/Extra", () => {
+check("18-19. El aviso del plan gratuito aparece solo en Free, nunca en Full/Extra", () => {
   const source = readSource("../../components/domain/onboarding/demo-plan-banner.tsx");
   const fnStart = source.indexOf("export function DemoPlanBanner");
   const fnEnd = source.indexOf("\n}", fnStart);
   const fnBody = source.slice(fnStart, fnEnd);
-  assert(fnBody.includes('if (planCode !== "demo") return null;'), "DemoPlanBanner debía devolver null para cualquier plan que no sea demo");
+  // PE-04B6 · El aviso se decide con el nivel comercial CANÓNICO y se llama por
+  // su nombre: Free. Antes lo decidía `organization_subscriptions.plan_code`, y
+  // un cliente Full con la fila heredada en «demo» leía en su propio panel que
+  // estaba en Demo. Lo que la prueba protegía —que no aparezca en planes de
+  // pago— sigue protegido, y ahora también protege que `null` («no se pudo
+  // determinar») no pinte nada.
+  assert(fnBody.includes('if (tier !== "free") return null;'),
+    "el aviso debía devolver null para cualquier nivel que no sea Free");
   assert(!fnBody.toLowerCase().includes("pagar") && !fnBody.toLowerCase().includes("pago"), "el banner Demo nunca debía mencionar pagos");
 });
 

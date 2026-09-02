@@ -108,7 +108,7 @@ export function UploadFileDocumentForm() {
           className="block w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-paper file:px-3 file:py-1.5 file:text-sm"
         />
         <span className="mt-1 block text-xs text-ink-soft">
-          PDF, Word, Excel, CSV, PNG, JPG o WebP — hasta 25 MB (10 MB en plan Demo).
+          PDF, Word, Excel, CSV, PNG, JPG o WebP — hasta 25 MB (10 MB en plan Free).
         </span>
       </label>
 

@@ -14,6 +14,7 @@ import { RoleBadge, ModuleBadge } from "@/components/ui/badge";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { OnboardingProgressCard } from "@/components/domain/onboarding/onboarding-progress-card";
 import { DemoPlanBanner, AccountStatusBanner } from "@/components/domain/onboarding/demo-plan-banner";
+import { getOrganizationEffectivePlanCode } from "@/lib/db/plans";
 
 export default async function DashboardPage() {
   // T9F: el dashboard es el inicio de CPR — su guard consume la regla canónica
@@ -37,6 +38,12 @@ export default async function DashboardPage() {
     ["open", "assigned", "waiting_customer", "in_progress"].includes(t.status)
   ).length;
 
+  // PE-04B6 · El aviso del plan gratuito se decide con el nivel comercial
+  // CANÓNICO, no con la copia heredada de `organization_subscriptions`.
+  const nivelComercial = await getOrganizationEffectivePlanCode(
+    activeOrg.organizationId
+  );
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-1">
@@ -51,7 +58,7 @@ export default async function DashboardPage() {
       </header>
 
       {usage ? <AccountStatusBanner planStatus={usage.planStatus} /> : null}
-      {usage ? <DemoPlanBanner planCode={usage.planCode} /> : null}
+      <DemoPlanBanner tier={nivelComercial} />
 
       <dl className="grid gap-4 sm:grid-cols-2">
         {usage ? (

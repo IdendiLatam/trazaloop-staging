@@ -1,15 +1,27 @@
 import Link from "next/link";
-import type { PlanCode, PlanStatus } from "@/lib/plans/types";
+import type { CommercialTier, PlanStatus } from "@/lib/plans/types";
 
-/** Banner discreto de plan Demo (Parte 8) — solo en Demo, nunca en
- *  Full/Extra. Nunca menciona pagos. */
-export function DemoPlanBanner({ planCode }: { planCode: PlanCode }) {
-  if (planCode !== "demo") return null;
+/**
+ * Aviso discreto del plan gratuito — solo en Free, nunca en Full ni Extra.
+ * Nunca menciona pagos.
+ *
+ * PE-04B6 · Decía «Estás usando el plan Demo» y lo decidía con
+ * `organization_subscriptions.plan_code`, la copia administrativa heredada. Un
+ * cliente Full cuya fila heredada siguiera diciendo `demo` leía en su panel que
+ * estaba en Demo: es exactamente el defecto que PE-04B2 cerró en la consola y
+ * que sobrevivía aquí, en la pantalla del propio cliente.
+ *
+ * Ahora se decide con el nivel comercial CANÓNICO y se llama por su nombre:
+ * Free. Y `null` —«no se pudo determinar»— no pinta nada: afirmar un plan que
+ * no se pudo leer es la mitad del defecto original.
+ */
+export function DemoPlanBanner({ tier }: { tier: CommercialTier | null }) {
+  if (tier !== "free") return null;
 
   return (
     <div id="plan" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber/40 bg-amber/10 p-4 text-sm">
       <p className="text-amber">
-        Estás usando el plan Demo. Puedes explorar la plataforma con límites de uso. Para ampliar
+        Estás usando el plan Free. Puedes trabajar con los límites incluidos. Para ampliar
         el acceso, contacta al equipo de Trazaloop desde el Centro de soporte.
       </p>
       <div className="flex shrink-0 gap-2">

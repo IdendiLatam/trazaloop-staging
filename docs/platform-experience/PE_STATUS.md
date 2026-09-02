@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B5.*
+*Actualizado el 2 de septiembre de 2026, en la aceptación integrada de PE-04B6.*
 
 ---
 
@@ -136,7 +136,24 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-04B3 | Cuota de almacenamiento única por empresa, reserva y seguridad por encima del límite | **0164** | **cerrado** · 2026-09-01 |
 | PE-04B4 | Créditos ponderados de Intelligence y reloj de uso de Free | **0166** | **cerrado** · 2026-09-01 |
 | PE-04B5 | Derechos de soporte y consola comercial | **0167** | **cerrado** · 2026-09-01 |
-| PE-04B6 | Aceptación integrada de PE-04 | — | no empezado |
+| PE-04B6 | Aceptación integrada de PE-04 | — | **con un defecto abierto** · 2026-09-02 |
+
+Los ocho de PE-04B6:
+[ciclo integrado](PE_04B6_INTEGRATED_LIFECYCLE.md) ·
+[los ejes juntos](PE_04B6_CROSS_AXIS_ACCEPTANCE.md) ·
+[verdad comercial y el defecto](PE_04B6_COMMERCIAL_TRUTH.md) ·
+[seguridad](PE_04B6_SECURITY_ACCEPTANCE.md) ·
+[residuos de QA](PE_04B6_QA_RESIDUES.md) ·
+[preparación](PE_04B6_RELEASE_READINESS.md) ·
+[cierre de PE-04](PE_04_FINAL_CLOSURE.md) ·
+[corte de producción](PE_04_PRODUCTION_CUTOVER_CARRYOVERS.md).
+
+> **Defecto abierto.** Una bajada de plan **no baja el plan**:
+> `commercial_assign_plan` añade la asignación nueva y no cierra la anterior, y
+> el resolutor toma la de mayor rango. Asignar Full a una empresa con Extra la
+> deja en Extra. Reproducido en aislamiento; necesita la migración **0168**, que
+> **no se ha creado** por indicación del encargo. Detalle en
+> [PE_04B6_COMMERCIAL_TRUTH.md](PE_04B6_COMMERCIAL_TRUTH.md).
 
 Los ocho de PE-04B5:
 [inventario de soporte](PE_04B5_SUPPORT_INVENTORY.md) ·

@@ -50,12 +50,21 @@ console.log("\nPE-04B1 · Los cimientos, leídos en el código\n");
 console.log("A · B1 no cambia la autoridad de nada");
 // ===========================================================================
 
-check("A1. Ningún consumidor de producto usa todavía el modelo nuevo", () => {
-  const consumidores = PRODUCTO
-    .filter((f) => !/lib\/db\/(commercial-plans|plan-shadow)\.ts$/.test(f))
-    .filter((f) => /commercial-plans|plan-shadow/.test(leer(f)));
-  assert(consumidores.length === 0,
-    `B1 dice no cambiar nada y estos ficheros ya lo usan: ${consumidores.join(", ")}`);
+check("A1. La sombra sigue siendo diagnóstico, no autoridad", () => {
+  // B1 exigía que NADIE usara el modelo nuevo: se construía en paralelo. Eso
+  // dejó de ser cierto a propósito en B2, y hoy el producto entero depende de
+  // él. Lo que sigue en pie es lo otro que B1 estableció: `plan-shadow` es una
+  // herramienta de COMPARACIÓN —lee el catálogo legacy para contrastarlo— y no
+  // puede acabar decidiendo nada en producción.
+  const conSombra = PRODUCTO
+    .filter((f) => !/lib\/db\/plan-shadow\.ts$/.test(f))
+    .filter((f) => /plan-shadow/.test(sinComentarios(leer(f))));
+  assert(conSombra.length === 0,
+    `la sombra dejó de ser diagnóstico y la usa: ${conSombra.join(", ")}`);
+  // Y el resolutor canónico sí lo usa el producto: eso es lo que B2..B6 hicieron.
+  const conResolutor = PRODUCTO.filter((f) => /commercial-plans/.test(leer(f)));
+  assert(conResolutor.length > 0,
+    "nadie usa el resolutor canónico: el trabajo de B2 en adelante habría desaparecido");
 });
 
 check("A2. El catálogo canónico se consulta por sus resolutores, no a mano", () => {

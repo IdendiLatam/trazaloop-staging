@@ -4,7 +4,8 @@ import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { resolveModuleAccessForOrg } from "@/lib/db/module-access";
 import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
 import { checkCommercialMutation, type MutationIntent } from "@/lib/db/organization-usage";
-import { getOrganizationUsage, getPlanLimits } from "@/lib/db/plans";
+import { resolveModulePlan, resolvePlanLimit } from "@/lib/db/commercial-plans";
+import { getOrganizationUsage } from "@/lib/db/plans";
 import {
   CPR_MODULE_CODE,
   TEXTILES_MODULE_CODE,
@@ -12,14 +13,11 @@ import {
   getCommercialModuleByCode,
   isFunctionalModuleCode,
 } from "@/lib/modules/catalog";
-import { accessModeToPlanCode } from "@/lib/modules/access";
 import { moduleAccessDeniedMessage } from "@/lib/modules/messages";
 import {
-  isPlanFeatureEnabled,
   hasStorageAvailable,
   buildResourceLimitMessage,
   buildPlanStatusMessage,
-  findLimit,
   FEATURE_NOT_AVAILABLE_MESSAGE,
   IMPORTS_PLAN_MESSAGE,
   STORAGE_LIMIT_MESSAGE,
@@ -135,6 +133,10 @@ const CONSULTATION_MODE_MESSAGE =
   + "descargando y borrando tu información; para volver a crear o modificar, espera al "
   + "reinicio del cupo o cambia de plan.";
 
+const PLAN_UNVERIFIABLE_FEATURE_MESSAGE =
+  "No se pudo comprobar qué incluye el plan de tu empresa ahora mismo. Vuelve a intentarlo "
+  + "en un momento.";
+
 const COMMERCIAL_UNVERIFIABLE_MESSAGE =
   "No se pudo comprobar lo que tu empresa tiene contratado ahora mismo. No se guardó nada; "
   + "vuelve a intentarlo en un momento.";
@@ -231,11 +233,29 @@ export async function checkModuleFeatureEnabled(
   const gate = await resolveModuleGate(moduleCode);
   if (gate.ok === null) return { allowed: false, error: gate.error };
 
-  const limits = await getPlanLimits(accessModeToPlanCode(gate.ok.accessMode));
-  const limit = findLimit(limits, resourceCode);
-  if (!limit) return { allowed: true, error: null };
+  // PE-04B6 · Última autoridad comercial que quedaba leyendo el catálogo
+  // LEGACY. `imports_enabled` y compañía están declarados en el catálogo
+  // canónico con `scope = module` desde 0162, así que la respuesta correcta se
+  // resuelve con el plan efectivo DEL MÓDULO, no traduciendo su `access_mode` a
+  // un código de plan heredado.
+  //
+  // Los valores no cambian —los trece límites funcionales se copiaron byte a
+  // byte en 0162/0163, y hay una prueba que compara ambos catálogos recurso a
+  // recurso—; lo que cambia es quién manda. El eje de ACCESO al módulo (0100)
+  // sigue decidiendo si se puede entrar, arriba, en `resolveModuleGate`.
+  const plan = await resolveModulePlan(gate.ok.organizationId, moduleCode);
+  if (plan.status === "unavailable") {
+    return { allowed: false, error: PLAN_UNVERIFIABLE_FEATURE_MESSAGE };
+  }
+  if (plan.status === "absent") {
+    return { allowed: false, error: PLAN_UNVERIFIABLE_FEATURE_MESSAGE };
+  }
 
-  const allowed = isPlanFeatureEnabled(limit);
+  const limit = await resolvePlanLimit(plan.planRevisionId, resourceCode);
+  // Un interruptor sin configurar NIEGA: no es «encendido» ni «apagado», es que
+  // nadie lo ha decidido, y sobre eso no se autoriza.
+  const allowed = limit.status === "unlimited"
+    || (limit.status === "finite" && limit.value > 0);
   const message =
     resourceCode === "imports_enabled" ? IMPORTS_PLAN_MESSAGE : FEATURE_NOT_AVAILABLE_MESSAGE;
   return { allowed, error: allowed ? null : message };
