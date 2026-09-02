@@ -3,6 +3,7 @@
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { resolveModuleAccessForOrg } from "@/lib/db/module-access";
 import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
+import { checkCommercialMutation, type MutationIntent } from "@/lib/db/organization-usage";
 import { getOrganizationUsage, getPlanLimits } from "@/lib/db/plans";
 import {
   CPR_MODULE_CODE,
@@ -124,9 +125,46 @@ async function resolveModuleGate(
 // ---------------------------------------------------------------------------
 
 /** ¿La organización puede MUTAR datos de este módulo ahora mismo? */
-export async function checkModuleCanMutate(moduleCode: string): Promise<CheckResult> {
+/**
+ * PE-04B4 · Lo que se dice en modo consulta. No es «no tienes permiso» —lo
+ * tiene— ni «se acabó tu plan» —lo sigue teniendo—: es que el tiempo de uso
+ * incluido en Free se agotó, y qué SÍ se puede hacer mientras tanto.
+ */
+const CONSULTATION_MODE_MESSAGE =
+  "Tu empresa agotó el tiempo de uso incluido en el plan Free. Puedes seguir consultando, "
+  + "descargando y borrando tu información; para volver a crear o modificar, espera al "
+  + "reinicio del cupo o cambia de plan.";
+
+const COMMERCIAL_UNVERIFIABLE_MESSAGE =
+  "No se pudo comprobar lo que tu empresa tiene contratado ahora mismo. No se guardó nada; "
+  + "vuelve a intentarlo en un momento.";
+
+export async function checkModuleCanMutate(
+  moduleCode: string,
+  intent: MutationIntent = "business_increase_or_modify"
+): Promise<CheckResult> {
   const gate = await resolveModuleGate(moduleCode);
   if (gate.ok === null) return { allowed: false, error: gate.error };
+
+  // PE-04B4 · EJE COMERCIAL. En modo consulta la empresa no crea ni modifica su
+  // sistema de gestión, pero SÍ lee, descarga y BORRA. Por eso la puerta
+  // pregunta por la intención: si el borrado se bloqueara, una empresa Free que
+  // agotara su tiempo con el almacenamiento lleno quedaría sin poder crear y
+  // sin poder liberar espacio. Agotar un cupo comercial no puede secuestrar los
+  // datos de nadie.
+  //
+  // El valor por omisión es el restrictivo a propósito: una acción nueva que no
+  // declare su intención se comporta como creación, que es el caso seguro.
+  const comercial = await checkCommercialMutation(gate.ok.organizationId, intent);
+  if (!comercial) return { allowed: false, error: COMMERCIAL_UNVERIFIABLE_MESSAGE };
+  if (!comercial.allowed) {
+    return {
+      allowed: false,
+      error: comercial.state === "ENTITLEMENT_UNAVAILABLE"
+        ? COMMERCIAL_UNVERIFIABLE_MESSAGE
+        : CONSULTATION_MODE_MESSAGE,
+    };
+  }
   return { allowed: true, error: null };
 }
 
@@ -312,8 +350,10 @@ export async function getModuleAccessModeForAction(
 // repita el string del module_code ni pueda equivocarse de módulo.
 // ---------------------------------------------------------------------------
 
-export async function checkCprCanMutate(): Promise<CheckResult> {
-  return checkModuleCanMutate(CPR_MODULE_CODE);
+export async function checkCprCanMutate(
+  intent: MutationIntent = "business_increase_or_modify"
+): Promise<CheckResult> {
+  return checkModuleCanMutate(CPR_MODULE_CODE, intent);
 }
 
 export async function checkCprResourceLimit(
@@ -344,8 +384,10 @@ export async function checkCprStorageAvailable(bytesToAdd: number): Promise<Chec
 // Envolturas canónicas Textiles
 // ---------------------------------------------------------------------------
 
-export async function checkTextilesCanMutate(): Promise<CheckResult> {
-  return checkModuleCanMutate(TEXTILES_MODULE_CODE);
+export async function checkTextilesCanMutate(
+  intent: MutationIntent = "business_increase_or_modify"
+): Promise<CheckResult> {
+  return checkModuleCanMutate(TEXTILES_MODULE_CODE, intent);
 }
 
 export async function checkTextilesResourceLimit(
@@ -369,6 +411,8 @@ export async function checkTextilesStorageAvailable(bytesToAdd: number): Promise
 // Envolturas canónicas Quality · QUALITY-01
 // ---------------------------------------------------------------------------
 
-export async function checkQualityCanMutate(): Promise<CheckResult> {
-  return checkModuleCanMutate(QUALITY_MODULE_CODE);
+export async function checkQualityCanMutate(
+  intent: MutationIntent = "business_increase_or_modify"
+): Promise<CheckResult> {
+  return checkModuleCanMutate(QUALITY_MODULE_CODE, intent);
 }

@@ -8,6 +8,7 @@ import "./context/adapters";
 // un motor, un registro de adaptadores.
 import "./context/integrated";
 import { resolveProvider } from "./provider";
+import { AI_DENIAL_MESSAGE, commitAiCredits, releaseAiCredits, reserveAiCredits } from "./credits";
 import { ANSWER_SCHEMA, ANSWER_SCHEMA_NAME, evidenceFromContext, validateAnswer,
          type AiAnswer } from "./schemas";
 import { tenantBlock, type PromptTemplate } from "./prompts";
@@ -49,6 +50,8 @@ export type CopilotRequest = {
   allow: { people: boolean; customer: boolean };
   /** QUALITY-13B5 · §23 · Las fuentes que la pantalla de origen necesita. */
   sources?: readonly string[] | null;
+  /** PE-04B4 · Para que un reintento del MISMO envío no cobre dos veces. */
+  idempotencyKey?: string | null;
 };
 
 export type CopilotOutcome =
@@ -93,6 +96,20 @@ export async function runCopilot(
     return { ok: false, runId: null, reason: "empty", message: "Escribe una pregunta." };
   }
 
+  // ---- 0 · ¿Hay crédito comercial? ----------------------------------------
+  // PE-04B4 · La reserva va ANTES de todo lo demás, y por dos razones. Una: si
+  // la empresa está en modo consulta o sin créditos, no se crea ni una fila de
+  // ejecución —`quality_ai_runs` es el libro de lo que se ejecutó, no de lo que
+  // se intentó—. Y dos: reservar DESPUÉS de llamar al proveedor sería regalar
+  // la última operación a quien llegue en el instante justo.
+  const reserva = await reserveAiCredits(
+    db, req.organizationId, req.useCase, req.idempotencyKey ?? null);
+  if (!reserva.ok) {
+    return { ok: false, runId: null, reason: reserva.code,
+             message: AI_DENIAL_MESSAGE[reserva.code] };
+  }
+  const reservaId = reserva.reservation.reservationId;
+
   // ---- 1 · ¿Se puede? ------------------------------------------------------
   const { data: permiso, error: errPermiso } = await db.rpc("quality_ai_start_run", {
     p_organization_id: req.organizationId,
@@ -110,10 +127,14 @@ export async function runCopilot(
     p_period_end: req.temporal.periodEnd ?? null,
   });
   if (errPermiso) {
+    await releaseAiCredits(db, reservaId);
     return { ok: false, runId: null, reason: "denied", message: errPermiso.message };
   }
   const p = permiso as { allowed: boolean; reason?: string; message?: string; run_id?: string };
   if (!p?.allowed) {
+    // Denegado por una salvaguarda INTERNA (Copilot apagado, anti-abuso): el
+    // crédito comercial no se consume, porque no se ejecutó nada.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
       message: p?.message ?? `${INTELLIGENCE_SHORT_NAME} no está disponible para esta empresa.`,
@@ -177,6 +198,9 @@ export async function runCopilot(
       p_evidence_level: "missing", p_input_tokens: 0, p_output_tokens: 0, p_tool_calls: 0,
       p_provider_called: false,
     });
+    // PE-04B4 · No se preguntó a nadie y no hay resultado de Intelligence que
+    // valga: no se cobra. La ejecución queda registrada igual, con sus ceros.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: true, runId, answer: respuesta, references: [],
       context: { sources: [], limitations: pack.temporalLimitations,
@@ -207,6 +231,10 @@ export async function runCopilot(
       p_status: resultado.kind === "refused" ? "refused" : "failed",
       p_error: resultado.message,
     });
+    // Un fallo de infraestructura NO se le cobra al cliente, y sobre todo no se
+    // le presenta como «alcanzaste tu límite». El coste que el proveedor haya
+    // incurrido sigue registrado aparte, en la propia ejecución.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: resultado.kind,
       message: resultado.kind === "timeout"
@@ -222,6 +250,7 @@ export async function runCopilot(
     await db.rpc("quality_ai_fail_run", {
       p_run_id: runId, p_status: "failed", p_error: validado.error,
     });
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: "invalid_output",
       message: "La respuesta no se pudo interpretar. No se guardó nada.",
@@ -247,6 +276,11 @@ export async function runCopilot(
     p_total_tokens: resultado.usage.totalTokens ?? null,
     p_provider_called: true,
   });
+
+  // PE-04B4 · AQUÍ, y solo aquí, la reserva se convierte en consumo: hay un
+  // resultado de Intelligence validado y utilizable. Confirmar dos veces no
+  // cobra dos veces.
+  await commitAiCredits(db, reservaId, runId);
 
   // ---- 6 · Los temas de clientes, si los hay ------------------------------
   // Solo en la consulta de temas: en cualquier otra, lo que venga en `themes`

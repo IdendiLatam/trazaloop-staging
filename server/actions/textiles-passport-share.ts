@@ -69,7 +69,7 @@ export async function revokePassportShareLinkAction(
 ): Promise<ShareActionState> {
   const g = await gate();
   if (g.error) return { error: g.error };
-  const mutate = await checkTextilesCanMutate();
+  const mutate = await checkTextilesCanMutate("delete_or_reduce");
   if (!mutate.allowed) return { error: mutate.error };
 
   const { error } = await revokePassportShareLink(g.organizationId, linkId);

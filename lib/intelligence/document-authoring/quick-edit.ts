@@ -2,6 +2,7 @@ import "server-only";
 
 import { aiConfig } from "@/lib/ai/config";
 import { resolveProvider } from "@/lib/ai/provider";
+import { AI_DENIAL_MESSAGE, commitAiCredits, releaseAiCredits, reserveAiCredits } from "@/lib/ai/credits";
 import { createServerClient } from "@/lib/supabase/server";
 import {
   QUICK_EDIT_SCHEMA, QUICK_EDIT_SCHEMA_NAME, validateQuickEdit,
@@ -45,6 +46,8 @@ export type QuickEditRequest = {
   sectionKey: string;
   action: QuickEditAction;
   context: QuickEditContext;
+  /** PE-04B4 · Para que un reintento del MISMO envío no cobre dos veces. */
+  idempotencyKey?: string | null;
 };
 
 export type QuickEditOutcome =
@@ -101,6 +104,17 @@ export async function runQuickEdit(
   const prompt = quickEditPrompt(req.action);
 
   // ---- 2 · ¿Se puede? El permiso es del MÓDULO DEL DOCUMENTO -------------
+  // PE-04B4 · La reserva comercial va ANTES de crear la fila de ejecución:
+  // `quality_ai_runs` es el libro de lo que se ejecutó, no de lo que se
+  // intentó, y reservar después de llamar al proveedor sería regalar la
+  // última operación a quien llegue en el instante justo.
+  const reserva = await reserveAiCredits(db, req.organizationId, "document.quick_edit", req.idempotencyKey ?? null);
+  if (!reserva.ok) {
+    return { ok: false, runId: null, reason: reserva.code,
+             message: AI_DENIAL_MESSAGE[reserva.code] };
+  }
+  const reservaId = reserva.reservation.reservationId;
+
   const { data: permiso, error: errPermiso } = await db.rpc("document_authoring_start_run", {
     p_organization_id: req.organizationId,
     p_document_id: req.documentId,
@@ -115,6 +129,7 @@ export async function runQuickEdit(
     p_daily_limit: 100,
   });
   if (errPermiso) {
+    await releaseAiCredits(db, reservaId);
     return { ok: false, runId: null, reason: "denied", message: errPermiso.message };
   }
   const p = permiso as {
@@ -126,6 +141,9 @@ export async function runQuickEdit(
     // de la denegación, así que no puede conceder nada, y solo para el tope
     // mensual: un tope por minuto es un doble clic, no una noticia.
     await emitHardLimitEvent(db, req.organizationId, p);
+    // Denegado por una salvaguarda INTERNA: no se ejecutó nada y el crédito
+    // comercial no se consume.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
       message: p?.message ?? "No se puede usar la asistencia de redacción aquí.",
@@ -155,6 +173,9 @@ export async function runQuickEdit(
       // recuento de llamadas, que es de lo que cuelga el análisis de coste.
       p_provider_called: resultado.kind === "refused",
     });
+    // Un fallo de infraestructura no se le cobra al cliente. El coste que el
+    // proveedor haya incurrido sigue registrado aparte en la ejecución.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: resultado.kind,
       message: resultado.kind === "timeout"
@@ -171,6 +192,7 @@ export async function runQuickEdit(
       // La respuesta llegó del proveedor: no cumplió el esquema, pero se pagó.
       p_provider_called: true,
     });
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: "invalid_output",
       message: "La propuesta no se pudo interpretar y no se aplicó nada. "
@@ -191,6 +213,10 @@ export async function runQuickEdit(
     p_total_tokens: resultado.usage.totalTokens ?? null,
     p_provider_called: true,
   });
+
+  // PE-04B4 · Aquí, y solo aquí, la reserva se convierte en consumo: hay un
+  // resultado validado y utilizable.
+  await commitAiCredits(db, reservaId, runId);
 
   return {
     ok: true,

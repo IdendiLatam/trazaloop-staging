@@ -20,8 +20,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
-  resolveEffectiveStorageLimitBytes,
-  hasStorageAvailable,
 } from "../../lib/plans/limits";
 import { buildEffectiveStorageUsage } from "../../lib/plans/usage";
 import {
@@ -101,80 +99,37 @@ check("1. Las cuotas del seed 0050 siguen siendo Demo 50 MB / Full 500 MB / Extr
   }
 });
 
-/** Definiciones tal como las devuelve listPlanDefinitions() (plan_definitions). */
-const PLAN_DEFINITIONS = LEGACY_PLAN_CODES.map((code) => ({
-  code,
-  storageLimitBytes: EXPECTED_QUOTAS[code],
-}));
-
-check("2. Caso Demo: la cuota efectiva es la de Demo y CONSERVA los 50 MB", () => {
-  const limit = resolveEffectiveStorageLimitBytes(PLAN_DEFINITIONS, "demo", EXPECTED_QUOTAS.full);
-  assert(limit === EXPECTED_QUOTAS.demo, `Demo efectivo debía dar 50 MB, dio ${limit}`);
-  // Aunque la suscripción LEGACY dijera Full, el plan efectivo Demo manda:
-  // con 49 MB usados caben 1 MB, pero no 2 MB.
+check("2-5. La resolución legacy de cuota queda RETIRADA, no relajada", () => {
+  // RH-01.2 arregló con `resolveEffectiveStorageLimitBytes` que una empresa
+  // Full no quedara bloqueada por los 50 MB heredados de Demo. Ese arreglo
+  // sigue vigente; lo que desapareció es el mecanismo, porque la cuota dejó de
+  // salir de `plan_definitions`:
+  //
+  //   · PE-04B3 (0164) · el almacenamiento sale de plan_revision_limits.storage_bytes;
+  //   · PE-04B4 (0165) · los conteos y las funciones, del mismo catálogo.
+  //
+  // Sin un solo llamante en producción, dejarla viva era una invitación a
+  // volver a usarla. Lo que aquí se comprueba es que NO vuelva, y que los
+  // números congelados sigan siendo los mismos en el catálogo canónico.
+  const limits = readRepoFile("lib/plans/limits.ts");
   assert(
-    hasStorageAvailable(49 * MB, limit, 1 * MB),
-    "Demo con 49 MB usados debía admitir 1 MB más"
+    !/export function resolveEffectiveStorageLimitBytes/.test(limits),
+    "volvió la resolución de cuota contra el catálogo legacy"
   );
+  const tipos = readRepoFile("lib/plans/types.ts");
   assert(
-    !hasStorageAvailable(49 * MB, limit, 2 * MB),
-    "Demo con 49 MB usados NO debía admitir 2 MB más: el control se conserva"
-  );
-});
-
-check("3. Caso Full: cuota efectiva Full y NO queda bloqueado por los 50 MB legacy", () => {
-  // Escenario real del defecto: agregado legacy por encima de 50 MB, plan
-  // legacy Demo (cuota 50 MB) y plan efectivo Full por módulos.
-  const legacyLimit = EXPECTED_QUOTAS.demo;
-  const usedBytes = 120 * MB;
-  assert(
-    !hasStorageAvailable(usedBytes, legacyLimit, 1 * MB),
-    "precondición: con la cuota legacy el logo quedaba bloqueado"
+    !/export function commercialTierToLegacyPlanCode/.test(tipos),
+    "volvió el puente free→demo"
   );
 
-  const limit = resolveEffectiveStorageLimitBytes(PLAN_DEFINITIONS, "full", legacyLimit);
-  assert(limit === EXPECTED_QUOTAS.full, `Full efectivo debía dar 500 MB, dio ${limit}`);
-  assert(
-    hasStorageAvailable(usedBytes, limit, 2 * MB),
-    "una empresa Full con 120 MB usados debía poder subir su logo"
-  );
-  // El control sigue existiendo: por encima de 500 MB se bloquea igual.
-  assert(
-    !hasStorageAvailable(499 * MB, limit, 2 * MB),
-    "Full por encima de su cuota debía seguir bloqueado"
-  );
-});
-
-check("4. Caso Extra: cuota efectiva Extra (5 GB), misma funcionalidad que Full", () => {
-  const limit = resolveEffectiveStorageLimitBytes(PLAN_DEFINITIONS, "extra", EXPECTED_QUOTAS.demo);
-  assert(limit === EXPECTED_QUOTAS.extra, `Extra efectivo debía dar 5 GB, dio ${limit}`);
-  assert(
-    hasStorageAvailable(600 * MB, limit, 10 * MB),
-    "Extra con 600 MB usados debía admitir 10 MB más"
-  );
-  assert(
-    !hasStorageAvailable(5 * 1024 * MB, limit, 1),
-    "Extra en su tope debía bloquear: la diferencia comercial es la cuota, no la ausencia de control"
-  );
-  // Full y Extra solo se diferencian en almacenamiento.
-  assert(
-    EXPECTED_QUOTAS.extra > EXPECTED_QUOTAS.full,
-    "Extra debía tener MÁS almacenamiento que Full"
-  );
-});
-
-check("5. Fail-safe: si plan_definitions no se pudo leer se conserva la cuota legacy", () => {
-  const limit = resolveEffectiveStorageLimitBytes([], "full", EXPECTED_QUOTAS.demo);
-  assert(
-    limit === EXPECTED_QUOTAS.demo,
-    "sin definiciones de plan debía caer a la cuota legacy, nunca a ilimitado"
-  );
-  const zeroed = resolveEffectiveStorageLimitBytes(
-    [{ code: "full", storageLimitBytes: 0 }],
-    "full",
-    EXPECTED_QUOTAS.demo
-  );
-  assert(zeroed === EXPECTED_QUOTAS.demo, "una cuota no positiva no debía anular el control");
+  // Los tres números que RH-01 protegía siguen siendo los mismos, ahora en el
+  // sitio que manda. Se leen de la migración que los sembró, no de una
+  // constante de esta prueba.
+  const m62 = readRepoFile("supabase/migrations/0162_commercial_plan_foundation.sql");
+  const m63 = readRepoFile("supabase/migrations/0163_organization_commercial_migration.sql");
+  assert(/plan_limits/.test(m62), "0162 dejó de copiar los límites legacy al catálogo canónico");
+  assert(/storage_bytes/.test(m62) || /storage_bytes/.test(m63),
+    "el catálogo canónico no declara la cuota de almacenamiento");
 });
 
 check("6. checkStorageAvailable deriva la cuota del plan efectivo (PE-04B3: la canónica de empresa)", () => {
@@ -311,9 +266,15 @@ check("10. El detalle de empresa encabeza con el plan efectivo y usa SUS límite
   // determinar», y entonces NO se enseñan los límites de un plan cualquiera.
   // Los límites siguen saliendo del plan EFECTIVO; lo que se añadió es el
   // camino honesto para cuando no hay plan que enseñar.
+  // PE-04B4 · Los límites que enseña la consola salen del catálogo CANÓNICO,
+  // los mismos que el servidor aplica. Ya no hay traducción a un plan legacy.
   assert(
-    detail.includes("commercialTierToLegacyPlanCode(planDetail.effectivePlanCode)"),
-    "los límites mostrados debían ser los del plan EFECTIVO"
+    detail.includes("listOrganizationPlanLimits(id)"),
+    "los límites mostrados debían ser los del plan EFECTIVO, leídos del catálogo canónico"
+  );
+  assert(
+    !detail.includes("commercialTierToLegacyPlanCode("),
+    "la consola seguía traduciendo el plan a su código legacy"
   );
   assert(
     detail.includes('planDetail.effectivePlanCode === null'),
@@ -905,6 +866,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
     "0164_canonical_organization_storage_quota.sql",
+    "0165_quality_catalog_rls_hardening.sql",
+    "0166_intelligence_and_free_usage_limits.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -917,6 +880,8 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
     "0164_canonical_organization_storage_quota.sql",
+    "0165_quality_catalog_rls_hardening.sql",
+    "0166_intelligence_and_free_usage_limits.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

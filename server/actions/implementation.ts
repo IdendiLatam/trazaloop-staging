@@ -347,7 +347,7 @@ export async function deleteImplementationFeedbackAction(
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Falta el identificador del feedback a eliminar." };
 
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const { data, error } = await supabase

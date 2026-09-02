@@ -215,7 +215,10 @@ check("14. Suspended no puede subir documento", () => {
 check("15. Suspended no puede editar metadatos", () => {
   assertCallsWithin("../../server/actions/trazadocs-master.ts", "updateFileDocumentMetadataAction", "checkCprCanMutate()");
   assertCallsWithin("../../server/actions/trazadocs-master.ts", "beginFileDocumentReplaceAction", "checkCprCanMutate()");
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", "checkCprCanMutate()");
+  // PE-04B4 · Borrar un borrador RETIRA: se declara `delete_or_reduce` para que
+  // el modo consulta no lo impida. El bloqueo por estado de cuenta
+  // (suspended/cancelled) lo sigue aplicando la misma puerta.
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "deleteDraftFileDocumentAction", 'checkCprCanMutate("delete_or_reduce")');
 });
 
 check("16. Suspended sí puede ver el maestro (nunca se bloquea lectura)", () => {

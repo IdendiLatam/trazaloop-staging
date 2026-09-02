@@ -2,6 +2,7 @@ import "server-only";
 
 import { aiConfig } from "@/lib/ai/config";
 import { resolveProvider } from "@/lib/ai/provider";
+import { AI_DENIAL_MESSAGE, commitAiCredits, releaseAiCredits, reserveAiCredits } from "@/lib/ai/credits";
 import { createServerClient } from "@/lib/supabase/server";
 import type { AuthoringGuidance } from "@/lib/db/authoring-guidance";
 import type { OrganizationAuthoringContext } from "@/lib/domain/organization-profile";
@@ -62,6 +63,8 @@ export type ContextualReviewRequest = {
   ownerPositionId: string | null;
   /** Fecha de corte. La pantalla no la manda hoy; la biblioteca la soporta. */
   asOf?: string | null;
+  /** PE-04B4 · Para que un reintento del MISMO envío no cobre dos veces. */
+  idempotencyKey?: string | null;
 };
 
 export type ContextualReviewOutcome =
@@ -127,6 +130,17 @@ export async function runContextualReview(
   //
   // Antes de leer un solo cargo. Construir el contexto de una empresa que no
   // tiene derecho a esto y descartarlo después sería leer lo que no toca.
+  // PE-04B4 · La reserva comercial va ANTES de crear la fila de ejecución:
+  // `quality_ai_runs` es el libro de lo que se ejecutó, no de lo que se
+  // intentó, y reservar después de llamar al proveedor sería regalar la
+  // última operación a quien llegue en el instante justo.
+  const reserva = await reserveAiCredits(db, req.organizationId, "document.contextual_review", req.idempotencyKey ?? null);
+  if (!reserva.ok) {
+    return { ok: false, runId: null, reason: reserva.code,
+             message: AI_DENIAL_MESSAGE[reserva.code] };
+  }
+  const reservaId = reserva.reservation.reservationId;
+
   const { data: permiso, error: errPermiso } = await db.rpc("document_review_start_run", {
     p_organization_id: req.organizationId,
     p_document_id: req.documentId,
@@ -142,6 +156,7 @@ export async function runContextualReview(
     p_daily_limit: 60,
   });
   if (errPermiso) {
+    await releaseAiCredits(db, reservaId);
     return { ok: false, runId: null, reason: "denied", message: errPermiso.message };
   }
   const p = permiso as {
@@ -153,6 +168,9 @@ export async function runContextualReview(
     // de la denegación, así que no puede conceder nada, y solo para el tope
     // mensual: un tope por minuto es un doble clic, no una noticia.
     await emitHardLimitEvent(db, req.organizationId, p);
+    // Denegado por una salvaguarda INTERNA: no se ejecutó nada y el crédito
+    // comercial no se consume.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId: null, reason: p?.reason ?? "denied",
       message: p?.message
@@ -234,6 +252,9 @@ export async function runContextualReview(
       // recuento de llamadas, que es de lo que cuelga el análisis de coste.
       p_provider_called: resultado.kind === "refused",
     });
+    // Un fallo de infraestructura no se le cobra al cliente. El coste que el
+    // proveedor haya incurrido sigue registrado aparte en la ejecución.
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: resultado.kind,
       message: resultado.kind === "timeout"
@@ -250,6 +271,7 @@ export async function runContextualReview(
       // La respuesta llegó del proveedor: no cumplió el esquema, pero se pagó.
       p_provider_called: true,
     });
+    await releaseAiCredits(db, reservaId);
     return {
       ok: false, runId, reason: "invalid_output",
       message: "La revisión no se pudo interpretar y no se ha aplicado nada. "
@@ -277,6 +299,10 @@ export async function runContextualReview(
     p_total_tokens: resultado.usage.totalTokens ?? null,
     p_provider_called: true,
   });
+
+  // PE-04B4 · Aquí, y solo aquí, la reserva se convierte en consumo: hay un
+  // resultado validado y utilizable.
+  await commitAiCredits(db, reservaId, runId);
 
   return {
     ok: true, runId, review, used, sources, findingSources, providerCalled: true,

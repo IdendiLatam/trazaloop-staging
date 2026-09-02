@@ -433,7 +433,7 @@ check("Corrección 7 (caso 10-12). Suspended/cancelled bloquean iniciar/guardar/
     // estado de cuenta (suspended/cancelled) y suma el acceso comercial del
     // módulo CPR.
     assert(
-      fnBody.includes("checkCprCanMutate()"),
+      fnBody.includes("checkCprCanMutate("),
       `${fnName} debía revisar checkCprCanMutate (bloquea si suspended/cancelled) antes de escribir`
     );
   }
@@ -442,8 +442,11 @@ check("Corrección 7 (caso 10-12). Suspended/cancelled bloquean iniciar/guardar/
 check("Corrección 8 (caso 14). updateCompanySettingsAction se bloquea si la cuenta está suspended/cancelled", () => {
   const settingsSource = fs.readFileSync(path.resolve(__dirname, "../../server/actions/settings.ts"), "utf8");
   const fnStart = settingsSource.indexOf("export async function updateCompanySettingsAction");
-  const fnBody = settingsSource.slice(fnStart, fnStart + 500);
-  assert(fnBody.includes("checkOrganizationCanMutate()"), "updateCompanySettingsAction debía revisar el estado de la suscripción");
+  const fnBody = settingsSource.slice(
+    fnStart,
+    settingsSource.indexOf("export async function", fnStart + 10)
+  );
+  assert(fnBody.includes("checkOrganizationCanMutate("), "updateCompanySettingsAction debía revisar el estado de la suscripción");
 
   // El logo también queda cubierto. PE-04B3: la CUOTA pasó a exigirla
   // `guardLogoStorage` (la reserva canónica, que solo sabe de capacidad), así
@@ -454,12 +457,17 @@ check("Corrección 8 (caso 14). updateCompanySettingsAction se bloquea si la cue
     uploadStart,
     settingsSource.indexOf("export async function removeCompanyLogoAction")
   );
-  assert(uploadBody.includes("checkOrganizationCanMutate()"), "uploadCompanyLogoAction debía revisar el estado de la suscripción");
+  assert(uploadBody.includes("checkOrganizationCanMutate("), "uploadCompanyLogoAction debía revisar el estado de la suscripción");
   assert(uploadBody.includes("guardLogoStorage("), "uploadCompanyLogoAction debía seguir revisando la cuota de almacenamiento");
 
   const removeStart = settingsSource.indexOf("export async function removeCompanyLogoAction");
-  const removeBody = settingsSource.slice(removeStart, removeStart + 500);
-  assert(removeBody.includes("checkOrganizationCanMutate()"), "removeCompanyLogoAction debía revisar el estado de la suscripción");
+  const removeBody = settingsSource.slice(removeStart, removeStart + 900);
+  assert(removeBody.includes("checkOrganizationCanMutate("), "removeCompanyLogoAction debía revisar el estado de la suscripción");
+  // PE-04B4 · Y lo hace declarando que RETIRA: en modo consulta, quitar el
+  // logo tiene que seguir siendo posible. Bloquear el borrado dejaría a la
+  // empresa sin poder crear y sin poder liberar espacio.
+  assert(removeBody.includes('checkOrganizationCanMutate("delete_or_reduce")'),
+    "quitar el logo debía declararse como una reducción, no como una creación");
 });
 
 check("Corrección 9 (caso 15). TrazaDocs no permite mutaciones si la cuenta está suspended/cancelled", () => {
@@ -473,7 +481,7 @@ check("Corrección 9 (caso 15). TrazaDocs no permite mutaciones si la cuenta est
   const transitionBody = trazadocsSource.slice(transitionStart, transitionStart + 700);
   // T9F.1: mismo bloqueo por estado de cuenta, ahora vía checkCprCanMutate().
   assert(
-    transitionBody.includes("checkCprCanMutate()"),
+    transitionBody.includes("checkCprCanMutate("),
     "el helper compartido transition() debía revisar el estado de la suscripción para las 6 transiciones de estado a la vez"
   );
 
@@ -490,7 +498,7 @@ check("Corrección 9 (caso 15). TrazaDocs no permite mutaciones si la cuenta est
     const fnStart = trazadocsSource.indexOf(`export async function ${fnName}`);
     assert(fnStart !== -1, `no se encontró ${fnName} en trazadocs.ts`);
     const fnBody = trazadocsSource.slice(fnStart, fnStart + 400);
-    assert(fnBody.includes("checkCprCanMutate()"), `${fnName} debía revisar el estado de la suscripción`);
+    assert(fnBody.includes("checkCprCanMutate("), `${fnName} debía revisar el estado de la suscripción`);
   }
 });
 
@@ -524,12 +532,16 @@ function assertMutateGuard(filePath: string, fnName: string) {
   // ajustes/logo) siguen con checkOrganizationCanMutate() legacy.
   const isTextiles = /textiles-/.test(filePath);
   const isOrgGlobal = /\/(team|settings)\.ts$/.test(filePath);
+  // PE-04B4 · La puerta es la misma; lo que se añadió es una INTENCIÓN
+  // opcional (`delete_or_reduce` en las acciones que retiran, para que el modo
+  // consulta no impida borrar). Se comprueba que la acción PASA POR LA PUERTA,
+  // que es el invariante, no la forma exacta de la llamada.
   const expected = isOrgGlobal
-    ? "checkOrganizationCanMutate()"
+    ? "checkOrganizationCanMutate("
     : isTextiles
-      ? "checkTextilesCanMutate()"
-      : "checkCprCanMutate()";
-  assert(fnBody.includes(expected), `${fnName} (${filePath}) debía revisar ${expected} antes de escribir`);
+      ? "checkTextilesCanMutate("
+      : "checkCprCanMutate(";
+  assert(fnBody.includes(expected), `${fnName} (${filePath}) debía revisar ${expected}) antes de escribir`);
 }
 
 check("1-2. Suspended no puede editar ni eliminar proveedor", () => {

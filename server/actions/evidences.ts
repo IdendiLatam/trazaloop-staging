@@ -263,7 +263,7 @@ export async function deleteEvidenceAction(
   // La sesión y la organización activa siguen siendo requisito de entrada;
   // la autorización REAL del borrado la aplica la RPC (espejo de la RLS).
   await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
 

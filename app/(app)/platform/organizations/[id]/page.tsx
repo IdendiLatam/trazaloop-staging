@@ -21,8 +21,8 @@ import { notFound } from "next/navigation";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
-import { getPlanLimits } from "@/lib/db/plans";
-import { PLAN_LABEL, commercialTierToLegacyPlanCode } from "@/lib/plans/types";
+import { PLAN_LABEL, type ResourceCode } from "@/lib/plans/types";
+import { listOrganizationPlanLimits } from "@/lib/db/organization-usage";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
@@ -51,8 +51,15 @@ export default async function PlatformOrganizationDetailPage({
   // determinar». Entonces NO se enseñan los límites de un plan cualquiera —se
   // enseña que no se pudo determinar—, que es justo lo contrario de lo que
   // hacía la consola cuando llamaba «Plan Demo» a un cliente Full.
-  const planLimits = planDetail.effectivePlanCode === null
-    ? [] : await getPlanLimits(commercialTierToLegacyPlanCode(planDetail.effectivePlanCode));
+  //
+  // PE-04B4 · Y salen del catálogo CANÓNICO, los mismos que el servidor aplica.
+  // Mientras los leyera del catálogo legacy —traduciendo `free` a `demo`— podía
+  // enseñar unos números y el producto exigir otros.
+  const planLimits = (await listOrganizationPlanLimits(id)).map((l) => ({
+    resourceCode: l.resourceCode as ResourceCode,
+    limitValue: l.limitValue,
+    isUnlimited: l.limitState === "unlimited",
+  }));
 
   const rows: [string, string | number][] = [
     ["Razón social", org.legalName ?? "No disponible"],

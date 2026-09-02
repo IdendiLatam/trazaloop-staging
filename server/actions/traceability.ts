@@ -257,7 +257,7 @@ export async function deleteInputBatchAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { data, error } = await supabase
@@ -468,7 +468,7 @@ export async function deleteProductionOrderAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   // PCR-02.2 (hallazgo A): una orden cerrada/cancelada es historial de
@@ -764,7 +764,7 @@ export async function deleteOutputConsumptionAction(
   const org = await requireActiveOrg();
   const id = String(formData.get("id") ?? "");
   if (!id) return { error: "Falta el identificador del consumo." };
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   // PCR-02.1 (hallazgo 1.B): quitar un consumo interno es una mutación
@@ -798,7 +798,7 @@ export async function deleteBatchConsumptionAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   // PCR-02.1 (hallazgo 1.A): quitar un consumo externo es una mutación
@@ -1054,7 +1054,7 @@ export async function deleteOutputBatchAction(
   formData: FormData
 ): Promise<TraceActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   // PCR-02.1 (§50): eliminar una salida es una mutación estructural.
@@ -1235,7 +1235,7 @@ export async function deleteBatchCompositionAction(
 ): Promise<TraceActionState> {
   if (!ALLOW_COMPOSITION_WRITES) return { error: COMPOSITION_WRITE_BLOCKED };
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   // PCR-02.4 (hallazgo crítico §11): eliminar composición también es

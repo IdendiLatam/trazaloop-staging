@@ -318,7 +318,9 @@ check("F2. editar el perfil exige rol y empresa activa", () => {
   const fn = /export async function updateOrganizationProfileAction[\s\S]*?\n}/.exec(ACCIONES)![0];
   assert(/await requireActiveOrg\(\)/.test(fn), "no se resuelve la empresa en servidor");
   assert(/canEditCompany\(org\.roleCode\)/.test(fn), "no se comprueba el rol");
-  assert(/checkOrganizationCanMutate\(\)/.test(fn), "no se comprueba el estado de la empresa");
+  // PE-04B4 · La puerta es la misma; ahora recibe la INTENCIÓN de la operación
+  // (editar el perfil es crear/modificar, y el modo consulta lo bloquea).
+  assert(/checkOrganizationCanMutate\(/.test(fn), "no se comprueba el estado de la empresa");
   assert(/org\.organizationId, buildOrganizationProfilePayload/.test(fn),
     "el identificador de empresa no sale del servidor");
 });

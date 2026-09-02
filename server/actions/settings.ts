@@ -97,7 +97,9 @@ export async function updateCompanySettingsAction(
 
   // Sprint 10A (Bloqueante 3): empresa suspended/cancelled queda en modo
   // solo lectura.
-  const mutateCheck = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: business_increase_or_modify.
+  // Editar los datos de la empresa es configurar el sistema de gestión.
+  const mutateCheck = await checkOrganizationCanMutate("business_increase_or_modify");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const input = {
@@ -149,7 +151,9 @@ export async function updateOrganizationProfileAction(
   if (!canEditCompany(org.roleCode)) {
     return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: business_increase_or_modify.
+  // Idem.
+  const mutateCheck = await checkOrganizationCanMutate("business_increase_or_modify");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const input = {
@@ -198,7 +202,9 @@ export async function uploadCompanyLogoAction(
   // desde PE-04B3 la cuota la exige `guardLogoStorage`, que solo sabe de
   // capacidad. Una cuenta suspended/cancelled sigue en solo lectura, y eso
   // hay que decirlo aquí explícitamente en vez de heredarlo por casualidad.
-  const mutable = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: business_increase_or_modify.
+  // Subir un archivo nuevo es aumentar.
+  const mutable = await checkOrganizationCanMutate("business_increase_or_modify");
   if (!mutable.allowed) return { error: mutable.error };
 
   const bytes = await file.arrayBuffer();
@@ -252,7 +258,9 @@ export async function removeCompanyLogoAction(
     return { error: "Tu rol permite consultar estos datos, pero no modificarlos." };
   }
 
-  const mutateCheck = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: delete_or_reduce.
+  // QUITAR el logo LIBERA espacio. Bloquearlo en modo consulta dejaría a la empresa sin poder crear y sin poder recuperar espacio: atrapada.
+  const mutateCheck = await checkOrganizationCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const storagePath = String(formData.get("storage_path") ?? "");

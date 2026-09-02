@@ -14,6 +14,7 @@ import { AppNav } from "@/components/layout/nav";
 import { ModuleHeaderBadge, ModuleAwareSettingsLink, ModuleSwitcher } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
 import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
+import { UsageClock } from "@/components/domain/usage/usage-clock";
 import { PlatformTutorialsLink } from "@/components/domain/tutorials/platform-tutorials-link";
 import Link from "next/link";
 
@@ -153,6 +154,11 @@ export default async function ShellLayout({
           </div>
         </header>
 
+        {/* PE-04B4 · El reloj de uso vive AQUÍ, en el shell, porque el shell es
+            justo la frontera de «superficie funcional de la empresa». Fuera de
+            él —la puerta, el perfil, la ayuda, lo legal, la consola de
+            plataforma— no se monta y por tanto no se cobra. */}
+        <UsageClock />
         <main className="flex-1 space-y-4 p-6">{children}</main>
       </div>
     </div>

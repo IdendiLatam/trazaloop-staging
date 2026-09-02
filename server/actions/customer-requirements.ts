@@ -144,7 +144,7 @@ export async function unlinkCustomerRequirementAction(
   formData: FormData
 ): Promise<RequirementActionState> {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
   const supabase = await createServerClient();
   const { error } = await supabase

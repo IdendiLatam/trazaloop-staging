@@ -12,6 +12,7 @@ import {
   recordFeedback, rejectSuggestion, resolveCustomerTheme, updateSettings,
 } from "@/lib/db/quality-ai";
 import { runCopilot } from "@/lib/ai/copilot";
+import { aiIdempotencyKey } from "@/lib/ai/credits";
 import {
   PROMPT_ASK, PROMPT_AUDIT_PREP, PROMPT_CUSTOMER_THEMES, PROMPT_EXPLAIN_SIGNAL,
   PROMPT_REVIEW_SUMMARY, PROMPT_RISK_CANDIDATES, PROMPT_ROOT_CAUSE,
@@ -143,6 +144,13 @@ export async function askCopilotAction(
       pinned,
       sessionId: optional(formData, "session_id"),
       allow: { people: ajustes.allowPeople, customer: ajustes.allowCustomer },
+      // PE-04B4 · Un reintento del MISMO envío dentro del mismo minuto reutiliza
+      // la reserva y no cobra dos veces. La clave la deriva el servidor: una
+      // clave que eligiera el navegador sería una clave reutilizable para no pagar.
+      idempotencyKey: aiIdempotencyKey({
+        actorId: g.ok.userId, operationCode: useCase,
+        payload: `${question}|${temporal.mode}|${temporal.asOf ?? ""}`,
+      }),
     });
 
     if (!r.ok) {

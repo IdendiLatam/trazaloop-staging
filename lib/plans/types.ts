@@ -28,26 +28,17 @@ export function isCommercialTier(v: string | null | undefined): v is CommercialT
   return !!v && (COMMERCIAL_TIERS as readonly string[]).includes(v);
 }
 
-/**
- * PE-04B2 · PUENTE TEMPORAL hacia las tablas de límites legacy.
+/*
+ * El PUENTE `commercialTierToLegacyPlanCode` se retira en PE-04B4.
  *
- * En las tablas legacy (`plan_limits`, `plan_definitions`) el plan más bajo se
- * llama `demo`; el plan comercial canónico lo llama `free`. La traducción es
- * EXACTA, no aproximada: los límites de Free se copiaron de los de `demo` byte
- * a byte en 0162, y hay una prueba que lo comprueba comparando las dos tablas.
- *
- * PE-04B3 · El puente SALIÓ del camino de ALMACENAMIENTO: la cuota de bytes ya
- * no pasa por aquí, se lee de `plan_revision_limits.storage_bytes` (0164).
- * Quedan exactamente dos usos, ambos de otro eje —los LÍMITES DE CONTEO
- * (`checkResourceLimit`) y las FUNCIONES habilitadas (`checkFeatureEnabled`)—,
- * que siguen leyendo `plan_limits`.
- *
- * **Se retira del todo en PE-04B4**, cuando esos dos también pasen al catálogo
- * canónico. Mientras tanto, ninguna ruta nueva debe usarlo.
+ * Traducía `free` a `demo` para poder preguntarle los límites a las tablas
+ * legacy. Desde 0164 la cuota de almacenamiento y desde 0165 los límites de
+ * conteo y las funciones habilitadas salen del catálogo canónico
+ * (`plan_revision_limits`), así que ya no hay ninguna pregunta que traducir.
+ * `plan_limits` y `plan_definitions` siguen existiendo como historia; lo que
+ * se retira es el camino que les devolvía autoridad.
  */
-export function commercialTierToLegacyPlanCode(tier: CommercialTier): PlanCode {
-  return tier === "free" ? "demo" : tier;
-}
+
 
 export const PLAN_LABEL: Record<PlanCode, string> = {
   demo: "Demo",

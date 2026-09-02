@@ -193,7 +193,9 @@ export async function revokeTeamInvitationAction(
   if (!canManageTeam(org.roleCode)) {
     return { error: "Tu rol no permite administrar usuarios de esta empresa." };
   }
-  const mutateCheck = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: delete_or_reduce.
+  // Revocar una invitación RETIRA algo; no aumenta nada.
+  const mutateCheck = await checkOrganizationCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const invitationId = String(formData.get("invitation_id") ?? "");
@@ -320,7 +322,9 @@ export async function deactivateMemberAction(
   // ayuda a volver dentro del límite. Solo se bloquea si la suscripción
   // está suspended/cancelled (checkOrganizationCanMutate, no
   // checkFeatureEnabled).
-  const mutateCheck = await checkOrganizationCanMutate();
+  // PE-04B4 · Intención: delete_or_reduce.
+  // Desactivar a alguien REDUCE. Y si además libera un cupo de plan, bloquearlo sería doblemente perverso.
+  const mutateCheck = await checkOrganizationCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const membershipId = String(formData.get("membership_id") ?? "");

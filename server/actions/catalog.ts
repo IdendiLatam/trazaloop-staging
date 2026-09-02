@@ -69,7 +69,7 @@ export async function upsertSupplierAction(
 
 export async function deleteSupplierAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -124,7 +124,7 @@ export async function upsertFamilyAction(
 
 export async function deleteFamilyAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -197,7 +197,7 @@ export async function upsertProductAction(
 
 export async function deleteProductAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase
@@ -257,7 +257,7 @@ export async function upsertMaterialAction(
 
 export async function deleteMaterialAction(formData: FormData) {
   const org = await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return;
   const supabase = await createServerClient();
   await supabase

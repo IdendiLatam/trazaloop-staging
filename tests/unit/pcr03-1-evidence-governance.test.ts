@@ -97,6 +97,8 @@ const QUALITY_01_ALLOWED = new Set([
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
     "0164_canonical_organization_storage_quota.sql",
+    "0165_quality_catalog_rls_hardening.sql",
+    "0166_intelligence_and_free_usage_limits.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -109,6 +111,8 @@ const QUALITY_01_ALLOWED = new Set([
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
     "0164_canonical_organization_storage_quota.sql",
+    "0165_quality_catalog_rls_hardening.sql",
+    "0166_intelligence_and_free_usage_limits.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -279,6 +283,8 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     // PE-04B2: la migración comercial de las empresas.
     "0163_organization_commercial_migration.sql",
     "0164_canonical_organization_storage_quota.sql",
+    "0165_quality_catalog_rls_hardening.sql",
+    "0166_intelligence_and_free_usage_limits.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

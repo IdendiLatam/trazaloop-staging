@@ -406,7 +406,7 @@ export async function deleteDocumentSectionAction(
   if (!canDeleteSection(org.roleCode)) {
     return { error: "Tu rol no permite eliminar secciones." };
   }
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");
@@ -435,7 +435,7 @@ export async function deleteDraftTrazadocDocumentAction(
 ): Promise<TrazadocsActionState> {
   const org = await requireActiveOrg();
   const { user } = await requireSession();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const documentId = String(formData.get("document_id") ?? "");

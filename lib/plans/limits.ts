@@ -6,7 +6,7 @@
  * create_organization/create_platform_organization/change_organization_plan
  * (0053), todas SECURITY DEFINER.
  */
-import type { PlanCode, PlanLimit, PlanStatus, ResourceCode } from "./types";
+import type { PlanLimit, PlanStatus, ResourceCode } from "./types";
 import type { PlatformRoleCode } from "../domain/platform";
 
 // ---------------------------------------------------------------------------
@@ -62,31 +62,17 @@ export function hasStorageAvailable(usedBytes: number, limitBytes: number, bytes
   return usedBytes + bytesToAdd <= limitBytes;
 }
 
-/**
- * RH-01.2 · Cuota de almacenamiento del plan EFECTIVO.
+/*
+ * PE-04B4 · `resolveEffectiveStorageLimitBytes` se retira.
  *
- * Mismo criterio que checkResourceLimit / checkFeatureEnabled desde PCR-01:
- * la autoridad comercial es organization_modules vía
- * organization_effective_plan_code (0103), no la copia legacy de
- * organization_subscriptions. Sin esto, una empresa Full/Extra quedaba
- * bloqueada al subir su logo porque el agregado legacy comparaba contra los
- * 50 MB del plan Demo heredado.
- *
- * Es una resolución de límite, NO una excepción: el control de
- * almacenamiento se mantiene íntegro y un plan Demo efectivo conserva sus
- * 50 MB aunque la suscripción legacy diga Full. Si plan_definitions no se
- * pudo leer (arreglo vacío o cuota no positiva) se conserva la cuota legacy
- * — nunca se concede espacio ilimitado por un fallo de lectura.
+ * Resolvía la cuota de almacenamiento traduciendo el nivel comercial a un
+ * código de plan legacy para buscarlo en `plan_definitions`. Desde 0164 la
+ * cuota sale de `plan_revision_limits.storage_bytes` y desde 0165 tampoco
+ * queda ningún límite de conteo que necesite esa traducción: la función se
+ * quedó sin un solo llamante en producción. Una función muerta que sabe
+ * resolver cuotas es una invitación a volver a usarla.
  */
-export function resolveEffectiveStorageLimitBytes(
-  planDefinitions: readonly { code: PlanCode; storageLimitBytes: number }[],
-  effectivePlanCode: PlanCode,
-  legacyLimitBytes: number
-): number {
-  const definition = planDefinitions.find((p) => p.code === effectivePlanCode);
-  if (!definition || !(definition.storageLimitBytes > 0)) return legacyLimitBytes;
-  return definition.storageLimitBytes;
-}
+
 
 // ---------------------------------------------------------------------------
 // Cambiar de plan (Parte 5): solo superadmin de plataforma.

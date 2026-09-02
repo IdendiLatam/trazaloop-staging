@@ -540,7 +540,7 @@ export async function deleteDraftFileDocumentAction(
 ): Promise<MasterActionState> {
   const org = await requireActiveOrg();
   const { user } = await requireSession();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const id = String(formData.get("id") ?? "");
@@ -583,7 +583,7 @@ export async function deleteDraftFileDocumentAction(
 // ---------------------------------------------------------------------------
 async function transitionFile(id: string, toStatus: "draft" | "in_review" | "approved" | "obsolete", note: string | null): Promise<MasterActionState> {
   await requireActiveOrg();
-  const mutateCheck = await checkCprCanMutate();
+  const mutateCheck = await checkCprCanMutate("delete_or_reduce");
   if (!mutateCheck.allowed) return { error: mutateCheck.error };
 
   const { newVersion, error } = await changeFileDocumentStatus(id, toStatus, note);

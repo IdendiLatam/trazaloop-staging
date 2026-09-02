@@ -154,24 +154,38 @@ check("8. lib/db/plans.ts lee el plan efectivo vía la RPC y es fail-closed", ()
     !PLANS_DB.includes('if (error) return "demo";'),
     "un fallo de lectura vuelve a presentarse como el plan Demo"
   );
-  // Y quien llama tiene que DENEGAR ante ese null, no dejar pasar.
+  // Y quien llama tiene que DENEGAR ante lo indeterminado, no dejar pasar.
+  //
+  // PE-04B4 · Ya no se resuelve un `tier` en `plans.ts`: los límites de conteo
+  // y las funciones habilitadas se leen del catálogo canónico
+  // (`organization_plan_limit`, 0166), igual que la cuota de almacenamiento se
+  // lee del suyo desde 0164. La promesa NO cambió —lo indeterminado deniega— y
+  // se comprueba sobre la forma nueva.
   assert(
-    PLANS_ACTIONS.includes("if (tier === null) return { allowed: false"),
-    "un plan indeterminado deja pasar la operación"
+    PLANS_ACTIONS.includes('limit.status === "unavailable"'),
+    "un límite que no se pudo leer deja pasar la operación"
+  );
+  assert(
+    PLANS_ACTIONS.includes('limit.status === "not_configured"'),
+    "un límite SIN CONFIGURAR deja pasar la operación · no es «ilimitado», es que nadie lo decidió"
   );
 });
 
 check("9. checkFeatureEnabled/checkResourceLimit usan el plan efectivo", () => {
-  const occurrences = PLANS_ACTIONS.split("getOrganizationEffectivePlanCode").length - 1;
+  // PCR-01 corrigió que estos dos leyeran el plan de `organization_subscriptions`
+  // en vez del efectivo por módulos. PE-04B4 va un paso más: los leen del
+  // catálogo comercial canónico, que es plan efectivo Y sin traducción a
+  // `demo`. Lo que PCR-01 protegía sigue protegido.
+  const usos = PLANS_ACTIONS.split("getOrganizationPlanLimit(").length - 1;
+  assert(usos >= 2, `los dos helpers debían resolver el límite con el catálogo canónico, hay ${usos} usos`);
+  assert(PLANS_ACTIONS.includes("getOrganizationPlanLimit,"), "falta la importación del resolutor canónico");
   assert(
-    occurrences >= 3,
-    "checkFeatureEnabled y checkResourceLimit debían resolver límites con el plan efectivo (import + 2 usos)"
+    !/getPlanLimits\(usage\.planCode\)/.test(PLANS_ACTIONS),
+    "el interruptor de funciones no debía seguir atado al plan legacy"
   );
   assert(
-    !/const limits = await getPlanLimits\(usage\.planCode\);[\s\S]{0,400}isPlanFeatureEnabled/.test(
-      PLANS_ACTIONS
-    ),
-    "el interruptor de funciones no debía seguir atado al plan legacy"
+    !PLANS_ACTIONS.includes("commercialTierToLegacyPlanCode("),
+    "seguía traduciendo el plan canónico a su código legacy para preguntar"
   );
 });
 

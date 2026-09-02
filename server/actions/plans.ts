@@ -7,24 +7,20 @@ import {
   getOrganizationUsage,
   listAllOrganizationUsage,
   getOrganizationEffectivePlanCode,
-  getPlanLimits,
   listPlanDefinitions,
   listPlanHistory,
   changeOrganizationPlan,
   type PlanDefinitionRow,
 } from "@/lib/db/plans";
 import {
-  canCreateResource,
-  isPlanFeatureEnabled,
   canChangeOrganizationPlan,
   buildResourceLimitMessage,
   buildPlanStatusMessage,
   FEATURE_NOT_AVAILABLE_MESSAGE,
   IMPORTS_PLAN_MESSAGE,
   STORAGE_LIMIT_MESSAGE,
-  findLimit,
 } from "@/lib/plans/limits";
-import { isPlanCode, isPlanStatus, commercialTierToLegacyPlanCode, type ResourceCode, type PlanCode, type CommercialTier, type SubscriptionPlanHistoryEntry } from "@/lib/plans/types";
+import { isPlanCode, isPlanStatus, type ResourceCode, type PlanCode, type CommercialTier, type SubscriptionPlanHistoryEntry } from "@/lib/plans/types";
 
 /**
  * PE-04B2 · Lo que se dice cuando NO SE PUDO determinar el plan.
@@ -36,6 +32,14 @@ import { isPlanCode, isPlanStatus, commercialTierToLegacyPlanCode, type Resource
 const PLAN_UNVERIFIABLE_MESSAGE =
   "No se pudo comprobar el plan de tu empresa ahora mismo. Vuelve a intentarlo en un momento.";
 import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
+import {
+  canCreateWithCanonicalLimit,
+  checkCommercialMutation,
+  getOrganizationPlanLimit,
+  listOrganizationPlanLimits,
+  isFeatureEnabledWithCanonicalLimit,
+  type MutationIntent,
+} from "@/lib/db/organization-usage";
 import type { OrganizationPlanUsage } from "@/lib/plans/usage";
 
 /**
@@ -43,6 +47,20 @@ import type { OrganizationPlanUsage } from "@/lib/plans/usage";
  * «te quedaste sin espacio» —eso afirmaría algo que no se sabe— ni se deja
  * pasar.
  */
+/**
+ * PE-04B4 · Modo consulta. Lo que se dice NO es «no tienes permiso» —lo tiene—
+ * ni «se acabó tu plan» —sigue teniéndolo—: es que el tiempo de uso incluido en
+ * Free se agotó por hoy o por este mes, y qué SÍ se puede hacer mientras tanto.
+ */
+const CONSULTATION_MODE_MESSAGE =
+  "Tu empresa agotó el tiempo de uso incluido en el plan Free. Puedes seguir consultando, "
+  + "descargando y borrando tu información; para volver a crear o modificar, espera al "
+  + "reinicio del cupo o cambia de plan.";
+
+const COMMERCIAL_UNVERIFIABLE_MESSAGE =
+  "No se pudo comprobar lo que tu empresa tiene contratado ahora mismo. No se guardó nada; "
+  + "vuelve a intentarlo en un momento.";
+
 const STORAGE_UNVERIFIABLE_MESSAGE =
   "No se pudo comprobar la capacidad de almacenamiento de tu empresa ahora mismo. No se subió nada; vuelve a intentarlo en un momento.";
 
@@ -91,11 +109,35 @@ function checkPlanStatusBlocking(usage: OrganizationPlanUsage): { allowed: boole
  * la organización activa (requireActiveOrg), nunca un organization_id
  * del cliente.
  */
-export async function checkOrganizationCanMutate(): Promise<{ allowed: boolean; error: string | null }> {
+export async function checkOrganizationCanMutate(
+  intent: MutationIntent = "business_increase_or_modify"
+): Promise<{ allowed: boolean; error: string | null }> {
   const org = await requireActiveOrg();
+
+  // EJE ADMINISTRATIVO (suspended/cancelled). Sigue sin bloquear ante un fallo
+  // de lectura de la vista legacy: ese eje no es el comercial.
   const usage = await getOrganizationUsage(org.organizationId);
-  if (!usage) return { allowed: true, error: null }; // sin datos de uso: no bloquear por un fallo de lectura.
-  return checkPlanStatusBlocking(usage);
+  if (usage) {
+    const estado = checkPlanStatusBlocking(usage);
+    if (!estado.allowed) return estado;
+  }
+
+  // PE-04B4 · EJE COMERCIAL. En modo consulta la empresa NO pierde nada: entra,
+  // navega, lee, descarga y BORRA. Lo que no puede es crear ni modificar su
+  // sistema de gestión. Por eso la puerta pregunta por la INTENCIÓN: bloquear
+  // también el borrado dejaría al cliente atrapado, sin poder crear y sin poder
+  // recuperar espacio, y agotar un cupo no puede secuestrar datos de nadie.
+  const comercial = await checkCommercialMutation(org.organizationId, intent);
+  if (!comercial) return { allowed: false, error: COMMERCIAL_UNVERIFIABLE_MESSAGE };
+  if (!comercial.allowed) {
+    return {
+      allowed: false,
+      error: comercial.state === "ENTITLEMENT_UNAVAILABLE"
+        ? COMMERCIAL_UNVERIFIABLE_MESSAGE
+        : CONSULTATION_MODE_MESSAGE,
+    };
+  }
+  return { allowed: true, error: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,14 +158,23 @@ export async function checkResourceLimit(resourceCode: ResourceCode): Promise<{ 
   // PE-04B2 · El plan puede venir como `null` = «no se pudo determinar». Se
   // DENIEGA y se dice que no se pudo verificar — no se cae al plan más bajo,
   // que era lo que hacía creer a un cliente Full que era Demo.
-  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
-  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
-  const limits = await getPlanLimits(commercialTierToLegacyPlanCode(tier));
-  const limit = findLimit(limits, resourceCode);
-  if (!limit) return { allowed: true, error: null };
+  // PE-04B4 · El límite sale del catálogo CANÓNICO (`plan_revision_limits`).
+  // Se retira el puente free→demo: preguntar por «demo» cuando la empresa es
+  // «free» obligaba a mantener vivo un plan que ya no existe comercialmente.
+  // Los trece límites funcionales se copiaron byte a byte en 0162/0163, así que
+  // el comportamiento no cambia; cambia de dónde se lee.
+  const limit = await getOrganizationPlanLimit(org.organizationId, resourceCode);
+  if (limit.status === "unavailable") {
+    return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
+  }
+  // Un recurso que el plan no declara NO se interpreta como permitido: es que
+  // nadie lo ha decidido, y sobre lo que no se sabe no se autoriza.
+  if (limit.status === "not_configured") {
+    return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
+  }
 
   const currentCount = resourceCurrentCount(usage, resourceCode);
-  const allowed = canCreateResource(currentCount, limit);
+  const allowed = canCreateWithCanonicalLimit(currentCount, limit);
   return { allowed, error: allowed ? null : buildResourceLimitMessage() };
 }
 
@@ -141,13 +192,14 @@ export async function checkFeatureEnabled(
   // decide si la función está disponible es el EFECTIVO por módulos (0103),
   // nunca la copia obsoleta de organization_subscriptions. Corrige el bug
   // real Demo→Full de invitaciones (roles_enabled) de raíz y en servidor.
-  const tier = await getOrganizationEffectivePlanCode(org.organizationId);
-  if (tier === null) return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
-  const limits = await getPlanLimits(commercialTierToLegacyPlanCode(tier));
-  const limit = findLimit(limits, resourceCode);
-  if (!limit) return { allowed: true, error: null };
+  // PE-04B4 · Mismo cambio que en checkResourceLimit: catálogo canónico y
+  // adiós al puente free→demo.
+  const limit = await getOrganizationPlanLimit(org.organizationId, resourceCode);
+  if (limit.status === "unavailable" || limit.status === "not_configured") {
+    return { allowed: false, error: PLAN_UNVERIFIABLE_MESSAGE };
+  }
 
-  const allowed = isPlanFeatureEnabled(limit);
+  const allowed = isFeatureEnabledWithCanonicalLimit(limit);
   const message = resourceCode === "imports_enabled" ? IMPORTS_PLAN_MESSAGE : FEATURE_NOT_AVAILABLE_MESSAGE;
   return { allowed, error: allowed ? null : message };
 }
@@ -218,10 +270,20 @@ export async function getOrganizationPlanAction(): Promise<OrganizationPlanUsage
   return getOrganizationUsage(org.organizationId);
 }
 
-export async function getOrganizationUsageAction(): Promise<{ usage: OrganizationPlanUsage | null; limits: Awaited<ReturnType<typeof getPlanLimits>> }> {
+export async function getOrganizationUsageAction(): Promise<{
+  usage: OrganizationPlanUsage | null;
+  limits: { resourceCode: string; limitValue: number | null; isUnlimited: boolean }[];
+}> {
   const org = await requireActiveOrg();
   const usage = await getOrganizationUsage(org.organizationId);
-  const limits = usage ? await getPlanLimits(usage.planCode) : [];
+  // PE-04B4 · Los límites salen del catálogo CANÓNICO, no del legacy indexado
+  // por `usage.planCode`, que era la copia administrativa de
+  // `organization_subscriptions` y podía no ser el plan comercial vigente.
+  const limits = (await listOrganizationPlanLimits(org.organizationId)).map((l) => ({
+    resourceCode: l.resourceCode,
+    limitValue: l.limitValue,
+    isUnlimited: l.limitState === "unlimited",
+  }));
   return { usage, limits };
 }
 

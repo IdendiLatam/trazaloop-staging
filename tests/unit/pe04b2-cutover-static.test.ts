@@ -78,12 +78,16 @@ check("B2. Un fallo devuelve `null`, no un plan", () => {
 });
 
 check("B3. Y quien llama DENIEGA ante ese null", () => {
-  // Los dos ejes que aún resuelven un `tier` (conteos y funciones) deniegan
-  // ante un plan indeterminado. El tercero —el almacenamiento— dejó de
-  // resolver un tier en PE-04B3: pide el estado canónico de la empresa y
-  // deniega igual, con su propio mensaje de «no se pudo comprobar».
-  const n = (PLANS_ACTIONS.match(/if \(tier === null\) return \{ allowed: false/g) ?? []).length;
-  assert(n >= 2, `solo ${n} comprobaciones deniegan ante un plan indeterminado`);
+  // Lo que B2 estableció —un plan que no se puede determinar DENIEGA, y se
+  // dice que fue un fallo de lectura— sigue en pie en los tres ejes, aunque
+  // ninguno resuelva ya un `tier`: B3 pasó el almacenamiento al estado canónico
+  // y B4 pasó conteos y funciones al catálogo canónico. Se comprueba el
+  // invariante, no la forma que tenía en B2.
+  const deniegan = (PLANS_ACTIONS.match(/status === "unavailable"/g) ?? []).length;
+  assert(deniegan >= 2,
+    `solo ${deniegan} comprobaciones deniegan ante un límite que no se pudo leer`);
+  assert(/limit\.status === "not_configured"/.test(PLANS_ACTIONS),
+    "un límite SIN CONFIGURAR debía denegar, no dejar pasar");
   assert(
     /!storage \|\| storage\.state === "QUOTA_UNAVAILABLE"/.test(PLANS_ACTIONS),
     "el camino de almacenamiento no deniega ante una capacidad indeterminada"
@@ -138,12 +142,16 @@ check("C2. Y la migración NO reescribe la suscripción legacy", () => {
     "0163 borra la suscripción legacy");
 });
 
-check("C3. El puente hacia las tablas legacy dice cuándo se retira", () => {
-  assert(/commercialTierToLegacyPlanCode/.test(TIPOS), "no existe el puente");
-  const i = TIPOS.indexOf("PUENTE TEMPORAL");
-  assert(i > -1, "el puente no se declara temporal");
+check("C3. El puente hacia las tablas legacy se retiró, y consta por qué", () => {
+  // B2 lo creó declarándolo temporal y diciendo en qué tramo se iría. B3 lo
+  // sacó del camino de almacenamiento y B4 lo retiró del todo: los límites de
+  // conteo y las funciones habilitadas también salen ya del catálogo canónico.
+  assert(!/export function commercialTierToLegacyPlanCode/.test(TIPOS),
+    "el puente sigue vivo");
+  const i = TIPOS.indexOf("PUENTE");
+  assert(i > -1, "se borró sin dejar constancia de que existió y por qué");
   const doc = TIPOS.slice(i, i + 900);
-  assert(/PE-04B3/.test(doc), "el puente no dice en qué tramo se retira");
+  assert(/PE-04B4/.test(doc), "no consta en qué tramo se retiró");
 });
 
 // ===========================================================================

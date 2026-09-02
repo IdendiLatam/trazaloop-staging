@@ -11,6 +11,7 @@ import type { QuickEditSuggestion } from "@/lib/intelligence/document-authoring/
 import {
   getCurrentAuthoringGuidance, getSectionRoleGuidance,
 } from "@/lib/db/authoring-guidance";
+import { aiIdempotencyKey } from "@/lib/ai/credits";
 import { getOrganizationAuthoringContext } from "@/lib/db/organization-profile";
 
 /**
@@ -128,6 +129,15 @@ export async function quickEditAction(
     moduleKey,
     sectionKey: String(sec.section_key),
     action,
+    // PE-04B4 · Un reintento del MISMO envío dentro del mismo minuto reutiliza
+    // la reserva y no cobra dos veces. El identificador de la empresa basta
+    // aquí porque la clave ya lleva documento, sección y texto: dos personas
+    // pidiendo lo mismo sobre el mismo texto en el mismo minuto ES la misma
+    // operación, y cobrarla dos veces sería cobrar por un duplicado.
+    idempotencyKey: aiIdempotencyKey({
+      actorId: org.organizationId, operationCode: "document.quick_edit",
+      payload: `${documentId}|${String(sec.section_key)}|${userText}`,
+    }),
     context: {
       userText,
       guidance,
