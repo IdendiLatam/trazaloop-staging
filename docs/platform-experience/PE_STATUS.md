@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 2 de septiembre de 2026, al cierre de PE-05B1.*
+*Actualizado el 2 de septiembre de 2026, al detenerse PE-05B2 en su comprobación previa.*
 
 ---
 
@@ -132,7 +132,8 @@ Y lo que se corrigió después de aquella revisión, en
 |---|---|---|---|
 | PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
 | PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
-| PE-05B2…B6 | Proveedor y webhooks, precio final, checkout, consola y precios públicos | previstas | no empezado |
+| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | — | **detenido en §0** · 2026-09-02 · no se empezó |
+| PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
 [cimientos](PE_05B1_BILLING_FOUNDATION.md) ·
@@ -155,6 +156,13 @@ Los diez de PE-05B1:
 > **No se fijó ningún tipo de cambio.** Inventarlo habría sido inventar un
 > precio: sin tasa vigente el presupuesto falla y lo dice. Hay que fijarla antes
 > de vender en cualquier entorno.
+
+> **PE-05B2 no se empezó.** Su comprobación previa obligatoria encontró una
+> regresión de PE-04: una empresa **en prueba** recibe los **500** créditos
+> mensuales de Full en vez de los **25** de Free, y al caducar la prueba queda
+> `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
+> escribió. El hallazgo, con su reproducción y la forma que tendría el remedio:
+> [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
 Los doce de PE-05A:
 [descubrimiento y alcance](PE_05A_PAYMENT_DISCOVERY.md) ·
