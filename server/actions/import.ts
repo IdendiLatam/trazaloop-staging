@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
+import { checkCprCanMutate, checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
 import type { ResourceCode } from "@/lib/plans/types";
 import { parseCsv } from "@/lib/csv";
 import {
@@ -301,6 +301,12 @@ export async function commitImportAction(
   // Sprint 10A (Parte 8): Demo no incluye importaciones.
   const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { inserted: 0, error: featureCheck.error };
+
+  // PE-04B4 · Confirmar una importación CREA filas de negocio en bloque: es
+  // la definición de «aumentar el sistema de gestión». En modo consulta se
+  // niega, y con el mensaje del cupo, no con uno de permisos.
+  const comercial = await checkCprCanMutate();
+  if (!comercial.allowed) return {  inserted: 0, error: comercial.error };
 
   const errors = await validateRows(entity, rows, org.organizationId);
   if (errors.length > 0) {

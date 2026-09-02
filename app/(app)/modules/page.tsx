@@ -32,6 +32,8 @@ import { Wordmark } from "@/components/layout/logo";
 import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
 import { WelcomeVideo } from "@/components/domain/tutorials/welcome-video";
 import { getActiveOrganization } from "@/lib/db/organizations";
+import { getAiCreditStatus, getOrganizationTimeStatus } from "@/lib/db/organization-usage";
+import { UsageSummaryCard } from "@/components/domain/usage/usage-summary-card";
 import { getActiveOrgModuleStatuses, getDemoTrialSummary } from "@/lib/db/module-access";
 import { DemoTrialBanner } from "@/components/domain/modules/demo-trial-banner";
 import {
@@ -100,6 +102,17 @@ export default async function ModulesPortalPage() {
     ? await getDemoTrialSummary(activeOrg.organizationId)
     : { activeTrials: [], expiredModules: [], hasEnterableModule: false, notice: "none" as const };
 
+  // PE-04B4 · El consumo, en la PUERTA. Es la primera pantalla después de
+  // entrar y la que responde «qué tengo»: el sitio natural para «cuánto me
+  // queda». Y está FUERA del shell, así que mirar lo que se ha consumido no
+  // consume tiempo — cobrar por consultar el propio cupo sería absurdo.
+  const consumo = activeOrg
+    ? await Promise.all([
+        getOrganizationTimeStatus(activeOrg.organizationId),
+        getAiCreditStatus(activeOrg.organizationId),
+      ])
+    : [null, null];
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       {/* PE-03B4 · La bienvenida, y SOLO aquí.
@@ -154,6 +167,8 @@ export default async function ModulesPortalPage() {
           </p>
         ) : null}
       </header>
+
+      {activeOrg ? <UsageSummaryCard time={consumo[0]} ai={consumo[1]} /> : null}
 
       {/* Que NO se pudiera comprobar nada y que NO haya nada activo son dos
           cosas distintas, y confundirlas es el defecto PE-D1 en grande: decirle

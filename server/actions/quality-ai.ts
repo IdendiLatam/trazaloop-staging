@@ -6,12 +6,13 @@ import {
 import { revalidatePath } from "next/cache";
 import { requireQualityForAction } from "@/lib/auth/require-quality-module";
 import { requireSession } from "@/lib/auth/require-session";
-import { checkQualityCanMutate } from "@/server/actions/module-plans";
 import {
   acceptSuggestion, createSession, createSuggestion, getSettings, listReferences,
   recordFeedback, rejectSuggestion, resolveCustomerTheme, updateSettings,
 } from "@/lib/db/quality-ai";
 import { runCopilot } from "@/lib/ai/copilot";
+import { checkQualityCanMutate } from "@/server/actions/module-plans";
+import type { MutationIntent } from "@/lib/db/organization-usage";
 import { aiIdempotencyKey } from "@/lib/ai/credits";
 import {
   PROMPT_ASK, PROMPT_AUDIT_PREP, PROMPT_CUSTOMER_THEMES, PROMPT_EXPLAIN_SIGNAL,
@@ -59,9 +60,20 @@ export type AiActionState = {
 
 type Gate = { organizationId: string; roleCode: string; userId: string };
 
-async function gate(): Promise<{ ok: Gate | null; error: string | null }> {
+async function gate(
+  intent: MutationIntent | null = null
+): Promise<{ ok: Gate | null; error: string | null }> {
   const access = await requireQualityForAction();
   if (access.org === null) return { ok: null, error: access.error };
+
+  // PE-04B4 · Solo las acciones que MUTAN piden la puerta comercial. Preguntar
+  // y leer no la necesitan, y la ejecución de Intelligence tiene la suya en la
+  // propia reserva de créditos (que ya niega en modo consulta).
+  if (intent !== null) {
+    const comercial = await checkQualityCanMutate(intent);
+    if (!comercial.allowed) return { ok: null, error: comercial.error };
+  }
+
   const { user } = await requireSession();
   return {
     ok: {
@@ -193,7 +205,9 @@ export async function askCopilotAction(
 export async function saveSuggestionAction(
   _prev: AiActionState, formData: FormData
 ): Promise<AiActionState> {
-  const g = await gate();
+  // PE-04B4 · Intención: business_increase_or_modify.
+  // Aceptar una sugerencia CREA estado de negocio (un riesgo, un caso, una acción).
+  const g = await gate("business_increase_or_modify");
   if (!g.ok) return { error: g.error };
 
   const runId = text(formData, "run_id");
@@ -256,7 +270,9 @@ export async function acceptSuggestionAction(
 export async function rejectSuggestionAction(
   _prev: AiActionState, formData: FormData
 ): Promise<AiActionState> {
-  const g = await gate();
+  // PE-04B4 · Intención: delete_or_reduce.
+  // Descartar una sugerencia no crea nada: la retira. En modo consulta debe poder limpiarse la bandeja.
+  const g = await gate("delete_or_reduce");
   if (!g.ok) return { error: g.error };
   const id = text(formData, "suggestion_id");
   if (!id) return { error: "Falta el borrador." };
@@ -314,7 +330,9 @@ export async function startSessionAction(
 export async function updateAiSettingsAction(
   _prev: AiActionState, formData: FormData
 ): Promise<AiActionState> {
-  const g = await gate();
+  // PE-04B4 · Intención: business_increase_or_modify.
+  // Cambiar los ajustes de Intelligence es configurar el sistema de gestión.
+  const g = await gate("business_increase_or_modify");
   if (!g.ok) return { error: g.error };
   if (!["admin", "quality"].includes(g.ok.roleCode)) {
     return { error: `Tu rol no permite configurar ${INTELLIGENCE_SHORT_NAME}.` };

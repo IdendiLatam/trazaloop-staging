@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B3.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B4.*
 
 ---
 
@@ -134,7 +134,22 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-04B1 | Catálogo canónico, revisiones y resolutor en sombra | **0162** | **cerrado** · 2026-09-01 |
 | PE-04B2 | Base comercial cerrada, migración de empresas y cambio de autoridad | **0163** | **cerrado** · 2026-09-01 |
 | PE-04B3 | Cuota de almacenamiento única por empresa, reserva y seguridad por encima del límite | **0164** | **cerrado** · 2026-09-01 |
-| PE-04B4…B6 | IA, tiempo activo y soporte | previstas | no empezado |
+| PE-04B4 | Créditos ponderados de Intelligence y reloj de uso de Free | **0166** | **cerrado** · 2026-09-01 |
+| PE-04B5…B6 | Soporte y cierre comercial | previstas | no empezado |
+
+Los nueve de PE-04B4:
+[inventario de IA](PE_04B4_AI_INVENTORY.md) ·
+[créditos ponderados](PE_04B4_WEIGHTED_CREDITS.md) ·
+[reservas](PE_04B4_AI_RESERVATIONS.md) ·
+[reloj de Free](PE_04B4_FREE_USAGE_CLOCK.md) ·
+[modo consulta](PE_04B4_CONSULTATION_MODE.md) ·
+[puertas comerciales](PE_04B4_COMMERCIAL_GATES.md) ·
+[retirada del legacy](PE_04B4_LEGACY_LIMIT_RETIREMENT.md) ·
+[privacidad](PE_04B4_PRIVACY_AND_USAGE.md) ·
+[pruebas](PE_04B4_TEST_MATRIX.md).
+
+Y fuera de PE-04, el incidente que interrumpió este tramo:
+[SEC-01 · RLS de los catálogos de Quality](../security/SEC_01_RLS_INCIDENT.md).
 
 Los siete de PE-04B3:
 [inventario](PE_04B3_STORAGE_INVENTORY.md) ·
@@ -176,6 +191,34 @@ Los diez de PE-04A:
 [seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
 [pruebas](PE_04A_TEST_STRATEGY.md).
 Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### PE-04B4 · dos ejes nuevos, y ninguno vigila a nadie
+
+**Intelligence** pasa a medirse en **créditos ponderados**: una llamada al
+proveedor no es un crédito, y tres operaciones pueden costar ocho. Convivían
+cuatro controles sobre lo mismo —10 000 ejecuciones al mes, 500 al mes, 50 al día
+**por persona**, más topes por minuto y hora— y ninguno era lo que se vende. Todos
+sobreviven, reclasificados como lo que de verdad son: protección de coste y
+anti-abuso. Encima queda un solo medidor comercial: 25 / 500 / 2 000 al mes por
+empresa, más 50 de prueba que **se gastan primero porque caducan**.
+
+**El tiempo de Free** son 30 minutos al día y 300 al mes **por empresa**, y el
+reloj corre mientras haya una pantalla funcional abierta —se mueva el ratón o
+no—. El consumo se guarda como un **conjunto de minutos**, no como una suma: tres
+personas a la vez durante diez minutos consumen diez, y eso no hay que
+calcularlo, sale de la clave primaria. La misma decisión que hace correcta la
+aritmética es la que impide construir un panel de productividad: la tabla **no
+guarda quién**.
+
+Al agotarse, la empresa entra en **modo consulta**: sigue entrando, leyendo,
+descargando y **borrando**. Lo que no puede es crear, subir ni ejecutar
+Intelligence. Bloquear también el borrado la dejaría atrapada —sin poder crear y
+sin poder liberar espacio—, y agotar un cupo no puede secuestrar los datos de
+nadie.
+
+Con esto **se retira el puente `free→demo`**: los límites de conteo y las
+funciones habilitadas leen ya el catálogo canónico, y con ellos desaparecen
+`commercialTierToLegacyPlanCode` y `resolveEffectiveStorageLimitBytes`.
 
 ### PE-04B3 · una sola cuota, y el fin del cupo doble
 
@@ -319,8 +362,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0164** |
-| Staging | **0164** |
+| Local | **0166** |
+| Staging | **0166** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

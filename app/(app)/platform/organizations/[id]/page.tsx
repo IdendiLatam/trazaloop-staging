@@ -22,7 +22,8 @@ import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { PLAN_LABEL, type ResourceCode } from "@/lib/plans/types";
-import { listOrganizationPlanLimits } from "@/lib/db/organization-usage";
+import { getAiCreditStatus, getOrganizationTimeStatus, listOrganizationPlanLimits } from "@/lib/db/organization-usage";
+import { UsageSummaryCard } from "@/components/domain/usage/usage-summary-card";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
@@ -55,6 +56,14 @@ export default async function PlatformOrganizationDetailPage({
   // PE-04B4 · Y salen del catálogo CANÓNICO, los mismos que el servidor aplica.
   // Mientras los leyera del catálogo legacy —traduciendo `free` a `demo`— podía
   // enseñar unos números y el producto exigir otros.
+  // PE-04B4 · La consola enseña el consumo con LA MISMA fuente que el cliente.
+  // Dos aritméticas para el mismo mes es cómo se acaba discutiendo con alguien
+  // que tiene razón.
+  const [consumoTiempo, consumoIa] = await Promise.all([
+    getOrganizationTimeStatus(id),
+    getAiCreditStatus(id),
+  ]);
+
   const planLimits = (await listOrganizationPlanLimits(id)).map((l) => ({
     resourceCode: l.resourceCode as ResourceCode,
     limitValue: l.limitValue,
@@ -116,6 +125,19 @@ export default async function PlatformOrganizationDetailPage({
         modules={moduleDetail.modules}
         canManage={moduleDetail.canManage}
       />
+
+      {/* PE-04B4 · Consumo comercial vigente, con la MISMA fuente canónica que
+          ve el cliente: créditos ponderados de Intelligence (mensuales y los de
+          la prueba, separados) y reloj de uso de Free. Debajo sigue la tarjeta
+          heredada, que es histórica y no manda. */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Consumo comercial vigente</h2>
+        <UsageSummaryCard
+          time={consumoTiempo}
+          ai={consumoIa}
+          titulo="Créditos de Intelligence y tiempo de uso"
+        />
+      </section>
 
       {planDetail.usage && planDetail.effectivePlanCode !== null ? (
         <section className="space-y-3">

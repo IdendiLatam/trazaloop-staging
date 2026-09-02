@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
-import { checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
+import { checkCprCanMutate, checkCprFeatureEnabled, checkCprResourceLimit } from "@/server/actions/module-plans";
 import { requireCprForAction } from "@/lib/auth/require-cpr-module";
 import type { ResourceCode } from "@/lib/plans/types";
 
@@ -265,6 +265,12 @@ export async function commitImportAction(
   // Sprint 10A (Parte 8): Demo no incluye importaciones.
   const featureCheck = await checkCprFeatureEnabled("imports_enabled");
   if (!featureCheck.allowed) return { ...emptyCommit, error: featureCheck.error };
+
+  // PE-04B4 · Confirmar una importación CREA filas de negocio en bloque: es
+  // la definición de «aumentar el sistema de gestión». En modo consulta se
+  // niega, y con el mensaje del cupo, no con uno de permisos.
+  const comercial = await checkCprCanMutate();
+  if (!comercial.allowed) return {  ...emptyCommit, error: comercial.error };
 
   const jobId = String(formData.get("import_job_id") ?? "");
   if (!jobId) return { ...emptyCommit, error: "Falta el identificador de la importación a confirmar." };
