@@ -431,6 +431,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0164_canonical_organization_storage_quota.sql",
     "0165_quality_catalog_rls_hardening.sql",
     "0166_intelligence_and_free_usage_limits.sql",
+    "0167_support_entitlements_and_commercial_admin.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -445,6 +446,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0164_canonical_organization_storage_quota.sql",
     "0165_quality_catalog_rls_hardening.sql",
     "0166_intelligence_and_free_usage_limits.sql",
+    "0167_support_entitlements_and_commercial_admin.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -484,6 +486,7 @@ check("15. Sin cambios de esquema del aviso Demo: ninguna migración lo conoce; 
     "0164_canonical_organization_storage_quota.sql",
     "0165_quality_catalog_rls_hardening.sql",
     "0166_intelligence_and_free_usage_limits.sql",
+    "0167_support_entitlements_and_commercial_admin.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

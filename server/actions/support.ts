@@ -2,6 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
+import {
+  getSupportEntitlement,
+  submitSupportTicket,
+  SUPPORT_SUBMIT_MESSAGE,
+  type SupportEntitlement,
+  type SupportKind,
+} from "@/lib/db/support-entitlements";
 import { requireSession } from "@/lib/auth/require-session";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getOrganizationUsage } from "@/lib/db/plans";
@@ -10,7 +17,6 @@ import {
   getSupportTicketSummary,
   listPlatformSupportTickets,
   getPlatformSupportTicket,
-  insertSupportTicket,
   listSupportTicketMessages,
   insertSupportTicketMessage,
   listSupportTicketHistory,
@@ -27,7 +33,6 @@ import {
 import {
   validateSupportTicketDraft,
   buildSupportTicketInsertPayload,
-  computeFirstResponseTargetAt,
   canCreateSupportTicket,
   canReopenTicket,
   isTicketStatus,
@@ -105,7 +110,6 @@ export async function createSupportTicketAction(
   formData: FormData
 ): Promise<SupportActionState> {
   const org = await requireActiveOrg();
-  const { user } = await requireSession();
 
   const input: SupportTicketDraftInput = {
     subject: String(formData.get("subject") ?? ""),
@@ -125,14 +129,31 @@ export async function createSupportTicketAction(
   const ticketCheck = canCreateSupportTicket(planStatus, input.category);
   if (ticketCheck.error) return { error: ticketCheck.error };
 
-  const payload = buildSupportTicketInsertPayload(input);
-  const targetAt = computeFirstResponseTargetAt(new Date()).toISOString();
+  // PE-04B5 · QUÉ se pide es una pregunta aparte de DE QUÉ va. La categoría
+  // describe el tema; `support_kind` dice si es un reporte de avería —abierto a
+  // los tres planes y sin consumir nada— o una orientación funcional, que solo
+  // Extra incluye. Deducir el derecho comercial de la etiqueta que el cliente
+  // eligió para el tema habría sido deducirlo de una palabra suya.
+  const supportKind: SupportKind =
+    formData.get("support_kind") === "functional_guidance" ? "functional_guidance" : "technical";
 
-  const { id, error } = await insertSupportTicket(org.organizationId, payload, user.id, targetAt);
-  if (error || !id) return { error: error ?? "No fue posible crear el ticket." };
+  const payload = buildSupportTicketInsertPayload(input);
+
+  // El envío y el consumo del caso ocurren en la MISMA transacción de base: con
+  // un caso libre, dos envíos simultáneos no pueden pasar los dos.
+  const enviado = await submitSupportTicket({
+    organizationId: org.organizationId,
+    subject: payload.subject,
+    description: payload.description,
+    category: payload.category,
+    relatedModule: payload.related_module,
+    priority: payload.priority,
+    supportKind,
+  });
+  if (!enviado.ok) return { error: SUPPORT_SUBMIT_MESSAGE[enviado.code] };
 
   revalidateSupport();
-  return { error: null, success: true, ticketId: id };
+  return { error: null, success: true, ticketId: enviado.ticketId };
 }
 
 export async function replySupportTicketAction(
@@ -338,4 +359,24 @@ export async function addInternalSupportNoteAction(
 
   revalidateSupport(ticketId);
   return { ...okState, ticketId };
+}
+
+// ---------------------------------------------------------------------------
+// PE-04B5 · Lo que el plan incluye, para que la pantalla no prometa de más.
+// ---------------------------------------------------------------------------
+export async function getSupportEntitlementAction(): Promise<SupportEntitlement | null> {
+  const org = await requireActiveOrg();
+  return getSupportEntitlement(org.organizationId);
+}
+
+/**
+ * PE-04B5 · El derecho de soporte de UNA empresa concreta, para la consola de
+ * plataforma. La base vuelve a comprobar quién pregunta: solo un miembro o el
+ * personal de plataforma obtienen respuesta.
+ */
+export async function getSupportEntitlementForOrganizationAction(
+  organizationId: string
+): Promise<SupportEntitlement | null> {
+  await requirePlatformStaff();
+  return getSupportEntitlement(organizationId);
 }

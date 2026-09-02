@@ -1201,6 +1201,7 @@ export const PAGE_KEY_EXCLUSIONS: readonly PageKeyExclusion[] = [
   { route: "/platform/intelligence", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/legal", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/legal/[id]", reason: "Consola de plataforma · herramienta interna" },
+  { route: "/platform/plans", reason: "Consola de plataforma · administración comercial interna" },
   { route: "/platform/organizations/new", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/organizations/[id]", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/support", reason: "Consola de plataforma · herramienta interna" },

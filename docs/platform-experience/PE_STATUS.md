@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B4.*
+*Actualizado el 1 de septiembre de 2026, al cierre de PE-04B5.*
 
 ---
 
@@ -135,7 +135,18 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-04B2 | Base comercial cerrada, migración de empresas y cambio de autoridad | **0163** | **cerrado** · 2026-09-01 |
 | PE-04B3 | Cuota de almacenamiento única por empresa, reserva y seguridad por encima del límite | **0164** | **cerrado** · 2026-09-01 |
 | PE-04B4 | Créditos ponderados de Intelligence y reloj de uso de Free | **0166** | **cerrado** · 2026-09-01 |
-| PE-04B5…B6 | Soporte y cierre comercial | previstas | no empezado |
+| PE-04B5 | Derechos de soporte y consola comercial | **0167** | **cerrado** · 2026-09-01 |
+| PE-04B6 | Aceptación integrada de PE-04 | — | no empezado |
+
+Los ocho de PE-04B5:
+[inventario de soporte](PE_04B5_SUPPORT_INVENTORY.md) ·
+[derechos](PE_04B5_SUPPORT_ENTITLEMENTS.md) ·
+[casos funcionales](PE_04B5_FUNCTIONAL_CASES.md) ·
+[prioridad](PE_04B5_SUPPORT_PRIORITY.md) ·
+[consola comercial](PE_04B5_COMMERCIAL_CONSOLE.md) ·
+[revisiones](PE_04B5_PLAN_REVISION_UX.md) ·
+[vista de empresa](PE_04B5_ORGANIZATION_COMMERCIAL_VIEW.md) ·
+[pruebas](PE_04B5_TEST_MATRIX.md).
 
 Los nueve de PE-04B4:
 [inventario de IA](PE_04B4_AI_INVENTORY.md) ·
@@ -191,6 +202,32 @@ Los diez de PE-04A:
 [seguridad y concurrencia](PE_04A_SECURITY_AND_CONCURRENCY.md) ·
 [pruebas](PE_04A_TEST_STRATEGY.md).
 Y las decisiones, en [PE_04A_DECISIONS.md](PE_04A_DECISIONS.md).
+
+### PE-04B5 · soporte que no se puede confundir, y un catálogo administrable
+
+Tres cosas que el producto ya no mezcla: **reportar una avería** —en los tres
+planes, sin consumir nada, y disponible incluso en modo consulta o cuando el plan
+no se puede resolver—, **orientación funcional** —dos casos al mes, solo Extra— y
+**consultoría**, que no está en ningún plan y es Acompañamiento.
+
+No se construyó un segundo motor de tickets: se añadió un eje, `support_kind`,
+que se pregunta explícitamente. Las diez categorías existentes mezclan *de qué va*
+con *qué se pide*, y deducir de ahí un derecho comercial habría sido deducirlo de
+la palabra que el cliente eligió para su tema.
+
+Y una regla que se comprueba ejecutando: **un incidente crítico de una empresa
+Free va por delante de una consulta de uso de una Extra**. Pagar no te cuela
+delante de una caída.
+
+En el camino apareció que la cola de soporte enseñaba `coalesce(plan_code,
+'demo')` de la suscripción heredada —la misma familia del defecto Full→Demo, que
+sobrevivía ahí— y que existía una segunda puerta de escritura de tickets que no
+comprobaba nada. Las dos cerradas.
+
+La consola **Planes y uso** permite crear una revisión sucesora, editarla y
+publicarla con un resumen en palabras de qué cambia; publicar **no mueve** a las
+empresas ya asignadas, y mover a una es una transición explícita con motivo que
+deja escrito qué tenía antes.
 
 ### PE-04B4 · dos ejes nuevos, y ninguno vigila a nadie
 
@@ -362,8 +399,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0166** |
-| Staging | **0166** |
+| Local | **0167** |
+| Staging | **0167** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { NewSupportTicketForm } from "@/components/domain/support/new-support-ticket-form";
+import { getSupportEntitlementAction } from "@/server/actions/support";
 import { isTicketModule, isTicketCategory } from "@/lib/domain/support";
 import {
   activeShellModuleFrom,
@@ -27,6 +28,10 @@ export default async function NewSupportTicketPage({
   const defaultModule = isTicketModule(moduleParam) ? moduleParam : "other";
   const defaultCategory = isTicketCategory(category) ? category : "technical_support";
 
+  // PE-04B5 · Lo que el plan incluye se resuelve en SERVIDOR y se le dice a la
+  // pantalla. La interfaz nunca decide un derecho comercial: solo lo refleja.
+  const entitlement = await getSupportEntitlementAction();
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
@@ -41,7 +46,7 @@ export default async function NewSupportTicketPage({
         </p>
       </header>
 
-      <NewSupportTicketForm defaultModule={defaultModule} defaultCategory={defaultCategory} moduleKey={activeModule.key} />
+      <NewSupportTicketForm defaultModule={defaultModule} defaultCategory={defaultCategory} moduleKey={activeModule.key} entitlement={entitlement} />
     </div>
   );
 }

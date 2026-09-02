@@ -9,6 +9,8 @@ import { Field, SelectField } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { moduleAwareHref, type ShellSurfaceKey } from "@/lib/modules/registry";
+import { SupportKindChoice } from "./support-kind-choice";
+import type { SupportEntitlement } from "@/lib/db/support-entitlements";
 
 const initial: SupportActionState = { error: null };
 const CATEGORY_OPTIONS = TICKET_CATEGORIES.map((c) => ({ value: c, label: TICKET_CATEGORY_LABEL[c] }));
@@ -19,9 +21,12 @@ export function NewSupportTicketForm({
   defaultModule = "other",
   defaultCategory = "technical_support",
   moduleKey = "cpr",
+  entitlement = null,
 }: {
   defaultModule?: string;
   defaultCategory?: string;
+  /** PE-04B5 · Lo que el plan incluye, resuelto en servidor. */
+  entitlement?: SupportEntitlement | null;
   /** PT-03A · El módulo desde el que se llegó. Sin esto, el salto al ticket
    *  recién creado devolvía el shell a PCR justo después de crearlo. */
   moduleKey?: ShellSurfaceKey;
@@ -39,6 +44,8 @@ export function NewSupportTicketForm({
     <form action={formAction} className="space-y-4">
       <ErrorAlert message={state.error} />
       <InfoAlert message={FIRST_RESPONSE_TARGET_MESSAGE} />
+
+      <SupportKindChoice entitlement={entitlement} />
 
       <Field label="Asunto" name="subject" required placeholder="Ej.: No puedo crear un documento" />
       <label className="block">

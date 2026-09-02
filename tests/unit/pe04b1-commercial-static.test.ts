@@ -58,18 +58,46 @@ check("A1. Ningún consumidor de producto usa todavía el modelo nuevo", () => {
     `B1 dice no cambiar nada y estos ficheros ya lo usan: ${consumidores.join(", ")}`);
 });
 
-check("A2. Y nadie consulta las tablas nuevas desde el producto", () => {
+check("A2. El catálogo canónico se consulta por sus resolutores, no a mano", () => {
+  // B1 exigía que NADIE tocara el modelo nuevo: se construía en paralelo y aún
+  // no mandaba. Eso dejó de ser cierto a propósito en B2, y hoy el producto
+  // entero depende de él. Lo que sigue en pie —y es lo que aquí se comprueba—
+  // es que el producto pregunte por los RESOLUTORES (`plan_effective_for_*`,
+  // `organization_plan_limit`, …) y no arme su propia aritmética leyendo filas
+  // del catálogo.
+  //
+  // La única excepción es la CONSOLA COMERCIAL de PE-04B5: administrar un
+  // catálogo es, literalmente, leer y escribir sus filas. Está acotada a
+  // administración de plataforma, en la pantalla y otra vez en la base.
+  const ADMINISTRACION = [
+    "lib/db/commercial-console.ts",
+    "server/actions/commercial-console.ts",
+  ];
   const tablas = ["plan_revisions", "plan_revision_limits",
     "organization_plan_assignments", "commercial_trial_policy"];
   const culpables: string[] = [];
   for (const f of PRODUCTO) {
     if (/lib\/db\/(commercial-plans|plan-shadow)\.ts$/.test(f)) continue;
+    if (ADMINISTRACION.includes(f)) continue;
     const codigo = sinComentarios(leer(f));
     for (const t of tablas) {
       if (new RegExp(`["'\`]${t}["'\`]`).test(codigo)) culpables.push(`${f} → ${t}`);
     }
   }
-  assert(culpables.length === 0, `consultan tablas nuevas: ${culpables.join(", ")}`);
+  assert(culpables.length === 0,
+    `leen el catálogo comercial a mano en vez de preguntar a sus resolutores: ${culpables.join(", ")}`);
+  // Y la excepción no se convierte en coladero: la consola exige
+  // administración de plataforma en TODAS sus escrituras.
+  const consola = leer("server/actions/commercial-console.ts");
+  const escrituras = (consola.match(/export async function \w+Action/g) ?? [])
+    .filter((m) => !/get\w+Action/.test(m));
+  for (const fn of escrituras) {
+    const nombre = fn.replace("export async function ", "");
+    const i = consola.indexOf(fn);
+    const sig = consola.indexOf("export async function", i + 10);
+    assert(consola.slice(i, sig === -1 ? undefined : sig).includes("exigirSuperadmin()"),
+      `${nombre} escribe en el catálogo sin exigir administración de plataforma`);
+  }
 });
 
 check("A3. Las tablas legacy siguen intactas · 0162 no las toca", () => {

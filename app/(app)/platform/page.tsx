@@ -71,6 +71,12 @@ export default async function PlatformPage() {
             </Link>
           ) : null}
           <Link
+            href="/platform/plans"
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
+          >
+            Planes y uso
+          </Link>
+          <Link
             href="/select-org"
             className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
           >

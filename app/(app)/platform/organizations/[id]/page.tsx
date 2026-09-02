@@ -24,6 +24,11 @@ import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
 import { PLAN_LABEL, type ResourceCode } from "@/lib/plans/types";
 import { getAiCreditStatus, getOrganizationTimeStatus, listOrganizationPlanLimits } from "@/lib/db/organization-usage";
 import { UsageSummaryCard } from "@/components/domain/usage/usage-summary-card";
+import { OrganizationCommercialPanel } from "@/components/domain/platform/organization-commercial-panel";
+import { getOrganizationCommercialViewAction, getPlanCatalogAction } from "@/server/actions/commercial-console";
+import { getSupportEntitlementForOrganizationAction } from "@/server/actions/support";
+import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
+import { listFunctionalModules } from "@/lib/db/module-catalog-read";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { PlanHistoryList } from "@/components/domain/plans/plan-history-list";
 import { PlatformOrganizationMembers } from "@/components/domain/platform/platform-organization-members";
@@ -59,6 +64,16 @@ export default async function PlatformOrganizationDetailPage({
   // PE-04B4 · La consola enseña el consumo con LA MISMA fuente que el cliente.
   // Dos aritméticas para el mismo mes es cómo se acaba discutiendo con alguien
   // que tiene razón.
+  // PE-04B5 · Lo comercial de la empresa: configurado, efectivo, soporte e
+  // historia. Todo de los resolutores canónicos.
+  const [comercial, soporte, almacenamiento, catalogo, modulos] = await Promise.all([
+    getOrganizationCommercialViewAction(id),
+    getSupportEntitlementForOrganizationAction(id),
+    getOrganizationStorageStatus(id),
+    getPlanCatalogAction(),
+    listFunctionalModules(),
+  ]);
+
   const [consumoTiempo, consumoIa] = await Promise.all([
     getOrganizationTimeStatus(id),
     getAiCreditStatus(id),
@@ -124,6 +139,19 @@ export default async function PlatformOrganizationDetailPage({
         organizationId={id}
         modules={moduleDetail.modules}
         canManage={moduleDetail.canManage}
+      />
+
+      <OrganizationCommercialPanel
+        organizationId={id}
+        effectivePlan={planDetail.effectivePlanCode}
+        assignments={comercial.assignments}
+        events={comercial.events}
+        support={soporte}
+        storage={almacenamiento}
+        ai={consumoIa}
+        revisions={catalogo.revisions}
+        functionalModules={modulos}
+        canManage={comercial.canManage}
       />
 
       {/* PE-04B4 · Consumo comercial vigente, con la MISMA fuente canónica que

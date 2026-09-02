@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
-import type { TicketStatus, TicketPriority, TicketCategory, TicketModule, SlaStatus, TrustedSupportTicketInsert } from "@/lib/domain/support";
+import type { TicketStatus, TicketPriority, TicketCategory, TicketModule, SlaStatus } from "@/lib/domain/support";
 
 /**
  * Trazaloop · Sprint 10C · Capa de datos del Centro de soporte. Nada aquí
@@ -115,26 +115,17 @@ export async function getPlatformSupportTicket(ticketId: string): Promise<Platfo
   return data ? mapPlatformSummaryRow(data as unknown as Record<string, unknown>) : null;
 }
 
-export async function insertSupportTicket(
-  orgId: string,
-  payload: TrustedSupportTicketInsert,
-  createdBy: string,
-  firstResponseTargetAt: string
-): Promise<{ id: string | null; error: string | null }> {
-  const supabase = await createServerClient();
-  const { data, error } = await supabase
-    .from("support_tickets")
-    .insert({
-      organization_id: orgId,
-      created_by: createdBy,
-      ...payload,
-      first_response_target_at: firstResponseTargetAt,
-    })
-    .select("id")
-    .single();
-  if (error || !data) return { id: null, error: "No fue posible crear el ticket." };
-  return { id: data.id as string, error: null };
-}
+/* PE-04B5 · `insertSupportTicket` se retira.
+ *
+ * Escribía en `support_tickets` directamente, sin pasar por el derecho
+ * comercial. Desde 0167 el único envío es `support_submit_ticket`, que resuelve
+ * el derecho y consume el caso EN LA MISMA transacción; una segunda puerta que
+ * inserta sin comprobar nada es la forma de que el cupo deje de significar algo
+ * el día que alguien la use por comodidad.
+ *
+ * Un guardia estático impide reintroducir un `insert` directo a la tabla.
+ */
+
 
 export type SupportMessageRow = {
   id: string;

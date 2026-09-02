@@ -165,6 +165,20 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
   "server/actions/trazadocs.ts:updateTrazadocBlueprintSectionAction": "Idem.",
   "server/actions/trazadocs.ts:updateTrazadocBlueprintSectionStatusAction": "Idem.",
   "server/actions/trazadocs.ts:reorderTrazadocBlueprintSectionsAction": "Idem.",
+  // PE-04B5 · La consola comercial. Administrar el catálogo o mover a una
+  // empresa de plan NO puede depender del cupo de esa empresa: sería imposible
+  // reactivar precisamente a quien lo agotó. Exigen administración de
+  // plataforma, en la pantalla y otra vez en la base.
+  "server/actions/commercial-console.ts:createDraftRevisionAction":
+    "Consola comercial de PLATAFORMA · exige administración de plataforma.",
+  "server/actions/commercial-console.ts:updateDraftRevisionAction":
+    "Consola comercial de PLATAFORMA · exige administración de plataforma.",
+  "server/actions/commercial-console.ts:updateDraftLimitAction":
+    "Consola comercial de PLATAFORMA · exige administración de plataforma.",
+  "server/actions/commercial-console.ts:publishRevisionAction":
+    "Consola comercial de PLATAFORMA · exige administración de plataforma.",
+  "server/actions/commercial-console.ts:assignPlanAction":
+    "Consola comercial de PLATAFORMA · mover a una empresa de plan no puede depender de su propio cupo.",
 };
 
 const DECL = /(?:export )?async function (\w+)\s*\(/g;

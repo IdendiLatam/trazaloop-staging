@@ -6,6 +6,8 @@ import Link from "next/link";
 import { listSupportTicketsAction, type SupportFilters } from "@/server/actions/support";
 import { TICKET_STATUSES, TICKET_STATUS_LABEL, TICKET_CATEGORIES, TICKET_CATEGORY_LABEL, TICKET_PRIORITIES, TICKET_PRIORITY_LABEL, FIRST_RESPONSE_TARGET_MESSAGE } from "@/lib/domain/support";
 import { SupportTicketTable } from "@/components/domain/support/support-ticket-table";
+import { SupportEntitlementCard } from "@/components/domain/support/support-entitlement-card";
+import { getSupportEntitlementAction } from "@/server/actions/support";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 import {
   activeShellModuleFrom,
@@ -32,6 +34,9 @@ export default async function SupportCenterPage({
     priority: one(params.priority),
   };
   const tickets = await listSupportTicketsAction(filters);
+
+  // PE-04B5 · Lo que el plan incluye, resuelto en servidor.
+  const entitlement = await getSupportEntitlementAction();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -113,6 +118,8 @@ export default async function SupportCenterPage({
           </Link>
         </div>
       </form>
+
+      <SupportEntitlementCard entitlement={entitlement} />
 
       <SupportTicketTable tickets={tickets} moduleKey={activeModule.key} />
     </div>
