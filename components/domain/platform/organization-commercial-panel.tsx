@@ -153,6 +153,18 @@ export function OrganizationCommercialPanel({
               {ai ? `${ai.monthlyUsed} de ${ai.monthlyLimit ?? "—"}` : "No disponible"}
               {ai?.trialActive ? ` · prueba ${ai.trialUsed ?? 0}/${ai.trialTotal ?? 0}` : ""}
             </dd>
+            {/*
+              Diagnóstico: durante una prueba el plan del producto y el plan del
+              que sale la bolsa mensual NO son el mismo, y esa diferencia es
+              justo la que hay que poder ver desde aquí. Solo se muestra cuando
+              difieren: si coinciden, decirlo sería ruido.
+            */}
+            {ai?.monthlyPlanCode && ai.monthlyPlanCode !== ai.planCode ? (
+              <dd className="mt-1 text-xs text-ink-soft">
+                Bolsa mensual del plan <strong>{ai.monthlyPlanCode}</strong>; el plan
+                efectivo es <strong>{ai.planCode}</strong> por la prueba, que no la eleva.
+              </dd>
+            ) : null}
           </div>
           <div className="rounded-lg border border-hairline bg-surface p-3">
             <dt className="text-xs text-ink-soft">Periodo</dt>

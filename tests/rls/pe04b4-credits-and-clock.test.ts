@@ -56,6 +56,7 @@ async function persona(prefijo: string, papel?: "superadmin") {
 type Creditos = {
   state: string; plan_code: string | null; period_month: string;
   monthly_limit: number | null; monthly_used: number; monthly_remaining: number | null;
+  monthly_plan_code: string | null;
   trial_active: boolean; trial_total: number | null; trial_used: number | null;
   trial_remaining: number | null; trial_ends_at: string | null;
 };
@@ -253,10 +254,22 @@ async function main() {
       const c = await creditos();
       assert(c.trial_active, "no reconoce la prueba activa");
       assert(c.trial_total === 50 && c.trial_remaining === 50, `prueba: ${c.trial_used}/${c.trial_total}`);
-      // Y la mensual sigue siendo la suya: la prueba NO convierte a la empresa
-      // en Full con 500. El plan efectivo es Full mientras dura, pero la bolsa
-      // de la prueba se informa aparte para que nadie confunda una cosa con otra.
       assert(c.monthly_used === 0, `la mensual arrancó gastada en ${c.monthly_used}`);
+      // LA ASERCIÓN QUE FALTABA. Esta comprobación miraba la bolsa de la prueba
+      // y el consumo, pero NO el techo mensual, y por ese hueco el producto
+      // estuvo entregando los 500 de Full durante la prueba —50 + 500 en vez de
+      // 50 + 25— hasta que 0170 lo corrigió. El plan EFECTIVO es Full mientras
+      // dura la prueba, y eso es correcto para el almacenamiento, los conteos,
+      // las funciones y el reloj; la bolsa mensual de Intelligence es el único
+      // recurso donde la verdad comercial dice lo contrario.
+      //
+      // Es permanente: si vuelve a resolver 500, esto se pone rojo.
+      assert(c.monthly_limit === 25,
+        `la mensual durante la prueba es ${c.monthly_limit}: la prueba no eleva la bolsa mensual`);
+      assert(c.monthly_plan_code === "free",
+        `la bolsa mensual dice venir del plan ${c.monthly_plan_code}`);
+      assert(c.plan_code === "full",
+        `el plan del producto durante la prueba dice ser ${c.plan_code}: debe seguir siendo Full`);
     });
 
     await check("F. Se consume PRIMERO la bolsa que caduca", async () => {

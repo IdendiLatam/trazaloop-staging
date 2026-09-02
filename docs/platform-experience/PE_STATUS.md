@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 2 de septiembre de 2026, al detenerse PE-05B2 en su comprobación previa.*
+*Actualizado el 2 de septiembre de 2026, al cerrarse la regresión de PE-04 que detuvo PE-05B2.*
 
 ---
 
@@ -132,7 +132,7 @@ Y lo que se corrigió después de aquella revisión, en
 |---|---|---|---|
 | PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
 | PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
-| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | — | **detenido en §0** · 2026-09-02 · no se empezó |
+| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | — | **detenido en §0** · 2026-09-02 · listo para reanudar |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -158,11 +158,19 @@ Los diez de PE-05B1:
 > de vender en cualquier entorno.
 
 > **PE-05B2 no se empezó.** Su comprobación previa obligatoria encontró una
-> regresión de PE-04: una empresa **en prueba** recibe los **500** créditos
-> mensuales de Full en vez de los **25** de Free, y al caducar la prueba queda
+> regresión de PE-04: una empresa **en prueba** recibía los **500** créditos
+> mensuales de Full en vez de los **25** de Free, y al caducar la prueba quedaba
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
-> escribió. El hallazgo, con su reproducción y la forma que tendría el remedio:
+> escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **Regresión cerrada en `0170`.** La bolsa mensual sale ahora del plan comercial
+> **no-prueba**, con una regla general —no un 25 fijo—: Free+prueba da 25, Full
+> comprado+prueba da 500, Extra da 2 000. Sin plan no-prueba resoluble se
+> deniega, no se cae a 25. Ni una fila del libro de créditos se tocó, y en
+> Staging el diagnóstico encontró **cero** empresas afectadas: el libro estaba
+> vacío. Todo escrito en
+> [la bolsa mensual y la prueba](PE_04_TRIAL_AI_MONTHLY_POOL.md).
 
 Los doce de PE-05A:
 [descubrimiento y alcance](PE_05A_PAYMENT_DISCOVERY.md) ·
@@ -481,8 +489,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0169** |
-| Staging | **0169** |
+| Local | **0170** |
+| Staging | **0170** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

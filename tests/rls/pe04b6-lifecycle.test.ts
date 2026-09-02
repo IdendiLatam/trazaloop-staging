@@ -195,7 +195,14 @@ async function main() {
       assert(alm.quota_bytes === FULL_BYTES, `almacenamiento ${alm.quota_bytes}`);
       assert(t.metered === false, "la prueba mide tiempo de Free");
       assert(cred.trial_active === true && cred.trial_total === 50, `prueba de IA: ${JSON.stringify(cred.trial_total)}`);
-      assert(cred.monthly_limit === 500, `la mensual durante la prueba es ${cred.monthly_limit}`);
+      // Los cinco ejes están de acuerdo, y estar de acuerdo NO es decir todos lo
+      // mismo: la prueba da almacenamiento de Full y reloj de Full, no da
+      // orientación funcional —que es de Extra— y no da la bolsa mensual de
+      // Full. Esta línea afirmaba 500 y así codificó el defecto que corrigió
+      // 0170. La asimetría de Intelligence es deliberada y viene de PE-04B4.
+      assert(cred.monthly_limit === 25, `la mensual durante la prueba es ${cred.monthly_limit}`);
+      assert(cred.monthly_plan_code === "free" && cred.plan_code === "full",
+        `origen de las bolsas: mensual ${cred.monthly_plan_code}, producto ${cred.plan_code}`);
       assert(sop.technical_reporting_allowed === true, "sin reporte técnico");
       assert(sop.functional_guidance_allowed === false,
         "la prueba de Full regaló la orientación funcional, que es de Extra");

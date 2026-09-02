@@ -113,9 +113,18 @@ Lo primero es cierto; lo segundo no arregla lo primero.
 Quien corrija esto debería añadir la aserción que falta —`monthly_limit === 25`
 con la prueba activa— para que la prueba tenga dientes.
 
-## Lo que NO se tocó
+## Cerrado
 
-No se corrigió nada. El encargo de PE-05B2 §0 dice que ante esta discrepancia
+La decisión de producto se confirmó sin cambios —la verdad comercial es la que
+estaba— y la corrección vive en `0170_trial_ai_monthly_pool_fix.sql`. La regla
+que se aplicó es general, no un 25 fijo:
+[la bolsa mensual y la prueba](PE_04_TRIAL_AI_MONTHLY_POOL.md).
+
+Lo que sigue describe el estado en el momento del hallazgo.
+
+## Lo que NO se tocó entonces
+
+No se corrigió nada en ese momento. El encargo de PE-05B2 §0 dice que ante esta discrepancia
 hay que **parar y reportarla como una regresión de PE-04 que requiere
 corrección**, y la corrección de PE-04 no está autorizada en este tramo.
 

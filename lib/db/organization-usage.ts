@@ -41,7 +41,15 @@ export type OrganizationTimeStatus = {
 export type AiCreditStatus = {
   state: AiCreditState;
   reason: string | null;
+  /** El plan del PRODUCTO. Durante una prueba de Full es `full`, y es correcto. */
   planCode: string | null;
+  /**
+   * De dónde sale la bolsa MENSUAL: el plan comercial que NO viene de una
+   * prueba. Durante una prueba de Full sobre base Free es `free`, porque la
+   * prueba trae su propia bolsa de 50 y no eleva la mensual. Son dos conceptos
+   * distintos y confundirlos fue exactamente el defecto que corrigió 0170.
+   */
+  monthlyPlanCode: string | null;
   periodMonth: string | null;
   limitState: "finite" | "unlimited" | "not_configured" | null;
   monthlyLimit: number | null;
@@ -105,6 +113,7 @@ export async function getAiCreditStatus(orgId: string): Promise<AiCreditStatus |
     state,
     reason: s(row.reason),
     planCode: s(row.plan_code),
+    monthlyPlanCode: s(row.monthly_plan_code),
     periodMonth: s(row.period_month),
     limitState: (row.limit_state as AiCreditStatus["limitState"]) ?? null,
     monthlyLimit: n(row.monthly_limit),

@@ -148,6 +148,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0167_support_entitlements_and_commercial_admin.sql",
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
+    "0170_trial_ai_monthly_pool_fix.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -165,6 +166,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0167_support_entitlements_and_commercial_admin.sql",
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
+    "0170_trial_ai_monthly_pool_fix.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

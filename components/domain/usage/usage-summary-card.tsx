@@ -82,7 +82,18 @@ export function UsageSummaryCard({ time, ai, titulo = "Tu consumo" }: {
           etiqueta="Créditos de Intelligence este mes"
           valor={formatAllowance(ai?.monthlyUsed ?? null, ai?.monthlyLimit ?? null)}
           tono={usageBadge(ai?.monthlyUsed ?? null, ai?.monthlyLimit ?? null)}
-          nota={reinicio ? `Vuelven a estar disponibles el ${reinicio}.` : null}
+          nota={
+            // Durante la prueba el cliente ve «Plan full» y una mensual de 25.
+            // Sin esta línea parece un error del producto; con ella es lo que
+            // es: la prueba trae su propia bolsa, y esta no la sustituye.
+            ai?.trialActive
+              ? `Los créditos de la prueba van aparte y no cambian este cupo.${
+                  reinicio ? ` Vuelven a estar disponibles el ${reinicio}.` : ""
+                }`
+              : reinicio
+                ? `Vuelven a estar disponibles el ${reinicio}.`
+                : null
+          }
         />
 
         {ai?.trialActive ? (
