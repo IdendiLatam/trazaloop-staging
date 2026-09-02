@@ -297,7 +297,8 @@ async function main() {
     await check("K. Dos transiciones simultáneas no dejan dos permanentes abiertas", async () => {
       const [x, y] = await Promise.all([asignar("extra"), asignar("free")]);
       const ganadoras = [x, y].filter((r) => r.ok).length;
-      assert(ganadoras >= 1, "no pasó ninguna");
+      assert(ganadoras >= 1,
+        `no pasó ninguna: ${[x, y].map((r) => (r.ok ? "ok" : r.code)).join(" | ")}`);
       const abiertas = await permanentesAbiertas();
       assert(abiertas.length === 1,
         `quedaron ${abiertas.length} permanentes abiertas: ${abiertas.map((a) => a.plan_revisions.plan_code).join(", ")}`);

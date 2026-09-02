@@ -155,6 +155,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
     "0170_trial_ai_monthly_pool_fix.sql",
+    "0171_mercadopago_provider_webhooks.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -173,6 +174,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
     "0170_trial_ai_monthly_pool_fix.sql",
+    "0171_mercadopago_provider_webhooks.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -1285,6 +1287,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
     "0170_trial_ai_monthly_pool_fix.sql",
+    "0171_mercadopago_provider_webhooks.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -2539,12 +2542,50 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
   );
 });
 
+/**
+ * PE-05B2 · La frontera del proveedor de pagos, declarada fichero a fichero.
+ *
+ * B2 integró Mercado Pago en SANDBOX, y esa integración vive exactamente aquí.
+ * Son piezas de servidor —máquina a máquina y acceso a datos—: ninguna pinta
+ * nada. Lo que la comprobación 53 protege sigue intacto: que la INTERFAZ no le
+ * diga al cliente que hay pagos integrados. Por eso la lista es cerrada, y por
+ * eso debajo se comprueba que ninguna pantalla las importa.
+ */
+const FRONTERA_MERCADOPAGO = [
+  "app/api/billing/webhooks/mercadopago/route.ts",
+  "lib/billing/mercadopago/mapping.ts",
+  "lib/billing/mercadopago/signature.ts",
+  "lib/billing/providers/mercadopago.ts",
+];
+
 check("53. Mercado Pago no se presenta como integrado", () => {
-  // En la interfaz: ninguna mención.
+  // En la interfaz: ninguna mención. La frontera de servidor de PE-05B2 queda
+  // fuera —no es interfaz—, y se comprueba aparte que sigue siendo exactamente
+  // esa y que nadie la importa desde una pantalla.
   for (const { file, code } of uiSources()) {
+    if (FRONTERA_MERCADOPAGO.includes(file)) continue;
     assert(
       !/mercado\s*pago/i.test(code),
       `${file} no debe mencionar Mercado Pago: no está integrado en v1.0.0`
+    );
+  }
+  // Y la frontera es la declarada: ni un fichero más.
+  const nombran = uiSources()
+    .filter(({ code }) => /mercado\s*pago/i.test(code))
+    .map(({ file }) => file)
+    .sort();
+  assert(
+    JSON.stringify(nombran) === JSON.stringify([...FRONTERA_MERCADOPAGO].sort()),
+    `la frontera de Mercado Pago cambió: ${nombran.join(", ")}`
+  );
+  // Ninguna pantalla ni componente la alcanza: si un `page.tsx` importara el
+  // adaptador, la pasarela habría llegado a la interfaz por la puerta de atrás.
+  for (const { file, code } of uiSources()) {
+    if (FRONTERA_MERCADOPAGO.includes(file)) continue;
+    if (!/^(app|components)\//.test(file)) continue;
+    assert(
+      !/from "@\/lib\/billing\/(mercadopago|providers\/mercadopago)/.test(code),
+      `${file} importa el adaptador de la pasarela: eso es servidor, no interfaz`
     );
   }
   // En el alcance: declarado aplazado.

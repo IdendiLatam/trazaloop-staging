@@ -159,12 +159,43 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
   }
 });
 
+/**
+ * PE-05B2 · La frontera de la pasarela: cuatro ficheros de servidor, ninguno
+ * de interfaz. Se declaran uno a uno para que la comprobación de abajo siga
+ * teniendo dientes: nombrar la pasarela en un quinto sitio la pone en rojo.
+ */
+const FRONTERA_PASARELA = [
+  "app/api/billing/webhooks/mercadopago/route.ts",
+  "lib/billing/mercadopago/mapping.ts",
+  "lib/billing/mercadopago/signature.ts",
+  "lib/billing/providers/mercadopago.ts",
+];
+
 check("AK. PE-04 no contiene cobro, cupones ni cálculo de impuestos", () => {
-  const codigo = PRODUCTO.map((f) => sinComentarios(leer(f))).join("\n");
-  for (const prohibido of ["mercadopago", "mercado_pago", "stripe", "checkout_session",
-                           "redeemCoupon", "calculateVat", "invoice_line"]) {
-    assert(!new RegExp(prohibido, "i").test(codigo), `PE-04 implementa «${prohibido}»: eso es PE-05`);
+  // Lo que esta comprobación protege es que el modelo COMERCIAL de PE-04 no se
+  // mezcle con el cobro. PE-05B2 trajo la pasarela, y vive fuera de PE-04: se
+  // excluyen sus cuatro ficheros del término que la nombra, y NADA más. El
+  // resto de términos —otra pasarela, cupones, cálculo de IVA— se siguen
+  // buscando en todo el producto, incluida la propia frontera.
+  const fueraDePe04 = PRODUCTO.filter((f) => !FRONTERA_PASARELA.includes(f));
+  const codigoPe04 = fueraDePe04.map((f) => sinComentarios(leer(f))).join("\n");
+  const codigoTodo = PRODUCTO.map((f) => sinComentarios(leer(f))).join("\n");
+
+  for (const prohibido of ["mercadopago", "mercado_pago"]) {
+    assert(!new RegExp(prohibido, "i").test(codigoPe04),
+      `PE-04 implementa «${prohibido}»: eso es PE-05`);
   }
+  for (const prohibido of ["stripe", "checkout_session", "redeemCoupon",
+                           "calculateVat", "invoice_line"]) {
+    assert(!new RegExp(prohibido, "i").test(codigoTodo),
+      `el producto implementa «${prohibido}»: eso no es de este tramo`);
+  }
+  // Y la frontera es exactamente la declarada.
+  const nombran = PRODUCTO
+    .filter((f) => /mercadopago|mercado_pago/i.test(sinComentarios(leer(f))))
+    .sort();
+  assert(JSON.stringify(nombran) === JSON.stringify([...FRONTERA_PASARELA].sort()),
+    `la frontera de la pasarela cambió: ${nombran.join(", ")}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -214,11 +245,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0168_commercial_plan_assignment_transition.sql",
     "0169_billing_foundation.sql",
     "0170_trial_ai_monthly_pool_fix.sql",
+    "0171_mercadopago_provider_webhooks.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0170_trial_ai_monthly_pool_fix.sql",
+  assert(cabecera === "0171_mercadopago_provider_webhooks.sql",
     `la cabecera es ${cabecera}`);
 });
 

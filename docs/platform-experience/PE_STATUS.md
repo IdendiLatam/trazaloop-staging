@@ -3,7 +3,7 @@
 Una sola página para no tener que abrir los ciento veintitrés documentos de
 `docs/platform-experience/`.
 
-*Actualizado el 2 de septiembre de 2026, al cerrarse la regresión de PE-04 que detuvo PE-05B2.*
+*Actualizado el 2 de septiembre de 2026, al cerrarse el código de PE-05B2.*
 
 ---
 
@@ -132,7 +132,7 @@ Y lo que se corrigió después de aquella revisión, en
 |---|---|---|---|
 | PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
 | PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
-| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | — | **detenido en §0** · 2026-09-02 · listo para reanudar |
+| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **código cerrado** · 2026-09-02 · a la espera del sandbox externo |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -163,6 +163,16 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **PE-05B2 · el código está y el sandbox no.** El adaptador, la firma, la
+> conciliación y el libro de notificaciones están construidos y probados —66
+> comprobaciones—, pero **no hay credenciales de prueba de Mercado Pago**, así
+> que no se ha hecho ni una llamada real. Y el Preview está detrás de Vercel
+> SSO, que **no se desactivó**: la entrega real de un webhook necesita una
+> decisión de infraestructura. Dos cosas quedan sin demostrar: que el proveedor
+> acepte el **cobro anual** y **cuándo** aplica un cambio de importe. Todo en
+> [la puesta a punto](PE_05B2_CREDENTIAL_SETUP.md) y en
+> [las pruebas](PE_05B2_SANDBOX_TESTS.md).
 
 > **Regresión cerrada en `0170`.** La bolsa mensual sale ahora del plan comercial
 > **no-prueba**, con una regla general —no un 25 fijo—: Free+prueba da 25, Full
@@ -489,8 +499,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0170** |
-| Staging | **0170** |
+| Local | **0171** |
+| Staging | **0171** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
