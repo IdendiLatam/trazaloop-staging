@@ -374,7 +374,7 @@ async function main() {
       const { error } = await sa.cli.rpc("commercial_assign_plan", {
         p_organization_id: org, p_plan_revision_id: await revision("full"),
         p_scope: "organization", p_module_code: null,
-        p_starts_at: new Date().toISOString(), p_ends_at: null,
+        p_starts_at: null, p_ends_at: null,
         p_reason: "Aceptación integrada de PE-04B6: subida controlada a Full." });
       assert(!error, `asignar Full: ${error?.message}`);
       const [p, alm, cred, t, sop] = await Promise.all([plan(), almacenamiento(), ia(), tiempo(), soporteDe()]);
@@ -393,7 +393,7 @@ async function main() {
       const { error } = await sa.cli.rpc("commercial_assign_plan", {
         p_organization_id: org, p_plan_revision_id: await revision("extra"),
         p_scope: "organization", p_module_code: null,
-        p_starts_at: new Date().toISOString(), p_ends_at: null,
+        p_starts_at: null, p_ends_at: null,
         p_reason: "Aceptación integrada de PE-04B6: subida controlada a Extra." });
       assert(!error, `asignar Extra: ${error?.message}`);
       const [alm, cred, t, sop] = await Promise.all([almacenamiento(), ia(), tiempo(), soporteDe()]);
@@ -424,7 +424,7 @@ async function main() {
       const { error } = await sa.cli.rpc("commercial_assign_plan", {
         p_organization_id: org, p_plan_revision_id: await revision("full"),
         p_scope: "organization", p_module_code: null,
-        p_starts_at: new Date().toISOString(), p_ends_at: null,
+        p_starts_at: null, p_ends_at: null,
         p_reason: "Aceptación integrada de PE-04B6: bajada controlada a Full." });
       assert(!error, `bajar: ${error?.message}`);
       const { data: despues } = await admin.from("support_tickets")
@@ -441,7 +441,7 @@ async function main() {
       const { error } = await sa.cli.rpc("commercial_assign_plan", {
         p_organization_id: org, p_plan_revision_id: await revision("extra"),
         p_scope: "organization", p_module_code: null,
-        p_starts_at: new Date().toISOString(), p_ends_at: null,
+        p_starts_at: null, p_ends_at: null,
         p_reason: "Aceptación integrada de PE-04B6: vuelta a Extra en el mismo mes." });
       assert(!error, `volver: ${error?.message}`);
       const sop = await soporteDe();
@@ -464,7 +464,7 @@ async function main() {
         const { error } = await sa.cli.rpc("commercial_assign_plan", {
           p_organization_id: org, p_plan_revision_id: await revision(code),
           p_scope: "module", p_module_code: mod,
-          p_starts_at: new Date().toISOString(), p_ends_at: null,
+          p_starts_at: null, p_ends_at: null,
           p_reason: `Aceptación integrada: ${mod} en ${code}.` });
         assert(!error, `asignar ${mod}: ${error?.message}`);
       }
@@ -623,6 +623,9 @@ async function main() {
       } finally {
         await admin.from("organization_plan_assignments").delete().eq("organization_id", otroId as string);
         await admin.from("memberships").delete().eq("organization_id", otroId as string);
+        await admin.from("organization_modules").delete().eq("organization_id", otroId as string);
+        await admin.from("subscription_plan_history").delete().eq("organization_id", otroId as string);
+        await admin.from("organization_subscriptions").delete().eq("organization_id", otroId as string);
         await admin.from("organizations").delete().eq("id", otroId as string);
       }
     });

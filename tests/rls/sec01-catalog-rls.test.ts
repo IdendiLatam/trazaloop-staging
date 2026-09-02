@@ -223,6 +223,9 @@ async function main() {
     // y la empresa sintética se queda en la base para siempre.
     await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
     await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("organization_modules").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("subscription_plan_history").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("organization_subscriptions").delete().in("organization_id", [org, otraOrg]);
     const { error: eOrg } = await admin.from("organizations").delete().in("id", [org, otraOrg]);
     if (eOrg) console.error(`  ⚠ no se pudieron retirar las empresas de prueba: ${eOrg.message}`);
     for (const id of personasCreadas) {

@@ -4,23 +4,23 @@
 
 | | |
 |---|---|
-| Replay `0001 → 0167` | **159 migraciones, 0 fallos** |
+| Replay `0001 → 0168` | **160 migraciones, 0 fallos** |
 | Tablas de `public` sin RLS tras el replay | **0** |
 | `npm run typecheck` | **exit 0** |
 | `npm run lint` | **0 errores**, 68 avisos heredados |
 | `npm run build` | **exit 0** |
-| `npm run test:all` | **exit 1** · un solo fallo, el defecto abierto |
+| `npm run test:all` | **exit 0** |
 
-El único rojo es `pe04b6-lifecycle · S1`, y es el defecto de la bajada de plan
-descrito en `PE_04B6_COMMERCIAL_TRUTH.md`. Está **en rojo a propósito**: se
-asienta la conducta correcta y se deja visible en vez de esconderla tras una
-excepción.
+El defecto de la bajada de plan que bloqueaba este tramo quedó resuelto en
+**0168** (ver `PE_04B6_PLAN_TRANSITION_FIX.md`). La comprobación que lo descubrió
+pasa ahora con el comportamiento real, sin relajarse.
 
 ## Suites de cierre
 
 | Suite | Resultado |
 |---|---|
-| `pe04b6-lifecycle` | **29/30** · el rojo es el defecto |
+| `pe04b6-lifecycle` | **30/30** |
+| `pe04b6-transitions` | **18/18** |
 | `pe04b6-readiness` | **15/15** |
 
 Y las heredadas, sobre la base reejecutada: SEC-01 19 ✔ · B1 38+30 ✔ ·

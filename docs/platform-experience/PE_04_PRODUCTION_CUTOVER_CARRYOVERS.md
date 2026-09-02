@@ -59,14 +59,17 @@ las credenciales, no.
 
 ## H · Migración controlada de 0111 a la cabeza de release
 
-Son **56** migraciones de salto. No es un `db push` a ciegas: hay que decidir
+Son **57** migraciones de salto. No es un `db push` a ciegas: hay que decidir
 ventana, orden y verificación posterior. Y la corrección de SEC-01 (**0165**)
 viaja por numeración **antes** de 0166 y 0167, de modo que Producción no puede
 quedar abierta al uso con las siete tablas expuestas.
 
-## Defecto abierto que debe ir resuelto antes del corte
+## Sobre la cadena que se promueve
 
-La bajada de plan no baja el plan (ver `PE_04B6_COMMERCIAL_TRUTH.md`). Requiere
-la migración **0168** y **no se ha creado**. Promover a Producción una consola
-comercial cuya única vía de transición no sabe bajar sería promover un problema
-conocido.
+Son **57** migraciones de salto desde 0111 hasta **0168**. La corrección de
+SEC-01 (**0165**) viaja por numeración **antes** de 0166, 0167 y 0168, y las
+cuatro últimas llevan el preflight que se niega a aplicarse sobre una base con
+alguna tabla de `public` expuesta.
+
+0168 incluye una **normalización idempotente** de asignaciones comerciales
+solapadas: es un no-op donde no hubo defecto, y no borra ninguna fila.

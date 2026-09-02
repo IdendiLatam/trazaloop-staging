@@ -15,7 +15,7 @@ cuando no sabe algo.
 | **SEC-01** | RLS en siete catálogos de Quality que nacieron sin ella | 0165 |
 | **B4** | Créditos ponderados de Intelligence y reloj de uso de Free | 0166 |
 | **B5** | Derechos de soporte y consola comercial | 0167 |
-| **B6** | Aceptación integrada, retirada del legacy y este cierre | — |
+| **B6** | Aceptación integrada, retirada del legacy y la transición corregida | 0168 |
 
 ## Las cuatro ideas que sostienen todo
 
@@ -71,16 +71,18 @@ base y un preflight que viaja dentro de las migraciones.
 
 | | |
 |---|---|
-| Local | **0167** |
-| Staging | **0167** |
+| Local | **0168** |
+| Staging | **0168** |
 | Producción | **0111** · no tocada |
 
-Replay limpio, 0 tablas sin RLS, typecheck y build en verde, lint sin errores.
+Replay limpio (160 migraciones, 0 fallos), 0 tablas sin RLS, `test:all` en verde,
+typecheck y build en verde, lint sin errores.
 
-**`test:all` está en rojo por una comprobación**, y es un defecto real
-encontrado por esta misma aceptación: la bajada de plan no baja el plan. Necesita
-la migración **0168**, que no se ha creado porque el encargo pide detenerse y
-reportar antes de abrirla. Está descrito, reproducido y acotado en
-`PE_04B6_COMMERCIAL_TRUTH.md`.
+La aceptación integrada encontró **dos defectos reales** y los dos quedaron
+cerrados en **0168**: una bajada de plan que no bajaba —se insertaba la
+asignación nueva sin cerrar la anterior— y una transición atada al reloj del
+proceso de la aplicación en vez de al de la base. El segundo apareció **probando
+el primero**, que es exactamente para lo que sirve una aceptación integrada.
 
-PE-04 **no se declara cerrado** mientras ese defecto siga abierto.
+PE-04 queda **técnicamente aceptado**, a la espera de la prueba humana de
+comprensión.

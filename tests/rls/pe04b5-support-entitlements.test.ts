@@ -630,6 +630,9 @@ async function main() {
     await admin.from("commercial_assignment_events").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
     await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("organization_modules").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("subscription_plan_history").delete().in("organization_id", [org, otraOrg]);
+    await admin.from("organization_subscriptions").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organizations").delete().in("id", [org, otraOrg]);
     for (const id of personasCreadas) {
       await admin.from("platform_staff").delete().eq("user_id", id);

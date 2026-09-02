@@ -277,7 +277,15 @@ export async function assignPlanAction(
     p_plan_revision_id: revisionId,
     p_scope: scope,
     p_module_code: scope === "module" ? moduleCode : null,
-    p_starts_at: new Date().toISOString(),
+    // PE-04B6 · `null` = «ahora», y ese «ahora» lo pone la BASE.
+    //
+    // Mandar `new Date()` desde el servidor de la aplicación ataba la
+    // transición al reloj de ese proceso: si iba unos milisegundos por delante
+    // del de Postgres, la asignación nueva quedaba en el futuro, la anterior se
+    // cerraba en ese mismo instante futuro… y durante ese rato el plan efectivo
+    // seguía siendo el viejo. Una transición que tarda en aplicarse por una
+    // diferencia de relojes es una transición que a veces no se aplica.
+    p_starts_at: null,
     p_ends_at: endsAt ? new Date(endsAt).toISOString() : null,
     p_reason: reason,
   });

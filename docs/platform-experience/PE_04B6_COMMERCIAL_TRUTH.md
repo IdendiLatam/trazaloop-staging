@@ -1,6 +1,6 @@
-# PE-04B6 · La verdad comercial, y un defecto abierto
+# PE-04B6 · La verdad comercial
 
-## Un defecto real, encontrado por la aceptación integrada
+## Un defecto real, encontrado por la aceptación integrada · RESUELTO en 0168
 
 > **Una bajada de plan no baja el plan.**
 
@@ -49,10 +49,13 @@ ya permite cerrar un periodo cuyo fin aún no ha llegado. Hay que decidir
 explícitamente si se cierran solo las del mismo alcance (recomendado) o también
 las de módulo cuando la nueva es de empresa.
 
-**No se ha creado.** El encargo de B6 pide detenerse y reportar antes de abrir
-una migración nueva, y eso es lo que se ha hecho. La suite
-`pe04b6-lifecycle` deja el defecto **en rojo y con nombre** (S1) en vez de
-esconderlo: `test:all` sale en rojo por exactamente esa comprobación.
+**Creada y aplicada tras autorización explícita.** El detalle completo —qué
+compite, qué no se toca y por qué, el segundo defecto de reloj que apareció al
+probarlo, la invariante en el esquema y la normalización de datos— está en
+[`PE_04B6_PLAN_TRANSITION_FIX.md`](PE_04B6_PLAN_TRANSITION_FIX.md).
+
+La comprobación que lo descubrió (`pe04b6-lifecycle · S1`) **no se relajó**:
+pasa con el comportamiento real.
 
 ## Lo que sí quedó cerrado
 

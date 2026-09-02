@@ -136,7 +136,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-04B3 | Cuota de almacenamiento única por empresa, reserva y seguridad por encima del límite | **0164** | **cerrado** · 2026-09-01 |
 | PE-04B4 | Créditos ponderados de Intelligence y reloj de uso de Free | **0166** | **cerrado** · 2026-09-01 |
 | PE-04B5 | Derechos de soporte y consola comercial | **0167** | **cerrado** · 2026-09-01 |
-| PE-04B6 | Aceptación integrada de PE-04 | — | **con un defecto abierto** · 2026-09-02 |
+| PE-04B6 | Aceptación integrada de PE-04 y transición comercial corregida | **0168** | **cerrado** · 2026-09-02 |
 
 Los ocho de PE-04B6:
 [ciclo integrado](PE_04B6_INTEGRATED_LIFECYCLE.md) ·
@@ -146,14 +146,14 @@ Los ocho de PE-04B6:
 [residuos de QA](PE_04B6_QA_RESIDUES.md) ·
 [preparación](PE_04B6_RELEASE_READINESS.md) ·
 [cierre de PE-04](PE_04_FINAL_CLOSURE.md) ·
+[la transición corregida](PE_04B6_PLAN_TRANSITION_FIX.md) ·
 [corte de producción](PE_04_PRODUCTION_CUTOVER_CARRYOVERS.md).
 
-> **Defecto abierto.** Una bajada de plan **no baja el plan**:
-> `commercial_assign_plan` añade la asignación nueva y no cierra la anterior, y
-> el resolutor toma la de mayor rango. Asignar Full a una empresa con Extra la
-> deja en Extra. Reproducido en aislamiento; necesita la migración **0168**, que
-> **no se ha creado** por indicación del encargo. Detalle en
-> [PE_04B6_COMMERCIAL_TRUTH.md](PE_04B6_COMMERCIAL_TRUTH.md).
+> **Dos defectos encontrados y cerrados en 0168.** Una bajada de plan no bajaba
+> —se insertaba la asignación nueva sin cerrar la anterior— y la transición
+> dependía del reloj del proceso de la aplicación en vez del de la base. El
+> segundo apareció probando el primero. Detalle en
+> [PE_04B6_PLAN_TRANSITION_FIX.md](PE_04B6_PLAN_TRANSITION_FIX.md).
 
 Los ocho de PE-04B5:
 [inventario de soporte](PE_04B5_SUPPORT_INVENTORY.md) ·
@@ -416,8 +416,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0167** |
-| Staging | **0167** |
+| Local | **0168** |
+| Staging | **0168** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

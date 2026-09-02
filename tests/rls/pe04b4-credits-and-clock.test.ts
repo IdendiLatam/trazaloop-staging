@@ -722,6 +722,9 @@ async function main() {
     await admin.from("storage_orphan_candidates").delete().eq("organization_id", org);
     await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
     await admin.from("memberships").delete().eq("organization_id", org);
+    await admin.from("organization_modules").delete().eq("organization_id", org);
+    await admin.from("subscription_plan_history").delete().eq("organization_id", org);
+    await admin.from("organization_subscriptions").delete().eq("organization_id", org);
     await admin.from("organizations").delete().eq("id", org);
     for (const id of personasCreadas) {
       await admin.from("platform_staff").delete().eq("user_id", id);
