@@ -41,7 +41,7 @@ export const runtime = "nodejs";
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
-                  "retire_qa_fx", "update_amount", "cancel"] as const;
+                  "retire_qa_fx", "customer_forensics", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -413,6 +413,72 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: r.ok, stage: "create", http: r.status, reused: false,
         customer: { id: j.id ?? null, live_mode: j.live_mode ?? null },
         error: r.ok ? null : (j.message ?? j.error ?? null) });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // Forense del 401 de Clientes. GET y POST, uno detrás de otro, en la MISMA
+  // petición, con el MISMO objeto de cabeceras y el MISMO origen de credencial:
+  // así «usan el mismo token» no es una afirmación, es una consecuencia de que
+  // no hay dos sitios donde construirlo.
+  //
+  // Se captura el cuerpo de error ENTERO, no un resumen, porque un «access
+  // denied» sin `cause` no dice si falta un permiso, una capacidad o un
+  // producto. Antes de devolverlo se tapan las direcciones de correo por si el
+  // proveedor devuelve alguna que no sea la nuestra.
+  if (accion === "customer_forensics") {
+    const correo = String(cuerpo.email ?? "");
+    if (!/^test_payer_[0-9]{1,10}@testuser\.com$/.test(correo)) {
+      return no("TEST_PAYER_EMAIL_FORMAT_INVALID", 400);
+    }
+    const cab = { "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+    const nombresDeCabecera = Object.keys(cab).sort();
+    const CABECERAS_SEGURAS = ["x-request-id", "x-caller-id", "x-caller-scopes",
+                               "www-authenticate", "content-type", "date"];
+    const seguras = (h: Headers) => {
+      const salida: Record<string, string> = {};
+      for (const k of CABECERAS_SEGURAS) { const v = h.get(k); if (v) salida[k] = v; }
+      return salida;
+    };
+    const taparCorreos = (x: unknown): unknown =>
+      JSON.parse(JSON.stringify(x ?? null)
+        .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<correo-tapado>"));
+
+    try {
+      const url = `https://api.mercadopago.com/v1/customers/search?email=${encodeURIComponent(correo)}`;
+      const g = await fetch(url, { method: "GET", headers: cab });
+      const gj = (await g.json()) as Record<string, unknown>;
+      const gResultados = Array.isArray(gj.results) ? (gj.results as unknown[]).length : null;
+
+      // Si ya existe, NO se crea otro. Se dice y se para.
+      if (g.ok && (gResultados ?? 0) > 0) {
+        return NextResponse.json({ ok: true, already_exists: true,
+          get: { status: g.status, results: gResultados } });
+      }
+
+      const p = await fetch("https://api.mercadopago.com/v1/customers", {
+        method: "POST", headers: cab, body: JSON.stringify({ email: correo }) });
+      const pj = (await p.json()) as Record<string, unknown>;
+
+      return NextResponse.json({
+        ok: true,
+        same_runtime: true,
+        same_credential_source: true,
+        same_header_object: true,
+        authorization_present: { get: true, post: true },
+        authorization_scheme: "Bearer",
+        request_header_names: nombresDeCabecera,
+        transport: "fetch (ambos)",
+        get: { method: "GET", url_path: "/v1/customers/search", status: g.status,
+               results: gResultados, headers: seguras(g.headers),
+               body: taparCorreos(gj) },
+        post: { method: "POST", url_path: "/v1/customers", status: p.status,
+                content_type: "application/json", body_fields: ["email"],
+                headers: seguras(p.headers), body: taparCorreos(pj) },
+      });
     } catch (e) {
       return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
