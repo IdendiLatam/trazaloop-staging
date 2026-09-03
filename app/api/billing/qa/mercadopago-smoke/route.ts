@@ -40,7 +40,7 @@ export const runtime = "nodejs";
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
-                  "get", "search", "update_amount", "cancel"] as const;
+                  "get", "search", "site", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -256,6 +256,32 @@ export async function POST(request: Request) {
       p_status: "provider_created", p_synced_amount: r.value.amount,
       p_provider_version: r.value.version, p_next_payment_date: r.value.nextPaymentDate });
     return NextResponse.json({ ok: true, subscription: r.value });
+  }
+
+  // El SITIO de la cuenta vendedora. «Payer is associated with a different
+  // site» puede significar dos cosas muy distintas —comprador de otro país, o
+  // vendedor que no es de Colombia— y la persona tiene que hacer cosas
+  // distintas en cada caso. Se leen solo metadatos del sitio: ni correo, ni
+  // nombre, ni nada de una persona.
+  if (accion === "site") {
+    try {
+      const r = await fetch("https://api.mercadopago.com/users/me", {
+        headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` },
+      });
+      const j = (await r.json()) as Record<string, unknown>;
+      return NextResponse.json({
+        ok: r.ok, http: r.status,
+        site_id: j.site_id ?? null,
+        country_id: j.country_id ?? null,
+        user_type: j.user_type ?? null,
+        tags: Array.isArray(j.tags) ? j.tags : null,
+        registration_identifiers: Array.isArray(j.registration_identifiers)
+          ? j.registration_identifiers : null,
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
   }
 
   // Reconciliar antes que duplicar: pregunta al proveedor qué existe ya.
