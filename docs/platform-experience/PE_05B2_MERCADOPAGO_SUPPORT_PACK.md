@@ -131,6 +131,38 @@ curl --request POST \
 The same credential, same header, same runtime, succeeds on
 `GET /v1/customers/search`.
 
+### 5c · Repeated with credentials taken from *Pruebas → Credenciales de prueba*
+
+The application's **test credentials** were then substituted in the deployment
+and the same probe was run again, on a fresh deployment:
+
+```
+owner: site_id MCO · country_id CO · tags include test_user
+
+GET  /v1/customers/search → 200
+     x-request-id: 12b63821-d6ef-4247-80d5-4af6864856cb
+     { "paging": { "limit": 10, "offset": 0, "total": 0 }, "results": [] }
+
+POST /v1/customers        → 401
+     x-request-id: 7ac25c6c-5992-420f-b0a2-6803eb9bbc42
+     {
+       "message": "access denied",
+       "error": "unauthorized",
+       "status": 401,
+       "cause": [
+         { "code": "300", "description": "Unauthorized use of live credentials" }
+       ]
+     }
+```
+
+**Identical result.** The credentials explicitly published by the dashboard as
+*test* credentials, for an application owned by a *test seller* on **MCO**, are
+still rejected as **live credentials** when creating a customer with a
+`@testuser.com` address.
+
+This is the core of the report: there appears to be **no credential of this
+application that Mercado Pago accepts as test-class**.
+
 ## 6 · Provider state
 
 ```
@@ -162,6 +194,12 @@ same credential in the same request.
 
 We believe the answer to Q2 also answers **Q1**: if the credentials were
 test-class, the test payer identity would presumably be accepted.
+
+**Q2b — the sharpest form of the question.** The credentials from
+*Pruebas → Credenciales de prueba* of an application owned by an **MCO test
+seller** produce cause **300, "Unauthorized use of live credentials"**. What,
+concretely, does this integration have to do to obtain a credential that
+Mercado Pago treats as test-class on MCO?
 
 **Q3.** Does `POST /preapproval` support
 

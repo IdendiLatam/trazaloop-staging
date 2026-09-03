@@ -164,6 +164,15 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **Ni las credenciales de PRUEBA son de prueba para Mercado Pago.** Se
+> sustituyó el token por el de *Pruebas → Credenciales de prueba* de la
+> aplicación del vendedor de prueba, y `POST /v1/customers` devuelve **la misma
+> causa 300, «Unauthorized use of live credentials»**. Identidad del dueño y
+> clase de credencial son **dos ejes distintos**, y el nuestro era más
+> permisivo que el del proveedor. La regla propuesta —y no implementada, por no
+> improvisar— está en
+> [clase de credencial](PE_05B2_CREDENTIAL_CLASS.md).
+
 > **PE-05B2 congelado, esperando a soporte de Mercado Pago.** El bloqueo es
 > externo: no hay forma documentada ni alcanzable por API de obtener el
 > `payer_email` que la propia API exige. Las cuatro preguntas y toda la
