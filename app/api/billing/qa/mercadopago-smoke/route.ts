@@ -40,7 +40,8 @@ export const runtime = "nodejs";
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
-                  "get", "search", "site", "create_test_user", "read_test_user", "update_amount", "cancel"] as const;
+                  "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
+                  "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -308,6 +309,49 @@ export async function POST(request: Request) {
       // Solo los NOMBRES de los campos que trae la ficha. Sirve para saber si
       // el correo viene con otro nombre, y no revela ningún valor.
       available_fields: Object.keys(j).sort() });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // El PAGADOR de pruebas, que NO es la cuenta de prueba.
+  //
+  // La cuenta Comprador MCO sirve para que una persona inicie sesión y
+  // autorice; no tiene correo y no es lo que la API quiere en `payer_email`.
+  // Lo que la API quiere es un CLIENTE, y para pruebas su correo tiene un
+  // formato documentado: `test_payer_[0-9]{1,10}@testuser.com`.
+  //
+  // Se BUSCA antes de crear: un reintento, una caída o una respuesta perdida no
+  // pueden dejar dos clientes con el mismo correo.
+  if (accion === "ensure_test_payer") {
+    const correo = String(cuerpo.email ?? "");
+    if (!/^test_payer_[0-9]{1,10}@testuser\.com$/.test(correo)) {
+      return no("TEST_PAYER_EMAIL_FORMAT_INVALID", 400);
+    }
+    const cab = { "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+    try {
+      const b = await fetch(
+        `https://api.mercadopago.com/v1/customers/search?email=${encodeURIComponent(correo)}`,
+        { headers: cab });
+      const bj = (await b.json()) as Record<string, unknown>;
+      const encontrados = Array.isArray(bj.results) ? (bj.results as Record<string, unknown>[]) : [];
+      if (encontrados.length > 0) {
+        const c = encontrados[0];
+        log_seguro("cliente_de_prueba", { reutilizado: true, live_mode: c.live_mode });
+        return NextResponse.json({ ok: true, reused: true,
+          customer: { id: c.id ?? null, live_mode: c.live_mode ?? null } });
+      }
+      // Solo el correo. Ningún dato personal: no hay persona detrás de esto.
+      const r = await fetch("https://api.mercadopago.com/v1/customers", {
+        method: "POST", headers: cab, body: JSON.stringify({ email: correo }) });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("cliente_de_prueba", { reutilizado: false, http: r.status,
+                                        live_mode: j.live_mode });
+      return NextResponse.json({ ok: r.ok, http: r.status, reused: false,
+        customer: { id: j.id ?? null, live_mode: j.live_mode ?? null },
+        error: r.ok ? null : (j.message ?? j.error ?? null) });
     } catch (e) {
       return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
