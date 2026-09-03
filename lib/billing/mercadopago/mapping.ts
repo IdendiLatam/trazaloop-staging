@@ -45,17 +45,45 @@ export function isKnownTopic(topic: string | null | undefined): topic is MpTopic
 // ---------------------------------------------------------------------------
 // Entorno · de dónde sale, y por qué no de una variable suelta
 // ---------------------------------------------------------------------------
-/**
- * Del PREFIJO DEL TOKEN, no de un interruptor aparte. Un interruptor puede
- * quedarse en «test» con un token de producción dentro, y entonces el guardia
- * que debía proteger la caja dice que todo va bien. El token es el que cobra,
- * así que el token es el que manda.
- */
 export type MpEnvironment = "test" | "live";
 
+/**
+ * LA FORMA DEL TOKEN NO BASTA, Y ESTO SE APRENDIÓ PAGÁNDOLO.
+ *
+ * Un `TEST-…` es de pruebas con certeza. Pero al revés no vale: cuando la
+ * aplicación se crea iniciando sesión como un VENDEDOR DE PRUEBA, Mercado Pago
+ * emite sus credenciales bajo el epígrafe «producción» y con prefijo
+ * `APP_USR-`. Clasificar por el prefijo declararía «producción» a un vendedor
+ * sintético, y el guardia bloquearía justo el entorno que existe para probar.
+ *
+ * Al revés sería peor: un vendedor real disfrazado de pruebas cobraría de
+ * verdad. Por eso quien decide es la IDENTIDAD que devuelve el proveedor, no
+ * la cadena que tenemos delante.
+ *
+ * Esta función se queda como PISTA barata y síncrona —dice «test» solo cuando
+ * lo puede afirmar sin preguntar—; la autoridad es `classifyOwnerEnvironment`.
+ */
 export function environmentFromAccessToken(token: string | undefined | null): MpEnvironment | null {
   if (!token || token.trim() === "") return null;
-  return token.startsWith("TEST-") ? "test" : "live";
+  return token.startsWith("TEST-") ? "test" : null;
+}
+
+/**
+ * La clasificación AUTORITATIVA, a partir de la ficha del dueño del token.
+ *
+ * Regla, y falla cerrado: solo es entorno de pruebas si el proveedor da
+ * evidencia POSITIVA de que el dueño es un usuario de prueba. Sin esa
+ * evidencia —o sin poder preguntar— es producción, que es la respuesta que
+ * impide cobrar sin querer.
+ *
+ * No hay ningún interruptor para saltarse esto.
+ */
+export function classifyOwnerEnvironment(
+  ficha: { tags?: unknown; site_id?: unknown } | null | undefined
+): MpEnvironment {
+  if (!ficha) return "live";
+  const tags = Array.isArray(ficha.tags) ? ficha.tags.map(String) : [];
+  return tags.includes("test_user") ? "test" : "live";
 }
 
 /**

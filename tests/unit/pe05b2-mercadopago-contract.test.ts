@@ -19,6 +19,7 @@ import {
   recurrenceFor, mapSubscriptionStatus, mapPaymentStatus, settlementOutcome,
   classifyProviderError, minorToProviderAmount, providerAmountToMinor,
   amountsReconcile, sanitizeEnvelope, envelopeIsClean, readNotification,
+  classifyOwnerEnvironment,
 } from "../../lib/billing/mercadopago/mapping";
 import {
   verifyMercadoPagoSignature, SIGNATURE_TOLERANCE_SECONDS,
@@ -37,6 +38,7 @@ const sinComentarios = (s: string) => s
 const RUTA = leer("app/api/billing/webhooks/mercadopago/route.ts");
 const ADAPTADOR = leer("lib/billing/providers/mercadopago.ts");
 const CAPA = leer("lib/db/billing-provider.ts");
+const QA = leer("app/api/billing/qa/mercadopago-smoke/route.ts");
 const M171 = leer("supabase/migrations/0171_mercadopago_provider_webhooks.sql");
 const SQL171 = sinComentarios(M171);
 
@@ -328,15 +330,39 @@ check("Lo NO firmado se anota SIN cuerpo", () => {
 console.log("\nE · Entorno · un aviso del otro mundo no activa nada");
 // ===========================================================================
 
-check("Z. El entorno sale del TOKEN, no de un interruptor aparte", () => {
-  assert(environmentFromAccessToken("TEST-123456") === "test", "un token de prueba");
-  assert(environmentFromAccessToken("APP_USR-123456") === "live", "un token real");
+check("Z. El entorno lo decide la IDENTIDAD del dueño, no la forma del token", () => {
+  // La forma del token NO basta, y esto se aprendió pagándolo: cuando la
+  // aplicación se crea iniciando sesión como VENDEDOR DE PRUEBA, Mercado Pago
+  // emite sus credenciales bajo el epígrafe «producción» y con prefijo
+  // `APP_USR-`. Clasificar por prefijo declaraba «producción» a un vendedor
+  // sintético y bloqueaba justo el entorno que existe para probar.
+  //
+  // La pista síncrona solo puede AFIRMAR «pruebas»; nunca afirmar lo contrario.
+  assert(environmentFromAccessToken("TEST-123456") === "test",
+    "un `TEST-` es de pruebas con certeza");
+  assert(environmentFromAccessToken("APP_USR-123456") === null,
+    "la forma del token no puede declarar «producción» por sí sola");
   assert(environmentFromAccessToken("") === null, "sin token no hay entorno");
   assert(environmentFromAccessToken(undefined) === null, "sin variable no hay entorno");
-  // Y no hay una variable suelta que pueda desalinearse del token.
-  const codigo = sinComentarios(ADAPTADOR) + sinComentarios(RUTA);
-  assert(!/MERCADOPAGO_ENV|MERCADOPAGO_MODE|MERCADOPAGO_SANDBOX/.test(codigo),
-    "hay un interruptor de entorno separado del token: puede quedarse en «pruebas» con un token real");
+
+  // La autoridad: evidencia POSITIVA de usuario de prueba, o «producción».
+  assert(classifyOwnerEnvironment({ tags: ["test_user"], site_id: "MCO" }) === "test",
+    "un vendedor de prueba no se reconoce");
+  assert(classifyOwnerEnvironment({ tags: ["normal"], site_id: "MCO" }) === "live",
+    "una cuenta real se tomó por entorno de pruebas");
+  assert(classifyOwnerEnvironment({ site_id: "MCO" }) === "live",
+    "sin etiquetas se supuso pruebas");
+  assert(classifyOwnerEnvironment(null) === "live", "sin ficha se supuso pruebas");
+
+  // Y no hay ningún interruptor para saltárselo.
+  const codigo = sinComentarios(ADAPTADOR) + sinComentarios(RUTA) + sinComentarios(QA);
+  for (const puerta of ["MERCADOPAGO_ENV", "MERCADOPAGO_MODE", "MERCADOPAGO_SANDBOX",
+                        "ALLOW_LIVE", "SKIP_SAFETY", "FORCE_TEST"]) {
+    assert(!codigo.includes(puerta), `hay una puerta trasera de entorno: ${puerta}`);
+  }
+  // No poder preguntar NO es «es de pruebas».
+  assert(/reachable: false/.test(sinComentarios(ADAPTADOR)),
+    "un fallo al preguntar no se distingue de una respuesta");
 });
 
 check("Y un evento en vivo sobre credenciales de prueba se rechaza", () => {
@@ -530,12 +556,17 @@ check("AB. Ningún secreto llega al navegador ni a los registros", () => {
   assert(!/NEXT_PUBLIC_MERCADOPAGO/.test(todo),
     "hay una variable de Mercado Pago expuesta al navegador");
   // Los registros llevan clase de operación e identificadores, nunca valores.
-  const codigo = sinComentarios(RUTA);
-  for (const secreto of ["MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET"]) {
-    const usos = [...codigo.matchAll(new RegExp(`${secreto}`, "g"))].length;
-    const enLog = new RegExp(`log\\([^)]*${secreto}`).test(codigo);
-    assert(usos > 0 && !enLog, `«${secreto}» aparece en un registro`);
+  // El invariante es que NO SE REGISTRA, se use o no. Antes se exigía además
+  // que la ruta lo usara, y eso dejó de ser cierto —y para mejor— cuando el
+  // entorno pasó a resolverse por identidad dentro del adaptador.
+  for (const fichero of [RUTA, ADAPTADOR, CAPA, QA]) {
+    const codigo = sinComentarios(fichero);
+    for (const secreto of ["MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET"]) {
+      const enLog = new RegExp(`(log|log_seguro|console\\.\\w+)\\([^)]*${secreto}`).test(codigo);
+      assert(!enLog, `«${secreto}» aparece en un registro`);
+    }
   }
+  const codigo = sinComentarios(RUTA);
   assert(!/console\.log\([^)]*process\.env/.test(codigo),
     "se registra el entorno completo");
   // Y el mensaje de error del proveedor no se propaga: puede traer al pagador.
@@ -563,7 +594,7 @@ check("El adaptador NO es importable desde el navegador", () => {
 });
 
 check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
-  const qa = leer("app/api/billing/qa/mercadopago-smoke/route.ts");
+  const qa = QA;
   const codigo = sinComentarios(qa);
   assert(qa.length > 0, "no existe el disparador de la prueba de sandbox");
   // Está declarado temporal, y consta dónde se dice cuándo se retira.
@@ -575,9 +606,14 @@ check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
   // 2 · solo superadministrador de plataforma.
   assert(/checkPlatformStatus/.test(codigo) && /NOT_PLATFORM_SUPERADMIN/.test(codigo),
     "no exige superadministrador");
-  // 3 · solo credenciales de prueba.
-  assert(/MERCADOPAGO_CREDENTIAL_IS_NOT_TEST/.test(codigo),
-    "no rechaza un token que no sea de pruebas");
+  // 3 · solo credenciales cuyo DUEÑO es un usuario de prueba, comprobado
+  // contra el proveedor. Y sin poder comprobarlo, tampoco pasa.
+  assert(/MERCADOPAGO_CREDENTIAL_OWNER_IS_NOT_TEST_USER/.test(codigo),
+    "no rechaza un token cuyo dueño no es un usuario de prueba");
+  assert(/MERCADOPAGO_IDENTITY_UNVERIFIABLE/.test(codigo),
+    "deja pasar cuando no se puede comprobar la identidad del dueño");
+  assert(/resolveEnvironment\(\)/.test(codigo),
+    "no consulta la identidad del dueño de las credenciales");
   // 4 · ningún importe llega del navegador.
   for (const veneno of ["cuerpo.amount", "cuerpo.total", "body.amount",
                         "cuerpo.transaction_amount", "cuerpo.price"]) {

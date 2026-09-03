@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  MERCADOPAGO, readNotification, isKnownTopic, environmentFromAccessToken,
+  MERCADOPAGO, readNotification, isKnownTopic,
   environmentMatches, mapPaymentStatus, settlementOutcome,
 } from "@/lib/billing/mercadopago/mapping";
 import { verifyMercadoPagoSignature } from "@/lib/billing/mercadopago/signature";
@@ -82,7 +82,14 @@ export async function POST(request: Request) {
     secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
   });
 
-  const entorno = environmentFromAccessToken(process.env.MERCADOPAGO_ACCESS_TOKEN);
+  // El entorno sale de la IDENTIDAD del dueño de las credenciales, no de la
+  // forma del token: un vendedor de prueba recibe credenciales con aspecto de
+  // producción, y mirar el prefijo rechazaría justo el entorno de pruebas.
+  // Falla cerrado: sin poder preguntar, «producción».
+  const proveedor = mercadoPagoFromEnv();
+  const duenno = await proveedor.resolveEnvironment();
+  const entorno = duenno.reachable && duenno.isTestUser ? duenno.environment
+    : duenno.reachable ? duenno.environment : null;
 
   const anotado = await recordProviderEvent({
     provider: MERCADOPAGO, topic: aviso.topic, resourceId: aviso.resourceId,
@@ -120,8 +127,6 @@ export async function POST(request: Request) {
     await cerrar("ignored", "unknown_topic");
     return OK();
   }
-
-  const proveedor = mercadoPagoFromEnv();
 
   try {
     if (aviso.topic === "subscription_preapproval") {

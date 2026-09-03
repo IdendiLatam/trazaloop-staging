@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
-import { environmentFromAccessToken, recurrenceFor } from "@/lib/billing/mercadopago/mapping";
+import { recurrenceFor } from "@/lib/billing/mercadopago/mapping";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -101,20 +101,39 @@ export async function POST(request: Request) {
     return no(`ACTION_UNKNOWN:${accion}`, 400);
   }
 
-  // --- Candado 3 · solo credenciales de PRUEBA ----------------------------
-  const entornoMp = environmentFromAccessToken(process.env.MERCADOPAGO_ACCESS_TOKEN);
+  // --- Candado 3 · solo credenciales de PRUEBA, POR IDENTIDAD -------------
+  //
+  // No por la forma del token. Cuando la aplicación se crea iniciando sesión
+  // como vendedor de prueba, Mercado Pago emite sus credenciales bajo el
+  // epígrafe «producción» y con prefijo `APP_USR-`: mirar el prefijo declararía
+  // producción a un vendedor sintético. Quien decide es la ficha del dueño.
+  //
+  // Y falla cerrado: sin evidencia POSITIVA de usuario de prueba —o sin poder
+  // preguntar— la respuesta es «producción», que es la que impide cobrar.
+  const tokenPuesto = Boolean(
+    process.env.MERCADOPAGO_ACCESS_TOKEN
+    && process.env.MERCADOPAGO_ACCESS_TOKEN.trim() !== "");
   const compradorConfigurado = Boolean(
     process.env.MERCADOPAGO_TEST_BUYER_EMAIL
     && process.env.MERCADOPAGO_TEST_BUYER_EMAIL.trim() !== ""
   );
+  const proveedor = mercadoPagoFromEnv();
+  const duenno = tokenPuesto
+    ? await proveedor.resolveEnvironment()
+    : { environment: "live" as const, siteId: null, countryId: null,
+        isTestUser: false, reachable: false };
 
   if (accion === "preflight") {
-    // No toca la red ni la base. Solo dice qué hay puesto, sin decir su valor.
     return NextResponse.json({
       ok: true,
       vercel_environment: entornoVercel,
-      access_token_present: entornoMp !== null,
-      access_token_environment: entornoMp,          // «test» | «live» | null
+      access_token_present: tokenPuesto,
+      // Clasificación por identidad. Nunca se dice nada del valor del token.
+      access_token_environment: duenno.environment,
+      owner_is_test_user: duenno.isTestUser,
+      owner_site_id: duenno.siteId,
+      owner_country_id: duenno.countryId,
+      provider_reachable: duenno.reachable,
       test_buyer_email_configured: compradorConfigurado,
       webhook_secret_present: Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET),
       identity: identidad,
@@ -122,12 +141,14 @@ export async function POST(request: Request) {
     });
   }
 
-  if (entornoMp === null) return no("MERCADOPAGO_ACCESS_TOKEN_NOT_AVAILABLE", 424);
-  if (entornoMp !== "test") return no("MERCADOPAGO_CREDENTIAL_IS_NOT_TEST", 424);
+  if (!tokenPuesto) return no("MERCADOPAGO_ACCESS_TOKEN_NOT_AVAILABLE", 424);
+  if (!duenno.reachable) return no("MERCADOPAGO_IDENTITY_UNVERIFIABLE", 424);
+  if (duenno.environment !== "test" || !duenno.isTestUser) {
+    return no("MERCADOPAGO_CREDENTIAL_OWNER_IS_NOT_TEST_USER", 424);
+  }
   if (!compradorConfigurado) return no("MERCADOPAGO_TEST_BUYER_EMAIL_REQUIRED", 424);
 
   const comprador = (process.env.MERCADOPAGO_TEST_BUYER_EMAIL as string).trim();
-  const proveedor = mercadoPagoFromEnv();
   const admin = createAdminClient();
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
   const volver = `${sitio.replace(/\/$/, "")}/billing/return`;

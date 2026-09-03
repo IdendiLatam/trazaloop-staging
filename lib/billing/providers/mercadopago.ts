@@ -7,7 +7,7 @@ import type {
 import {
   MERCADOPAGO, recurrenceFor, mapPaymentStatus, mapSubscriptionStatus,
   classifyProviderError, minorToProviderAmount, environmentFromAccessToken,
-  type MpEnvironment,
+  classifyOwnerEnvironment, type MpEnvironment,
 } from "@/lib/billing/mercadopago/mapping";
 
 /**
@@ -36,8 +36,28 @@ import {
 
 const TIEMPO_MAXIMO_MS = 10_000;
 
+/**
+ * La identidad del dueño del token no cambia mientras el proceso vive, y
+ * preguntarla en cada webhook sería una llamada de red por notificación. Se
+ * recuerda por token. No se recuerda un fallo: no poder preguntar hoy no puede
+ * quedarse pegado como respuesta.
+ */
+const identidadRecordada = new Map<string, {
+  environment: MpEnvironment; siteId: string | null; countryId: string | null;
+  isTestUser: boolean; reachable: boolean;
+}>();
+
 export type MercadoPagoAdapter = BillingProvider & {
+  /** Pista síncrona: «test» solo cuando se puede afirmar sin preguntar. */
   readonly environment: MpEnvironment | null;
+  /**
+   * La clasificación que manda. Pregunta por la identidad del dueño del token
+   * y falla cerrado: sin evidencia positiva de usuario de prueba, «live».
+   */
+  resolveEnvironment(): Promise<{
+    environment: MpEnvironment; siteId: string | null; countryId: string | null;
+    isTestUser: boolean; reachable: boolean;
+  }>;
   createSubscription(input: {
     externalReference: string;
     payerEmail: string;
@@ -142,8 +162,10 @@ const num = (v: unknown): number | null =>
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
 export function mercadoPagoProvider(accessToken: string | undefined): MercadoPagoAdapter {
+  // Pista barata: un `TEST-…` no necesita preguntar. Cualquier otra forma se
+  // resuelve preguntándole al proveedor quién es el dueño.
   const environment = environmentFromAccessToken(accessToken);
-  const configurado = Boolean(accessToken && environment);
+  const configurado = Boolean(accessToken && accessToken.trim() !== "");
   const cliente = configurado
     ? new MercadoPagoConfig({
         accessToken: accessToken as string,
@@ -248,6 +270,40 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
                                     currency: str(auto.currency_id), version: num(r.version) } };
       } catch (e) {
         return fallo(e);
+      }
+    },
+
+    async resolveEnvironment() {
+      const recordada = accessToken ? identidadRecordada.get(accessToken) : undefined;
+      if (recordada) return recordada;
+      if (environment === "test") {
+        return { environment: "test" as MpEnvironment, siteId: null, countryId: null,
+                 isTestUser: true, reachable: true };
+      }
+      if (!accessToken) {
+        return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
+                 isTestUser: false, reachable: false };
+      }
+      try {
+        const r = await fetch("https://api.mercadopago.com/users/me", {
+          headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!r.ok) {
+          return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
+                   isTestUser: false, reachable: false };
+        }
+        const j = (await r.json()) as Record<string, unknown>;
+        const clasificado = classifyOwnerEnvironment(j);
+        const resuelta = {
+          environment: clasificado,
+          siteId: str(j.site_id), countryId: str(j.country_id),
+          isTestUser: clasificado === "test", reachable: true,
+        };
+        if (accessToken) identidadRecordada.set(accessToken, resuelta);
+        return resuelta;
+      } catch {
+        // No poder preguntar NO es «es de pruebas».
+        return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
+                 isTestUser: false, reachable: false };
       }
     },
 
