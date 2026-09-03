@@ -132,7 +132,8 @@ Y lo que se corrigió después de aquella revisión, en
 |---|---|---|---|
 | PE-05A | Descubrimiento y arquitectura de cobro · 63 decisiones | — | **cerrado** · 2026-09-02 · pendiente de revisión humana |
 | PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
-| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **código cerrado** · 2026-09-02 · a la espera del sandbox externo |
+| PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **bloqueado** · el sandbox exige un pagador MCO que su panel no expone |
+| PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -163,6 +164,14 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **Wompi, recomendado para el sandbox.** No programa la recurrencia —la
+> inicia el comercio—, y eso convierte el cobro anual en una transacción cada
+> doce meses: **la incógnita que bloquea B2 desaparece**. Además su entorno
+> **sí** se distingue por la llave, que es justo lo que Mercado Pago no
+> permite. El coste es nuestro: el calendario pasa a ser de Trazaloop. Análisis
+> completo, con tarifas y riesgos, en
+> [viabilidad de Wompi](PE_05B2W_WOMPI_FEASIBILITY.md).
 
 > **El flujo pendiente probado; el pagador vuelve a bloquear.** Se retiró la
 > conclusión anterior sobre la clase de credencial —era una extrapolación— y se
