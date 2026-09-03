@@ -84,6 +84,53 @@ requires.
 In case 4 the preceding `GET /v1/customers/search` responded normally and
 returned no results, so the `401` comes from the create call, not the search.
 
+## 5b · The complete 401 body — the decisive evidence
+
+`GET` and `POST` were issued **back to back inside a single server request**,
+from the same runtime, with the **same header object** built once from the same
+environment variable. There is no second place where the credential could be
+constructed, so "same token" is not a claim — it is a consequence of the code.
+
+```
+GET  /v1/customers/search  → 200
+     x-request-id: 4379ba10-a010-4370-9262-273087ef1e52
+     { "paging": { "limit": 10, "offset": 0, "total": 0 }, "results": [] }
+
+POST /v1/customers         → 401
+     x-request-id: ea3c4878-1404-4d95-83a7-b4dac88af91f
+     {
+       "message": "access denied",
+       "error": "unauthorized",
+       "status": 401,
+       "cause": [
+         { "code": "300", "description": "Unauthorized use of live credentials" }
+       ]
+     }
+```
+
+**Cause 300 — "Unauthorized use of live credentials" — is the finding.**
+
+Mercado Pago classifies these credentials as **live**, even though the account
+that owns them is a **test user** (`tags` include `test_user`, `site_id: MCO`).
+
+That single fact explains every earlier rejection: a `@testuser.com` identity is
+refused because the credential presenting it is treated as production-class. The
+owner being a test user does **not** make the application's credentials test
+credentials.
+
+Minimal reproducible request:
+
+```bash
+curl --request POST \
+  'https://api.mercadopago.com/v1/customers' \
+  --header 'Authorization: Bearer <TEST_SELLER_MCO_ACCESS_TOKEN>' \
+  --header 'Content-Type: application/json' \
+  --data '{ "email": "test_payer_<digits>@testuser.com" }'
+```
+
+The same credential, same header, same runtime, succeeds on
+`GET /v1/customers/search`.
+
 ## 6 · Provider state
 
 ```
@@ -102,9 +149,19 @@ inferred from the error codes.
 Pago **TEST BUYER on site MCO**, when the Test Accounts dashboard exposes no
 email and neither `POST /users/test` nor `GET /users/{id}` returns one?
 
-**Q2.** Is `POST /v1/customers` intentionally unavailable to a verified MCO test
-seller application? If it requires an additional capability, which one, and how
-is it enabled for a test seller?
+**Q2 — now sharper.** `POST /v1/customers` fails with cause **300, "Unauthorized
+use of live credentials"**, while `GET /v1/customers/search` succeeds with the
+same credential in the same request.
+
+- Why are the credentials of an application created **by a test seller**
+  classified as *live*?
+- How does an integrator obtain **test-class credentials** for an MCO test
+  seller, so that `@testuser.com` identities are accepted?
+- Is this the same reason `payer_email = test_payer_…@testuser.com` is rejected
+  by `POST /preapproval` with `User bad request`?
+
+We believe the answer to Q2 also answers **Q1**: if the credentials were
+test-class, the test payer identity would presumably be accepted.
 
 **Q3.** Does `POST /preapproval` support
 
