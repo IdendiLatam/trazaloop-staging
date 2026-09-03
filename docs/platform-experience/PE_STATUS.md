@@ -164,6 +164,12 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **Primera prueba real: detenida antes de llamar.** El Preview está
+> desplegado y el disparador de QA construido, pero falta
+> `MERCADOPAGO_TEST_BUYER_EMAIL` —sin él no hay pagador legítimo— y el Preview
+> responde 401 tras el SSO, que **no se tocó**. Ninguna llamada al proveedor.
+> Detalle en [la primera prueba](PE_05B2_PROVIDER_SMOKE_1.md).
+
 > **PE-05B2 · el código está y el sandbox no.** El adaptador, la firma, la
 > conciliación y el libro de notificaciones están construidos y probados —66
 > comprobaciones—, pero **no hay credenciales de prueba de Mercado Pago**, así
