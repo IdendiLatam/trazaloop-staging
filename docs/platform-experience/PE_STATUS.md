@@ -164,6 +164,21 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **Comprador MCO creado; la API ya no devuelve su correo.** Se creó una
+> identidad de prueba dedicada del sitio **MCO**, activa, con sus credenciales
+> guardadas fuera del repositorio. Pero Mercado Pago **no devuelve el correo del
+> usuario de prueba** —ni al crearlo ni al leerlo— aunque su propia referencia
+> lo documente. Dos formas derivadas del apodo y del identificador movieron el
+> error de «otro sitio» a «User bad request»: el sitio ya no falla, la dirección
+> sí. Hace falta leerla en *Tus integraciones → Cuentas de prueba*.
+> Cero artefactos en el proveedor. Detalle en
+> [el comprador de prueba](PE_05B2_TEST_BUYER_IDENTITY.md).
+
+> **CARRYOVER · RETIRE QA SYNTHETIC FX RATE BEFORE PE-05B2 FINAL CLOSURE**, o
+> antes de cualquier ejercicio comercial no-QA en Staging: la tasa 4 000 COP/USD
+> marcada `QA-SYNTHETIC-NOT-FOR-PRODUCTION` está **activa** y
+> `billing_resolve_fx` no mira la nota.
+
 > **Se llamó al proveedor, y rechazó por el pagador.** El bypass de
 > automatización de Vercel funcionó sin tocar el SSO, el token clasifica como
 > **prueba** y B1 calculó los importes sin una cifra escrita a mano. Mercado
