@@ -562,6 +562,35 @@ check("El adaptador NO es importable desde el navegador", () => {
   }
 });
 
+check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
+  const qa = leer("app/api/billing/qa/mercadopago-smoke/route.ts");
+  const codigo = sinComentarios(qa);
+  assert(qa.length > 0, "no existe el disparador de la prueba de sandbox");
+  // Está declarado temporal, y consta dónde se dice cuándo se retira.
+  assert(/QA_TRIGGER_IS_TEMPORARY/.test(codigo), "no se declara provisional");
+  assert(/PE_05B2_SANDBOX_TESTS\.md/.test(qa), "no consta dónde se documenta su retirada");
+  // 1 · nunca en Producción.
+  assert(/VERCEL_ENV[\s\S]{0,120}=== "production"/.test(codigo)
+    && /QA_TRIGGER_FORBIDDEN_IN_PRODUCTION/.test(codigo), "no se niega en Producción");
+  // 2 · solo superadministrador de plataforma.
+  assert(/checkPlatformStatus/.test(codigo) && /NOT_PLATFORM_SUPERADMIN/.test(codigo),
+    "no exige superadministrador");
+  // 3 · solo credenciales de prueba.
+  assert(/MERCADOPAGO_CREDENTIAL_IS_NOT_TEST/.test(codigo),
+    "no rechaza un token que no sea de pruebas");
+  // 4 · ningún importe llega del navegador.
+  for (const veneno of ["cuerpo.amount", "cuerpo.total", "body.amount",
+                        "cuerpo.transaction_amount", "cuerpo.price"]) {
+    assert(!codigo.includes(veneno), `el disparador acepta un importe del navegador: ${veneno}`);
+  }
+  assert(/intento\.expected_total_amount/.test(codigo),
+    "el importe no sale del intento");
+  // Y no devuelve el token ni una parte de él.
+  assert(!/MERCADOPAGO_ACCESS_TOKEN\s*[,)]/.test(codigo.replace(/environmentFromAccessToken\(process\.env\.MERCADOPAGO_ACCESS_TOKEN\)/g, "")),
+    "el disparador expone el token");
+  assert(!/slice\(0,\s*\d+\)/.test(codigo), "el disparador devuelve un trozo del token");
+});
+
 check("El webhook no exige sesión, y su seguridad es la firma", () => {
   const codigo = sinComentarios(RUTA);
   assert(!/createServerClient|getUser\(\)|requireSession/.test(codigo),

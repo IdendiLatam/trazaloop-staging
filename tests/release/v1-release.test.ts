@@ -2553,6 +2553,10 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
  */
 const FRONTERA_MERCADOPAGO = [
   "app/api/billing/webhooks/mercadopago/route.ts",
+  // PROVISIONAL · el disparador de la prueba de sandbox. Se retira al cerrar
+  // PE-05B2; mientras tanto es de servidor, exige superadministrador y se
+  // niega en Producción.
+  "app/api/billing/qa/mercadopago-smoke/route.ts",
   "lib/billing/mercadopago/mapping.ts",
   "lib/billing/mercadopago/signature.ts",
   "lib/billing/providers/mercadopago.ts",
