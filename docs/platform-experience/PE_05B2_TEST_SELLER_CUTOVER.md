@@ -46,7 +46,7 @@ Dos operaciones, dos rechazos distintos:
 
 | Operación | Respuesta |
 |---|---|
-| `POST /v1/customers` con `test_payer_0502@testuser.com` | **401 `access denied`** |
+| `POST /v1/customers` con el pagador estable `test_payer_…@testuser.com` | **401 `access denied`** |
 | `POST /preapproval` con ese mismo correo como `payer_email` | **400 `User bad request`** |
 
 La **búsqueda** de clientes sí respondió —no encontró ninguno—, así que el 401
