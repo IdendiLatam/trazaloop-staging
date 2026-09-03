@@ -357,6 +357,13 @@ export async function POST(request: Request) {
         `https://api.mercadopago.com/v1/customers/search?email=${encodeURIComponent(correo)}`,
         { headers: cab });
       const bj = (await b.json()) as Record<string, unknown>;
+      // Si la BÚSQUEDA falla no se puede concluir «no existe»: se dice que no
+      // se pudo mirar. Crear tras una búsqueda que no respondió es como crear
+      // sin mirar, y así se acaba con dos clientes iguales.
+      if (!b.ok) {
+        return NextResponse.json({ ok: false, stage: "search", http: b.status,
+          error: bj.message ?? bj.error ?? null });
+      }
       const encontrados = Array.isArray(bj.results) ? (bj.results as Record<string, unknown>[]) : [];
       if (encontrados.length > 0) {
         const c = encontrados[0];
@@ -370,7 +377,7 @@ export async function POST(request: Request) {
       const j = (await r.json()) as Record<string, unknown>;
       log_seguro("cliente_de_prueba", { reutilizado: false, http: r.status,
                                         live_mode: j.live_mode });
-      return NextResponse.json({ ok: r.ok, http: r.status, reused: false,
+      return NextResponse.json({ ok: r.ok, stage: "create", http: r.status, reused: false,
         customer: { id: j.id ?? null, live_mode: j.live_mode ?? null },
         error: r.ok ? null : (j.message ?? j.error ?? null) });
     } catch (e) {
