@@ -188,9 +188,18 @@ export async function POST(request: Request) {
   if (duenno.environment !== "test" || !duenno.isTestUser) {
     return no("MERCADOPAGO_CREDENTIAL_OWNER_IS_NOT_TEST_USER", 424);
   }
-  if (!compradorConfigurado) return no("MERCADOPAGO_TEST_BUYER_EMAIL_REQUIRED", 424);
-
-  const comprador = (process.env.MERCADOPAGO_TEST_BUYER_EMAIL as string).trim();
+  // EL PAGADOR DEL FLUJO PENDIENTE.
+  //
+  // Es el valor que la documentación oficial usa en el ejemplo de «suscripción
+  // sin plan asociado con pago pendiente», y no es la identidad de nadie: ni
+  // contacto de facturación, ni cuenta de Mercado Pago, ni el comprador de
+  // prueba. La persona real entra después, abriendo el enlace de autorización
+  // con sus credenciales.
+  //
+  // Vive aquí, dentro del disparador de QA, y no en una variable de entorno:
+  // una variable invitaría a confundirlo con un dato comercial.
+  const PAGADOR_QA_DOCUMENTADO = "test_payer@example.com";
+  const comprador = PAGADOR_QA_DOCUMENTADO;
   const admin = createAdminClient();
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
   const volver = `${sitio.replace(/\/$/, "")}/billing/return`;
@@ -199,6 +208,7 @@ export async function POST(request: Request) {
   // prepare · la empresa sintética, su tasa de QA y el presupuesto
   // -------------------------------------------------------------------------
   if (accion === "prepare") {
+    void compradorConfigurado;
     const plan = cuerpo.plan === "extra" ? "extra" : "full";
     const intervalo = cuerpo.interval === "annual" ? "annual" : "monthly";
 
@@ -206,9 +216,13 @@ export async function POST(request: Request) {
     // Se marca de forma que no se pueda confundir con verdad comercial, y se
     // deja escrito que 4 000 no es una tasa real ni actual.
     const { data: tasas } = await admin.from("commercial_fx_rates")
-      .select("id, note").eq("base_currency", "USD").eq("quote_currency", "COP");
-    const yaHay = ((tasas ?? []) as { note: string | null }[])
-      .some((t) => (t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION"));
+      .select("id, note, status, effective_to")
+      .eq("base_currency", "USD").eq("quote_currency", "COP");
+    // Vigente = activa y sin cerrar. Una retirada NO se reabre reescribiéndola:
+    // se abre una vigencia nueva y la anterior se queda como historia.
+    const yaHay = ((tasas ?? []) as Record<string, unknown>[])
+      .some((t) => String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION")
+        && t.status === "active" && !t.effective_to);
     if (!yaHay) {
       const { error } = await admin.from("commercial_fx_rates").insert({
         base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
@@ -324,7 +338,8 @@ export async function POST(request: Request) {
       p_init_point: r.value.initPoint, p_provider_status: r.value.providerStatus,
       p_status: "provider_created", p_synced_amount: r.value.amount,
       p_provider_version: r.value.version, p_next_payment_date: r.value.nextPaymentDate });
-    return NextResponse.json({ ok: true, subscription: r.value });
+    return NextResponse.json({ ok: true, intent_id: intentId,
+      payer_fixture: PAGADOR_QA_DOCUMENTADO, subscription: r.value });
   }
 
   // Crear UNA identidad de prueba del sitio MCO. El contrato oficial admite

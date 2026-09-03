@@ -73,6 +73,7 @@ export type MercadoPagoAdapter = BillingProvider & {
     frequency: number | null; frequencyType: string | null;
     version: number | null; nextPaymentDate: string | null;
     externalReference: string | null;
+    applicationId: number | null; collectorId: number | null;
   }>>;
   getSubscriptionDetail(id: string): Promise<ProviderResult<{
     providerSubscriptionId: string; providerStatus: string | null;
@@ -81,6 +82,7 @@ export type MercadoPagoAdapter = BillingProvider & {
     frequency: number | null; frequencyType: string | null;
     version: number | null; nextPaymentDate: string | null;
     externalReference: string | null;
+    applicationId: number | null; collectorId: number | null;
   }>>;
   /**
    * Cambiar el importe recurrente de UNA suscripción. Es la primitiva que más
@@ -192,6 +194,11 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
       version: num(r.version),
       nextPaymentDate: str(r.next_payment_date),
       externalReference: str(r.external_reference),
+      // Identificadores de la aplicación y del vendedor: no son datos de
+      // ninguna persona y sirven para comprobar que el objeto se creó bajo el
+      // vendedor que esperábamos.
+      applicationId: num(r.application_id),
+      collectorId: num(r.collector_id),
     };
   };
 
