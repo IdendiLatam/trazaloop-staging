@@ -304,7 +304,10 @@ export async function POST(request: Request) {
         id: j.id ?? null, nickname: j.nickname ?? null, email: j.email ?? null,
         site_id: j.site_id ?? null, status: j.status ?? null,
         user_type: j.user_type ?? null, tags: Array.isArray(j.tags) ? j.tags : null,
-      } });
+      },
+      // Solo los NOMBRES de los campos que trae la ficha. Sirve para saber si
+      // el correo viene con otro nombre, y no revela ningún valor.
+      available_fields: Object.keys(j).sort() });
     } catch (e) {
       return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
