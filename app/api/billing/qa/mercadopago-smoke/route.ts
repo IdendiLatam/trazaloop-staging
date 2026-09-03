@@ -40,7 +40,7 @@ export const runtime = "nodejs";
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
-                  "get", "update_amount", "cancel"] as const;
+                  "get", "search", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -256,6 +256,15 @@ export async function POST(request: Request) {
       p_status: "provider_created", p_synced_amount: r.value.amount,
       p_provider_version: r.value.version, p_next_payment_date: r.value.nextPaymentDate });
     return NextResponse.json({ ok: true, subscription: r.value });
+  }
+
+  // Reconciliar antes que duplicar: pregunta al proveedor qué existe ya.
+  if (accion === "search") {
+    const ref = cuerpo.external_reference ? String(cuerpo.external_reference) : undefined;
+    const r = await proveedor.searchSubscriptions(ref);
+    return NextResponse.json(r.ok ? { ok: true, ...r.value }
+      : { ok: false, failure: r.failure, message: r.message,
+          detail: (r as { detail?: string | null }).detail ?? null });
   }
 
   if (accion === "get") {

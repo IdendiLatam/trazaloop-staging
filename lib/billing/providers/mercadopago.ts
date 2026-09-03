@@ -70,6 +70,20 @@ export type MercadoPagoAdapter = BillingProvider & {
    */
   updateRecurringAmount(id: string, amountMinor: number, currency: string):
     Promise<ProviderResult<{ amount: number | null; currency: string | null; version: number | null }>>;
+  /**
+   * Reconciliar en vez de duplicar. Si una petición de creación se envía y la
+   * respuesta se pierde —una caída, un tiempo agotado—, el objeto puede existir
+   * en el proveedor sin que aquí conste. Volver a crear a ciegas dejaría dos
+   * suscripciones cobrando. Esto pregunta primero.
+   */
+  searchSubscriptions(externalReference?: string): Promise<ProviderResult<{
+    total: number;
+    items: Array<{
+      providerSubscriptionId: string; providerStatus: string | null;
+      externalReference: string | null; amount: number | null; currency: string | null;
+      frequency: number | null; frequencyType: string | null; dateCreated: string | null;
+    }>;
+  }>>;
   getPaymentDetail(id: string): Promise<ProviderResult<{
     providerPaymentId: string; providerStatus: string | null;
     canonicalStatus: ReturnType<typeof mapPaymentStatus>;
@@ -232,6 +246,36 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
         const auto = (r.auto_recurring ?? {}) as Record<string, unknown>;
         return { ok: true, value: { amount: num(auto.transaction_amount),
                                     currency: str(auto.currency_id), version: num(r.version) } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
+
+    async searchSubscriptions(externalReference) {
+      if (!cliente) return sinCredencial();
+      try {
+        const opciones: Record<string, string | number> = { limit: 50, offset: 0 };
+        if (externalReference) opciones.external_reference = externalReference;
+        const r = (await new PreApproval(cliente).search({ options: opciones })
+          ) as unknown as Record<string, unknown>;
+        const crudos = Array.isArray(r.results) ? (r.results as Record<string, unknown>[]) : [];
+        const paging = (r.paging ?? {}) as Record<string, unknown>;
+        return { ok: true, value: {
+          total: num(paging.total) ?? crudos.length,
+          items: crudos.map((x) => {
+            const auto = (x.auto_recurring ?? {}) as Record<string, unknown>;
+            return {
+              providerSubscriptionId: String(x.id ?? ""),
+              providerStatus: str(x.status),
+              externalReference: str(x.external_reference),
+              amount: num(auto.transaction_amount),
+              currency: str(auto.currency_id),
+              frequency: num(auto.frequency),
+              frequencyType: str(auto.frequency_type),
+              dateCreated: str(x.date_created),
+            };
+          }),
+        } };
       } catch (e) {
         return fallo(e);
       }
