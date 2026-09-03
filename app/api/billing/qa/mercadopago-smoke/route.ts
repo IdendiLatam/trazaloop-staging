@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -161,6 +161,15 @@ export async function POST(request: Request) {
       ok: true,
       vercel_environment: entornoVercel,
       access_token_present: tokenPuesto,
+      // Huella NO reversible: diez hexadecimales de un SHA-256. No revela el
+      // token ni su longitud, y sirve para lo único que hacía falta y no se
+      // podía: comprobar que un despliegue trae la credencial NUEVA y no la
+      // anterior. Sin ella, «se cambió el token» era una afirmación sin prueba.
+      access_token_fingerprint: tokenPuesto
+        ? createHash("sha256")
+            .update(process.env.MERCADOPAGO_ACCESS_TOKEN as string)
+            .digest("hex").slice(0, 10)
+        : null,
       // Clasificación por identidad. Nunca se dice nada del valor del token.
       access_token_environment: duenno.environment,
       owner_is_test_user: duenno.isTestUser,
