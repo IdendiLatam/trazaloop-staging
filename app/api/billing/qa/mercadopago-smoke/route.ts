@@ -40,7 +40,7 @@ export const runtime = "nodejs";
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
-                  "get", "search", "site", "create_test_user", "update_amount", "cancel"] as const;
+                  "get", "search", "site", "create_test_user", "read_test_user", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -283,6 +283,28 @@ export async function POST(request: Request) {
       log_seguro("usuario_de_prueba", { http: r.status, site_id: j.site_id,
                                         site_status: j.site_status });
       return NextResponse.json({ ok: r.ok, http: r.status, user: j });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // Leer la identidad de prueba ya creada. La creación no devolvió correo, y
+  // el correo NO se construye a ojo a partir del identificador: se pide.
+  if (accion === "read_test_user") {
+    const id = String(cuerpo.test_user_id ?? "");
+    if (!id) return no("TEST_USER_ID_REQUIRED", 400);
+    try {
+      const r = await fetch(`https://api.mercadopago.com/users/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` } });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("lectura_usuario_prueba", { http: r.status, site_id: j.site_id });
+      // Solo lo que hace falta para poder pagar y entrar. Nada más de la ficha.
+      return NextResponse.json({ ok: r.ok, http: r.status, user: {
+        id: j.id ?? null, nickname: j.nickname ?? null, email: j.email ?? null,
+        site_id: j.site_id ?? null, status: j.status ?? null,
+        user_type: j.user_type ?? null, tags: Array.isArray(j.tags) ? j.tags : null,
+      } });
     } catch (e) {
       return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
