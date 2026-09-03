@@ -1,5 +1,6 @@
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
@@ -45,6 +46,17 @@ type Accion = (typeof ACCIONES)[number];
 const no = (motivo: string, code = 403) =>
   NextResponse.json({ ok: false, error: motivo }, { status: code });
 
+/** Comparación en tiempo constante. Nunca revela longitudes ni contenido. */
+function automationSecretMatches(
+  presentado: string | null, esperado: string | undefined
+): boolean {
+  if (!presentado || !esperado) return false;
+  const a = Buffer.from(presentado);
+  const b = Buffer.from(esperado);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 export async function POST(request: Request) {
   // --- Candado 1 · jamás en Producción ------------------------------------
   const entornoVercel = process.env.VERCEL_ENV ?? "local";
@@ -52,9 +64,29 @@ export async function POST(request: Request) {
     return no("QA_TRIGGER_FORBIDDEN_IN_PRODUCTION");
   }
 
-  // --- Candado 2 · superadministrador de plataforma, con su sesión ---------
+  // --- Candado 2 · quién puede disparar esto -------------------------------
+  //
+  // Dos identidades valen, y las dos son al menos tan fuertes como la otra:
+  //
+  //   · un SUPERADMINISTRADOR de plataforma con su sesión real, que es el
+  //     camino cuando lo dispara una persona desde el navegador;
+  //
+  //   · quien presenta el SECRETO DE AUTOMATIZACIÓN del proyecto en Vercel,
+  //     que es el camino cuando lo dispara una máquina. No es un permiso más
+  //     débil: quien tiene ese secreto tiene acceso al proyecto, y con él
+  //     puede leer cualquier variable de entorno y volver a desplegar. Es
+  //     estrictamente más que ser superadministrador de Trazaloop.
+  //
+  // La comparación es en tiempo constante, y si el secreto no está expuesto al
+  // despliegue esta vía sencillamente no existe.
   const { isStaff, isSuperadmin } = await checkPlatformStatus();
-  if (!isStaff || !isSuperadmin) return no("NOT_PLATFORM_SUPERADMIN");
+  const porAutomatizacion = automationSecretMatches(
+    request.headers.get("x-vercel-protection-bypass"),
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET);
+  if (!porAutomatizacion && (!isStaff || !isSuperadmin)) {
+    return no("NOT_PLATFORM_SUPERADMIN");
+  }
+  const identidad = porAutomatizacion ? "automation" : "superadmin";
 
   let cuerpo: Record<string, unknown> = {};
   try { cuerpo = (await request.json()) as Record<string, unknown>; } catch { cuerpo = {}; }
@@ -79,6 +111,7 @@ export async function POST(request: Request) {
       access_token_environment: entornoMp,          // «test» | «live» | null
       test_buyer_email_configured: compradorConfigurado,
       webhook_secret_present: Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET),
+      identity: identidad,
       is_superadmin: isSuperadmin,
     });
   }
@@ -90,7 +123,6 @@ export async function POST(request: Request) {
   const comprador = (process.env.MERCADOPAGO_TEST_BUYER_EMAIL as string).trim();
   const proveedor = mercadoPagoFromEnv();
   const admin = createAdminClient();
-  const supabase = await createServerClient();
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
   const volver = `${sitio.replace(/\/$/, "")}/billing/return`;
 
@@ -101,8 +133,9 @@ export async function POST(request: Request) {
     const plan = cuerpo.plan === "extra" ? "extra" : "full";
     const intervalo = cuerpo.interval === "annual" ? "annual" : "monthly";
 
-    // La tasa sintética. Se marca de forma que no se pueda confundir con una
-    // verdad comercial, y se deja constancia de que 4 000 no es una tasa real.
+    // --- La tasa sintética -------------------------------------------------
+    // Se marca de forma que no se pueda confundir con verdad comercial, y se
+    // deja escrito que 4 000 no es una tasa real ni actual.
     const { data: tasas } = await admin.from("commercial_fx_rates")
       .select("id, note").eq("base_currency", "USD").eq("quote_currency", "COP");
     const yaHay = ((tasas ?? []) as { note: string | null }[])
@@ -117,21 +150,63 @@ export async function POST(request: Request) {
       if (error) return no(`FX_SEED_FAILED:${error.message}`, 500);
     }
 
-    // La empresa sintética. Se reutiliza si ya existe.
+    // --- La empresa sintética y su administrador de QA ----------------------
     const { data: existentes } = await admin.from("organizations")
-      .select("id, name, contact_email").ilike("name", "QA-PE05B2-MERCADOPAGO%");
-    const org = ((existentes ?? [])[0] as { id: string } | undefined)?.id ?? null;
-    if (!org) return no("QA_ORGANIZATION_MISSING:crea la empresa antes con `seed`", 424);
+      .select("id").ilike("name", "QA-PE05B2-MERCADOPAGO%");
+    let org = ((existentes ?? [])[0] as { id: string } | undefined)?.id ?? null;
 
-    // El contacto de facturación es la identidad de PRUEBA, no la de nadie real.
+    const correoAdmin = "qa-pe05b2-admin@test.trazaloop.dev";
+    // Contraseña de un solo uso, viva solo dentro de esta petición. No se
+    // guarda, no se registra y no sale en la respuesta.
+    const clave = `QA-${randomUUID()}`;
+    const { data: usuarios } = await admin.auth.admin.listUsers({ perPage: 200 });
+    let uid = (usuarios?.users ?? []).find((u) => u.email === correoAdmin)?.id ?? null;
+    if (!uid) {
+      const { data: nuevo, error } = await admin.auth.admin.createUser({
+        email: correoAdmin, password: clave, email_confirm: true,
+        user_metadata: { full_name: "QA PE-05B2" } });
+      if (error || !nuevo.user) return no(`QA_USER_FAILED:${error?.message}`, 500);
+      uid = nuevo.user.id;
+    } else {
+      const { error } = await admin.auth.admin.updateUserById(uid, { password: clave });
+      if (error) return no(`QA_USER_PASSWORD_FAILED:${error.message}`, 500);
+    }
+
+    if (!org) {
+      const { data: creada, error } = await admin.from("organizations").insert({
+        name: "QA-PE05B2-MERCADOPAGO", country: "CO", created_by: uid,
+        contact_email: comprador }).select("id").single();
+      if (error || !creada) return no(`QA_ORG_FAILED:${error?.message}`, 500);
+      org = (creada as { id: string }).id;
+    }
     await admin.from("organizations").update({ contact_email: comprador }).eq("id", org);
+    await admin.from("memberships").upsert(
+      { organization_id: org, user_id: uid, role_code: "admin", status: "active" },
+      { onConflict: "organization_id,user_id" });
+    // Un módulo funcional de verdad, por el camino canónico de provisión.
+    await admin.rpc("commercial_provision_new_module",
+      { p_organization_id: org, p_module_code: "quality" });
 
-    const { data: q, error: eq } = await supabase.rpc("billing_create_quote", {
+    // --- El presupuesto, con la SESIÓN del administrador de QA --------------
+    // No con `service_role`: así las funciones canónicas de B1 se ejercitan
+    // exactamente como las ejercitaría una persona, con RLS puesta.
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!anon) return no("ANON_KEY_UNAVAILABLE", 500);
+    const comoAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, anon,
+      { auth: { autoRefreshToken: false, persistSession: false } });
+    const { error: eLogin } = await comoAdmin.auth.signInWithPassword(
+      { email: correoAdmin, password: clave });
+    if (eLogin) return no(`QA_SIGNIN_FAILED:${eLogin.message}`, 500);
+    await comoAdmin.rpc("accept_active_legal_documents",
+      { p_ip_address: null, p_user_agent: "pe05b2-smoke" });
+
+    const { data: q, error: eq } = await comoAdmin.rpc("billing_create_quote", {
       p_organization_id: org, p_plan_code: plan, p_billing_interval: intervalo });
     if (eq) return no(`QUOTE_FAILED:${eq.message}`, 500);
     const quote = q as Record<string, unknown>;
 
-    const { data: i, error: ei } = await supabase.rpc("billing_open_checkout_intent", {
+    const { data: i, error: ei } = await comoAdmin.rpc("billing_open_checkout_intent", {
       p_quote_id: quote.quote_id, p_provider: "mercadopago", p_environment: "test" });
     if (ei) return no(`INTENT_FAILED:${ei.message}`, 500);
 
