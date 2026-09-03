@@ -624,7 +624,20 @@ check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
   // Y no devuelve el token ni una parte de él.
   assert(!/MERCADOPAGO_ACCESS_TOKEN\s*[,)]/.test(codigo.replace(/environmentFromAccessToken\(process\.env\.MERCADOPAGO_ACCESS_TOKEN\)/g, "")),
     "el disparador expone el token");
-  assert(!/slice\(0,\s*\d+\)/.test(codigo), "el disparador devuelve un trozo del token");
+  // Ningún TROZO DEL TOKEN puede salir. Una huella sí: un resumen SHA-256 no
+  // es reversible y no revela ni el valor ni la longitud. La comprobación
+  // anterior prohibía cualquier `slice`, y no distinguía una cosa de la otra;
+  // ahora mira si entre el token y el recorte hay un `digest`.
+  for (const m of codigo.matchAll(/MERCADOPAGO_ACCESS_TOKEN[\s\S]{0,400}?\.slice\(/g)) {
+    const tramo = m[0];
+    assert(/\.digest\(/.test(tramo),
+      "se recorta el token sin resumirlo antes: eso devuelve un trozo del secreto");
+  }
+  // Y si hay huella, es de un resumen criptográfico.
+  if (/access_token_fingerprint/.test(codigo)) {
+    assert(/createHash\("sha256"\)[\s\S]{0,300}?MERCADOPAGO_ACCESS_TOKEN/.test(codigo),
+      "la huella del token no sale de un resumen SHA-256");
+  }
 });
 
 check("El webhook no exige sesión, y su seguridad es la firma", () => {
