@@ -164,6 +164,16 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **Tres rechazos, una sola causa: la cuenta vendedora es real, no de prueba.**
+> El pagador técnico —un cliente con el correo `test_payer_…@testuser.com` que
+> la propia referencia documenta— fue rechazado con `invalid domain user email`.
+> Junto con los dos rechazos anteriores, todo apunta a lo mismo: la cuenta
+> vendedora es `user_type: normal`, **sin la etiqueta `test_user`**, y el
+> sandbox de Mercado Pago espera operar con el token de un **vendedor de
+> prueba**. Cero clientes y cero suscripciones creados. El anual **sigue sin
+> poder preguntarse**. Detalle en
+> [el pagador de pruebas](PE_05B2_TEST_PAYER_MODEL.md).
+
 > **Comprador MCO creado; la API ya no devuelve su correo.** Se creó una
 > identidad de prueba dedicada del sitio **MCO**, activa, con sus credenciales
 > guardadas fuera del repositorio. Pero Mercado Pago **no devuelve el correo del
