@@ -93,18 +93,25 @@ export type MercadoPagoAdapter = BillingProvider & {
  * largo, por si algún día el proveedor mete ahí algo que no debería.
  */
 function diagnostico(e: unknown): string | null {
-  const err = e as { status?: number; error?: string; causes?: unknown[] } | null;
+  const err = e as Record<string, unknown> | null;
   if (!err) return null;
   const partes: string[] = [];
+  if (typeof err.name === "string") partes.push(err.name);
   if (typeof err.status === "number") partes.push(`http=${err.status}`);
-  if (typeof err.error === "string") partes.push(err.error.slice(0, 120));
-  for (const c of (err.causes ?? []).slice(0, 5)) {
-    const cc = c as { code?: unknown; description?: unknown } | null;
-    if (!cc) continue;
-    const texto = `${cc.code ?? ""}:${String(cc.description ?? "").slice(0, 160)}`;
-    if (!texto.includes("@")) partes.push(texto);
+  for (const campo of ["error", "message"]) {
+    const v = err[campo];
+    if (typeof v === "string" && v) partes.push(`${campo}=${v.slice(0, 200)}`);
   }
-  const salida = partes.join(" | ").slice(0, 600);
+  const causas = Array.isArray(err.causes) ? err.causes
+    : Array.isArray(err.cause) ? (err.cause as unknown[]) : [];
+  for (const c of causas.slice(0, 5)) {
+    if (typeof c === "string") { partes.push(c.slice(0, 160)); continue; }
+    const cc = c as Record<string, unknown> | null;
+    if (!cc) continue;
+    partes.push(`${cc.code ?? cc.error ?? ""}:${String(cc.description ?? cc.message ?? "").slice(0, 160)}`);
+  }
+  // Nada con arroba: si algún día el proveedor mete ahí un correo, no viaja.
+  const salida = partes.filter((x) => !x.includes("@")).join(" | ").slice(0, 700);
   return salida === "" ? null : salida;
 }
 
