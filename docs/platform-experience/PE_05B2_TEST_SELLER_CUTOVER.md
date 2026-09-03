@@ -90,8 +90,14 @@ rechazo del cobro anual.**
 | Cuenta Comprador MCO | intacta, con sus credenciales fuera del repositorio |
 | Pagador técnico | el mismo de siempre, estable, sin regenerar |
 
-## Carryover
+## La tasa sintética, retirada
 
-**RETIRE QA SYNTHETIC FX RATE BEFORE PE-05B2 FINAL CLOSURE**, o antes de
-cualquier ejercicio comercial no-QA en Staging. Los 4 000 COP/USD siguen
-activos y `billing_resolve_fx` no mira la nota.
+Como el bloqueo es externo y de duración desconocida, la tasa de QA dejó de ser
+efectiva el mismo día. **Por vigencia, no borrándola**: su periodo se cerró y
+quedó marcada `retired`, igual que se retira una regla fiscal.
+
+- ventana demostrable: vigente **solo** durante el smoke;
+- `billing_resolve_fx(USD, COP)` → `unavailable · no_active_rate`;
+- un presupuesto nuevo falla ahora con **`FX_RATE_UNAVAILABLE`**, comprobado;
+- los **seis** presupuestos históricos conservan su `fx_rate_micros`;
+- ni un `DELETE`, ni una migración, ni Producción.

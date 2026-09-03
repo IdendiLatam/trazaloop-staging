@@ -164,6 +164,18 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **PE-05B2 congelado, esperando a soporte de Mercado Pago.** El bloqueo es
+> externo: no hay forma documentada ni alcanzable por API de obtener el
+> `payer_email` que la propia API exige. Las cuatro preguntas y toda la
+> evidencia saneada están en
+> [el paquete para soporte](PE_05B2_MERCADOPAGO_SUPPORT_PACK.md).
+
+> **Tasa sintética RETIRADA.** Ya no es efectiva: su periodo se cerró y quedó
+> marcada `retired`, sin borrar la fila. Un presupuesto nuevo que necesite
+> USD→COP falla ahora con `FX_RATE_UNAVAILABLE`, y los seis presupuestos
+> históricos conservan el tipo con el que se calcularon. El *carryover* queda
+> **cerrado**.
+
 > **El vendedor ya es de prueba; el pagador sigue sin existir.** El cambio de
 > credenciales funcionó y está verificado **por identidad**: `test_user`,
 > `MCO`, `CO`. De paso quedó corregido el clasificador, que decidía por el
@@ -194,10 +206,9 @@ Los diez de PE-05B1:
 > Cero artefactos en el proveedor. Detalle en
 > [el comprador de prueba](PE_05B2_TEST_BUYER_IDENTITY.md).
 
-> **CARRYOVER · RETIRE QA SYNTHETIC FX RATE BEFORE PE-05B2 FINAL CLOSURE**, o
-> antes de cualquier ejercicio comercial no-QA en Staging: la tasa 4 000 COP/USD
-> marcada `QA-SYNTHETIC-NOT-FOR-PRODUCTION` está **activa** y
-> `billing_resolve_fx` no mira la nota.
+> ~~CARRYOVER · RETIRE QA SYNTHETIC FX RATE~~ · **hecho el 3 de septiembre de
+> 2026**: retirada por vigencia, sin borrar la fila. `billing_resolve_fx`
+> devuelve `no_active_rate`.
 
 > **Se llamó al proveedor, y rechazó por el pagador.** El bypass de
 > automatización de Vercel funcionó sin tocar el SSO, el token clasifica como
