@@ -1,4 +1,9 @@
-# PE-05B2 · Primera prueba real contra Mercado Pago · detenida antes de llamar
+# PE-05B2 · Primera prueba real contra Mercado Pago
+
+*Actualizado tras la segunda sesión: el bypass funcionó, se llamó al proveedor
+cuatro veces y las cuatro rechazó por el mismo motivo. Lo de abajo describe la
+primera sesión; el resultado real está en
+[la llamada al proveedor](PE_05B2_PROVIDER_SMOKE_1_RESULT.md).*
 
 **No se hizo ninguna llamada al proveedor.** Dos cosas faltaban, y las dos las
 tiene que poner una persona.

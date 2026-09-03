@@ -274,9 +274,11 @@ export async function POST(request: Request) {
         site_id: j.site_id ?? null,
         country_id: j.country_id ?? null,
         user_type: j.user_type ?? null,
+        // `tags` dice si la cuenta es de prueba, que es lo que hace falta.
+        // NADA más: `/users/me` devuelve además teléfono y correo del titular,
+        // y eso no tiene por qué salir de ahí para responder «¿de qué país es
+        // esta cuenta?». La primera versión los arrastró; esta no.
         tags: Array.isArray(j.tags) ? j.tags : null,
-        registration_identifiers: Array.isArray(j.registration_identifiers)
-          ? j.registration_identifiers : null,
       });
     } catch (e) {
       return NextResponse.json({ ok: false,

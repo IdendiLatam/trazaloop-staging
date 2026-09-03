@@ -164,11 +164,15 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
-> **Primera prueba real: detenida antes de llamar.** El Preview está
-> desplegado y el disparador de QA construido, pero falta
-> `MERCADOPAGO_TEST_BUYER_EMAIL` —sin él no hay pagador legítimo— y el Preview
-> responde 401 tras el SSO, que **no se tocó**. Ninguna llamada al proveedor.
-> Detalle en [la primera prueba](PE_05B2_PROVIDER_SMOKE_1.md).
+> **Se llamó al proveedor, y rechazó por el pagador.** El bypass de
+> automatización de Vercel funcionó sin tocar el SSO, el token clasifica como
+> **prueba** y B1 calculó los importes sin una cifra escrita a mano. Mercado
+> Pago devolvió `Payer is associated with a different site` en las cuatro
+> llamadas: la cuenta vendedora **sí** es colombiana (`MCO`), así que lo que
+> falla es que `test@testuser.com` no es un comprador de ese sitio. Valida el
+> pagador antes que la recurrencia, así que **el anual sigue sin respuesta**.
+> Cero artefactos en el proveedor, comprobado preguntándole.
+> Detalle en [la llamada real](PE_05B2_PROVIDER_SMOKE_1_RESULT.md).
 
 > **PE-05B2 · el código está y el sandbox no.** El adaptador, la firma, la
 > conciliación y el libro de notificaciones están construidos y probados —66
