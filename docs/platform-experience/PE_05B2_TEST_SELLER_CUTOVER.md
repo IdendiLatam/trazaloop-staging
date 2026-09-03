@@ -57,6 +57,32 @@ Y el correo con el formato que la propia referencia documenta,
 No se probó ninguna variante más. Cada intento es una llamada real, y probar
 formatos hasta acertar es adivinar.
 
+## La causa, aislada después · y una tensión con nuestro propio guardia
+
+El cuerpo completo del 401 —capturado en un forense posterior, con `GET` y
+`POST` seguidos en la misma petición y el mismo objeto de cabeceras— dice lo
+que «access denied» tapaba:
+
+```
+cause: [{ code: "300", description: "Unauthorized use of live credentials" }]
+```
+
+**Mercado Pago clasifica estas credenciales como de producción**, aunque la
+cuenta que las posee sea un usuario de prueba.
+
+Y ahí hay una tensión que conviene decir en voz alta: nuestro clasificador
+decide «pruebas» porque el **dueño** lleva la etiqueta `test_user`, y el
+proveedor dice «producción» porque la **credencial** es de clase producción.
+Son dos ejes distintos, y hasta ahora dábamos por hecho que el primero implicaba
+el segundo.
+
+No ha habido exposición: no se ha creado ni un objeto y no ha circulado dinero
+—un vendedor de prueba no transacciona con compradores reales—. Pero la
+recomendación para el próximo tramo es exigir evidencia positiva en **los dos
+ejes**, no solo en el del dueño. No se cambió ahora porque bloquearía el mismo
+sandbox que intentamos usar, y porque el encargo pedía conservar el
+endurecimiento tal cual.
+
 ## Lo que esto significa
 
 El vendedor ya es de prueba y del sitio correcto: esa hipótesis se comprobó y
