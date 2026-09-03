@@ -151,25 +151,20 @@ export async function POST(request: Request) {
     }
 
     // --- La empresa sintética y su administrador de QA ----------------------
+    // Primero la EMPRESA: si ya existe, ella misma dice quién es su persona de
+    // QA en `created_by`. Buscar por correo en la API administrativa no filtra
+    // —solo pagina— y en un entorno con cientos de personas es poco fiable.
     const { data: existentes } = await admin.from("organizations")
-      .select("id").ilike("name", "QA-PE05B2-MERCADOPAGO%");
-    let org = ((existentes ?? [])[0] as { id: string } | undefined)?.id ?? null;
+      .select("id, created_by").ilike("name", "QA-PE05B2-MERCADOPAGO%");
+    const fila = (existentes ?? [])[0] as { id: string; created_by: string | null } | undefined;
+    let org = fila?.id ?? null;
+    let uid = fila?.created_by ?? null;
 
     const correoAdmin = "qa-pe05b2-admin@test.trazaloop.dev";
     // Contraseña de un solo uso, viva solo dentro de esta petición. No se
     // guarda, no se registra y no sale en la respuesta.
     const clave = `QA-${randomUUID()}`;
-    // Buscar por correo hay que hacerlo PAGINANDO: la API administrativa no
-    // filtra, y en un entorno con cientos de personas la primera página no
-    // contiene a la de QA. Buscar solo en la primera daba «ya registrado» al
-    // intentar crearla de nuevo.
-    let uid: string | null = null;
-    for (let pagina = 1; pagina <= 20 && !uid; pagina += 1) {
-      const { data: lote } = await admin.auth.admin.listUsers({ page: pagina, perPage: 200 });
-      const encontrada = (lote?.users ?? []).find((u) => u.email === correoAdmin);
-      if (encontrada) uid = encontrada.id;
-      if ((lote?.users ?? []).length < 200) break;
-    }
+
     if (!uid) {
       const { data: nuevo, error } = await admin.auth.admin.createUser({
         email: correoAdmin, password: clave, email_confirm: true,
