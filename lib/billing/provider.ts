@@ -59,10 +59,34 @@ export type ProviderResult<T> =
   | { ok: true; value: T }
   | { ok: false; failure: BillingFailure; message: string };
 
+/**
+ * QUIÉN LLEVA EL CALENDARIO.
+ *
+ * No todos los proveedores se parecen. Unos guardan un objeto de suscripción y
+ * cobran solos —Mercado Pago—; otros guardan una fuente de pago y esperan a que
+ * el comercio pida cada cobro —Wompi—. Los dos son legítimos y necesitan cosas
+ * distintas del dominio, así que el proveedor lo DECLARA en vez de que el
+ * dominio lo adivine.
+ *
+ * Esto es una capacidad técnica, no una verdad comercial: el plan, el precio y
+ * el derecho siguen siendo de PE-04 y B1, y ningún proveedor los toca.
+ */
+export type BillingProviderCapabilities = {
+  /** `provider` cobra solo; `merchant` espera a que se le pida. */
+  readonly recurrenceOwner: "provider" | "merchant";
+  /** ¿Guarda un medio de pago reutilizable? */
+  readonly supportsStoredPaymentSource: boolean;
+  /** ¿Se le puede pedir un cobro contra ese medio guardado? */
+  readonly supportsRecurringCharge: boolean;
+  /** ¿Tiene un objeto de suscripción propio? */
+  readonly supportsProviderSubscription: boolean;
+};
+
 export type BillingProvider = {
   readonly name: string;
   /** ¿Está configurado de verdad, o es el doble? */
   readonly live: boolean;
+  readonly capabilities: BillingProviderCapabilities;
 
   createSubscriptionCheckout(input: {
     quoteId: string;

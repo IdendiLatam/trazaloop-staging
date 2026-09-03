@@ -205,6 +205,13 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
   return {
     name: MERCADOPAGO,
     live: configurado,
+    // Mercado Pago guarda la suscripción y cobra por su cuenta.
+    capabilities: {
+      recurrenceOwner: "provider",
+      supportsStoredPaymentSource: false,
+      supportsRecurringCharge: false,
+      supportsProviderSubscription: true,
+    },
     environment,
 
     async createSubscription(input) {

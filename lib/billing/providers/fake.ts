@@ -30,6 +30,14 @@ export function fakeBillingProvider(outcome: FakeOutcome = "approve"): BillingPr
   });
 
   return {
+    // El doble imita al proveedor que gestiona la recurrencia, que es el
+    // modelo con el que nació B1.
+    capabilities: {
+      recurrenceOwner: "provider" as const,
+      supportsStoredPaymentSource: false,
+      supportsRecurringCharge: false,
+      supportsProviderSubscription: true,
+    },
     name: "fake",
     live: false,
 
