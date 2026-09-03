@@ -1,5 +1,14 @@
 # PE-05B2 · Dos ejes, no uno · identidad del dueño y clase de credencial
 
+> **Retirado como conclusión.** El `401 · causa 300` de `POST /v1/customers` no
+> demuestra que el token sea de clase producción: la documentación oficial dice
+> que las credenciales de *Pruebas* sirven para el entorno de pruebas y que un
+> token de prueba puede empezar por `APP_USR`. El hallazgo se reclasifica como
+> **`CUSTOMER_API_TEST_COMPATIBILITY = REJECTED_OR_INCONCLUSIVE`** y **no se
+> extrapola** a `/preapproval`. **La regla propuesta abajo NO se implementó.**
+> Lo que sigue vale como descripción de los dos ejes y de la asimetría de
+> nuestro guardia, no como conclusión sobre esta credencial.
+
 ## Lo que se creía
 
 Que un vendedor de prueba implica credenciales de prueba. Parecía obvio y es

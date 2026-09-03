@@ -164,6 +164,16 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **El flujo pendiente probado; el pagador vuelve a bloquear.** Se retiró la
+> conclusión anterior sobre la clase de credencial —era una extrapolación— y se
+> probó el modelo documentado: `status: "pending"`, sin plan y sin tarjeta, con
+> el pagador del ejemplo oficial. Respuesta: **«Payer is associated with a
+> different site»**. Con eso queda observado que `payer_email` **debe ser un
+> usuario de Mercado Pago existente del sitio MCO**, y volvemos al mismo punto:
+> ese correo no lo expone ni la API ni el panel. Cero artefactos; tasa QA
+> cerrada otra vez. Detalle en
+> [el bloqueo del pagador](PE_05B2_PENDING_PAYER_BLOCK.md).
+
 > **Ni las credenciales de PRUEBA son de prueba para Mercado Pago.** Se
 > sustituyó el token por el de *Pruebas → Credenciales de prueba* de la
 > aplicación del vendedor de prueba, y `POST /v1/customers` devuelve **la misma
