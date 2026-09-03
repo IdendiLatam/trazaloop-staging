@@ -40,8 +40,13 @@ export const runtime = "nodejs";
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
-                  "get", "search", "site", "update_amount", "cancel"] as const;
+                  "get", "search", "site", "create_test_user", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
+
+/** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
+function log_seguro(evento: string, campos: Record<string, unknown>) {
+  console.log(`[billing:qa] ${evento}`, JSON.stringify(campos));
+}
 
 const no = (motivo: string, code = 403) =>
   NextResponse.json({ ok: false, error: motivo }, { status: code });
@@ -256,6 +261,32 @@ export async function POST(request: Request) {
       p_status: "provider_created", p_synced_amount: r.value.amount,
       p_provider_version: r.value.version, p_next_payment_date: r.value.nextPaymentDate });
     return NextResponse.json({ ok: true, subscription: r.value });
+  }
+
+  // Crear UNA identidad de prueba del sitio MCO. El contrato oficial admite
+  // exactamente dos campos —`site_id` y `description`—; no hay `profile`
+  // documentado, así que no se manda: inventar un parámetro que la referencia
+  // no declara es cómo se acaba con una cuenta que no sirve y sin saber por qué.
+  //
+  // La respuesta trae contraseña. Viaja por TLS a quien llamó y NO se registra,
+  // ni se guarda en la base, ni se escribe en el repositorio.
+  if (accion === "create_test_user") {
+    try {
+      const r = await fetch("https://api.mercadopago.com/users/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` },
+        body: JSON.stringify({ site_id: "MCO",
+                               description: "Trazaloop PE-05B2 Test Buyer" }),
+      });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("usuario_de_prueba", { http: r.status, site_id: j.site_id,
+                                        site_status: j.site_status });
+      return NextResponse.json({ ok: r.ok, http: r.status, user: j });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
   }
 
   // El SITIO de la cuenta vendedora. «Payer is associated with a different
