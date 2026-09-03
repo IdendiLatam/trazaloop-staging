@@ -41,7 +41,7 @@ export const runtime = "nodejs";
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
-                  "update_amount", "cancel"] as const;
+                  "retire_qa_fx", "update_amount", "cancel"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -99,6 +99,39 @@ export async function POST(request: Request) {
   const accion = String(cuerpo.action ?? "") as Accion;
   if (!(ACCIONES as readonly string[]).includes(accion)) {
     return no(`ACTION_UNKNOWN:${accion}`, 400);
+  }
+
+  // --- Retirar la tasa sintética de QA ------------------------------------
+  // Va ANTES del candado del proveedor a propósito: no toca su red, y hacerla
+  // depender de que Mercado Pago responda sería atarla a algo que no le
+  // importa. Se retira por VIGENCIA, como se retira una regla fiscal: la fila
+  // se queda, se cierra su periodo y deja de ser efectiva. Ni un DELETE.
+  if (accion === "retire_qa_fx") {
+    const admin0 = createAdminClient();
+    const { data: tasas, error: eLeer } = await admin0.from("commercial_fx_rates")
+      .select("id, note, status, effective_from, effective_to, rate_micros");
+    if (eLeer) return no(`FX_READ_FAILED:${eLeer.message}`, 500);
+    const sinteticas = ((tasas ?? []) as Record<string, unknown>[])
+      .filter((t) => String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION"));
+    const ahora = new Date().toISOString();
+    const retiradas: unknown[] = [];
+    for (const t of sinteticas) {
+      if (t.status === "retired" && t.effective_to) { retiradas.push({ id: t.id, ya: true }); continue; }
+      const { error } = await admin0.from("commercial_fx_rates")
+        .update({ status: "retired", effective_to: ahora }).eq("id", t.id as string);
+      if (error) return no(`FX_RETIRE_FAILED:${error.message}`, 500);
+      retiradas.push({ id: t.id, effective_from: t.effective_from, effective_to: ahora });
+    }
+    // Y se comprueba que a partir de ahora se falla cerrado.
+    const { data: fx } = await admin0.rpc("billing_resolve_fx",
+      { p_base: "USD", p_quote: "COP", p_at: new Date().toISOString() });
+    const { count: cuantosQuotes } = await admin0.from("billing_quotes")
+      .select("id", { count: "exact", head: true });
+    const { data: instantaneas } = await admin0.from("billing_quotes")
+      .select("id, fx_rate_micros, total_amount").limit(10);
+    return NextResponse.json({ ok: true, retired: retiradas,
+      fx_after: fx, historical_quotes: cuantosQuotes,
+      quote_snapshots: instantaneas });
   }
 
   // --- Candado 3 · solo credenciales de PRUEBA, POR IDENTIDAD -------------
