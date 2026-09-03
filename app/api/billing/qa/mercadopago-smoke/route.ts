@@ -34,8 +34,9 @@ export const runtime = "nodejs";
  * Y no devuelve el token, ni parte de él, ni su longitud.
  */
 
-/** Se retira en el cierre de PE-05B2. Ver PE_05B2_SANDBOX_TESTS.md. */
-export const QA_TRIGGER_IS_TEMPORARY = true;
+// QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
+// Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
+// exportar sus manejadores y su configuración, así que la marca vive aquí.
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "update_amount", "cancel"] as const;

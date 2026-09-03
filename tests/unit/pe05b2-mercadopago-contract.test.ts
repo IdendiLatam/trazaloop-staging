@@ -567,7 +567,7 @@ check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
   const codigo = sinComentarios(qa);
   assert(qa.length > 0, "no existe el disparador de la prueba de sandbox");
   // Está declarado temporal, y consta dónde se dice cuándo se retira.
-  assert(/QA_TRIGGER_IS_TEMPORARY/.test(codigo), "no se declara provisional");
+  assert(/QA_TRIGGER_IS_TEMPORARY/.test(qa), "no se declara provisional");
   assert(/PE_05B2_SANDBOX_TESTS\.md/.test(qa), "no consta dónde se documenta su retirada");
   // 1 · nunca en Producción.
   assert(/VERCEL_ENV[\s\S]{0,120}=== "production"/.test(codigo)
