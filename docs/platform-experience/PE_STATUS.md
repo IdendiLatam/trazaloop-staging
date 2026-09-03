@@ -164,6 +164,16 @@ Los diez de PE-05B1:
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
 
+> **El vendedor ya es de prueba; el pagador sigue sin existir.** El cambio de
+> credenciales funcionó y está verificado **por identidad**: `test_user`,
+> `MCO`, `CO`. De paso quedó corregido el clasificador, que decidía por el
+> prefijo del token y habría bloqueado justo el entorno de pruebas —ahora
+> exige evidencia positiva del proveedor y falla cerrado—. Pero
+> `POST /v1/customers` responde **401 access denied** y el `payer_email` con el
+> formato que la propia referencia documenta responde **400 User bad request**.
+> El anual **sigue sin poder preguntarse**. Cero artefactos.
+> Detalle en [el cambio de vendedor](PE_05B2_TEST_SELLER_CUTOVER.md).
+
 > **Tres rechazos, una sola causa: la cuenta vendedora es real, no de prueba.**
 > El pagador técnico —un cliente con el correo `test_payer_…@testuser.com` que
 > la propia referencia documenta— fue rechazado con `invalid domain user email`.
