@@ -80,11 +80,40 @@ export type MercadoPagoAdapter = BillingProvider & {
   }>>;
 };
 
-function fallo(e: unknown): { ok: false; failure: ReturnType<typeof classifyProviderError>; message: string } {
+/**
+ * Un diagnóstico SEGURO del rechazo del proveedor.
+ *
+ * El mensaje crudo no se propaga: puede traer datos del pagador. Pero sin
+ * NINGÚN detalle, una validación de esquema —«este campo no vale»— es
+ * indistinguible de una caída, y eso convierte cada error en una adivinanza.
+ *
+ * Así que se conserva lo que es contrato y no persona: el código HTTP y los
+ * `cause` del proveedor, que son mensajes de validación de campos. Se recortan,
+ * y se descarta cualquier cosa que traiga arroba o parezca un identificador
+ * largo, por si algún día el proveedor mete ahí algo que no debería.
+ */
+function diagnostico(e: unknown): string | null {
+  const err = e as { status?: number; error?: string; causes?: unknown[] } | null;
+  if (!err) return null;
+  const partes: string[] = [];
+  if (typeof err.status === "number") partes.push(`http=${err.status}`);
+  if (typeof err.error === "string") partes.push(err.error.slice(0, 120));
+  for (const c of (err.causes ?? []).slice(0, 5)) {
+    const cc = c as { code?: unknown; description?: unknown } | null;
+    if (!cc) continue;
+    const texto = `${cc.code ?? ""}:${String(cc.description ?? "").slice(0, 160)}`;
+    if (!texto.includes("@")) partes.push(texto);
+  }
+  const salida = partes.join(" | ").slice(0, 600);
+  return salida === "" ? null : salida;
+}
+
+function fallo(e: unknown): {
+  ok: false; failure: ReturnType<typeof classifyProviderError>;
+  message: string; detail: string | null;
+} {
   const clase = classifyProviderError(e);
-  // El mensaje del proveedor NO se propaga tal cual: puede traer datos del
-  // pagador. Se registra la clase, que es lo que sirve para decidir.
-  return { ok: false, failure: clase, message: clase };
+  return { ok: false, failure: clase, message: clase, detail: diagnostico(e) };
 }
 
 const num = (v: unknown): number | null =>

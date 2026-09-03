@@ -240,6 +240,7 @@ export async function POST(request: Request) {
     });
     if (!r.ok) {
       return NextResponse.json({ ok: false, failure: r.failure, message: r.message,
+        detail: (r as { detail?: string | null }).detail ?? null,
         requested: { ...recurrenceFor(intervalo),
                      transaction_amount: Number(intento.expected_total_amount),
                      currency_id: String(intento.expected_currency) } }, { status: 200 });
@@ -258,7 +259,8 @@ export async function POST(request: Request) {
     if (!id) return no("PROVIDER_SUBSCRIPTION_ID_REQUIRED", 400);
     const r = await proveedor.getSubscriptionDetail(id);
     return NextResponse.json(r.ok ? { ok: true, subscription: r.value }
-                                  : { ok: false, failure: r.failure, message: r.message });
+      : { ok: false, failure: r.failure, message: r.message,
+          detail: (r as { detail?: string | null }).detail ?? null });
   }
 
   // -------------------------------------------------------------------------
@@ -284,7 +286,8 @@ export async function POST(request: Request) {
     return NextResponse.json(r.ok
       ? { ok: true, before: Number((q as Record<string, number>).total_amount),
           requested: nuevo, after: r.value }
-      : { ok: false, failure: r.failure, message: r.message, requested: nuevo });
+      : { ok: false, failure: r.failure, message: r.message,
+          detail: (r as { detail?: string | null }).detail ?? null, requested: nuevo });
   }
 
   if (accion === "cancel") {
@@ -292,7 +295,8 @@ export async function POST(request: Request) {
     if (!id) return no("PROVIDER_SUBSCRIPTION_ID_REQUIRED", 400);
     const r = await proveedor.cancelSubscription(id, false);
     return NextResponse.json(r.ok ? { ok: true, status: r.value.status }
-                                  : { ok: false, failure: r.failure, message: r.message });
+      : { ok: false, failure: r.failure, message: r.message,
+          detail: (r as { detail?: string | null }).detail ?? null });
   }
 
   return no("ACTION_UNHANDLED", 400);
