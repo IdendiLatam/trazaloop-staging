@@ -159,8 +159,17 @@ export async function POST(request: Request) {
     // Contraseña de un solo uso, viva solo dentro de esta petición. No se
     // guarda, no se registra y no sale en la respuesta.
     const clave = `QA-${randomUUID()}`;
-    const { data: usuarios } = await admin.auth.admin.listUsers({ perPage: 200 });
-    let uid = (usuarios?.users ?? []).find((u) => u.email === correoAdmin)?.id ?? null;
+    // Buscar por correo hay que hacerlo PAGINANDO: la API administrativa no
+    // filtra, y en un entorno con cientos de personas la primera página no
+    // contiene a la de QA. Buscar solo en la primera daba «ya registrado» al
+    // intentar crearla de nuevo.
+    let uid: string | null = null;
+    for (let pagina = 1; pagina <= 20 && !uid; pagina += 1) {
+      const { data: lote } = await admin.auth.admin.listUsers({ page: pagina, perPage: 200 });
+      const encontrada = (lote?.users ?? []).find((u) => u.email === correoAdmin);
+      if (encontrada) uid = encontrada.id;
+      if ((lote?.users ?? []).length < 200) break;
+    }
     if (!uid) {
       const { data: nuevo, error } = await admin.auth.admin.createUser({
         email: correoAdmin, password: clave, email_confirm: true,
