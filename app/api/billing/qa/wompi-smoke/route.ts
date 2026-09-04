@@ -3,7 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
-import { WOMPI_SANDBOX_URL } from "@/lib/billing/wompi/mapping";
+import {
+  WOMPI_SANDBOX_URL, buildIntentReference, buildRenewalReference,
+} from "@/lib/billing/wompi/mapping";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +38,7 @@ export const runtime = "nodejs";
 
 const ACCIONES = ["preflight", "contracts", "prepare", "tokenize_test_card",
                   "create_payment_source", "charge", "get_transaction",
-                  "simulate_event"] as const;
+                  "simulate_event", "renew"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -130,35 +132,46 @@ export async function POST(request: Request) {
     // Se busca por el prefijo de QA del tramo, no por el nombre de un
     // proveedor: la empresa sintética es de facturación, no de una pasarela, y
     // nombrar aquí a la otra las mezcla sin motivo.
-    // Con `fresh` se monta una empresa sintética NUEVA y completa. Hace falta
-    // porque la que había no tenía ningún módulo funcional habilitado: la
-    // liquidación no tenía a qué conceder el plan, y sin eso la mitad del
-    // efecto —el derecho— no se puede demostrar.
+    // LA EMPRESA DE QA, POR EL CAMINO DEL PRODUCTO.
+    //
+    // La versión anterior insertaba la fila de `organizations` a mano, y por eso
+    // `organization_modules` quedaba vacío: quien provisiona los módulos es
+    // `create_organization`, que llama a `provision_new_organization_modules`.
+    // Sin módulos habilitados, la liquidación no tenía a qué conceder el plan y
+    // la mitad del efecto no se podía ver.
+    //
+    // Ahora se crea como la crearía una persona: con su sesión, por la función
+    // canónica. No se toca `organization_modules` a mano, y desde luego no se
+    // habilita nada como efecto de haber pagado.
     let fila: { id: string; created_by: string | null } | undefined;
+    const anon0 = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!anon0) return no("ANON_KEY_UNAVAILABLE", 500);
+
     if (cuerpo.fresh === true) {
-      const correo = `qa-w-${Date.now()}@test.trazaloop.dev`;
+      const correoQA = `qa-w-${Date.now()}@test.trazaloop.dev`;
       const clavePersona = `QA-${crypto.randomUUID()}`;
       const { data: nueva, error: eu } = await admin.auth.admin.createUser({
-        email: correo, password: clavePersona, email_confirm: true,
+        email: correoQA, password: clavePersona, email_confirm: true,
         user_metadata: { full_name: "QA PE-05B2W" } });
       if (eu || !nueva.user) return no(`QA_USER_FAILED:${eu?.message}`, 500);
-      const { data: creada, error: eo } = await admin.from("organizations").insert({
-        name: `QA-PE05B2W-${Date.now()}`, country: "CO", created_by: nueva.user.id,
-      }).select("id").single();
-      if (eo || !creada) return no(`QA_ORG_FAILED:${eo?.message}`, 500);
-      const orgNueva = (creada as { id: string }).id;
-      await admin.from("memberships").insert({
-        organization_id: orgNueva, user_id: nueva.user.id,
-        role_code: "admin", status: "active" });
-      // Por el camino canónico de provisión, para que el módulo quede
-      // habilitado de verdad y la liquidación tenga a qué conceder el plan.
-      const { error: ep } = await admin.rpc("commercial_provision_new_module",
-        { p_organization_id: orgNueva, p_module_code: "quality" });
-      if (ep) return no(`PROVISION_FAILED:${ep.message}`, 500);
-      fila = { id: orgNueva, created_by: nueva.user.id };
+
+      const comoPersona = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL as string, anon0,
+        { auth: { autoRefreshToken: false, persistSession: false } });
+      const { error: eIn } = await comoPersona.auth.signInWithPassword(
+        { email: correoQA, password: clavePersona });
+      if (eIn) return no(`QA_SIGNIN_FAILED:${eIn.message}`, 500);
+      await comoPersona.rpc("accept_active_legal_documents",
+        { p_ip_address: null, p_user_agent: "pe05b2w" });
+
+      const { data: orgId, error: eo } = await comoPersona.rpc("create_organization",
+        { p_name: `QA-PE05B2W-${Date.now()}`, p_tax_id: null, p_country: "CO" });
+      if (eo || !orgId) return no(`QA_ORG_FAILED:${eo?.message}`, 500);
+      fila = { id: String(orgId), created_by: nueva.user.id };
     } else {
       const { data: existentes } = await admin.from("organizations")
-        .select("id, created_by").ilike("name", "QA-PE05B2%")
+        .select("id, created_by").ilike("name", "QA-PE05B2W%")
         .order("created_at", { ascending: false });
       fila = (existentes ?? [])[0] as { id: string; created_by: string | null } | undefined;
     }
@@ -192,7 +205,24 @@ export async function POST(request: Request) {
     const { data: i, error: ei } = await comoAdmin.rpc("billing_open_checkout_intent", {
       p_quote_id: quote.quote_id, p_provider: "wompi", p_environment: "test" });
     if (ei) return no(`INTENT_FAILED:${ei.message}`, 500);
-    return NextResponse.json({ ok: true, organization_id: fila.id, quote, intent: i });
+
+    // ANTES de cobrar: qué módulos hay habilitados de verdad. Si no hay
+    // ninguno funcional, el cobro liquidaría sin conceder nada y la prueba
+    // estaría mintiendo por omisión.
+    const { data: mods } = await admin.from("organization_modules")
+      .select("module_code, enabled, access_mode").eq("organization_id", fila.id);
+    const { data: cat } = await admin.from("modules").select("code, is_functional");
+    const funcionales = new Set(((cat ?? []) as Record<string, unknown>[])
+      .filter((m) => m.is_functional === true).map((m) => String(m.code)));
+    const habilitados = ((mods ?? []) as Record<string, unknown>[])
+      .filter((m) => m.enabled === true)
+      .map((m) => ({ module: String(m.module_code),
+                     functional: funcionales.has(String(m.module_code)),
+                     access_mode: m.access_mode }));
+
+    return NextResponse.json({ ok: true, organization_id: fila.id, quote, intent: i,
+      enabled_modules: habilitados,
+      enabled_functional_count: habilitados.filter((m) => m.functional).length });
   }
 
   // -------------------------------------------------------------------------
@@ -262,15 +292,18 @@ export async function POST(request: Request) {
     const i = intento as Record<string, unknown>;
     if (i.environment !== "test") return no("INTENT_IS_NOT_TEST", 424);
 
-    // Referencia única por INTENTO DE COBRO. Wompi no ofrece clave de
-    // idempotencia, así que la unicidad la pone Trazaloop.
-    //
-    // El PRIMER cobro de un intento usa el intento desnudo: es único y es
-    // exactamente lo que la liquidación espera. Los siguientes van numerados,
-    // porque con este proveedor un mismo intento puede cobrarse más de una vez
-    // y `reference` tiene que ser distinta en cada transacción.
-    const sufijo = String(cuerpo.attempt ?? "1").replace(/[^a-zA-Z0-9]/g, "");
-    const referencia = sufijo === "1" ? intentId : `${intentId}-${sufijo}`;
+    // La referencia dice a qué objeto canónico pertenece el cobro. Una
+    // CONTRATACIÓN se cobra una vez, así que aquí solo hay una forma posible.
+    const referencia = buildIntentReference(intentId);
+
+    // Y se anota contra qué medio de pago del proveedor se está cobrando, para
+    // que la renovación sepa después con qué cobrar. Es el mismo sitio donde el
+    // otro proveedor guarda su suscripción: el dominio no necesita saber cuál
+    // de las dos cosas es.
+    await admin.rpc("billing_attach_provider_subscription", {
+      p_intent_id: intentId, p_provider_subscription_id: String(fuente),
+      p_init_point: null, p_provider_status: null, p_status: null,
+      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
     const r = await proveedor.chargePaymentSource({
       paymentSourceId: fuente,
       amountCopMinor: Number(i.expected_total_amount),
@@ -350,6 +383,66 @@ export async function POST(request: Request) {
       signature_broken: cuerpo.break_signature === true,
       transaction_id: idTransaccion },
       webhook_status: r.status, webhook_body: respuesta });
+  }
+
+  // -------------------------------------------------------------------------
+  // renew · «llegó la fecha de renovación», a mano y sin planificador
+  // -------------------------------------------------------------------------
+  //
+  // No finge que pasó el tiempo: construye UN intento de cobro canónico propio,
+  // colgado de la SUSCRIPCIÓN viva —no del intento que la creó—, con su número
+  // de periodo y su referencia única. Es lo que hará el calendario cuando
+  // exista, y por eso se prueba antes de escribirlo.
+  if (accion === "renew") {
+    const subId = String(cuerpo.subscription_id ?? "");
+    const secuencia = Number(cuerpo.sequence ?? 2);
+    if (!subId) return no("SUBSCRIPTION_ID_REQUIRED", 400);
+
+    const { data: sub } = await admin.from("billing_subscriptions")
+      .select("id, organization_id, status, base_charge_amount, charge_currency")
+      .eq("id", subId).single();
+    if (!sub) return no("SUBSCRIPTION_NOT_FOUND", 404);
+    const sfila = sub as Record<string, unknown>;
+    if (!["active", "past_due", "cancel_at_period_end"].includes(String(sfila.status))) {
+      return no(`SUBSCRIPTION_NOT_LIVE:${sfila.status}`, 424);
+    }
+
+    // El medio de pago con el que se le cobra a esta suscripción.
+    const { data: intentos } = await admin.from("billing_checkout_intents")
+      .select("provider_subscription_id").eq("billing_subscription_id", subId)
+      .not("provider_subscription_id", "is", null).limit(1);
+    const fuente = ((intentos ?? [])[0] as { provider_subscription_id: string } | undefined)
+      ?.provider_subscription_id;
+    if (!fuente) return no("PAYMENT_SOURCE_UNKNOWN", 424);
+
+    // EL IMPORTE. Base congelada de la suscripción + el impuesto VIGENTE, que
+    // resuelve B1. No se copia el total de la contratación: si mañana cambia la
+    // regla fiscal, la renovación debe cobrar la nueva.
+    const { data: regla } = await admin.rpc("billing_resolve_tax_rule", {
+      p_service_class: "self_service_saas", p_at: new Date().toISOString(),
+      p_jurisdiction: "CO" });
+    const rr = regla as Record<string, unknown> | null;
+    if (!rr || rr.status !== "found") return no("TAX_RULE_UNAVAILABLE", 424);
+    const { data: imp } = await admin.rpc("billing_tax_amount", {
+      p_base: Number(sfila.base_charge_amount),
+      p_rate_basis_points: Number(rr.rate_basis_points) });
+    const total = Number(sfila.base_charge_amount) + Number(imp);
+
+    const referencia = buildRenewalReference(subId, secuencia);
+    const r = await proveedor.chargePaymentSource({
+      paymentSourceId: Number(fuente),
+      amountCopMinor: total,
+      currency: String(sfila.charge_currency),
+      reference: referencia,
+      customerEmail: String(cuerpo.customer_email ?? "qa-wompi@test.trazaloop.dev"),
+      recurrent: true,
+    });
+    return NextResponse.json(r.ok
+      ? { ok: true, reference: referencia, subscription_id: subId,
+          base: Number(sfila.base_charge_amount), tax: Number(imp), total,
+          transaction: r.value }
+      : { ok: false, reference: referencia, failure: r.failure, message: r.message,
+          detail: (r as { detail?: string | null }).detail ?? null });
   }
 
   if (accion === "get_transaction") {

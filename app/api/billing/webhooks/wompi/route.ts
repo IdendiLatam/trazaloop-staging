@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import {
   WOMPI, WOMPI_EVENT_TRANSACTION_UPDATED, eventChecksumPayload,
   sanitizeEventEnvelope, mapTransactionStatus, settlementOutcome,
-  classifyWompiKeys, eventEnvironmentMatches, intentIdFromReference,
+  classifyWompiKeys, eventEnvironmentMatches, parseCanonicalReference,
   type WompiEvent,
 } from "@/lib/billing/wompi/mapping";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
+  recordRenewalPayment, resolveRenewalTarget, subscriptionIsLive,
 } from "@/lib/db/billing-provider";
 
 export const dynamic = "force-dynamic";
@@ -150,32 +151,56 @@ export async function POST(request: Request) {
     return OK();
   }
 
-  // La referencia de cobro es `<intento>-<nº>`, porque Wompi exige unicidad por
-  // transacción y aquí un mismo intento puede cobrarse más de una vez. La
-  // autoridad sigue siendo el INTENTO, y se extrae aquí: el formato es nuestro
-  // y la base no tiene por qué aprender el de una pasarela.
+  // A QUÉ COBRO PERTENECE ESTE DINERO.
   //
-  // Con eso, la conciliación y la liquidación son EXACTAMENTE las mismas de
-  // B1/B2. No hay un segundo motor.
-  const intento = intentIdFromReference(leida.value.reference);
-  if (!intento) {
+  // La referencia dice qué objeto canónico es —una contratación o la renovación
+  // de una suscripción— y el ENRUTADO lo decide el estado en la base, no la
+  // forma de la referencia ni el orden de llegada. Si no se reconoce, va a
+  // revisión: cuando ya se movió dinero, adivinar es lo peor que se puede hacer.
+  const ref = parseCanonicalReference(leida.value.reference);
+  if (!ref) {
     await cerrar("manual_review", "unparseable_reference", null, "NO_REFERENCE");
     log("referencia_ilegible", { resource: recurso });
     return OK();
   }
-  const r = await settleProviderPayment({
-    provider: WOMPI, externalReference: intento,
-    providerPaymentId: leida.value.transactionId, outcome: salida,
-    amount: leida.value.amountCopMinor, currency: leida.value.currency,
-    // El entorno lo dice la firma, no el cuerpo: las llaves que verificaron
-    // este evento son las que mandan.
-    liveMode: clasificacion.environment === "production",
-    failureReason: leida.value.statusMessage,
-  });
-  const estado = r.outcome === "activated" || r.outcome === "already_settled"
-    || r.outcome === "declined" || r.outcome === "failed" ? "processed" : "manual_review";
+
+  let r;
+  if (ref.kind === "checkout_intent") {
+    // UNA CONTRATACIÓN SE COBRA UNA VEZ. La primitiva de B1 ya se niega a
+    // liquidar dos veces el mismo presupuesto.
+    r = await settleProviderPayment({
+      provider: WOMPI, externalReference: ref.id,
+      providerPaymentId: leida.value.transactionId, outcome: salida,
+      amount: leida.value.amountCopMinor, currency: leida.value.currency,
+      liveMode: clasificacion.environment === "production",
+      failureReason: leida.value.statusMessage,
+    });
+  } else {
+    // UNA RENOVACIÓN NO CREA NADA: añade historia y corre el periodo. Y solo
+    // sobre una suscripción que siga VIVA: renovar una terminada sería
+    // resucitarla por la puerta de atrás.
+    if (!(await subscriptionIsLive(ref.id))) {
+      await cerrar("manual_review", "subscription_not_live", null, "NOT_LIVE");
+      log("renovacion_sobre_suscripcion_no_viva", { resource: recurso });
+      return OK();
+    }
+    const destino = await resolveRenewalTarget(ref.id);
+    if (!destino) {
+      await cerrar("manual_review", "renewal_target_unknown", null, "NO_TARGET");
+      log("renovacion_sin_destino", { resource: recurso });
+      return OK();
+    }
+    r = await recordRenewalPayment({
+      provider: WOMPI, providerSubscriptionId: destino.providerSubscriptionId,
+      providerPaymentId: leida.value.transactionId, outcome: salida,
+      amount: leida.value.amountCopMinor, currency: leida.value.currency,
+      liveMode: clasificacion.environment === "production",
+    });
+  }
+  const estado = ["activated", "renewed", "already_settled", "declined", "failed"]
+    .includes(r.outcome) ? "processed" : "manual_review";
   await cerrar(estado, r.outcome, r.organizationId);
-  log("pago_conciliado", { resource: recurso, outcome: r.outcome,
+  log("pago_conciliado", { resource: recurso, kind: ref.kind, outcome: r.outcome,
                            ms: Date.now() - inicio });
   return OK();
 }

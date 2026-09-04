@@ -15,7 +15,8 @@ import {
   settlementOutcome, paymentSourceIsUsable, classifyProviderError,
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
-  eventEnvironmentMatches, intentIdFromReference,
+  eventEnvironmentMatches, parseCanonicalReference,
+  buildIntentReference, buildRenewalReference,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -379,26 +380,56 @@ check("El disparador de QA es PROVISIONAL y tiene sus candados", () => {
   assert(/i\.expected_total_amount/.test(codigo), "el importe no sale del intento");
 });
 
-check("La referencia de cobro lleva el intento, y se extrae aquí", () => {
-  // Wompi exige `reference` única por transacción, y con este proveedor un
-  // mismo intento puede cobrarse varias veces. La autoridad sigue siendo el
-  // intento.
-  const uuid = "09d9f269-7ac8-4461-a8ac-2b0236abebd5";
-  assert(intentIdFromReference(`${uuid}-1`) === uuid, "no extrajo el intento");
-  assert(intentIdFromReference(`${uuid}-27`) === uuid, "con más de un dígito");
-  assert(intentIdFromReference(uuid) === uuid, "la referencia desnuda también vale");
-  assert(intentIdFromReference(uuid.toUpperCase()) === uuid, "no normalizó a minúsculas");
-  // Y lo que no es un intento NO se adivina.
-  for (const malo of ["ORDER-123", "", null, undefined, "no-es-un-uuid-1",
-                      "1234-5678"]) {
-    assert(intentIdFromReference(malo as string) === null, `aceptó «${malo}»`);
+check("La referencia dice QUÉ OBJETO es · contratación o renovación", () => {
+  // Son objetos distintos, y mezclarlos daba a entender que una contratación
+  // puede cobrarse varias veces. No puede: una contratación es un cobro; los
+  // siguientes son renovaciones y cuelgan de la SUSCRIPCIÓN.
+  const intento = "09d9f269-7ac8-4461-a8ac-2b0236abebd5";
+  const susc = "81fa8ffb-3abb-4095-8e60-6ca4b49d7321";
+
+  assert(buildIntentReference(intento) === `int_${intento}`, "la referencia de contratación");
+  assert(buildRenewalReference(susc, 2) === `sub_${susc}_2`, "la de renovación");
+
+  const a = parseCanonicalReference(`int_${intento}`);
+  assert(a?.kind === "checkout_intent" && a.id === intento, JSON.stringify(a));
+  const b = parseCanonicalReference(`sub_${susc}_7`);
+  assert(b?.kind === "subscription_renewal" && b.id === susc && b.sequence === 7,
+    JSON.stringify(b));
+
+  // NADA de adivinar. Ni el UUID desnudo, ni el formato viejo, ni subcadenas.
+  for (const malo of [intento, `${intento}-1`, `int_${intento}-1`, `sub_${susc}`,
+                      `sub_${susc}_0`, `SUB_${susc}_1x`, "int_no-es-uuid",
+                      "ORDER-123", "", null, undefined, `pre_int_${intento}`,
+                      `int_${intento}_extra`]) {
+    assert(parseCanonicalReference(malo as string) === null,
+      `se aceptó una referencia que no lo es: «${malo}»`);
   }
-  // La ruta la usa, y si no se puede leer manda a revisión en vez de inventar.
+  // Y una secuencia inválida no se construye a la ligera.
+  for (const n of [0, -1, 1.5]) {
+    let lanzo = false;
+    try { buildRenewalReference(susc, n); } catch { lanzo = true; }
+    assert(lanzo, `construyó una renovación con secuencia ${n}`);
+  }
+});
+
+check("El enrutado lo decide el ESTADO, no la referencia ni el orden", () => {
   const codigo = sinComentarios(RUTA);
-  assert(/intentIdFromReference\(leida\.value\.reference\)/.test(codigo),
-    "la ruta no extrae el intento de la referencia");
-  assert(/unparseable_reference/.test(codigo),
-    "una referencia ilegible no va a revisión");
+  assert(/parseCanonicalReference\(leida\.value\.reference\)/.test(codigo),
+    "la ruta no resuelve la referencia canónica");
+  assert(/unparseable_reference/.test(codigo), "una referencia ilegible no va a revisión");
+  // Contratación → liquidación inicial. Renovación → primitiva de renovación.
+  assert(/kind === "checkout_intent"[\s\S]{0,400}settleProviderPayment/.test(codigo),
+    "la contratación no va por la liquidación inicial");
+  assert(/recordRenewalPayment/.test(codigo), "no existe el camino de renovación");
+  // Y una renovación exige que la suscripción siga VIVA.
+  assert(/subscriptionIsLive/.test(codigo) && /subscription_not_live/.test(codigo),
+    "se renovaría una suscripción que ya no está viva");
+  assert(/renewal_target_unknown/.test(codigo),
+    "una renovación sin destino no va a revisión");
+  // La renovación NUNCA llama a la creación inicial.
+  const renov = codigo.slice(codigo.indexOf("} else {"), codigo.indexOf("const estado ="));
+  assert(!renov.includes("settleProviderPayment"),
+    "el camino de renovación llama a la liquidación inicial: crearía otra suscripción");
 });
 
 check("Una sola liquidación · no hay un segundo motor", () => {
@@ -409,8 +440,8 @@ check("Una sola liquidación · no hay un segundo motor", () => {
     assert(!codigo.includes(atajo), `la ruta escribe «${atajo}» directamente`);
   }
   // La referencia de Wompi ES la referencia opaca del intento.
-  assert(/externalReference: intento/.test(codigo),
-    "la conciliación no usa el intento extraído de la referencia");
+  assert(/externalReference: ref\.id/.test(codigo),
+    "la conciliación no usa el objeto canónico de la referencia");
 });
 
 check("Y nada de calendario todavía", () => {

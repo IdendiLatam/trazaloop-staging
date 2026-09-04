@@ -187,6 +187,43 @@ export async function recordRenewalPayment(input: {
   };
 }
 
+/**
+ * De una suscripción viva al identificador del proveedor con el que se le
+ * cobra. Es una LECTURA: no decide nada, solo traduce.
+ *
+ * Con un proveedor que lleva su propia suscripción, ese identificador es la
+ * suscripción del proveedor. Con uno que solo guarda un medio de pago, es ese
+ * medio. El intento lo guarda en el mismo sitio en los dos casos, así que el
+ * dominio no necesita saber cuál de las dos cosas es.
+ */
+export async function resolveRenewalTarget(subscriptionId: string): Promise<{
+  providerSubscriptionId: string; organizationId: string;
+} | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("billing_checkout_intents")
+    .select("provider_subscription_id, organization_id")
+    .eq("billing_subscription_id", subscriptionId)
+    .not("provider_subscription_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) return null;
+  const fila = (data ?? [])[0] as
+    { provider_subscription_id: string; organization_id: string } | undefined;
+  if (!fila?.provider_subscription_id) return null;
+  return { providerSubscriptionId: fila.provider_subscription_id,
+           organizationId: fila.organization_id };
+}
+
+/** ¿Esta suscripción sigue viva? Lo que decide el enrutado es el ESTADO. */
+export async function subscriptionIsLive(subscriptionId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("billing_subscriptions")
+    .select("status").eq("id", subscriptionId).single();
+  const estado = (data as { status?: string } | null)?.status;
+  return estado === "active" || estado === "past_due"
+    || estado === "pending" || estado === "cancel_at_period_end";
+}
+
 export async function markProviderSubscriptionState(input: {
   provider: string; providerSubscriptionId: string;
   providerStatus: string | null; canonicalStatus: string | null;
