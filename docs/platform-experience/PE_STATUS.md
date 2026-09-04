@@ -136,6 +136,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
 | PE-05B2W2 | Wompi · webhook real | **0171** | **cerrado** · 2026-09-04 · evento real firmado, conciliado y liquidado una vez |
+| PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **esperando** · 2026-09-04 · falta registrar la URL estable |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -166,6 +167,14 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **Una URL de webhook que no caduca.** La registrada apuntaba a un despliegue
+> concreto, así que cada commit dejaba a Wompi hablando con código viejo — ya
+> pasó una vez. No existía ningún alias que registrar, así que se creó:
+> `trazaloop-pe05-sandbox.vercel.app`, comprobado que **sigue protegido** y que
+> sirve el último despliegue. Hay que registrarlo **una vez** y no volver a
+> tocar el panel.
+> [URL estable](PE_05B2W3_STABLE_WEBHOOK_URL.md).
 
 > **El webhook real de Wompi llegó, y liquidó una vez.** Firma verificada,
 > `environment: test`, relectura de la transacción, conciliación exacta —190 400
