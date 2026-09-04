@@ -246,6 +246,12 @@ check("D4. Recargar no vuelve a pedir la tarjeta ni abre otro cobro", () => {
   assert(j > i, "el presupuesto se abre ANTES de mirar si ya había uno");
   assert(/alreadySubmitted/.test(pagina) && /CheckoutWatcher/.test(pagina),
     "un intento ya enviado vuelve a enseñar el formulario de tarjeta");
+  // Y un intento abierto SIN enviar se reutiliza con su importe congelado: si
+  // no, cada recarga abriría un segundo camino de pago para lo mismo.
+  const k = pagina.indexOf("if (viva) {");
+  assert(k > 0 && k < j, "un intento abierto no se reutiliza: se presupuesta otra vez");
+  assert(/viva\.totalAmount/.test(pagina),
+    "se reutiliza el intento pero no el importe que congeló");
   const vigilante = leer("components/domain/billing/checkout-watcher.tsx");
   for (const campo of CAMPOS_DE_TARJETA) {
     assert(!new RegExp(`\\b${campo}\\b`).test(vigilante),

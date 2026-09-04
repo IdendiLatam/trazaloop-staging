@@ -53,24 +53,67 @@ export default async function CheckoutPage({
   const viva = await findLiveCheckout({
     organizationId: org.organizationId, planCode: plan, billingInterval: intervalo });
 
+  // Ya salió hacia el proveedor: se enseña en qué quedó y no se pide la
+  // tarjeta otra vez.
   if (viva?.alreadySubmitted) {
     return (
-      <div className="mx-auto max-w-xl space-y-6">
-        <header className="space-y-1">
-          <p className="eyebrow">
-            <Link href={volver} className="hover:underline">
-              Plan y facturación
-            </Link>
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">Contratar</h1>
-        </header>
+      <Marco volver={volver}>
         <CheckoutWatcher intentId={viva.intentId} backHref={volver} />
-      </div>
+      </Marco>
+    );
+  }
+
+  // Abierto pero sin enviar: se sigue con ESE intento y con el importe que
+  // congeló. Presupuestar otra vez abriría un segundo camino de pago para lo
+  // mismo, y el precio podría no coincidir con el que ya se prometió.
+  if (viva) {
+    return (
+      <Marco volver={volver}>
+        <Contratacion
+          intentId={viva.intentId} planCode={plan} intervalo={intervalo}
+          base={viva.baseAmount} impuesto={viva.taxAmount}
+          total={viva.totalAmount} caduca={viva.expiresAt}
+        />
+      </Marco>
     );
   }
 
   const presupuesto = await createBillingQuote(org.organizationId, plan, intervalo);
+  if (!presupuesto.ok) {
+    return (
+      <Marco volver={volver}>
+        <ErrorAlert message={QUOTE_ERROR_MESSAGE[presupuesto.code]} />
+      </Marco>
+    );
+  }
 
+  // El intento congela lo esperado. Un presupuesto tiene un solo intento vivo.
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("billing_open_checkout_intent", {
+    p_quote_id: presupuesto.quoteId, p_provider: "wompi",
+    p_environment: process.env.VERCEL_ENV === "production" ? "live" : "test",
+  });
+  if (error || !data) {
+    return (
+      <Marco volver={volver}>
+        <ErrorAlert message="No fue posible preparar el pago. No se cobró nada." />
+      </Marco>
+    );
+  }
+
+  return (
+    <Marco volver={volver}>
+      <Contratacion
+        intentId={String((data as Record<string, unknown>).intent_id)}
+        planCode={presupuesto.planCode} intervalo={presupuesto.billingInterval}
+        base={presupuesto.baseAmount} impuesto={presupuesto.taxAmount}
+        total={presupuesto.totalAmount} caduca={presupuesto.expiresAt}
+      />
+    </Marco>
+  );
+}
+
+function Marco({ volver, children }: { volver: string; children: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <header className="space-y-1">
@@ -81,43 +124,18 @@ export default async function CheckoutPage({
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Contratar</h1>
       </header>
-
-      {!presupuesto.ok ? (
-        <ErrorAlert message={QUOTE_ERROR_MESSAGE[presupuesto.code]} />
-      ) : (
-        <Contratacion
-          quoteId={presupuesto.quoteId}
-          planCode={presupuesto.planCode}
-          intervalo={presupuesto.billingInterval}
-          base={presupuesto.baseAmount}
-          impuesto={presupuesto.taxAmount}
-          total={presupuesto.totalAmount}
-          caduca={presupuesto.expiresAt}
-        />
-      )}
+      {children}
     </div>
   );
 }
 
 async function Contratacion({
-  quoteId, planCode, intervalo, base, impuesto, total, caduca,
+  intentId, planCode, intervalo, base, impuesto, total, caduca,
 }: {
-  quoteId: string; planCode: string;
+  intentId: string; planCode: string;
   intervalo: "monthly" | "annual"; base: number; impuesto: number;
   total: number; caduca: string;
 }) {
-  // El intento congela lo esperado. Un presupuesto tiene un solo intento vivo:
-  // volver a esta pantalla no crea otro ni cobra dos veces.
-  const supabase = await createServerClient();
-  const { data, error } = await supabase.rpc("billing_open_checkout_intent", {
-    p_quote_id: quoteId, p_provider: "wompi",
-    p_environment: process.env.VERCEL_ENV === "production" ? "live" : "test",
-  });
-  if (error || !data) {
-    return <ErrorAlert message="No fue posible preparar el pago. No se cobró nada." />;
-  }
-  const intentId = String((data as Record<string, unknown>).intent_id);
-
   const config = await getWompiPublicConfig();
 
   return (

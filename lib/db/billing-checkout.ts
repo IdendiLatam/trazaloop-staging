@@ -77,6 +77,11 @@ export type LiveCheckout = {
   status: string;
   /** `true` = ya salió hacia el proveedor: no se vuelve a pedir la tarjeta. */
   alreadySubmitted: boolean;
+  /** Lo que el intento CONGELÓ. Es lo que se enseña y lo que se cobrará. */
+  baseAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  expiresAt: string;
 };
 
 export async function findLiveCheckout(input: {
@@ -84,17 +89,43 @@ export async function findLiveCheckout(input: {
 }): Promise<LiveCheckout | null> {
   const admin = createAdminClient();
   const { data } = await admin.from("billing_checkout_intents")
-    .select("id, status, plan_code, billing_interval, created_at")
+    .select("id, status, quote_id, expected_total_amount")
     .eq("organization_id", input.organizationId)
     .eq("provider", "wompi")
     .eq("plan_code", input.planCode)
     .eq("billing_interval", input.billingInterval)
     .in("status", ["created", "provider_created", "authorized"])
     .order("created_at", { ascending: false }).limit(1);
-  const fila = ((data ?? []) as { id: string; status: string }[])[0];
+  const fila = ((data ?? []) as {
+    id: string; status: string; quote_id: string; expected_total_amount: number;
+  }[])[0];
   if (!fila) return null;
-  return { intentId: fila.id, status: fila.status,
-           alreadySubmitted: fila.status !== "created" };
+
+  const yaEnviado = fila.status !== "created";
+
+  // Un intento que todavía NO salió solo se reutiliza si su presupuesto sigue
+  // en pie: si caducó, el importe ya no vale y hay que calcularlo otra vez.
+  const { data: q } = await admin.from("billing_quotes")
+    .select("status, expires_at, base_amount, tax_amount, total_amount")
+    .eq("id", fila.quote_id).single();
+  const presupuesto = q as {
+    status: string; expires_at: string; base_amount: number;
+    tax_amount: number; total_amount: number;
+  } | null;
+  if (!presupuesto) return null;
+  if (!yaEnviado
+      && (presupuesto.status !== "open"
+          || new Date(presupuesto.expires_at).getTime() <= Date.now())) {
+    return null;
+  }
+
+  return {
+    intentId: fila.id, status: fila.status, alreadySubmitted: yaEnviado,
+    baseAmount: Number(presupuesto.base_amount),
+    taxAmount: Number(presupuesto.tax_amount),
+    totalAmount: Number(fila.expected_total_amount),
+    expiresAt: String(presupuesto.expires_at),
+  };
 }
 
 export type SubmitResult =
