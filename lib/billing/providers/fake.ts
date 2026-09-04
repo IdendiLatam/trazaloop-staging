@@ -23,7 +23,21 @@ function ref(prefijo: string, semilla: string): string {
 
 export type FakeOutcome = "approve" | "decline" | "unavailable";
 
-export function fakeBillingProvider(outcome: FakeOutcome = "approve"): BillingProvider {
+/**
+ * Los desenlaces que el cobro recurrente tiene que saber distinguir.
+ *
+ * `lost_response` es el que existe por una razón: la petición SALIÓ y no hubo
+ * respuesta. Sin poder provocarlo a voluntad, la recuperación tras una caída
+ * no se puede probar, y es justo la parte donde un error cobra dos veces.
+ */
+export type FakeChargeOutcome =
+  | "approve" | "retryable_decline" | "hard_decline"
+  | "lost_response" | "unavailable_before_send" | "integrity_mismatch";
+
+export function fakeBillingProvider(
+  outcome: FakeOutcome = "approve",
+  chargeOutcome: FakeChargeOutcome = "approve",
+): BillingProvider {
   const caido = (): ProviderResult<never> => ({
     ok: false, failure: "provider_unavailable",
     message: "La pasarela de pago no responde.",
@@ -75,6 +89,39 @@ export function fakeBillingProvider(outcome: FakeOutcome = "approve"): BillingPr
         ok: true as const,
         value: { status: atPeriodEnd ? ("cancel_at_period_end" as const) : ("ended" as const) },
       };
+    },
+
+    /**
+     * El cobro contra un medio guardado, sin red y sin ambigüedad.
+     *
+     * El identificador de la transacción sale de la REFERENCIA, que identifica
+     * el intento: así una prueba puede reenviar el mismo intento y comprobar
+     * que no nacen dos cobros distintos.
+     */
+    async chargeStoredPaymentMethod(input): Promise<ProviderResult<ProviderPayment>> {
+      if (chargeOutcome === "unavailable_before_send") {
+        return { ok: false, failure: "provider_unavailable",
+                 message: "FAKE_NOT_REACHABLE", failureClass: "provider_unavailable" };
+      }
+      if (chargeOutcome === "lost_response") {
+        // Salió y no contestó. El dominio no puede saber si se cobró.
+        return { ok: false, failure: "provider_unavailable",
+                 message: "FAKE_RESPONSE_LOST", failureClass: "provider_unknown" };
+      }
+      if (chargeOutcome === "integrity_mismatch") {
+        return { ok: false, failure: "invalid_request",
+                 message: "FAKE_INTEGRITY", failureClass: "integrity_mismatch" };
+      }
+      if (chargeOutcome === "retryable_decline" || chargeOutcome === "hard_decline") {
+        return { ok: false, failure: "declined", message: "FAKE_DECLINED",
+                 failureClass: chargeOutcome };
+      }
+      return { ok: true, value: {
+        providerPaymentId: ref("fakepay", input.reference),
+        status: "approved" as const,
+        amount: input.amountMinor,
+        currency: input.currency,
+      } };
     },
 
     async verifyWebhook() {

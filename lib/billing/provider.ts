@@ -40,6 +40,27 @@ export type BillingSubscriptionState = (typeof BILLING_SUBSCRIPTION_STATES)[numb
  */
 export type BillingFailure = "declined" | "provider_unavailable" | "invalid_request";
 
+/**
+ * POR QUÉ LA CLASE LA PONE EL ADAPTADOR Y NO EL DOMINIO.
+ *
+ * La política de reintentos no puede depender de leer el mensaje del
+ * proveedor: viene en su idioma, con su ortografía, y lo pueden cambiar sin
+ * avisar. Quien sabe traducir «esto se puede reintentar» de un código de
+ * respuesta concreto es el adaptador, que ya conoce a su pasarela.
+ *
+ * `provider_unknown` es la que de verdad importa: la petición SALIÓ y no
+ * sabemos qué pasó. Nunca se reintenta sola, porque el cargo puede existir.
+ */
+export const RENEWAL_FAILURE_CLASSES = [
+  "retryable_decline",
+  "hard_decline",
+  "provider_unknown",
+  "provider_unavailable",
+  "integrity_mismatch",
+  "payment_method_unavailable",
+] as const;
+export type RenewalFailureClass = (typeof RENEWAL_FAILURE_CLASSES)[number];
+
 export type ProviderCheckout = {
   /** Referencia del proveedor para este intento de cobro. */
   providerRef: string;
@@ -57,7 +78,29 @@ export type ProviderPayment = {
 
 export type ProviderResult<T> =
   | { ok: true; value: T }
-  | { ok: false; failure: BillingFailure; message: string };
+  | {
+      ok: false; failure: BillingFailure; message: string;
+      /** Cómo debe tratarlo la política de cobro. Sin esto, el dominio tendría
+       *  que adivinar leyendo texto del proveedor. */
+      failureClass?: RenewalFailureClass;
+    };
+
+/**
+ * Un cobro contra un medio de pago YA GUARDADO, sin navegador y sin tarjeta.
+ *
+ * Neutral respecto al proveedor a propósito: el identificador del instrumento
+ * viaja como texto porque cada pasarela lo numera a su manera, y el importe va
+ * en unidades menores de la moneda de cobro. La conversión a lo que quiera el
+ * proveedor ocurre dentro de su adaptador y en ningún otro sitio.
+ */
+export type StoredChargeInput = {
+  providerPaymentMethodId: string;
+  amountMinor: number;
+  currency: string;
+  /** Identifica el INTENTO. Nunca codifica calendario ni importe. */
+  reference: string;
+  customerEmail: string;
+};
 
 /**
  * QUIÉN LLEVA EL CALENDARIO.
@@ -98,6 +141,13 @@ export type BillingProvider = {
   }): Promise<ProviderResult<ProviderCheckout>>;
 
   getPayment(providerPaymentId: string): Promise<ProviderResult<ProviderPayment>>;
+
+  /**
+   * Solo la implementan las pasarelas que declaran `supportsRecurringCharge`.
+   * Opcional en el contrato para que la que cobra sola no tenga que fingir un
+   * método que no le corresponde.
+   */
+  chargeStoredPaymentMethod?(input: StoredChargeInput): Promise<ProviderResult<ProviderPayment>>;
 
   getSubscription(providerSubscriptionId: string):
     Promise<ProviderResult<{ providerSubscriptionId: string; status: BillingSubscriptionState }>>;

@@ -1,6 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { BillingProvider, ProviderResult } from "@/lib/billing/provider";
+import type {
+  BillingProvider, ProviderResult, ProviderPayment, RenewalFailureClass,
+} from "@/lib/billing/provider";
 import {
   WOMPI, classifyWompiKeys, copToWompiCents, wompiCentsToCop,
   mapTransactionStatus, paymentSourceIsUsable, classifyProviderError,
@@ -248,6 +250,54 @@ export function wompiProvider(llaves: {
         const d = (r.body.data ?? {}) as Record<string, unknown>;
         return { ok: true, value: leerTransaccion(d) };
       } catch (e) { return { ...fallo(0, null), failure: classifyProviderError(e) }; }
+    },
+
+    /**
+     * El cobro recurrente, en vocabulario del dominio.
+     *
+     * Traduce y clasifica, que es todo lo que un adaptador debe hacer. La
+     * clasificación importa más que el mensaje: si la petición SALIÓ y no hubo
+     * respuesta, se dice `provider_unknown` y nadie vuelve a cobrar solo.
+     */
+    async chargeStoredPaymentMethod(input): Promise<ProviderResult<ProviderPayment>> {
+      if (!configurado) {
+        return { ok: false, failure: "provider_unavailable",
+                 message: `WOMPI_NOT_CONFIGURED:${clasificacion.problems.join(",") || "unknown"}`,
+                 failureClass: "provider_unavailable" };
+      }
+      const fuente = Number(input.providerPaymentMethodId);
+      if (!Number.isInteger(fuente) || fuente <= 0) {
+        return { ok: false, failure: "invalid_request",
+                 message: "PAYMENT_METHOD_REFERENCE_INVALID",
+                 failureClass: "payment_method_unavailable" };
+      }
+      const r = await this.chargePaymentSource({
+        paymentSourceId: fuente,
+        amountCopMinor: input.amountMinor,
+        currency: input.currency,
+        reference: input.reference,
+        customerEmail: input.customerEmail,
+        // El comercio programa el cobro: sin esto, la tarjeta guardada no
+        // valdría para los meses siguientes.
+        recurrent: true,
+      });
+      if (r.ok) {
+        return { ok: true, value: {
+          providerPaymentId: r.value.transactionId,
+          // Un estado que no sepamos traducir NO es «aprobado»: se queda
+          // pendiente y lo resolverá la conciliación.
+          status: r.value.canonicalStatus ?? "pending",
+          amount: r.value.amountCopMinor,
+          currency: r.value.currency,
+        } };
+      }
+      // La petición cruzó la frontera: puede haberse cobrado. Nunca se
+      // reintenta sola una de estas.
+      const clase: RenewalFailureClass =
+        r.failure === "declined" ? "retryable_decline"
+        : r.failure === "invalid_request" ? "integrity_mismatch"
+        : "provider_unknown";
+      return { ok: false, failure: r.failure, message: r.message, failureClass: clase };
     },
 
     async getTransaction(id) {
