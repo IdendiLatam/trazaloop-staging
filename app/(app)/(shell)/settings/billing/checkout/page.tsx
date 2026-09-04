@@ -13,6 +13,7 @@ import { ErrorAlert } from "@/components/ui/alert";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
+import { planLabel, money, timeOfDay } from "@/lib/domain/billing-display";
 
 /**
  * Trazaloop · PE-05B2W4 · Pagar el plan elegido.
@@ -28,8 +29,7 @@ import {
  * precio para poder cobrar.
  */
 
-const pesos = (minor: number) => new Intl.NumberFormat("es-CO",
-  { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(minor);
+const pesos = (minor: number) => money(minor, "COP");
 
 export default async function CheckoutPage({
   searchParams,
@@ -144,7 +144,7 @@ async function Contratacion({
         <h2 className="text-sm font-semibold">Lo que vas a pagar</h2>
         <dl className="grid grid-cols-2 gap-2 pt-2 text-sm">
           <dt className="text-ink-soft">Plan</dt>
-          <dd className="font-medium">{planCode}</dd>
+          <dd className="font-medium">{planLabel(planCode)}</dd>
           <dt className="text-ink-soft">Facturación</dt>
           <dd>{intervalo === "annual" ? "Anual" : "Mensual"}</dd>
           <dt className="text-ink-soft">Base</dt>
@@ -155,10 +155,8 @@ async function Contratacion({
           <dd className="font-medium">{pesos(total)}</dd>
         </dl>
         <p className="pt-2 text-xs text-ink-soft">
-          Este importe vale hasta las{" "}
-          {new Date(caduca).toLocaleTimeString("es-CO",
-            { hour: "2-digit", minute: "2-digit" })}.
-          Después habrá que calcularlo otra vez.
+          Este importe vale hasta las {timeOfDay(caduca)}; después habrá que
+          calcularlo otra vez.
         </p>
       </section>
 

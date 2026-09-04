@@ -5,6 +5,7 @@ import {
   submitCardTokenAction, readCheckoutStatusAction,
 } from "@/server/actions/billing";
 import type { WompiPublicConfig } from "@/lib/db/billing-checkout";
+import { planLabel, longDate } from "@/lib/domain/billing-display";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 
@@ -137,10 +138,10 @@ export function WompiCardForm({
   if (estado.fase === "aprobado") {
     return (
       <div className="space-y-3">
-        <InfoAlert message={`Pago aprobado. Tu plan ${estado.plan ?? ""} está activo.`} />
+        <InfoAlert message={`Pago aprobado. Tu plan ${planLabel(estado.plan)} está activo.`} />
         {estado.hasta ? (
           <p className="text-sm text-ink-soft">
-            Siguiente renovación: {new Date(estado.hasta).toLocaleDateString("es-CO")}.
+            Siguiente renovación: {longDate(estado.hasta)}.
           </p>
         ) : null}
       </div>

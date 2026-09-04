@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
-import { buildAttemptReference } from "@/lib/billing/wompi/mapping";
+import { buildAttemptReference, envelopeIsClean } from "@/lib/billing/wompi/mapping";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
-                  "seed_qa_fx"] as const;
+                  "seed_qa_fx", "recent_checkouts", "privacy_scan"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -515,6 +515,49 @@ export async function POST(request: Request) {
       fx_rate_id: (nueva as { id: string }).id });
   }
 
+  if (accion === "recent_checkouts") {
+    // Solo LEE. Sirve para localizar la contratación que hizo una persona
+    // desde el navegador cuando no se sabe con qué empresa entró.
+    const { data, error } = await admin.from("billing_checkout_intents")
+      .select("id, organization_id, provider, environment, status, plan_code,"
+        + " billing_interval, expected_total_amount, payment_method_id,"
+        + " provider_subscription_id, period_id, billing_subscription_id, created_at")
+      .order("created_at", { ascending: false }).limit(12);
+    if (error) return no(`READ_FAILED:${error.message}`, 500);
+    return NextResponse.json({ ok: true, intents: data ?? [] });
+  }
+
+  if (accion === "privacy_scan") {
+    // ¿Quedó algo de la tarjeta guardado en algún sitio? Devuelve RECUENTOS,
+    // nunca valores: una prueba de privacidad que imprima lo que busca sería
+    // ella misma la fuga.
+    const testigo = "%tok_%";
+    const dieciseis = "%[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]%";
+    const buscar = async (tabla: string, columna: string, patron: string) => {
+      const { count, error } = await admin.from(tabla)
+        .select("id", { count: "exact", head: true }).like(columna, patron);
+      return { table: tabla, column: columna, matches: error ? null : (count ?? 0) };
+    };
+    const hallazgos = [
+      await buscar("billing_payment_methods", "provider_payment_method_id", testigo),
+      await buscar("billing_payment_methods", "provider_payment_method_id", dieciseis),
+      await buscar("billing_checkout_intents", "provider_subscription_id", testigo),
+      await buscar("billing_checkout_intents", "init_point", testigo),
+      await buscar("billing_checkout_intents", "failure_reason", testigo),
+      await buscar("billing_payments", "provider_payment_id", testigo),
+      await buscar("billing_payments", "failure_reason", testigo),
+    ];
+    // Los sobres de los eventos se revisan enteros, con el mismo comprobador
+    // que usa la ruta: si alguno no está limpio, aquí sale.
+    const { data: sobres } = await admin.from("billing_provider_events")
+      .select("id, payload").not("payload", "is", null).limit(200);
+    const sucios = ((sobres ?? []) as { id: string; payload: unknown }[])
+      .filter((e) => !envelopeIsClean((e.payload ?? {}) as Record<string, unknown>))
+      .length;
+    return NextResponse.json({ ok: true, findings: hallazgos,
+      event_payloads_checked: (sobres ?? []).length, unclean_payloads: sucios });
+  }
+
   if (accion === "state") {
     // Solo LEE. Es la vista del libro que necesita la prueba para demostrar
     // que el derecho avanzó una vez y una sola: qué obligaciones existen, qué
@@ -523,7 +566,9 @@ export async function POST(request: Request) {
     if (!orgId) return no("ORGANIZATION_ID_REQUIRED", 400);
 
     const { data: subs } = await admin.from("billing_subscriptions")
-      .select("id, status, plan_code, billing_interval, current_period_start, current_period_end, grace_until")
+      .select("id, status, plan_code, billing_interval, current_period_start,"
+        + " current_period_end, renews_at, grace_until, provider,"
+        + " base_charge_amount, charge_currency, fx_rate_micros, created_at")
       .eq("organization_id", orgId).order("created_at");
     const { data: periodos } = await admin.from("billing_subscription_periods")
       .select("id, subscription_id, period_sequence, period_start, period_end, base_amount, status, settled_payment_id, settled_at")
@@ -541,6 +586,10 @@ export async function POST(request: Request) {
     const { data: pagos } = await admin.from("billing_payments")
       .select("id, provider, provider_payment_id, status, total_amount, period_id, created_at")
       .eq("organization_id", orgId).order("created_at");
+    const { data: modulos } = await admin.from("organization_modules")
+      .select("module_code, enabled, access_mode")
+      .eq("organization_id", orgId).order("module_code");
+
     const { data: eventos } = await admin.from("billing_provider_events")
       .select("provider, topic, resource_id, processing_status, outcome, attempt_count")
       .eq("organization_id", orgId).order("first_received_at");
@@ -550,7 +599,7 @@ export async function POST(request: Request) {
     // tienen sesión, no en un diagnóstico.
     return NextResponse.json({ ok: true, subscriptions: subs ?? [],
       periods: periodos ?? [], payment_methods: metodos ?? [], intents: intentos ?? [],
-      payments: pagos ?? [], events: eventos ?? [] });
+      payments: pagos ?? [], events: eventos ?? [], modules: modulos ?? [] });
   }
 
   if (accion === "get_transaction") {

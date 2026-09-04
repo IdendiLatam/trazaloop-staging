@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { readCheckoutStatusAction } from "@/server/actions/billing";
 import { InfoAlert, ErrorAlert } from "@/components/ui/alert";
+import { planLabel } from "@/lib/domain/billing-display";
 
 /**
  * Trazaloop · PE-05B2W4 · «Este pago ya salió; esto es lo que se sabe».
@@ -35,7 +36,7 @@ export function CheckoutWatcher(
   }, [estado.fase, intentId]);
 
   if (estado.fase === "aprobado") {
-    return <InfoAlert message={`Pago aprobado. Tu plan ${estado.plan ?? ""} está activo.`} />;
+    return <InfoAlert message={`Pago aprobado. Tu plan ${planLabel(estado.plan)} está activo.`} />;
   }
   if (estado.fase === "rechazado") {
     return (

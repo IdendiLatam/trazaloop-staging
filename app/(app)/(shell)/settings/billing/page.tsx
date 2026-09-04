@@ -6,6 +6,7 @@ import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getOrganizationBillingState } from "@/lib/db/billing";
 import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
 import { InfoAlert } from "@/components/ui/alert";
+import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -21,11 +22,7 @@ import {
  */
 
 const dinero = (minor: number | null, moneda: string | null) =>
-  minor === null || moneda === null
-    ? null
-    : new Intl.NumberFormat("es-CO",
-        { style: "currency", currency: moneda, maximumFractionDigits: 2 })
-        .format(moneda === "COP" ? minor : minor / 100);
+  minor === null || moneda === null ? null : money(minor, moneda);
 
 export default async function BillingPage({
   searchParams,
@@ -64,7 +61,7 @@ export default async function BillingPage({
         ) : estado.hasSubscription ? (
           <dl className="grid grid-cols-2 gap-2 pt-2 text-sm">
             <dt className="text-ink-soft">Plan</dt>
-            <dd className="font-medium">{estado.planCode}</dd>
+            <dd className="font-medium">{planLabel(estado.planCode)}</dd>
             <dt className="text-ink-soft">Facturación</dt>
             <dd>{estado.billingInterval === "annual" ? "Anual" : "Mensual"}</dd>
             <dt className="text-ink-soft">Estado</dt>
@@ -72,7 +69,7 @@ export default async function BillingPage({
             {estado.renewsAt ? (
               <>
                 <dt className="text-ink-soft">Siguiente cobro</dt>
-                <dd>{new Date(estado.renewsAt).toLocaleDateString("es-CO")}</dd>
+                <dd>{longDate(estado.renewsAt)}</dd>
               </>
             ) : null}
           </dl>
