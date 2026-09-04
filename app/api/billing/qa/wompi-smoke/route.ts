@@ -514,16 +514,13 @@ export async function POST(request: Request) {
     const { data: eventos } = await admin.from("billing_provider_events")
       .select("provider, topic, resource_id, processing_status, outcome, attempt_count")
       .eq("organization_id", orgId).order("first_received_at");
-    // El derecho se pregunta al RESOLUTOR canónico. Aquí no se lee el catálogo
-    // a mano ni se rehace su aritmética: lo que vale es lo que él responda.
-    const { data: derecho, error: ea } = await admin.rpc(
-      "plan_effective_for_organization",
-      { p_organization_id: orgId, p_as_of: new Date().toISOString() });
-    if (ea) return no(`READ_FAILED:${ea.message}`, 500);
-
+    // Aquí NO se mira el derecho comercial. El resolutor canónico exige sesión
+    // —es su gracia— y esta vista corre con la llave de servicio. Que el plan
+    // no se conceda dos veces se demuestra en las pruebas deterministas, que sí
+    // tienen sesión, no en un diagnóstico.
     return NextResponse.json({ ok: true, subscriptions: subs ?? [],
-      periods: periodos ?? [], intents: intentos ?? [], payments: pagos ?? [], events: eventos ?? [],
-      effective_plan: derecho ?? null });
+      periods: periodos ?? [], intents: intentos ?? [],
+      payments: pagos ?? [], events: eventos ?? [] });
   }
 
   if (accion === "get_transaction") {
