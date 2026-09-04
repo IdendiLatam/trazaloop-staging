@@ -21,6 +21,7 @@
  * Correr: npm run test:pe05b2w4-boundary
  */
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 let passed = 0, failed = 0;
@@ -312,6 +313,45 @@ check("E3. La certificación se atribuye a quien la tiene · sin insignias inven
   // Nivel: su frase oficial no lo dice, así que aquí tampoco.
   assert(!/nivel\s*1|level\s*1/i.test(CONFIANZA),
     "se afirma un nivel de certificación que la fuente no enuncia");
+});
+
+check("E3b. El logotipo es el archivo OFICIAL, sin redibujar ni deformar", () => {
+  const svg = leer("public/marcas/wompi.svg");
+  assert(svg.length > 0, "no está el logotipo oficial en el repositorio");
+  // Tal cual llegó: monocromo, sin fondo, y con su lienzo original. Si alguien
+  // lo recorta o lo recolorea, el área de seguridad y la proporción se pierden.
+  assert(/viewBox="0 0 1982 997"/.test(svg), "cambió el lienzo del archivo oficial");
+  assert(!/<rect/.test(svg), "se le añadió un fondo");
+  const colores = new Set((svg.match(/#[0-9A-Fa-f]{6}/g) ?? []).map((c) => c.toUpperCase()));
+  assert(colores.size === 1 && colores.has("#2C2A29"),
+    `se recoloreó: ${[...colores].join(", ")}`);
+  // Y nada ejecutable ni traído de fuera dentro de un archivo que servimos.
+  for (const p of [/<script/i, /on[a-z]+\s*=/i, /foreignObject/i, /href\s*=\s*"https?:/i]) {
+    assert(!p.test(svg), `el SVG trae algo que no debería: ${p}`);
+  }
+
+  // El panel lo pinta a un ancho donde el aire propio del archivo —348 de 997
+  // unidades por lado— supera los 40 px que pide Wompi.
+  assert(/src="\/marcas\/wompi\.svg"/.test(CONFIANZA), "el panel no usa el archivo oficial");
+  assert(/alt="Wompi"/.test(CONFIANZA), "el logotipo no tiene texto alternativo");
+  assert(/w-\[14\.5rem\]/.test(CONFIANZA) && /h-auto/.test(CONFIANZA),
+    "se fija el alto a mano: la proporción deja de derivarse del viewBox");
+  // Y consta de dónde salió, porque dentro de un año nadie se acordará.
+  const procedencia = leer("public/marcas/PROCEDENCIA.md");
+  assert(/wompi\.co[^\s)]*recursos-graficos/.test(procedencia),
+    "no consta la fuente oficial de la marca");
+  assert(new RegExp(createHash("sha256").update(svg).digest("hex")).test(procedencia),
+    "la huella anotada no es la del archivo que hay");
+});
+
+check("E3c. No se inventa una relación con Wompi que no existe", () => {
+  for (const p of [/\bpartner\b/i, /\bsocio\b/i, /certificad[oa]s?\s+por\s+wompi/i,
+                   /aliado\s+(oficial|estratégico)/i, /respaldad[oa]\s+por\s+wompi/i]) {
+    assert(!p.test(CONFIANZA), `se afirma una relación no establecida: ${p}`);
+  }
+  // Y el sello de PCI no se cuelga en nuestro panel: ahí se leería como nuestro.
+  assert(!/logos_pci|PCI\.svg|pci\.svg/i.test(CONFIANZA),
+    "el sello de PCI está dentro del panel de Trazaloop");
 });
 
 check("E4. Quién hace qué, sin confundir a las dos empresas", () => {

@@ -41,11 +41,22 @@ export function WompiTrustPanel() {
       <div className="space-y-1">
         <p id="pago-seguro-titulo" className="eyebrow">Pago seguro con</p>
         {/*
-          El logotipo oficial de Wompi todavía no está en el repositorio. Aquí
-          va su nombre como texto —que es exacto y no falsifica nada— hasta que
-          se incorpore la marca oficial. Dibujarla a mano sería inventarla.
+          El archivo oficial, servido tal cual llegó del kit descargable de
+          Wompi. Su procedencia está en `public/marcas/PROCEDENCIA.md`.
+
+          El ancho no es un capricho: Wompi pide 40 px de aire alrededor de su
+          logotipo y el archivo ya trae ese margen dentro —348 de 997 unidades
+          por lado—, así que a 14,5rem de ancho el aire real pasa de 40 px. El
+          alto lo deriva el navegador del `viewBox`, que es la única forma de
+          no tocar la proporción.
         */}
-        <p className="text-xl font-semibold tracking-tight">Wompi</p>
+        <img
+          src="/marcas/wompi.svg"
+          alt="Wompi"
+          width={232}
+          height={117}
+          className="h-auto w-[14.5rem] max-w-full"
+        />
       </div>
 
       <p className="text-sm text-ink-soft">
