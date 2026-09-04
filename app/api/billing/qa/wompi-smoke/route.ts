@@ -126,8 +126,11 @@ export async function POST(request: Request) {
       if (error) return no(`FX_SEED_FAILED:${error.message}`, 500);
     }
 
+    // Se busca por el prefijo de QA del tramo, no por el nombre de un
+    // proveedor: la empresa sintética es de facturación, no de una pasarela, y
+    // nombrar aquí a la otra las mezcla sin motivo.
     const { data: existentes } = await admin.from("organizations")
-      .select("id, created_by").ilike("name", "QA-PE05B2-MERCADOPAGO%");
+      .select("id, created_by").ilike("name", "QA-PE05B2%");
     const fila = (existentes ?? [])[0] as { id: string; created_by: string | null } | undefined;
     if (!fila?.id || !fila.created_by) {
       return no("QA_ORGANIZATION_MISSING", 424);
