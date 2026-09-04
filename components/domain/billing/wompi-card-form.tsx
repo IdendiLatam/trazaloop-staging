@@ -233,13 +233,23 @@ export function WompiCardForm({
         </label>
       </div>
 
-      <Button type="button" onClick={pagar} disabled={!listo || trabajando}>
-        {trabajando ? "Procesando…" : `Pagar ${totalLabel}`}
-      </Button>
+      <div className="space-y-1.5">
+        <Button type="button" onClick={pagar} disabled={!listo || trabajando}>
+          {trabajando ? "Procesando…" : `Pagar ${totalLabel}`}
+        </Button>
+        {/* Identifica quién procesa, sin parecer un segundo botón. */}
+        <p className="text-xs text-ink-soft">Procesado de forma segura por Wompi.</p>
+      </div>
 
+      {/*
+        Se dice lo que está DEMOSTRADO, no lo que suena bien. «Viajan cifrados»
+        describe el transporte y no aporta nada —cualquier formulario va por
+        HTTPS—; lo que de verdad protege a quien paga es que el número no llega
+        aquí, y eso hay una prueba que lo comprueba en todo el servidor.
+      */}
       <p className="text-xs text-ink-soft">
-        Los datos de tu tarjeta viajan cifrados directamente a la pasarela de pago.
-        Trazaloop no los recibe ni los guarda.
+        Los datos de tu tarjeta se envían directamente a Wompi. Trazaloop no
+        recibe ni almacena el número completo de la tarjeta ni el CVC.
       </p>
     </div>
   );

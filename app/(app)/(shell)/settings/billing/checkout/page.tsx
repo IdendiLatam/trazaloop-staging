@@ -9,6 +9,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { findLiveCheckout, getWompiPublicConfig } from "@/lib/db/billing-checkout";
 import { WompiCardForm } from "@/components/domain/billing/wompi-card-form";
 import { CheckoutWatcher } from "@/components/domain/billing/checkout-watcher";
+import { WompiTrustPanel } from "@/components/domain/billing/wompi-trust-panel";
 import { ErrorAlert } from "@/components/ui/alert";
 import {
   activeShellModuleFrom, moduleAwareHref,
@@ -115,7 +116,7 @@ export default async function CheckoutPage({
 
 function Marco({ volver, children }: { volver: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="eyebrow">
           <Link href={volver} className="hover:underline">
@@ -139,8 +140,16 @@ async function Contratacion({
   const config = await getWompiPublicConfig();
 
   return (
-    <>
-      <section className="rounded-md border border-hairline bg-surface p-4">
+    /*
+      EL ORDEN IMPORTA, y por eso está en el marcado y no en JavaScript.
+      En pantalla estrecha se lee de arriba abajo: qué vas a pagar, POR QUÉ
+      puedes escribir aquí una tarjeta, y solo entonces el formulario. La
+      confianza va ANTES de pedir el número, nunca después.
+      En pantalla ancha, el panel se coloca a la derecha sin cambiar nada de eso.
+    */
+    <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
+      <section className="rounded-md border border-hairline bg-surface p-4
+                          lg:col-start-1 lg:row-start-1">
         <h2 className="text-sm font-semibold">Lo que vas a pagar</h2>
         <dl className="grid grid-cols-2 gap-2 pt-2 text-sm">
           <dt className="text-ink-soft">Plan</dt>
@@ -160,16 +169,23 @@ async function Contratacion({
         </p>
       </section>
 
-      {!config.ok ? (
-        <ErrorAlert message={
-          config.code === "PROVIDER_NOT_CONFIGURED"
-            ? "El pago con tarjeta no está disponible ahora mismo. No se cobró nada."
-            : "No pudimos cargar los documentos que hay que aceptar. No se cobró nada."
-        } />
-      ) : (
-        <WompiCardForm intentId={intentId} config={config.config}
-                       totalLabel={pesos(total)} />
-      )}
-    </>
+      {/* Antes del formulario en móvil; a la derecha en pantalla ancha. */}
+      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
+        <WompiTrustPanel />
+      </div>
+
+      <div className="lg:col-start-1 lg:row-start-2">
+        {!config.ok ? (
+          <ErrorAlert message={
+            config.code === "PROVIDER_NOT_CONFIGURED"
+              ? "El pago con tarjeta no está disponible ahora mismo. No se cobró nada."
+              : "No pudimos cargar los documentos que hay que aceptar. No se cobró nada."
+          } />
+        ) : (
+          <WompiCardForm intentId={intentId} config={config.config}
+                         totalLabel={pesos(total)} />
+        )}
+      </div>
+    </div>
   );
 }

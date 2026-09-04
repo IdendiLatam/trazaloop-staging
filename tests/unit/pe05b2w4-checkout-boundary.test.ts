@@ -260,5 +260,85 @@ check("D4. Recargar no vuelve a pedir la tarjeta ni abre otro cobro", () => {
   assert(!/submitCardTokenAction/.test(vigilante), "la pantalla de espera puede cobrar");
 });
 
+// ===========================================================================
+console.log("\nE · Lo que se le promete a quien paga");
+// ===========================================================================
+
+/**
+ * Lo que se comprueba aquí es la COPIA que se renderiza, así que se quitan los
+ * comentarios: este mismo fichero explica en prosa qué frases están prohibidas,
+ * y sin quitarlos se acusaría a sí mismo.
+ */
+const copia = (ruta: string) => sinComentarios(leer(ruta)).replace(/\s+/g, " ");
+const CONFIANZA = copia("components/domain/billing/wompi-trust-panel.tsx");
+const FORM_COPIA = copia(FRONTERA);
+
+check("E1. Ninguna promesa absoluta de seguridad", () => {
+  // Una promesa que no se puede cumplir no genera confianza: genera
+  // responsabilidad. Y en cuanto una aparece, el resto del panel deja de
+  // leerse como información y empieza a leerse como publicidad.
+  const PROHIBIDAS = [
+    /100\s*%\s*segur/i, /totalmente\s+segur/i, /completamente\s+segur/i,
+    /imposible\s+de\s+(hackear|vulnerar)/i, /inviolable/i, /infalible/i,
+    /nivel\s+bancario/i, /seguridad\s+bancaria/i,
+    /cero\s+fraude/i, /sin\s+riesgo/i, /garantiza(mos)?\s+(la\s+)?(protecci|segur)/i,
+  ];
+  for (const texto of [CONFIANZA, FORM_COPIA]) {
+    for (const p of PROHIBIDAS) {
+      assert(!p.test(texto), `hay una promesa absoluta de seguridad: ${p}`);
+    }
+  }
+});
+
+check("E2. Lo que se afirma de Trazaloop es lo que está demostrado", () => {
+  // Esta es la frase que sostiene toda la pantalla, y no es publicidad: es el
+  // resultado de A1. Si alguien la borra, la prueba lo dice.
+  assert(/no recibe ni almacena el número completo/i.test(CONFIANZA),
+    "el panel ya no dice qué es lo que Trazaloop NO recibe");
+  assert(/no recibe ni almacena el número completo de la tarjeta ni el CVC/i.test(FORM_COPIA),
+    "bajo el formulario ya no está la afirmación comprobada");
+  // Y no se vuelve a la fórmula vaga: cualquier formulario va cifrado, así que
+  // «viajan cifrados» no informa de nada.
+  assert(!/viajan cifrados/i.test(FORM_COPIA),
+    "volvió «viajan cifrados», que no dice nada de lo que importa");
+});
+
+check("E3. La certificación se atribuye a quien la tiene · sin insignias inventadas", () => {
+  assert(/Wompi cuenta con certificación PCI DSS/.test(CONFIANZA),
+    "no se enuncia la certificación de la pasarela");
+  // Trazaloop no la tiene y no puede insinuarlo.
+  assert(!/Trazaloop[^.]{0,60}\bPCI\b/.test(CONFIANZA),
+    "se insinúa que Trazaloop está certificada");
+  // Nivel: su frase oficial no lo dice, así que aquí tampoco.
+  assert(!/nivel\s*1|level\s*1/i.test(CONFIANZA),
+    "se afirma un nivel de certificación que la fuente no enuncia");
+});
+
+check("E4. Quién hace qué, sin confundir a las dos empresas", () => {
+  assert(/pagando dentro de Trazaloop a través de Wompi, nuestra pasarela de pagos/
+    .test(CONFIANZA),
+    "no se dice que Wompi es la pasarela y el pago ocurre dentro de Trazaloop");
+  assert(/Wompi recibe y procesa los datos de la tarjeta/.test(CONFIANZA),
+    "no se separa lo que hace cada una");
+});
+
+check("E5. La confianza se lee ANTES de pedir la tarjeta", () => {
+  const pagina = leer("app/(app)/(shell)/settings/billing/checkout/page.tsx");
+  const panel = pagina.indexOf("<WompiTrustPanel />");
+  const formulario = pagina.indexOf("<WompiCardForm");
+  assert(panel > 0 && formulario > 0, "falta alguna de las dos piezas");
+  assert(panel < formulario,
+    "en pantalla estrecha el formulario aparece antes que la explicación");
+});
+
+check("E6. Las dos aceptaciones siguen siendo obligatorias y sin marcar", () => {
+  assert(/aceptaServicio && aceptaDatos/.test(FORM_COPIA),
+    "se puede pagar sin aceptar los dos documentos");
+  assert(!/defaultChecked|checked=\{true\}/.test(FORM),
+    "algún documento viene aceptado de antemano");
+  assert((FORM.match(/type="checkbox"/g) ?? []).length === 2,
+    "cambió el número de aceptaciones");
+});
+
 console.log(`\nPE-05B2W4 · frontera: ${passed} en verde, ${failed} en rojo\n`);
 process.exit(failed === 0 ? 0 : 1);
