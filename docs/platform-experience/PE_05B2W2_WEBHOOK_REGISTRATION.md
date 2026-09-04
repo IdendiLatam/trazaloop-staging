@@ -7,7 +7,7 @@ la tiene que hacer una persona, así que aquí se para.
 
 ```
 WOMPI_SANDBOX_EVENT_URL_BASE =
-https://trazaloop-production-28xplfvfc-idendi-latam-s-projects.vercel.app/api/billing/webhooks/wompi
+https://trazaloop-production-l0ppneni6-idendi-latam-s-projects.vercel.app/api/billing/webhooks/wompi
 ```
 
 A esa base hay que **añadirle su parámetro de bypass de Vercel**, el del
@@ -50,19 +50,50 @@ segunda la decide la firma.
 - **relee la transacción** en la API antes de conciliar;
 - liquida por `billing_settle_provider_payment`, la primitiva de siempre.
 
-## Una corrección hecha antes de entregar la URL
+## El guardia de entorno · las dos evidencias
 
-La ruta exigía que el evento declarara `environment: "test"`. Pero el ejemplo
-oficial de `transaction.updated` **ni siquiera trae ese campo**, y su valor en
-sandbox no está documentado: con esa regla, una entrega legítima habría sido
-rechazada y el registro habría sido en balde.
+El contrato de eventos de Wompi **siempre** incluye `environment`, y sus dos
+únicos valores son **`test`** en Sandbox y **`prod`** en Producción.
 
-La regla correcta es más fuerte, no más laxa: **el entorno lo establece la
-firma**. Wompi exige una URL y un secreto por entorno, así que una firma que
-cuadra con el secreto de pruebas demuestra de dónde viene el evento —evidencia
-criptográfica, no una declaración del propio mensaje—. Y el campo, **cuando
-viene**, no puede contradecirla: si dice producción sobre llaves de pruebas, o
-trae un valor que no se sabe leer, se rechaza.
+Se exigen las dos cosas, y **ninguna sustituye a la otra**:
+
+- la **firma**, que demuestra que el mensaje viene de quien tiene el secreto de
+  ese entorno —Wompi obliga a una URL y un secreto por entorno—;
+- el **campo**, que declara el entorno y debe coincidir con las llaves.
+
+Que falte no es que dé igual: se rechaza. Y no hay alias —ni `sandbox`, ni
+`production`, ni mayúsculas—: el contrato dice dos valores y son esos dos.
+
+*Antes de esto había relajado la regla apoyándome en un renderizado incompleto
+de la documentación, y saqué una conclusión de lo que no había verificado.
+Corregida y endurecida.*
+
+### Los cinco casos, ejecutados contra la ruta real
+
+El secreto de eventos vive en el servidor, así que un evento con firma
+**válida** solo se puede construir ahí. El disparador provisional lo hace —y no
+puede cobrar nada por construcción: la ruta relee la transacción en Wompi antes
+de liquidar, así que un identificador inventado no llega al dinero—.
+
+| Caso | Resultado anotado |
+|---|---|
+| firma OK · `environment: "test"` | **pasó los dos guardias** · se detuvo en la relectura, sin tocar dinero |
+| firma OK · `environment` **ausente** | `rejected` · `environment_mismatch` |
+| firma OK · `environment: "prod"` | `rejected` · `environment_mismatch` |
+| firma OK · `environment: "sandbox"` (alias) | `rejected` · `environment_mismatch` |
+| **firma rota** · `environment: "test"` | `rejected` · `ChecksumMismatch` · **sin cuerpo** |
+
+**0 cobros y 0 suscripciones** en los cinco.
+
+**`WOMPI_EVENT_ENVIRONMENT_GUARD = PASS`.**
+
+### Por qué un rechazo de entorno responde 200 y una firma rota responde 401
+
+Son noticias distintas para el proveedor. Una firma inválida es un problema del
+mensaje y merece un **401**. Un evento auténtico pero de otro entorno ya está
+decidido: reintentarlo no cambiaría nada, así que se acusa recibo con **200** y
+se deja en cuarentena anotado. Es acuse y aislamiento, no aceptación: no se
+liquida nada y queda escrito por qué.
 
 ## Lo que queda para cuando la URL esté registrada
 
