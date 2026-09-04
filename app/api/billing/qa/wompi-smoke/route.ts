@@ -273,7 +273,12 @@ export async function POST(request: Request) {
   if (accion === "simulate_event") {
     const secreto = process.env.WOMPI_EVENTS_SECRET;
     if (!secreto) return no("WOMPI_EVENTS_SECRET_MISSING", 424);
-    const idTransaccion = `qa-simulado-${Date.now()}`;
+    // Se puede repetir un evento de una transacción REAL, que es la única
+    // forma de comprobar de punta a punta que una reentrega no cobra dos veces.
+    const idTransaccion = typeof cuerpo.transaction_id === "string"
+      && cuerpo.transaction_id !== ""
+      ? cuerpo.transaction_id
+      : `qa-simulado-${Date.now()}`;
     const sello = Math.floor(Date.now() / 1000);
     const propiedades = ["transaction.id", "transaction.status",
                          "transaction.amount_in_cents"];
