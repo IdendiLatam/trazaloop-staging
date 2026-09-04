@@ -10,7 +10,14 @@ import type { RenewalFailureClass } from "@/lib/billing/provider";
  * única capa donde dos procesos simultáneos ven lo mismo.
  */
 
-export type DueAction = "renew" | "retry" | "lapse";
+export type DueAction =
+  | "renew"
+  | "retry"
+  | "lapse_due"
+  | "cancel_due"
+  | "downgrade_due"
+  | "manual_review_required"
+  | "payment_method_unavailable";
 
 export type DueRenewal = {
   action: DueAction;
@@ -194,9 +201,22 @@ export async function markRenewalFailure(input: {
 }
 
 export async function lapseSubscription(subscriptionId: string): Promise<string> {
+  return llamarTransicion("billing_lapse_subscription", subscriptionId);
+}
+
+/** La cancelación se ejecuta cuando el mes pagado termina, no cuando se pidió. */
+export async function cancelAtPeriodEnd(subscriptionId: string): Promise<string> {
+  return llamarTransicion("billing_cancel_at_period_end", subscriptionId);
+}
+
+/** El cambio de plan programado, con el importe que se congeló al programarlo. */
+export async function applyScheduledChange(subscriptionId: string): Promise<string> {
+  return llamarTransicion("billing_apply_scheduled_change", subscriptionId);
+}
+
+async function llamarTransicion(fn: string, subscriptionId: string): Promise<string> {
   const admin = createAdminClient();
-  const { data, error } = await admin.rpc("billing_lapse_subscription",
-    { p_subscription_id: subscriptionId });
-  if (error) throw new Error(`LAPSE_FAILED:${error.message}`);
+  const { data, error } = await admin.rpc(fn, { p_subscription_id: subscriptionId });
+  if (error) throw new Error(`${fn.toUpperCase()}_FAILED:${error.message}`);
   return String((data as Record<string, unknown>).status);
 }

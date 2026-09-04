@@ -2,7 +2,8 @@ import "server-only";
 import type { BillingProvider, RenewalFailureClass } from "@/lib/billing/provider";
 import {
   listDueRenewals, openNextPeriod, openRenewalAttempt, markProviderSubmitted,
-  markRenewalFailure, lapseSubscription, type DueRenewal,
+  markRenewalFailure, lapseSubscription, cancelAtPeriodEnd, applyScheduledChange,
+  type DueRenewal,
 } from "@/lib/db/billing-renewal";
 
 /**
@@ -48,6 +49,10 @@ export type RenewalRunResult = {
   charged: number;
   retried: number;
   lapsed: number;
+  cancelled: number;
+  downgraded: number;
+  manualReview: number;
+  paymentMethodUnavailable: number;
   skipped: number;
   failures: number;
   decisions: RenewalDecision[];
@@ -71,24 +76,38 @@ export async function runRenewalPass(input: {
   provider: BillingProvider;
   now?: string;
   limit?: number;
+  /**
+   * En seco: descubre y decide, pero NO ejecuta nada. Ni cobra, ni deja caer,
+   * ni cancela, ni cambia de plan. Es lo único que se despliega en B5C.
+   */
+  dryRun?: boolean;
 }): Promise<RenewalRunResult> {
   const vencidas = await listDueRenewals({ now: input.now, limit: input.limit });
   const decisiones: RenewalDecision[] = [];
 
   for (const d of vencidas) {
     try {
-      decisiones.push(await resolverUna(d, input.provider));
+      decisiones.push(input.dryRun
+        ? { ...vacia(d, `dry_run:${d.action}`) }
+        : await resolverUna(d, input.provider));
     } catch (e) {
       decisiones.push({ ...vacia(d, "error"),
         outcome: e instanceof Error ? `error:${e.message}` : "error" });
     }
   }
 
+  const porAccion = (a: DueRenewal["action"]) =>
+    decisiones.filter((x) => x.action === a).length;
+
   return {
     dueFound: vencidas.length,
     charged: decisiones.filter((x) => x.action === "renew" && x.outcome === "submitted").length,
     retried: decisiones.filter((x) => x.action === "retry" && x.outcome === "submitted").length,
     lapsed: decisiones.filter((x) => x.outcome === "lapsed").length,
+    cancelled: decisiones.filter((x) => x.outcome === "cancelled").length,
+    downgraded: decisiones.filter((x) => x.outcome === "applied").length,
+    manualReview: porAccion("manual_review_required"),
+    paymentMethodUnavailable: porAccion("payment_method_unavailable"),
     skipped: decisiones.filter((x) => x.outcome.startsWith("skipped")).length,
     failures: decisiones.filter((x) => x.failureClass !== null
       || x.outcome.startsWith("error")).length,
@@ -100,11 +119,31 @@ async function resolverUna(
   d: DueRenewal, proveedor: BillingProvider
 ): Promise<RenewalDecision> {
   // ------------------------------------------------------------------
-  // CADUCAR. Es lo contrario de cobrar: no necesita tarjeta ni proveedor.
+  // LO QUE NO ES COBRAR. Ninguna de estas llama al proveedor, y ninguna
+  // toca asignaciones a mano: cada una tiene su primitiva canónica.
   // ------------------------------------------------------------------
-  if (d.action === "lapse") {
+  if (d.action === "cancel_due") {
+    const estado = await cancelAtPeriodEnd(d.subscriptionId);
+    return vacia(d, estado === "cancelled" ? "cancelled" : `skipped:${estado}`);
+  }
+  if (d.action === "downgrade_due") {
+    const estado = await applyScheduledChange(d.subscriptionId);
+    return vacia(d, estado === "applied" ? "applied" : `skipped:${estado}`);
+  }
+  if (d.action === "lapse_due") {
     const estado = await lapseSubscription(d.subscriptionId);
-    return { ...vacia(d, estado === "lapsed" ? "lapsed" : `skipped:${estado}`) };
+    return vacia(d, estado === "lapsed" ? "lapsed" : `skipped:${estado}`);
+  }
+  // Un cobro sin desenlace no se toca: ni se reintenta, ni se deja caer. Lo
+  // mira una persona, y hasta entonces el derecho pagado sigue en pie.
+  if (d.action === "manual_review_required") {
+    return { ...vacia(d, "manual_review"), failureClass: "provider_unknown" };
+  }
+  // Sin tarjeta no se cobra, pero SÍ se sigue viendo: cuando se agote la
+  // gracia, esta misma suscripción volverá con `lapse_due`.
+  if (d.action === "payment_method_unavailable") {
+    return { ...vacia(d, "skipped:no_payment_method"),
+             failureClass: "payment_method_unavailable" };
   }
 
   // ------------------------------------------------------------------

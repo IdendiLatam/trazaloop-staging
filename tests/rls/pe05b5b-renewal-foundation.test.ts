@@ -238,8 +238,12 @@ async function main() {
       assert(mio(await vencimientos(), e.subscriptionId), "no venció cuando debía");
       await admin.from("billing_subscriptions")
         .update({ cancel_at_period_end: true }).eq("id", e.subscriptionId);
-      assert(!mio(await vencimientos(), e.subscriptionId),
-        "una suscripción cancelada al vencimiento entró a cobro");
+      // Desde 0175 no desaparece: sale con su propia acción, que es lo
+      // correcto —irse también es un final que hay que ejecutar—. Lo que sigue
+      // siendo cierto, y es la invariante de verdad, es que NO se le cobra.
+      const cancelada = mio(await vencimientos(), e.subscriptionId);
+      assert(cancelada?.action === "cancel_due",
+        `una cancelada salió como ${cancelada?.action}`);
       // Free y prueba no tienen suscripción de cobro: no existen como fila,
       // así que no pueden aparecer. Se comprueba que solo hay planes de pago.
       const v = await vencimientos(200);
@@ -257,8 +261,13 @@ async function main() {
       await admin.from("billing_payment_methods")
         .update({ status: "revoked", revoked_at: new Date().toISOString() })
         .eq("id", e.metodo);
-      assert(!mio(await vencimientos(), e.subscriptionId),
-        "se intentó cobrar sin tarjeta utilizable");
+      // Tampoco desaparece desde 0175 —desaparecer era el defecto: nunca
+      // caducaba—. La invariante es que no se le cobra y que no se resuelve
+      // ningún medio de pago.
+      const sinTarjeta = mio(await vencimientos(), e.subscriptionId);
+      assert(sinTarjeta?.action === "payment_method_unavailable",
+        `sin tarjeta salió como ${sinTarjeta?.action}`);
+      assert(sinTarjeta.payment_method_id === null, "resolvió una tarjeta revocada");
     });
 
     // =====================================================================
@@ -439,7 +448,7 @@ async function main() {
       // Pasan los 7 días de gracia del mes impagado.
       await envejecer(e.subscriptionId, 71);
       const v = mio(await vencimientos(), e.subscriptionId);
-      assert(v?.action === "lapse", `la acción es ${v?.action}`);
+      assert(v?.action === "lapse_due", `la acción es ${v?.action}`);
 
       const r = await runRenewalPass({ provider: fakeBillingProvider("approve", "approve") });
       const d = r.decisions.find((x) => x.subscriptionId === e.subscriptionId);
