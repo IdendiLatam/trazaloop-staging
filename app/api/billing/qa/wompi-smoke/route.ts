@@ -130,9 +130,38 @@ export async function POST(request: Request) {
     // Se busca por el prefijo de QA del tramo, no por el nombre de un
     // proveedor: la empresa sintética es de facturación, no de una pasarela, y
     // nombrar aquí a la otra las mezcla sin motivo.
-    const { data: existentes } = await admin.from("organizations")
-      .select("id, created_by").ilike("name", "QA-PE05B2%");
-    const fila = (existentes ?? [])[0] as { id: string; created_by: string | null } | undefined;
+    // Con `fresh` se monta una empresa sintética NUEVA y completa. Hace falta
+    // porque la que había no tenía ningún módulo funcional habilitado: la
+    // liquidación no tenía a qué conceder el plan, y sin eso la mitad del
+    // efecto —el derecho— no se puede demostrar.
+    let fila: { id: string; created_by: string | null } | undefined;
+    if (cuerpo.fresh === true) {
+      const correo = `qa-w-${Date.now()}@test.trazaloop.dev`;
+      const clavePersona = `QA-${crypto.randomUUID()}`;
+      const { data: nueva, error: eu } = await admin.auth.admin.createUser({
+        email: correo, password: clavePersona, email_confirm: true,
+        user_metadata: { full_name: "QA PE-05B2W" } });
+      if (eu || !nueva.user) return no(`QA_USER_FAILED:${eu?.message}`, 500);
+      const { data: creada, error: eo } = await admin.from("organizations").insert({
+        name: `QA-PE05B2W-${Date.now()}`, country: "CO", created_by: nueva.user.id,
+      }).select("id").single();
+      if (eo || !creada) return no(`QA_ORG_FAILED:${eo?.message}`, 500);
+      const orgNueva = (creada as { id: string }).id;
+      await admin.from("memberships").insert({
+        organization_id: orgNueva, user_id: nueva.user.id,
+        role_code: "admin", status: "active" });
+      // Por el camino canónico de provisión, para que el módulo quede
+      // habilitado de verdad y la liquidación tenga a qué conceder el plan.
+      const { error: ep } = await admin.rpc("commercial_provision_new_module",
+        { p_organization_id: orgNueva, p_module_code: "quality" });
+      if (ep) return no(`PROVISION_FAILED:${ep.message}`, 500);
+      fila = { id: orgNueva, created_by: nueva.user.id };
+    } else {
+      const { data: existentes } = await admin.from("organizations")
+        .select("id, created_by").ilike("name", "QA-PE05B2%")
+        .order("created_at", { ascending: false });
+      fila = (existentes ?? [])[0] as { id: string; created_by: string | null } | undefined;
+    }
     if (!fila?.id || !fila.created_by) {
       return no("QA_ORGANIZATION_MISSING", 424);
     }
