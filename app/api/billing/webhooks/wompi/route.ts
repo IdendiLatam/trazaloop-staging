@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import {
   WOMPI, WOMPI_EVENT_TRANSACTION_UPDATED, eventChecksumPayload,
   sanitizeEventEnvelope, mapTransactionStatus, settlementOutcome,
-  classifyWompiKeys, eventEnvironmentMatches, type WompiEvent,
+  classifyWompiKeys, eventEnvironmentMatches, intentIdFromReference,
+  type WompiEvent,
 } from "@/lib/billing/wompi/mapping";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
@@ -149,12 +150,21 @@ export async function POST(request: Request) {
     return OK();
   }
 
-  // La referencia de la transacción ES la referencia opaca del intento: lo
-  // mismo que `external_reference` en el otro proveedor, así que la
-  // conciliación y la liquidación son EXACTAMENTE las mismas de B1/B2. No hay
-  // un segundo motor de liquidación.
+  // La referencia de cobro es `<intento>-<nº>`, porque Wompi exige unicidad por
+  // transacción y aquí un mismo intento puede cobrarse más de una vez. La
+  // autoridad sigue siendo el INTENTO, y se extrae aquí: el formato es nuestro
+  // y la base no tiene por qué aprender el de una pasarela.
+  //
+  // Con eso, la conciliación y la liquidación son EXACTAMENTE las mismas de
+  // B1/B2. No hay un segundo motor.
+  const intento = intentIdFromReference(leida.value.reference);
+  if (!intento) {
+    await cerrar("manual_review", "unparseable_reference", null, "NO_REFERENCE");
+    log("referencia_ilegible", { resource: recurso });
+    return OK();
+  }
   const r = await settleProviderPayment({
-    provider: WOMPI, externalReference: leida.value.reference,
+    provider: WOMPI, externalReference: intento,
     providerPaymentId: leida.value.transactionId, outcome: salida,
     amount: leida.value.amountCopMinor, currency: leida.value.currency,
     // El entorno lo dice la firma, no el cuerpo: las llaves que verificaron

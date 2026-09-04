@@ -232,6 +232,28 @@ export function eventChecksumPayload(evento: WompiEvent, eventsSecret: string): 
 export const WOMPI_EVENT_TRANSACTION_UPDATED = "transaction.updated";
 
 /**
+ * LA REFERENCIA DE COBRO · y por qué no es solo el intento.
+ *
+ * Wompi exige que `reference` sea única POR TRANSACCIÓN, y con este proveedor
+ * un mismo intento puede cobrarse más de una vez —es el modelo: el calendario
+ * lo lleva el comercio—. Así que la referencia es
+ *
+ *     <uuid del intento>-<número de intento de cobro>
+ *
+ * Del lado de Trazaloop la autoridad sigue siendo el INTENTO, que es lo que
+ * `billing_settle_provider_payment` espera. Esta función devuelve esa parte.
+ *
+ * Se hace aquí, en la frontera del proveedor, porque el formato es NUESTRO: no
+ * hay que enseñarle a la base un formato de referencia de una pasarela.
+ */
+export function intentIdFromReference(referencia: string | null | undefined): string | null {
+  if (!referencia) return null;
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-.+)?$/i
+    .exec(referencia.trim());
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
  * QUÉ ENTORNO ES · y hacen falta LAS DOS COSAS.
  *
  * El contrato de eventos de Wompi es explícito: todo evento lleva

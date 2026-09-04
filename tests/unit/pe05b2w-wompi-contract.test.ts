@@ -15,7 +15,7 @@ import {
   settlementOutcome, paymentSourceIsUsable, classifyProviderError,
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
-  eventEnvironmentMatches,
+  eventEnvironmentMatches, intentIdFromReference,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -379,6 +379,28 @@ check("El disparador de QA es PROVISIONAL y tiene sus candados", () => {
   assert(/i\.expected_total_amount/.test(codigo), "el importe no sale del intento");
 });
 
+check("La referencia de cobro lleva el intento, y se extrae aquí", () => {
+  // Wompi exige `reference` única por transacción, y con este proveedor un
+  // mismo intento puede cobrarse varias veces. La autoridad sigue siendo el
+  // intento.
+  const uuid = "09d9f269-7ac8-4461-a8ac-2b0236abebd5";
+  assert(intentIdFromReference(`${uuid}-1`) === uuid, "no extrajo el intento");
+  assert(intentIdFromReference(`${uuid}-27`) === uuid, "con más de un dígito");
+  assert(intentIdFromReference(uuid) === uuid, "la referencia desnuda también vale");
+  assert(intentIdFromReference(uuid.toUpperCase()) === uuid, "no normalizó a minúsculas");
+  // Y lo que no es un intento NO se adivina.
+  for (const malo of ["ORDER-123", "", null, undefined, "no-es-un-uuid-1",
+                      "1234-5678"]) {
+    assert(intentIdFromReference(malo as string) === null, `aceptó «${malo}»`);
+  }
+  // La ruta la usa, y si no se puede leer manda a revisión en vez de inventar.
+  const codigo = sinComentarios(RUTA);
+  assert(/intentIdFromReference\(leida\.value\.reference\)/.test(codigo),
+    "la ruta no extrae el intento de la referencia");
+  assert(/unparseable_reference/.test(codigo),
+    "una referencia ilegible no va a revisión");
+});
+
 check("Una sola liquidación · no hay un segundo motor", () => {
   const codigo = sinComentarios(RUTA);
   assert(/settleProviderPayment/.test(codigo), "no usa la liquidación canónica");
@@ -387,8 +409,8 @@ check("Una sola liquidación · no hay un segundo motor", () => {
     assert(!codigo.includes(atajo), `la ruta escribe «${atajo}» directamente`);
   }
   // La referencia de Wompi ES la referencia opaca del intento.
-  assert(/externalReference: leida\.value\.reference/.test(codigo),
-    "la conciliación no usa la referencia de la transacción");
+  assert(/externalReference: intento/.test(codigo),
+    "la conciliación no usa el intento extraído de la referencia");
 });
 
 check("Y nada de calendario todavía", () => {
