@@ -514,14 +514,16 @@ export async function POST(request: Request) {
     const { data: eventos } = await admin.from("billing_provider_events")
       .select("provider, topic, resource_id, processing_status, outcome, attempt_count")
       .eq("organization_id", orgId).order("first_received_at");
-    const { data: asignaciones, error: ea } = await admin.from("organization_plan_assignments")
-      .select("plan_revision_id, scope, module_code, grant_kind, source, starts_at, ends_at")
-      .eq("organization_id", orgId).order("starts_at");
+    // El derecho se pregunta al RESOLUTOR canónico. Aquí no se lee el catálogo
+    // a mano ni se rehace su aritmética: lo que vale es lo que él responda.
+    const { data: derecho, error: ea } = await admin.rpc(
+      "plan_effective_for_organization",
+      { p_organization_id: orgId, p_as_of: new Date().toISOString() });
     if (ea) return no(`READ_FAILED:${ea.message}`, 500);
 
     return NextResponse.json({ ok: true, subscriptions: subs ?? [],
       periods: periodos ?? [], intents: intentos ?? [], payments: pagos ?? [], events: eventos ?? [],
-      plan_assignments: asignaciones ?? [] });
+      effective_plan: derecho ?? null });
   }
 
   if (accion === "get_transaction") {
