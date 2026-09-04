@@ -3,13 +3,13 @@ import { NextResponse } from "next/server";
 import {
   WOMPI, WOMPI_EVENT_TRANSACTION_UPDATED, eventChecksumPayload,
   sanitizeEventEnvelope, mapTransactionStatus, settlementOutcome,
-  classifyWompiKeys, eventEnvironmentMatches, parseCanonicalReference,
+  classifyWompiKeys, eventEnvironmentMatches, parseAttemptReference,
   type WompiEvent,
 } from "@/lib/billing/wompi/mapping";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
-  recordRenewalPayment, resolveRenewalTarget, subscriptionIsLive,
+  classifyAttempt, settlePeriodPayment,
 } from "@/lib/db/billing-provider";
 
 export const dynamic = "force-dynamic";
@@ -153,54 +153,49 @@ export async function POST(request: Request) {
 
   // A QUÉ COBRO PERTENECE ESTE DINERO.
   //
-  // La referencia dice qué objeto canónico es —una contratación o la renovación
-  // de una suscripción— y el ENRUTADO lo decide el estado en la base, no la
-  // forma de la referencia ni el orden de llegada. Si no se reconoce, va a
-  // revisión: cuando ya se movió dinero, adivinar es lo peor que se puede hacer.
-  const ref = parseCanonicalReference(leida.value.reference);
-  if (!ref) {
+  // La referencia solo dice QUÉ INTENTO es. Lo que ese intento significa
+  // —contratación o renovación de un periodo concreto— lo dice la base. Poner
+  // la semántica en la cadena fue el error que permitió dos cobros para el
+  // mismo mes.
+  const intentoId = parseAttemptReference(leida.value.reference);
+  if (!intentoId) {
     await cerrar("manual_review", "unparseable_reference", null, "NO_REFERENCE");
     log("referencia_ilegible", { resource: recurso });
     return OK();
   }
+  const clase = await classifyAttempt(intentoId);
+  if (!clase) {
+    await cerrar("manual_review", "unknown_attempt", null, "UNKNOWN_ATTEMPT");
+    log("intento_desconocido", { resource: recurso });
+    return OK();
+  }
 
   let r;
-  if (ref.kind === "checkout_intent") {
-    // UNA CONTRATACIÓN SE COBRA UNA VEZ. La primitiva de B1 ya se niega a
-    // liquidar dos veces el mismo presupuesto.
+  if (clase.kind === "initial") {
     r = await settleProviderPayment({
-      provider: WOMPI, externalReference: ref.id,
+      provider: WOMPI, externalReference: clase.intentId,
       providerPaymentId: leida.value.transactionId, outcome: salida,
       amount: leida.value.amountCopMinor, currency: leida.value.currency,
       liveMode: clasificacion.environment === "production",
       failureReason: leida.value.statusMessage,
     });
   } else {
-    // UNA RENOVACIÓN NO CREA NADA: añade historia y corre el periodo. Y solo
-    // sobre una suscripción que siga VIVA: renovar una terminada sería
-    // resucitarla por la puerta de atrás.
-    if (!(await subscriptionIsLive(ref.id))) {
-      await cerrar("manual_review", "subscription_not_live", null, "NOT_LIVE");
-      log("renovacion_sobre_suscripcion_no_viva", { resource: recurso });
-      return OK();
-    }
-    const destino = await resolveRenewalTarget(ref.id);
-    if (!destino) {
-      await cerrar("manual_review", "renewal_target_unknown", null, "NO_TARGET");
-      log("renovacion_sin_destino", { resource: recurso });
-      return OK();
-    }
-    r = await recordRenewalPayment({
-      provider: WOMPI, providerSubscriptionId: destino.providerSubscriptionId,
+    // La renovación salda UNA obligación ya definida. El derecho se extiende al
+    // periodo que ya estaba escrito: el pago no inventa fechas.
+    r = await settlePeriodPayment({
+      periodId: clase.periodId, provider: WOMPI,
       providerPaymentId: leida.value.transactionId, outcome: salida,
       amount: leida.value.amountCopMinor, currency: leida.value.currency,
       liveMode: clasificacion.environment === "production",
     });
   }
+
+  // `period_already_settled` NO es un proceso normal: es dinero de más sobre
+  // una obligación ya saldada, y lo mira una persona.
   const estado = ["activated", "renewed", "already_settled", "declined", "failed"]
     .includes(r.outcome) ? "processed" : "manual_review";
   await cerrar(estado, r.outcome, r.organizationId);
-  log("pago_conciliado", { resource: recurso, kind: ref.kind, outcome: r.outcome,
+  log("pago_conciliado", { resource: recurso, kind: clase.kind, outcome: r.outcome,
                            ms: Date.now() - inicio });
   return OK();
 }

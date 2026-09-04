@@ -522,8 +522,15 @@ async function main() {
     });
   } finally {
     for (const o of [org, otra]) {
+      // El periodo y el cobro se apuntan mutuamente: hay que soltar el nudo
+      // antes de borrar, y por CADA empresa. Un borrado que falla no lanza.
+      await admin.from("billing_subscription_periods")
+        .update({ settled_payment_id: null }).eq("organization_id", o);
+      await admin.from("billing_payments").update({ period_id: null }).eq("organization_id", o);
+      await admin.from("billing_quotes").update({ subscription_id: null }).eq("organization_id", o);
       await admin.from("billing_provider_events").delete().eq("organization_id", o);
-      for (const t of ["billing_payments", "billing_checkout_intents", "billing_quotes",
+      for (const t of ["billing_payments", "billing_subscription_periods",
+                       "billing_checkout_intents", "billing_quotes",
                        "billing_subscriptions", "ai_credit_ledger",
                        "organization_usage_minutes", "organization_usage_leases",
                        "commercial_assignment_events", "organization_plan_assignments",

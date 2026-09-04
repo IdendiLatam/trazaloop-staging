@@ -100,6 +100,15 @@ async function main() {
     return (data as J).plan_code as string | undefined;
   };
   const limpiarFacturacion = async () => {
+    // El periodo y el cobro se apuntan mutuamente —el periodo dice qué pago lo
+    // saldó y el pago dice a qué periodo pertenece—, así que hay que soltar el
+    // nudo antes de borrar nada. Un borrado que falla no lanza: devuelve un
+    // error que nadie mira, y la fila sobrevive.
+    await admin.from("billing_subscription_periods")
+      .update({ settled_payment_id: null }).eq("organization_id", org);
+    await admin.from("billing_payments").update({ period_id: null }).eq("organization_id", org);
+    await admin.from("billing_quotes").update({ subscription_id: null }).eq("organization_id", org);
+    await admin.from("billing_subscription_periods").delete().eq("organization_id", org);
     await admin.from("billing_payments").delete().eq("organization_id", org);
     await admin.from("billing_quotes").delete().eq("organization_id", org);
     await admin.from("billing_subscriptions").delete().eq("organization_id", org);

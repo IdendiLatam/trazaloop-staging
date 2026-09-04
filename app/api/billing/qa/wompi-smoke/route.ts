@@ -3,9 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
-import {
-  WOMPI_SANDBOX_URL, buildIntentReference, buildRenewalReference,
-} from "@/lib/billing/wompi/mapping";
+import { WOMPI_SANDBOX_URL, buildAttemptReference } from "@/lib/billing/wompi/mapping";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
@@ -292,9 +290,9 @@ export async function POST(request: Request) {
     const i = intento as Record<string, unknown>;
     if (i.environment !== "test") return no("INTENT_IS_NOT_TEST", 424);
 
-    // La referencia dice a qué objeto canónico pertenece el cobro. Una
-    // CONTRATACIÓN se cobra una vez, así que aquí solo hay una forma posible.
-    const referencia = buildIntentReference(intentId);
+    // La referencia identifica el INTENTO y nada más. Lo que ese intento
+    // significa lo dice la base.
+    const referencia = buildAttemptReference(intentId);
 
     // Y se anota contra qué medio de pago del proveedor se está cobrando, para
     // que la renovación sepa después con qué cobrar. Es el mismo sitio donde el
@@ -395,53 +393,85 @@ export async function POST(request: Request) {
   // exista, y por eso se prueba antes de escribirlo.
   if (accion === "renew") {
     const subId = String(cuerpo.subscription_id ?? "");
-    const secuencia = Number(cuerpo.sequence ?? 2);
     if (!subId) return no("SUBSCRIPTION_ID_REQUIRED", 400);
 
-    const { data: sub } = await admin.from("billing_subscriptions")
-      .select("id, organization_id, status, base_charge_amount, charge_currency")
-      .eq("id", subId).single();
-    if (!sub) return no("SUBSCRIPTION_NOT_FOUND", 404);
-    const sfila = sub as Record<string, unknown>;
-    if (!["active", "past_due", "cancel_at_period_end"].includes(String(sfila.status))) {
-      return no(`SUBSCRIPTION_NOT_LIVE:${sfila.status}`, 424);
+    // 1 · LA OBLIGACIÓN. Se abre ANTES de cobrar, y su calendario sale del
+    //     ancla de la suscripción, no del reloj. Si ya había una abierta, es
+    //     esa: no se reclaman dos meses teniendo uno pendiente.
+    const { data: per, error: ep } = await admin.rpc("billing_open_next_period",
+      { p_subscription_id: subId });
+    if (ep) return no(`PERIOD_FAILED:${ep.message}`, 500);
+    const periodo = per as Record<string, unknown>;
+    if (periodo.status !== "open") {
+      return NextResponse.json({ ok: false, stage: "period", period: periodo });
     }
 
-    // El medio de pago con el que se le cobra a esta suscripción.
-    const { data: intentos } = await admin.from("billing_checkout_intents")
-      .select("provider_subscription_id").eq("billing_subscription_id", subId)
-      .not("provider_subscription_id", "is", null).limit(1);
-    const fuente = ((intentos ?? [])[0] as { provider_subscription_id: string } | undefined)
-      ?.provider_subscription_id;
-    if (!fuente) return no("PAYMENT_SOURCE_UNKNOWN", 424);
+    // 2 · EL INTENTO DE COBRO, colgado de esa obligación. Un periodo puede
+    //     necesitar varios —rechazo, tiempo agotado, aprobado— y todos apuntan
+    //     al mismo sitio.
+    const { data: sub } = await admin.from("billing_subscriptions")
+      .select("organization_id, plan_code, billing_interval, charge_currency")
+      .eq("id", subId).single();
+    if (!sub) return no("SUBSCRIPTION_NOT_FOUND", 404);
+    const sf = sub as Record<string, unknown>;
 
-    // EL IMPORTE. Base congelada de la suscripción + el impuesto VIGENTE, que
-    // resuelve B1. No se copia el total de la contratación: si mañana cambia la
-    // regla fiscal, la renovación debe cobrar la nueva.
+    const { data: base } = await admin.from("billing_checkout_intents")
+      .select("quote_id").eq("billing_subscription_id", subId).limit(1).single();
+    if (!base) return no("ORIGIN_INTENT_NOT_FOUND", 424);
+
+    // El total con la regla fiscal VIGENTE, resuelta por B1.
     const { data: regla } = await admin.rpc("billing_resolve_tax_rule", {
       p_service_class: "self_service_saas", p_at: new Date().toISOString(),
       p_jurisdiction: "CO" });
     const rr = regla as Record<string, unknown> | null;
     if (!rr || rr.status !== "found") return no("TAX_RULE_UNAVAILABLE", 424);
     const { data: imp } = await admin.rpc("billing_tax_amount", {
-      p_base: Number(sfila.base_charge_amount),
+      p_base: Number(periodo.base_amount),
       p_rate_basis_points: Number(rr.rate_basis_points) });
-    const total = Number(sfila.base_charge_amount) + Number(imp);
+    const total = Number(periodo.base_amount) + Number(imp);
 
-    const referencia = buildRenewalReference(subId, secuencia);
+    const { data: intento, error: ei } = await admin.from("billing_checkout_intents")
+      .insert({
+        organization_id: sf.organization_id, quote_id: (base as { quote_id: string }).quote_id,
+        provider: "wompi", environment: "test",
+        expected_total_amount: total, expected_currency: String(periodo.charge_currency),
+        billing_interval: String(sf.billing_interval), plan_code: String(sf.plan_code),
+        period_id: periodo.period_id, billing_subscription_id: subId,
+        status: "created",
+      }).select("id").single();
+    if (ei || !intento) return no(`ATTEMPT_FAILED:${ei?.message}`, 500);
+    const intentoId = (intento as { id: string }).id;
+
+    // 3 · El medio de pago con el que se cobra a esta suscripción.
+    const { data: origen } = await admin.from("billing_checkout_intents")
+      .select("provider_subscription_id").eq("billing_subscription_id", subId)
+      .not("provider_subscription_id", "is", null).limit(1).single();
+    const fuente = (origen as { provider_subscription_id: string } | null)
+      ?.provider_subscription_id;
+    if (!fuente) return no("PAYMENT_SOURCE_UNKNOWN", 424);
+    await admin.rpc("billing_attach_provider_subscription", {
+      p_intent_id: intentoId, p_provider_subscription_id: String(fuente),
+      p_init_point: null, p_provider_status: null, p_status: null,
+      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+
+    if (cuerpo.charge === false) {
+      return NextResponse.json({ ok: true, period: periodo, attempt_id: intentoId,
+        total, charged: false });
+    }
+
+    const referencia = buildAttemptReference(intentoId);
     const r = await proveedor.chargePaymentSource({
-      paymentSourceId: Number(fuente),
-      amountCopMinor: total,
-      currency: String(sfila.charge_currency),
-      reference: referencia,
+      paymentSourceId: Number(fuente), amountCopMinor: total,
+      currency: String(periodo.charge_currency), reference: referencia,
       customerEmail: String(cuerpo.customer_email ?? "qa-wompi@test.trazaloop.dev"),
       recurrent: true,
     });
     return NextResponse.json(r.ok
-      ? { ok: true, reference: referencia, subscription_id: subId,
-          base: Number(sfila.base_charge_amount), tax: Number(imp), total,
+      ? { ok: true, period: periodo, attempt_id: intentoId, reference: referencia,
+          base: Number(periodo.base_amount), tax: Number(imp), total,
           transaction: r.value }
-      : { ok: false, reference: referencia, failure: r.failure, message: r.message,
+      : { ok: false, period: periodo, attempt_id: intentoId, reference: referencia,
+          failure: r.failure, message: r.message,
           detail: (r as { detail?: string | null }).detail ?? null });
   }
 

@@ -232,95 +232,57 @@ export function eventChecksumPayload(evento: WompiEvent, eventsSecret: string): 
 export const WOMPI_EVENT_TRANSACTION_UPDATED = "transaction.updated";
 
 /**
- * LA REFERENCIA DE COBRO · qué objeto nuestro identifica.
- *
- * Wompi exige `reference` única por transacción, y con este proveedor el
- * calendario lo lleva el comercio: habrá muchos cobros a lo largo de la vida de
- * una suscripción. Así que la referencia tiene que decir DOS cosas: a qué
- * objeto canónico pertenece el cobro, y cuál de sus intentos es.
- *
- * Y son objetos DISTINTOS, que es lo que la primera versión mezclaba:
- *
- *   · `int_<uuid>`        — la CONTRATACIÓN. Un intento de compra, una vez.
- *   · `sub_<uuid>_<n>`    — la RENOVACIÓN de una suscripción viva, con su
- *                           número de periodo.
- *
- * Antes la referencia era el intento con un sufijo, y eso daba a entender que
- * un mismo intento de compra podía cobrarse varias veces. No puede: una
- * contratación es un cobro. Los cobros siguientes son renovaciones y cuelgan de
- * la SUSCRIPCIÓN, no del intento que la creó.
- *
- * El separador es `_` y no `-` a propósito: un UUID ya lleva guiones, y
- * separar con guion obliga a adivinar dónde acaba. Aquí no se adivina nada.
- */
-export type CanonicalChargeReference =
-  | { kind: "checkout_intent"; id: string }
-  | { kind: "subscription_renewal"; id: string; sequence: number };
-
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const RE_INTENTO = new RegExp(`^int_(${UUID})$`, "i");
-const RE_RENOVACION = new RegExp(`^sub_(${UUID})_([1-9][0-9]{0,4})$`, "i");
-
-export function buildIntentReference(intentId: string): string {
-  return `int_${intentId.toLowerCase()}`;
-}
-
-export function buildRenewalReference(subscriptionId: string, sequence: number): string {
-  if (!Number.isInteger(sequence) || sequence < 1) {
-    throw new Error(`RENEWAL_SEQUENCE_INVALID:${sequence}`);
-  }
-  return `sub_${subscriptionId.toLowerCase()}_${sequence}`;
-}
-
-/**
- * Solo el formato exacto. Nada de subcadenas, nada de «parece un UUID»: una
- * referencia que no se reconozca va a revisión, que es lo correcto cuando no se
- * sabe a qué cobro pertenece un dinero que ya se movió.
- */
-export function parseCanonicalReference(
-  referencia: string | null | undefined
-): CanonicalChargeReference | null {
-  if (typeof referencia !== "string") return null;
-  const r = referencia.trim();
-  const i = RE_INTENTO.exec(r);
-  if (i) return { kind: "checkout_intent", id: i[1].toLowerCase() };
-  const s = RE_RENOVACION.exec(r);
-  if (s) return { kind: "subscription_renewal", id: s[1].toLowerCase(),
-                  sequence: Number(s[2]) };
-  return null;
-}
-
-
-/**
  * QUÉ ENTORNO ES · y hacen falta LAS DOS COSAS.
  *
  * El contrato de eventos de Wompi es explícito: todo evento lleva
- * `environment`, y sus dos únicos valores son `"test"` en Sandbox y `"prod"`
- * en Producción.
+ * `environment`, y sus dos únicos valores son `"test"` en Sandbox y `"prod"` en
+ * Producción. Se exigen dos evidencias independientes y ninguna sustituye a la
+ * otra: la FIRMA, que demuestra de quién viene, y el CAMPO, que declara el
+ * entorno y debe coincidir con las llaves.
  *
- * Así que se exigen dos evidencias independientes y NINGUNA sustituye a la
- * otra:
- *
- *   · la FIRMA, que demuestra que el mensaje viene de quien tiene el secreto
- *     de ESE entorno —Wompi obliga a una URL y un secreto por entorno—;
- *   · el CAMPO, que declara el entorno y tiene que coincidir con las llaves.
- *
- * Falta el campo, o trae cualquier otra cosa —`sandbox`, `production`, vacío,
- * nulo—: se rechaza. No se admiten alias: el contrato dice dos valores y son
- * esos dos. Falla cerrado.
+ * Que falte, o traiga cualquier otra cosa, se rechaza. Falla cerrado.
  */
 export function eventEnvironmentMatches(
   declarado: string | null | undefined, llaves: WompiEnvironment
 ): boolean {
   if (typeof declarado !== "string") return false;
-  // Sin normalizar de más: el contrato es literal.
   if (declarado === "test") return llaves === "sandbox";
   if (declarado === "prod") return llaves === "production";
   return false;
 }
 
+/**
+ * LA REFERENCIA DE COBRO · identifica UN intento, y no decide nada.
+ *
+ * Wompi exige `reference` única por transacción. Lo que viaja es un
+ * identificador opaco del INTENTO DE COBRO:
+ *
+ *     pay_<uuid del intento>
+ *
+ * Y ya está. **La cadena no es la autoridad**: quién es la suscripción, si esto
+ * es una contratación o una renovación y a qué periodo pertenece lo dice la
+ * BASE, mirando ese intento.
+ *
+ * La versión anterior metía la semántica en el texto —`sub_<uuid>_<n>`— y el
+ * número lo ponía quien llamaba. Eso permitía dos cobros para el mismo mes:
+ * dos transacciones legítimas y distintas para el proveedor, que la
+ * idempotencia por identificador de pago no puede distinguir. Por eso el número
+ * desapareció: la obligación es una fila, no un sufijo.
+ */
+export function buildAttemptReference(attemptId: string): string {
+  return `pay_${attemptId.toLowerCase()}`;
+}
 
-/** Del cuerpo del evento solo se guarda el sobre. Nunca tarjeta ni pagador. */
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const RE_INTENTO = new RegExp(`^pay_(${UUID})$`, "i");
+
+/** Solo el formato exacto. Lo que no se reconozca va a revisión. */
+export function parseAttemptReference(referencia: string | null | undefined): string | null {
+  if (typeof referencia !== "string") return null;
+  const m = RE_INTENTO.exec(referencia.trim());
+  return m ? m[1].toLowerCase() : null;
+}
+
 export function sanitizeEventEnvelope(evento: WompiEvent): Record<string, unknown> {
   const tx = (evento.data?.transaction ?? {}) as Record<string, unknown>;
   const sobre: Record<string, unknown> = {

@@ -15,8 +15,7 @@ import {
   settlementOutcome, paymentSourceIsUsable, classifyProviderError,
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
-  eventEnvironmentMatches, parseCanonicalReference,
-  buildIntentReference, buildRenewalReference,
+  eventEnvironmentMatches, parseAttemptReference, buildAttemptReference,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -380,56 +379,50 @@ check("El disparador de QA es PROVISIONAL y tiene sus candados", () => {
   assert(/i\.expected_total_amount/.test(codigo), "el importe no sale del intento");
 });
 
-check("La referencia dice QUÉ OBJETO es · contratación o renovación", () => {
-  // Son objetos distintos, y mezclarlos daba a entender que una contratación
-  // puede cobrarse varias veces. No puede: una contratación es un cobro; los
-  // siguientes son renovaciones y cuelgan de la SUSCRIPCIÓN.
+check("La referencia identifica UN intento, y no decide nada", () => {
+  // La versión anterior metía la semántica en el texto —`sub_<uuid>_<n>`— y el
+  // número lo ponía quien llamaba. Eso permitía dos cobros para el mismo mes:
+  // dos transacciones legítimas y distintas para el proveedor, que la
+  // idempotencia por identificador de pago no puede distinguir.
   const intento = "09d9f269-7ac8-4461-a8ac-2b0236abebd5";
-  const susc = "81fa8ffb-3abb-4095-8e60-6ca4b49d7321";
+  assert(buildAttemptReference(intento) === `pay_${intento}`, "la referencia");
+  assert(parseAttemptReference(`pay_${intento}`) === intento, "no se lee de vuelta");
+  assert(parseAttemptReference(`PAY_${intento.toUpperCase()}`) === intento,
+    "no se normaliza a minúsculas");
 
-  assert(buildIntentReference(intento) === `int_${intento}`, "la referencia de contratación");
-  assert(buildRenewalReference(susc, 2) === `sub_${susc}_2`, "la de renovación");
-
-  const a = parseCanonicalReference(`int_${intento}`);
-  assert(a?.kind === "checkout_intent" && a.id === intento, JSON.stringify(a));
-  const b = parseCanonicalReference(`sub_${susc}_7`);
-  assert(b?.kind === "subscription_renewal" && b.id === susc && b.sequence === 7,
-    JSON.stringify(b));
-
-  // NADA de adivinar. Ni el UUID desnudo, ni el formato viejo, ni subcadenas.
-  for (const malo of [intento, `${intento}-1`, `int_${intento}-1`, `sub_${susc}`,
-                      `sub_${susc}_0`, `SUB_${susc}_1x`, "int_no-es-uuid",
-                      "ORDER-123", "", null, undefined, `pre_int_${intento}`,
-                      `int_${intento}_extra`]) {
-    assert(parseCanonicalReference(malo as string) === null,
+  // Nada de números en la cadena, nada de adivinar.
+  for (const malo of [intento, `pay_${intento}_2`, `sub_${intento}_2`,
+                      `int_${intento}`, `${intento}-1`, "pay_no-es-uuid",
+                      "ORDER-123", "", null, undefined, `x_pay_${intento}`]) {
+    assert(parseAttemptReference(malo as string) === null,
       `se aceptó una referencia que no lo es: «${malo}»`);
   }
-  // Y una secuencia inválida no se construye a la ligera.
-  for (const n of [0, -1, 1.5]) {
-    let lanzo = false;
-    try { buildRenewalReference(susc, n); } catch { lanzo = true; }
-    assert(lanzo, `construyó una renovación con secuencia ${n}`);
+
+  // Y en el código NO queda rastro del modelo viejo.
+  const todo = sinComentarios(ADAPTADOR) + sinComentarios(RUTA) + sinComentarios(QA)
+    + sinComentarios(leer("lib/billing/wompi/mapping.ts"));
+  for (const viejo of ["buildRenewalReference", "parseCanonicalReference",
+                       "subscription_renewal", "cuerpo.sequence"]) {
+    assert(!todo.includes(viejo), `sobrevive el modelo viejo de referencia: ${viejo}`);
   }
 });
 
-check("El enrutado lo decide el ESTADO, no la referencia ni el orden", () => {
+check("Lo que significa el cobro lo dice la BASE, no la cadena", () => {
   const codigo = sinComentarios(RUTA);
-  assert(/parseCanonicalReference\(leida\.value\.reference\)/.test(codigo),
-    "la ruta no resuelve la referencia canónica");
-  assert(/unparseable_reference/.test(codigo), "una referencia ilegible no va a revisión");
-  // Contratación → liquidación inicial. Renovación → primitiva de renovación.
-  assert(/kind === "checkout_intent"[\s\S]{0,400}settleProviderPayment/.test(codigo),
+  assert(/parseAttemptReference\(leida\.value\.reference\)/.test(codigo),
+    "la ruta no lee el intento de la referencia");
+  assert(/classifyAttempt\(intentoId\)/.test(codigo),
+    "la ruta no pregunta a la base qué es este cobro");
+  assert(/unparseable_reference/.test(codigo) && /unknown_attempt/.test(codigo),
+    "una referencia ilegible o un intento desconocido no van a revisión");
+  // Contratación → liquidación inicial. Renovación → saldar SU periodo.
+  assert(/clase\.kind === "initial"[\s\S]{0,400}settleProviderPayment/.test(codigo),
     "la contratación no va por la liquidación inicial");
-  assert(/recordRenewalPayment/.test(codigo), "no existe el camino de renovación");
-  // Y una renovación exige que la suscripción siga VIVA.
-  assert(/subscriptionIsLive/.test(codigo) && /subscription_not_live/.test(codigo),
-    "se renovaría una suscripción que ya no está viva");
-  assert(/renewal_target_unknown/.test(codigo),
-    "una renovación sin destino no va a revisión");
-  // La renovación NUNCA llama a la creación inicial.
+  assert(/settlePeriodPayment/.test(codigo) && /periodId: clase\.periodId/.test(codigo),
+    "la renovación no salda su obligación");
   const renov = codigo.slice(codigo.indexOf("} else {"), codigo.indexOf("const estado ="));
   assert(!renov.includes("settleProviderPayment"),
-    "el camino de renovación llama a la liquidación inicial: crearía otra suscripción");
+    "el camino de renovación llama a la creación inicial: haría otra suscripción");
 });
 
 check("Una sola liquidación · no hay un segundo motor", () => {
@@ -440,8 +433,8 @@ check("Una sola liquidación · no hay un segundo motor", () => {
     assert(!codigo.includes(atajo), `la ruta escribe «${atajo}» directamente`);
   }
   // La referencia de Wompi ES la referencia opaca del intento.
-  assert(/externalReference: ref\.id/.test(codigo),
-    "la conciliación no usa el objeto canónico de la referencia");
+  assert(/externalReference: clase\.intentId/.test(codigo),
+    "la conciliación no usa el intento que la base identificó");
 });
 
 check("Y nada de calendario todavía", () => {

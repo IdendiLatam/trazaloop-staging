@@ -224,6 +224,52 @@ export async function subscriptionIsLive(subscriptionId: string): Promise<boolea
     || estado === "pending" || estado === "cancel_at_period_end";
 }
 
+/**
+ * QUÉ ES ESTE COBRO, según la base y no según la referencia.
+ *
+ * Un intento sin periodo es una CONTRATACIÓN; con periodo, la renovación de esa
+ * obligación concreta. La cadena que viajó al proveedor solo dijo qué intento
+ * era; el significado vive aquí.
+ */
+export async function classifyAttempt(attemptId: string): Promise<
+  | { kind: "initial"; intentId: string; organizationId: string }
+  | { kind: "renewal"; intentId: string; periodId: string; organizationId: string }
+  | null
+> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("billing_checkout_intents")
+    .select("id, period_id, organization_id").eq("id", attemptId).single();
+  if (error || !data) return null;
+  const d = data as { id: string; period_id: string | null; organization_id: string };
+  return d.period_id
+    ? { kind: "renewal", intentId: d.id, periodId: d.period_id,
+        organizationId: d.organization_id }
+    : { kind: "initial", intentId: d.id, organizationId: d.organization_id };
+}
+
+/** Salda la obligación de un periodo. Una vez, y el dinero de más no se pierde. */
+export async function settlePeriodPayment(input: {
+  periodId: string; provider: string; providerPaymentId: string;
+  outcome: "approved" | "declined" | "failed";
+  amount: number | null; currency: string | null; liveMode: boolean | null;
+}): Promise<SettleOutcome & { periodSequence?: number | null }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("billing_settle_period_payment", {
+    p_period_id: input.periodId, p_provider: input.provider,
+    p_provider_payment_id: input.providerPaymentId, p_outcome: input.outcome,
+    p_amount: input.amount, p_currency: input.currency, p_live_mode: input.liveMode,
+  });
+  if (error || !data) return { outcome: "error" };
+  const r = data as Record<string, unknown>;
+  return {
+    outcome: String(r.outcome),
+    organizationId: (r.organization_id as string) ?? null,
+    paymentId: (r.payment_id as string) ?? null,
+    subscriptionId: (r.subscription_id as string) ?? null,
+    periodSequence: (r.period_sequence as number) ?? null,
+  };
+}
+
 export async function markProviderSubscriptionState(input: {
   provider: string; providerSubscriptionId: string;
   providerStatus: string | null; canonicalStatus: string | null;

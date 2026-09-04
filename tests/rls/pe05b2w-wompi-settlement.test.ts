@@ -270,7 +270,12 @@ async function main() {
       }
     });
   } finally {
+        await admin.from("billing_subscription_periods")
+      .update({ settled_payment_id: null }).eq("organization_id", org);
+    await admin.from("billing_payments").update({ period_id: null }).eq("organization_id", org);
+    await admin.from("billing_quotes").update({ subscription_id: null }).eq("organization_id", org);
     for (const t of ["billing_provider_events", "billing_payments",
+                     "billing_subscription_periods",
                      "billing_checkout_intents", "billing_quotes", "billing_subscriptions",
                      "ai_credit_ledger", "organization_usage_minutes",
                      "organization_usage_leases", "commercial_assignment_events",
