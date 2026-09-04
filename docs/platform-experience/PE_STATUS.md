@@ -135,7 +135,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **bloqueado** · el sandbox exige un pagador MCO que su panel no expone |
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
-| PE-05B2W2 | Wompi · webhook real | **0171** | **esperando** · 2026-09-04 · falta registrar la URL en el panel de Wompi |
+| PE-05B2W2 | Wompi · webhook real | **0171** | **cerrado** · 2026-09-04 · evento real firmado, conciliado y liquidado una vez |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -166,6 +166,16 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **El webhook real de Wompi llegó, y liquidó una vez.** Firma verificada,
+> `environment: test`, relectura de la transacción, conciliación exacta —190 400
+> COP de punta a punta— y `billing_settle_provider_payment`. Seis entregas del
+> mismo evento: **un** cobro y **una** suscripción. Antes de que costara caro se
+> encontró que la referencia de Wompi lleva el número de intento y la
+> liquidación esperaba el intento desnudo. Lo que **no** se demostró es la
+> asignación vendida: las empresas sintéticas no tienen ningún módulo
+> habilitado, y *pagar no concede módulos*. Detalle en
+> [el webhook real](PE_05B2W2_REAL_WEBHOOK.md).
 
 > **La puerta de Wompi está lista; falta registrarla.** Sin bypass el Preview
 > sigue devolviendo 401, y con bypass un evento sin firma válida recibe
