@@ -134,6 +134,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B1 | Cimientos de facturación · presupuestos, suscripciones, pagos, cambio e impuestos con vigencia | **0169** | **cerrado** · 2026-09-02 |
 | PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **bloqueado** · el sandbox exige un pagador MCO que su panel no expone |
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
+| PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -164,6 +165,15 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **Wompi cobró dos veces sobre la misma tarjeta.** Fuente de pago guardada y
+> **dos transacciones aprobadas** de 190 400 COP, la segunda con
+> `recurrent: true` y sin volver a pedir la tarjeta. Es el modelo que el cobro
+> anual necesitaba. Sin migración —la cabecera sigue en 0171—, sin planificador
+> y sin registrar el webhook todavía. La trampa de este proveedor está aislada
+> y probada: cuenta centésimas de peso, y mandarle el número de B1 tal cual
+> cobraría cien veces menos. Detalle en
+> [Wompi en pruebas](PE_05B2W1_WOMPI_SANDBOX.md).
 
 > **Wompi, recomendado para el sandbox.** No programa la recurrencia —la
 > inicia el comercio—, y eso convierte el cobro anual en una transacción cada
