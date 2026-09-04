@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import { WOMPI_SANDBOX_URL } from "@/lib/billing/wompi/mapping";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,7 +35,8 @@ export const runtime = "nodejs";
  */
 
 const ACCIONES = ["preflight", "contracts", "prepare", "tokenize_test_card",
-                  "create_payment_source", "charge", "get_transaction"] as const;
+                  "create_payment_source", "charge", "get_transaction",
+                  "simulate_event"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -250,6 +251,67 @@ export async function POST(request: Request) {
           transaction: r.value }
       : { ok: false, reference: referencia, failure: r.failure, message: r.message,
           detail: (r as { detail?: string | null }).detail ?? null });
+  }
+
+  // -------------------------------------------------------------------------
+  // simulate_event · para comprobar EL GUARDIA, no para inventar cobros
+  // -------------------------------------------------------------------------
+  //
+  // El secreto de eventos vive en el servidor y no sale de aquí, así que un
+  // evento con firma VÁLIDA solo se puede construir en el servidor. Sin esto no
+  // habría forma de comprobar el caso que más importa: firma buena y entorno
+  // equivocado.
+  //
+  // Y no puede cobrar nada, por construcción: la ruta RELEE la transacción en
+  // la API de Wompi antes de liquidar, así que un identificador inventado se
+  // queda en «pendiente de recurso» y no toca el dinero. El guardia se
+  // comprueba; la caja no se abre.
+  if (accion === "simulate_event") {
+    const secreto = process.env.WOMPI_EVENTS_SECRET;
+    if (!secreto) return no("WOMPI_EVENTS_SECRET_MISSING", 424);
+    const idTransaccion = `qa-simulado-${Date.now()}`;
+    const sello = Math.floor(Date.now() / 1000);
+    const propiedades = ["transaction.id", "transaction.status",
+                         "transaction.amount_in_cents"];
+    const datos = { transaction: { id: idTransaccion, status: "APPROVED",
+                                   amount_in_cents: 19_040_000, currency: "COP",
+                                   reference: "qa-simulada" } };
+    const cadena = `${idTransaccion}APPROVED19040000${sello}${secreto}`;
+    const checksum = cuerpo.break_signature === true
+      ? "0".repeat(64)
+      : createHash("sha256").update(cadena).digest("hex");
+
+    const evento: Record<string, unknown> = {
+      event: "transaction.updated", data: datos,
+      timestamp: sello, sent_at: new Date().toISOString(),
+      signature: { properties: propiedades, checksum },
+    };
+    // `environment` se pone tal y como lo pida la prueba: presente, ausente o
+    // con otro valor. Es justo lo que hay que poder variar.
+    if (cuerpo.environment !== "__omit__") {
+      evento.environment = cuerpo.environment ?? "test";
+    }
+
+    const url = new URL(request.url);
+    const destino = `${url.origin}/api/billing/webhooks/wompi`;
+    const r = await fetch(destino, {
+      method: "POST",
+      headers: { "Content-Type": "application/json",
+                 // El mismo bypass con el que llegó esta petición: el evento
+                 // simulado entra por la misma puerta que entrará el real.
+                 ...(request.headers.get("x-vercel-protection-bypass")
+                   ? { "x-vercel-protection-bypass":
+                       request.headers.get("x-vercel-protection-bypass") as string }
+                   : {}) },
+      body: JSON.stringify(evento),
+    });
+    let respuesta: unknown = null;
+    try { respuesta = await r.json(); } catch { respuesta = null; }
+    return NextResponse.json({ ok: true, sent: {
+      environment: evento.environment ?? null,
+      signature_broken: cuerpo.break_signature === true,
+      transaction_id: idTransaccion },
+      webhook_status: r.status, webhook_body: respuesta });
   }
 
   if (accion === "get_transaction") {

@@ -15,7 +15,7 @@ import {
   settlementOutcome, paymentSourceIsUsable, classifyProviderError,
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
-  eventEnvironmentContradicts,
+  eventEnvironmentMatches,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -235,29 +235,46 @@ check("Sin sello, sin propiedades o con un campo ausente, no hay manifiesto", ()
     "un campo firmado ausente dio manifiesto");
 });
 
-check("El entorno lo establece la FIRMA, no un campo del cuerpo", () => {
-  // El ejemplo oficial de `transaction.updated` ni siquiera trae
-  // `environment`. Exigir un valor concreto rechazaría entregas legítimas por
-  // su forma, y cada entorno de Wompi ya tiene su URL y su secreto: que la
-  // firma cuadre con el de pruebas ES la evidencia.
-  assert(!eventEnvironmentContradicts(undefined, "sandbox"), "ausente no contradice");
-  assert(!eventEnvironmentContradicts(null, "sandbox"), "nulo no contradice");
-  assert(!eventEnvironmentContradicts("", "sandbox"), "vacío no contradice");
-  assert(!eventEnvironmentContradicts("test", "sandbox"), "test con sandbox");
-  assert(!eventEnvironmentContradicts("sandbox", "sandbox"), "sandbox con sandbox");
-  assert(!eventEnvironmentContradicts("prod", "production"), "prod con producción");
-  // Y lo que sí contradice, se rechaza.
-  assert(eventEnvironmentContradicts("prod", "sandbox"),
+check("El entorno exige LAS DOS evidencias · firma Y campo", () => {
+  // El contrato de eventos de Wompi siempre incluye `environment`, y sus dos
+  // únicos valores son `test` y `prod`. La firma demuestra de quién viene el
+  // mensaje; el campo declara el entorno. Ninguna sustituye a la otra.
+  assert(eventEnvironmentMatches("test", "sandbox"), "test con llaves de sandbox");
+  assert(eventEnvironmentMatches("prod", "production"), "prod con llaves de producción");
+
+  // Cruzados: no.
+  assert(!eventEnvironmentMatches("prod", "sandbox"),
     "un evento de producción pasó con llaves de pruebas");
-  assert(eventEnvironmentContradicts("production", "sandbox"), "la otra grafía");
-  assert(eventEnvironmentContradicts("test", "production"),
+  assert(!eventEnvironmentMatches("test", "production"),
     "un evento de pruebas pasó con llaves de producción");
-  // Un valor que no se sabe leer NO se da por bueno.
-  assert(eventEnvironmentContradicts("staging", "sandbox"), "un valor desconocido pasó");
-  // Y la ruta usa las LLAVES para decidir si el pago es de producción.
+
+  // Ausente: NO. Que falte no es que dé igual.
+  assert(!eventEnvironmentMatches(undefined, "sandbox"), "pasó sin campo");
+  assert(!eventEnvironmentMatches(null, "sandbox"), "pasó con campo nulo");
+  assert(!eventEnvironmentMatches("", "sandbox"), "pasó con campo vacío");
+
+  // Y no hay alias: el contrato dice dos valores y son esos dos.
+  for (const alias of ["sandbox", "production", "TEST", "Prod", "staging", "unknown"]) {
+    assert(!eventEnvironmentMatches(alias, "sandbox"), `se aceptó el alias «${alias}»`);
+  }
+
+  // La ruta lo exige, y decide el modo en vivo por las LLAVES.
   const codigo = sinComentarios(RUTA);
+  assert(/!eventEnvironmentMatches\(evento\.environment, clasificacion\.environment\)/
+    .test(codigo), "la ruta no exige que el entorno coincida");
   assert(/liveMode: clasificacion\.environment === "production"/.test(codigo),
     "el modo en vivo se toma del cuerpo del evento en vez de las llaves");
+});
+
+check("Y ninguna de las dos comprobaciones sustituye a la otra", () => {
+  const codigo = sinComentarios(RUTA);
+  const cuerpo = codigo.slice(codigo.indexOf("export async function POST"));
+  const corteFirma = cuerpo.indexOf("if (!verificado)");
+  const corteEntorno = cuerpo.indexOf("eventEnvironmentMatches");
+  const liquida = cuerpo.indexOf("settleProviderPayment");
+  assert(corteFirma > -1 && corteEntorno > -1 && liquida > -1, "faltan los cortes");
+  assert(corteFirma < corteEntorno, "el entorno se comprueba antes que la firma");
+  assert(corteEntorno < liquida, "se liquida antes de comprobar el entorno");
 });
 
 check("Firma inválida → 401 y CERO efecto", () => {

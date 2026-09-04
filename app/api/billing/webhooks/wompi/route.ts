@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   WOMPI, WOMPI_EVENT_TRANSACTION_UPDATED, eventChecksumPayload,
   sanitizeEventEnvelope, mapTransactionStatus, settlementOutcome,
-  classifyWompiKeys, eventEnvironmentContradicts, type WompiEvent,
+  classifyWompiKeys, eventEnvironmentMatches, type WompiEvent,
 } from "@/lib/billing/wompi/mapping";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
@@ -109,15 +109,15 @@ export async function POST(request: Request) {
                          outcome: resultado, errorClass: clase ?? null,
                          organizationId: org ?? null });
 
-  // ENTORNO. Lo establece la FIRMA: cada entorno de Wompi tiene su propia URL
-  // de eventos y su propio secreto, así que una firma que cuadra con el
-  // secreto de pruebas demuestra de dónde viene. El campo `environment` del
-  // cuerpo no está documentado para sandbox —el ejemplo oficial ni lo trae—,
-  // así que exigirle un valor concreto rechazaría entregas legítimas.
+  // ENTORNO. Hacen falta LAS DOS EVIDENCIAS, y ninguna sustituye a la otra: la
+  // firma ya demostró que el mensaje viene de quien tiene el secreto de este
+  // entorno, y el campo `environment` —que el contrato de Wompi siempre
+  // incluye, con `test` o `prod` como únicos valores— tiene que coincidir con
+  // las llaves.
   //
-  // Lo que sí se hace: si el campo VIENE y contradice a las llaves, se rechaza.
+  // Si falta, o trae cualquier otra cosa, se rechaza. Falla cerrado.
   if (!clasificacion.environment
-      || eventEnvironmentContradicts(evento.environment, clasificacion.environment)) {
+      || !eventEnvironmentMatches(evento.environment, clasificacion.environment)) {
     await cerrar("rejected", "environment_mismatch", null, "ENVIRONMENT_MISMATCH");
     log("entorno_no_coincide", { event: evento.event,
                                  evento_entorno: evento.environment ?? null,
