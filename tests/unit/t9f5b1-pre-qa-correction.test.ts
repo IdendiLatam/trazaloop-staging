@@ -529,6 +529,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0170_trial_ai_monthly_pool_fix.sql",
     "0171_mercadopago_provider_webhooks.sql",
     "0172_billing_subscription_period_identity.sql",
+    "0173_billing_payment_method_and_period_renewal.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -549,6 +550,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0170_trial_ai_monthly_pool_fix.sql",
     "0171_mercadopago_provider_webhooks.sql",
     "0172_billing_subscription_period_identity.sql",
+    "0173_billing_payment_method_and_period_renewal.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

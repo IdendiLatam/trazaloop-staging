@@ -48,6 +48,29 @@ function automationSecretMatches(presentado: string | null, esperado: string | u
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * Registra el instrumento reutilizable de esta empresa y ata el intento a él.
+ * Los dos pasos devuelven su estado; ninguno se traga un error.
+ */
+async function registrarYAtar(orgId: string, intentId: string, fuente: number): Promise<
+  { ok: true; metodo: string; atado: unknown } | { ok: false; error: string }> {
+  const admin0 = createAdminClient();
+  const { data: reg, error: er } = await admin0.rpc("billing_register_payment_method", {
+    p_organization_id: orgId, p_provider: "wompi",
+    p_provider_payment_method_id: String(fuente), p_environment: "test",
+    p_created_by: null });
+  if (er) return { ok: false, error: `REGISTER_FAILED:${er.message}` };
+  const r = reg as Record<string, unknown>;
+  if (!r.payment_method_id) return { ok: false, error: `REGISTER_REFUSED:${r.status}` };
+
+  const { data: at, error: ea } = await admin0.rpc("billing_attach_intent_payment_method", {
+    p_intent_id: intentId, p_payment_method_id: String(r.payment_method_id) });
+  if (ea) return { ok: false, error: `ATTACH_FAILED:${ea.message}` };
+  const a = at as Record<string, unknown>;
+  if (a.status !== "attached") return { ok: false, error: `ATTACH_REFUSED:${a.status}` };
+  return { ok: true, metodo: String(r.payment_method_id), atado: a };
+}
+
 export async function POST(request: Request) {
   const entornoVercel = process.env.VERCEL_ENV ?? "local";
   if (entornoVercel === "production") return no("QA_TRIGGER_FORBIDDEN_IN_PRODUCTION");
@@ -284,7 +307,7 @@ export async function POST(request: Request) {
     const fuente = Number(cuerpo.payment_source_id ?? 0);
     if (!intentId || !fuente) return no("IDS_REQUIRED", 400);
     const { data: intento } = await admin.from("billing_checkout_intents")
-      .select("id, expected_total_amount, expected_currency, environment")
+      .select("id, organization_id, expected_total_amount, expected_currency, environment")
       .eq("id", intentId).single();
     if (!intento) return no("INTENT_NOT_FOUND", 404);
     const i = intento as Record<string, unknown>;
@@ -294,15 +317,11 @@ export async function POST(request: Request) {
     // significa lo dice la base.
     const referencia = buildAttemptReference(intentId);
 
-    // Y se anota contra qué medio de pago del proveedor se está cobrando, para
-    // que la renovación sepa después con qué cobrar. Es el mismo sitio donde el
-    // otro proveedor guarda su suscripción: el dominio no necesita saber cuál
-    // de las dos cosas es.
-    const { error: eat } = await admin.rpc("billing_attach_provider_subscription", {
-      p_intent_id: intentId, p_provider_subscription_id: String(fuente),
-      p_init_point: null, p_provider_status: null, p_status: null,
-      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
-    if (eat) return no(`ATTACH_FAILED:${eat.message}`, 500);
+    // El medio de pago se registra como lo que es —un instrumento reutilizable
+    // de esta empresa— y el intento se ata a él. Ya no ocupa la columna de la
+    // suscripción del proveedor, que es otra cosa y de otra pasarela.
+    const met = await registrarYAtar(String(i.organization_id), intentId, fuente);
+    if (!met.ok) return no(met.error, 500);
     const r = await proveedor.chargePaymentSource({
       paymentSourceId: fuente,
       amountCopMinor: Number(i.expected_total_amount),
@@ -443,18 +462,24 @@ export async function POST(request: Request) {
     if (ei || !intento) return no(`ATTEMPT_FAILED:${ei?.message}`, 500);
     const intentoId = (intento as { id: string }).id;
 
-    // 3 · El medio de pago con el que se cobra a esta suscripción.
+    // 3 · El instrumento con el que se cobra a esta suscripción. Es el MISMO
+    //     de la contratación: eso es exactamente lo que el modelo anterior
+    //     hacía imposible.
     const { data: origen } = await admin.from("billing_checkout_intents")
-      .select("provider_subscription_id").eq("billing_subscription_id", subId)
-      .not("provider_subscription_id", "is", null).limit(1).single();
-    const fuente = (origen as { provider_subscription_id: string } | null)
-      ?.provider_subscription_id;
-    if (!fuente) return no("PAYMENT_SOURCE_UNKNOWN", 424);
-    const { error: eat } = await admin.rpc("billing_attach_provider_subscription", {
-      p_intent_id: intentoId, p_provider_subscription_id: String(fuente),
-      p_init_point: null, p_provider_status: null, p_status: null,
-      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+      .select("payment_method_id").eq("billing_subscription_id", subId)
+      .not("payment_method_id", "is", null)
+      .order("created_at", { ascending: false }).limit(1).single();
+    const metodoId = (origen as { payment_method_id: string } | null)?.payment_method_id;
+    if (!metodoId) return no("PAYMENT_METHOD_UNKNOWN", 424);
+    const { data: pm } = await admin.from("billing_payment_methods")
+      .select("provider_payment_method_id").eq("id", metodoId).single();
+    const fuente = Number((pm as { provider_payment_method_id: string }).provider_payment_method_id);
+    const { data: at, error: eat } = await admin.rpc("billing_attach_intent_payment_method", {
+      p_intent_id: intentoId, p_payment_method_id: metodoId });
     if (eat) return no(`ATTACH_FAILED:${eat.message}`, 500);
+    if ((at as Record<string, unknown>).status !== "attached") {
+      return NextResponse.json({ ok: false, stage: "attach", attach: at });
+    }
 
     if (cuerpo.charge === false) {
       return NextResponse.json({ ok: true, period: periodo, attempt_id: intentoId,
@@ -463,7 +488,7 @@ export async function POST(request: Request) {
 
     const referencia = buildAttemptReference(intentoId);
     const r = await proveedor.chargePaymentSource({
-      paymentSourceId: Number(fuente), amountCopMinor: total,
+      paymentSourceId: fuente, amountCopMinor: total,
       currency: String(periodo.charge_currency), reference: referencia,
       customerEmail: String(cuerpo.customer_email ?? "qa-wompi@test.trazaloop.dev"),
       recurrent: true,
@@ -478,16 +503,17 @@ export async function POST(request: Request) {
   }
 
   if (accion === "link_payment_source") {
-    // Diagnóstico: enlaza el medio de pago al intento y DEVUELVE el error tal
-    // cual, sin tragárselo. No mueve dinero.
-    const { data, error } = await admin.rpc("billing_attach_provider_subscription", {
-      p_intent_id: String(cuerpo.intent_id ?? ""),
-      p_provider_subscription_id: String(cuerpo.payment_source_id ?? ""),
-      p_init_point: null, p_provider_status: null, p_status: null,
-      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
-    return NextResponse.json({ ok: !error, result: data ?? null,
-      error: error ? { message: error.message, code: error.code,
-                       details: error.details, hint: error.hint } : null });
+    // Registra el instrumento reutilizable y lo ata al intento, por el camino
+    // canónico. Devuelve el error tal cual, sin tragárselo. No mueve dinero.
+    const intentId = String(cuerpo.intent_id ?? "");
+    const { data: i } = await admin.from("billing_checkout_intents")
+      .select("organization_id").eq("id", intentId).single();
+    if (!i) return no("INTENT_NOT_FOUND", 404);
+    const r = await registrarYAtar(String((i as { organization_id: string }).organization_id),
+      intentId, Number(cuerpo.payment_source_id ?? 0));
+    return NextResponse.json(r.ok
+      ? { ok: true, payment_method_id: r.metodo, attach: r.atado }
+      : { ok: false, error: r.error });
   }
 
   if (accion === "state") {
@@ -503,8 +529,13 @@ export async function POST(request: Request) {
     const { data: periodos } = await admin.from("billing_subscription_periods")
       .select("id, subscription_id, period_sequence, period_start, period_end, base_amount, status, settled_payment_id, settled_at")
       .eq("organization_id", orgId).order("period_sequence");
+    const { data: metodos, error: emet } = await admin.from("billing_payment_methods")
+      .select("id, provider, provider_payment_method_id, environment, status")
+      .eq("organization_id", orgId).order("created_at");
+    if (emet) return no(`READ_FAILED:${emet.message}`, 500);
+
     const { data: intentos, error: eint } = await admin.from("billing_checkout_intents")
-      .select("id, status, provider, provider_subscription_id, billing_subscription_id, period_id, expected_total_amount, created_at")
+      .select("id, status, provider, provider_subscription_id, payment_method_id, billing_subscription_id, period_id, expected_total_amount, created_at")
       .eq("organization_id", orgId).order("created_at");
     if (eint) return no(`READ_FAILED:${eint.message}`, 500);
 
@@ -519,7 +550,7 @@ export async function POST(request: Request) {
     // no se conceda dos veces se demuestra en las pruebas deterministas, que sí
     // tienen sesión, no en un diagnóstico.
     return NextResponse.json({ ok: true, subscriptions: subs ?? [],
-      periods: periodos ?? [], intents: intentos ?? [],
+      periods: periodos ?? [], payment_methods: metodos ?? [], intents: intentos ?? [],
       payments: pagos ?? [], events: eventos ?? [] });
   }
 
