@@ -136,7 +136,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
 | PE-05B2W2 | Wompi · webhook real | **0171** | **cerrado** · 2026-09-04 · evento real firmado, conciliado y liquidado una vez |
-| PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **cerrado** · 2026-09-04 · contratación y renovación, cada una por su camino |
+| PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **enrutado PASS · periodo con DEFECTO** · 2026-09-04 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -167,6 +167,14 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **El periodo no avanzó un mes: avanzó seis minutos.** La renovación ancla el
+> periodo nuevo en **la fecha del pago** y no en el final del ya pagado, así que
+> quien paga antes de vencer **pierde** lo que le quedaba —hasta un mes—. Se
+> cobró dos veces y el derecho terminó el mismo 4 de octubre. Y hay un segundo
+> hueco: **nada ata una renovación a un periodo**, así que dos cobros distintos
+> para el mismo mes pasarían los dos. No se tocó código: hace falta decidir.
+> [El defecto del periodo](PE_05B2W3_PERIOD_DEFECT.md).
 
 > **Contratar y renovar son cosas distintas, y ya van por caminos distintos.**
 > La contratación real dejó **1 suscripción viva** y **3 asignaciones vendidas**
