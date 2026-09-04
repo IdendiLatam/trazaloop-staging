@@ -37,7 +37,7 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
-                  "seed_qa_fx", "recent_checkouts", "privacy_scan"] as const;
+                  "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -556,6 +556,19 @@ export async function POST(request: Request) {
       .length;
     return NextResponse.json({ ok: true, findings: hallazgos,
       event_payloads_checked: (sobres ?? []).length, unclean_payloads: sucios });
+  }
+
+  if (accion === "fx_state") {
+    // Solo LEE. Sirve para demostrar que abrir una vigencia nueva no tocó
+    // ninguna de las anteriores.
+    const { data, error } = await admin.from("commercial_fx_rates")
+      .select("id, base_currency, quote_currency, rate_micros, status,"
+        + " effective_from, effective_to, note")
+      .order("effective_from");
+    if (error) return no(`READ_FAILED:${error.message}`, 500);
+    const { data: resuelta } = await admin.rpc("billing_resolve_fx", {
+      p_base: "USD", p_quote: "COP", p_at: new Date().toISOString() });
+    return NextResponse.json({ ok: true, rates: data ?? [], resolved: resuelta });
   }
 
   if (accion === "state") {
