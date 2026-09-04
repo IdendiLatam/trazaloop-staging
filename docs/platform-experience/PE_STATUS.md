@@ -135,6 +135,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2 | Mercado Pago en pruebas · proveedor, suscripciones y webhooks | **0171** | **bloqueado** · el sandbox exige un pagador MCO que su panel no expone |
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
+| PE-05B2W2 | Wompi · webhook real | **0171** | **esperando** · 2026-09-04 · falta registrar la URL en el panel de Wompi |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -165,6 +166,14 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **La puerta de Wompi está lista; falta registrarla.** Sin bypass el Preview
+> sigue devolviendo 401, y con bypass un evento sin firma válida recibe
+> **401** y **cero efecto financiero**: el bypass es transporte, no
+> autenticación del proveedor. Antes de entregar la URL se corrigió una regla
+> que habría rechazado entregas legítimas —el entorno lo establece **la firma**,
+> no un campo que la documentación ni siquiera trae—.
+> [Registro del webhook](PE_05B2W2_WEBHOOK_REGISTRATION.md).
 
 > **Wompi cobró dos veces sobre la misma tarjeta.** Fuente de pago guardada y
 > **dos transacciones aprobadas** de 190 400 COP, la segunda con

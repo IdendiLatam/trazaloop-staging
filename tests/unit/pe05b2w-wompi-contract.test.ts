@@ -382,6 +382,38 @@ check("Y nada de calendario todavía", () => {
   }
 });
 
+check("Ninguna llave real de Wompi vive en el repositorio", () => {
+  // El guardia mira la FORMA de una llave, así que no distingue por sí solo
+  // una real de un ejemplo. Se declaran las dos únicas excepciones legítimas y
+  // se comprueba que no hay ninguna más: una llave de verdad no encaja en
+  // ninguna de ellas.
+  const PATRON = /(pub|prv)_(test|prod)_[A-Za-z0-9]{16,}|(test|prod)_(events|integrity)_[A-Za-z0-9]{16,}/g;
+  // 1 · el ejemplo publicado por la propia documentación de Wompi, con el que
+  //     se verifica que nuestro resumen coincide con el suyo;
+  const DEL_MANUAL = "prod_integrity_Z5mMke9x0k8gpErbDqwrJXMqsI6SFli6";
+  // 2 · fixtures inconfundibles: la cola es un solo carácter repetido.
+  const esFixture = (v: string) => {
+    const cola = v.split("_").slice(-1)[0];
+    return cola.length >= 8 && new Set(cola).size === 1;
+  };
+  const ficheros: string[] = [];
+  const recorrer = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const r = `${d}/${e.name}`;
+      if (e.isDirectory() && e.name !== "node_modules") recorrer(r);
+      else if (/\.(tsx?|md|json|sql)$/.test(e.name)) ficheros.push(r);
+    }
+  };
+  for (const raiz of ["lib", "server", "components", "app", "tests", "docs",
+                      "scripts", "supabase"]) recorrer(raiz);
+  for (const f of ficheros) {
+    for (const encontrada of leer(f).match(PATRON) ?? []) {
+      if (encontrada === DEL_MANUAL || esFixture(encontrada)) continue;
+      assert(false, `${f} contiene algo con forma de llave real de Wompi`);
+    }
+  }
+});
+
 check("Y el otro proveedor no se tocó", () => {
   const mp = leer("lib/billing/providers/mercadopago.ts");
   assert(/new PreApproval\(/.test(mp), "el adaptador de Mercado Pago cambió de forma");
