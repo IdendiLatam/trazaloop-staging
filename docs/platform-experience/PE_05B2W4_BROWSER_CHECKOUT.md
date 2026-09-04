@@ -77,3 +77,30 @@ paquete del cliente se revisó: cero apariciones de ninguno de los tres.
 
 Los dos documentos que exige el proveedor se aceptan a mano, con sus enlaces y
 sin ninguna casilla marcada de antemano.
+
+## La prueba humana
+
+Una persona contrató Full mensual desde el navegador, con la tarjeta de prueba
+pública de Wompi. Verificado después **solo con evidencia del servidor**:
+
+| | |
+|---|---|
+| intento | `34ec17da` · `settled` |
+| referencia | `pay_34ec17da-12b4-4cd1-b26c-7d40ec8c3273` |
+| transacción | `12180854-1788538514-51746` · `APPROVED` · 190 400 COP |
+| medio de pago | `371273` · wompi · test · activo |
+| periodo 1 | 2026-09-04 16:15:19 → 2026-10-04 16:15:19 · saldado |
+| suscripción | Full mensual, activa, renueva el 4 de octubre de 2026 |
+| evento | `transaction.updated` · procesado · `activated` · una entrega |
+
+Uno de cada cosa: una suscripción, un periodo, un intento, un cobro, un evento,
+un medio de pago. Ni un duplicado por doble pulsación, recarga o reentrega.
+
+Y del rastreo de privacidad —que devuelve recuentos, nunca valores—: cero
+apariciones de un testigo de tarjeta en ninguna columna de facturación, cero
+secuencias largas de dígitos en el identificador guardado, y los doce sobres de
+evento limpios según el mismo comprobador que usa la ruta.
+
+El identificador que sí queda es `371273`: el medio de pago del proveedor, seis
+dígitos que no reconstruyen ninguna tarjeta y que sin las credenciales privadas
+del comercio no cobran nada.
