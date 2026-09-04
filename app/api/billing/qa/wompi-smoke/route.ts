@@ -234,10 +234,14 @@ export async function POST(request: Request) {
     if (i.environment !== "test") return no("INTENT_IS_NOT_TEST", 424);
 
     // Referencia única por INTENTO DE COBRO. Wompi no ofrece clave de
-    // idempotencia, así que la unicidad la pone Trazaloop: una referencia por
-    // intento, y el intento se identifica antes de llamar.
+    // idempotencia, así que la unicidad la pone Trazaloop.
+    //
+    // El PRIMER cobro de un intento usa el intento desnudo: es único y es
+    // exactamente lo que la liquidación espera. Los siguientes van numerados,
+    // porque con este proveedor un mismo intento puede cobrarse más de una vez
+    // y `reference` tiene que ser distinta en cada transacción.
     const sufijo = String(cuerpo.attempt ?? "1").replace(/[^a-zA-Z0-9]/g, "");
-    const referencia = `${intentId}-${sufijo}`;
+    const referencia = sufijo === "1" ? intentId : `${intentId}-${sufijo}`;
     const r = await proveedor.chargePaymentSource({
       paymentSourceId: fuente,
       amountCopMinor: Number(i.expected_total_amount),
