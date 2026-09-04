@@ -37,6 +37,16 @@ type Fallo = { ok: false; failure: ReturnType<typeof classifyProviderError>;
 export type WompiAdapter = BillingProvider & {
   readonly environment: WompiEnvironment | null;
   readonly configurationProblems: string[];
+  /**
+   * La llave PÚBLICA y la base de la API del entorno ya clasificado.
+   *
+   * Las dos son públicas a propósito: sin ellas el navegador no puede
+   * tokenizar, y con ellas no puede cobrar. Se exponen aquí —y no como
+   * variable `NEXT_PUBLIC_`— para que quien las reparta siga siendo el
+   * servidor, y para que la base no la adivine el cliente.
+   */
+  readonly publicKey: string | null;
+  readonly apiBaseUrl: string | null;
 
   /** Los dos contratos que la persona tiene que aceptar, con sus enlaces. */
   getAcceptanceContracts(): Promise<ProviderResult<{
@@ -158,6 +168,8 @@ export function wompiProvider(llaves: {
     },
     environment: clasificacion.environment,
     configurationProblems: clasificacion.problems,
+    publicKey: llaves.publicKey ?? null,
+    apiBaseUrl: base,
 
     async getAcceptanceContracts() {
       if (!configurado || !llaves.publicKey) return sinConfigurar();

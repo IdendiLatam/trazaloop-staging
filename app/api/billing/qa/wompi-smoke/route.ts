@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
-import { WOMPI_SANDBOX_URL, buildAttemptReference } from "@/lib/billing/wompi/mapping";
+import { buildAttemptReference } from "@/lib/billing/wompi/mapping";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +34,10 @@ export const runtime = "nodejs";
  * El camino de producto sigue siendo navegador → Wompi. Este no lo sustituye.
  */
 
-const ACCIONES = ["preflight", "contracts", "prepare", "tokenize_test_card",
+const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
-                  "simulate_event", "renew", "state", "link_payment_source"] as const;
+                  "simulate_event", "renew", "state", "link_payment_source",
+                  "seed_qa_fx"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -247,42 +248,14 @@ export async function POST(request: Request) {
   }
 
   // -------------------------------------------------------------------------
-  // tokenize_test_card · SOLO aquí, y solo con la tarjeta pública de prueba
+  // La tokenización desde el SERVIDOR ya no existe
   // -------------------------------------------------------------------------
-  if (accion === "tokenize_test_card") {
-    const pan = String(cuerpo.pan ?? "");
-    // Solo se aceptan las DOS tarjetas publicadas por Wompi para su sandbox.
-    // Cualquier otra cosa se rechaza: así este camino no puede usarse nunca
-    // con una tarjeta de una persona, ni por error ni a propósito.
-    const PERMITIDAS = new Set(["4242424242424242", "4111111111111111"]);
-    if (!PERMITIDAS.has(pan.replace(/\s+/g, ""))) {
-      return no("ONLY_PUBLISHED_SANDBOX_TEST_CARDS_ALLOWED", 400);
-    }
-    try {
-      const r = await fetch(`${WOMPI_SANDBOX_URL}/tokens/cards`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json",
-                   Authorization: `Bearer ${process.env.WOMPI_PUBLIC_KEY}` },
-        body: JSON.stringify({
-          number: pan.replace(/\s+/g, ""),
-          cvc: String(cuerpo.cvc ?? "123"),
-          exp_month: String(cuerpo.exp_month ?? "12"),
-          exp_year: String(cuerpo.exp_year ?? "30"),
-          card_holder: "QA TRAZALOOP",
-        }),
-      });
-      const j = (await r.json()) as Record<string, unknown>;
-      const d = (j.data ?? {}) as Record<string, unknown>;
-      // Del resultado NO sale nada de la tarjeta salvo la marca y el estado.
-      return NextResponse.json({ ok: r.ok, http: r.status,
-        token_present: Boolean(d.id), token: d.id ?? null,
-        status: d.status ?? null, brand: d.brand ?? null,
-        error: r.ok ? null : JSON.stringify(j).slice(0, 400) });
-    } catch (e) {
-      return NextResponse.json({ ok: false,
-        message: e instanceof Error ? e.name : "UnknownError" });
-    }
-  }
+  //
+  // B2W1 la necesitó porque no había navegador. B2W4 sí lo tiene: la tarjeta
+  // viaja del navegador a Wompi y Trazaloop no la ve. Dejar aquí un camino que
+  // acepte un número de tarjeta —aunque fuera solo la pública de prueba—
+  // significaría que existe una puerta por la que un PAN puede entrar al
+  // servidor. Se retira, y una prueba se pone roja si vuelve.
 
   if (accion === "create_payment_source") {
     const contratos = await proveedor.getAcceptanceContracts();
@@ -514,6 +487,32 @@ export async function POST(request: Request) {
     return NextResponse.json(r.ok
       ? { ok: true, payment_method_id: r.metodo, attach: r.atado }
       : { ok: false, error: r.error });
+  }
+
+  if (accion === "seed_qa_fx") {
+    // Abre la tasa sintética que la prueba humana necesita para poder
+    // presupuestar. No la pone el producto: el producto FALLA CERRADO sin
+    // tasa, que es lo correcto. Esto es el mecanismo explícito de QA, y se
+    // cierra por validez —nunca se borra— al terminar.
+    const { data: tasas } = await admin.from("commercial_fx_rates")
+      .select("id, note, status, effective_to")
+      .eq("base_currency", "USD").eq("quote_currency", "COP");
+    const vigente = ((tasas ?? []) as Record<string, unknown>[]).find((t) =>
+      String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION")
+      && t.status === "active" && !t.effective_to);
+    if (vigente) {
+      return NextResponse.json({ ok: true, status: "already_active",
+        fx_rate_id: vigente.id });
+    }
+    const { data: nueva, error } = await admin.from("commercial_fx_rates").insert({
+      base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
+      effective_from: new Date(Date.now() - 3_600_000).toISOString(),
+      note: "QA-SYNTHETIC-NOT-FOR-PRODUCTION · PE-05B2W4 · 4000 COP/USD no es una "
+          + "tasa real ni actual: existe solo para la prueba humana del sandbox.",
+    }).select("id").single();
+    if (error) return no(`FX_SEED_FAILED:${error.message}`, 500);
+    return NextResponse.json({ ok: true, status: "seeded",
+      fx_rate_id: (nueva as { id: string }).id });
   }
 
   if (accion === "state") {

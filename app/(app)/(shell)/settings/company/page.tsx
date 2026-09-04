@@ -65,6 +65,12 @@ export default async function CompanySettingsPage({
           >
             Ir a Equipo
           </Link>
+          <Link
+            href={moduleAwareHref("/settings/billing", activeModule.key)}
+            className="rounded-md border border-hairline bg-surface px-3 py-1.5 text-sm font-medium hover:border-loop"
+          >
+            Ir a Plan y facturación
+          </Link>
         </div>
       </header>
 

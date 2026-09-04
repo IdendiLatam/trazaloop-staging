@@ -338,9 +338,13 @@ check("Wompi no finge tener suscripción propia", () => {
 });
 
 check("Ningún fichero de PRODUCTO toca datos de tarjeta", () => {
-  // El único sitio del repositorio donde puede aparecer un número es el
-  // disparador provisional de QA, y se declara uno a uno.
-  const PERMITIDO = new Set(["app/api/billing/qa/wompi-smoke/route.ts"]);
+  // B2W1 permitía UNA excepción: el disparador de QA, que tokenizaba desde el
+  // servidor porque no había navegador. B2W4 lo hay, así que la excepción se
+  // MUEVE, no se amplía: el único sitio del repositorio donde pueden aparecer
+  // campos de tarjeta es el formulario del NAVEGADOR, que es exactamente la
+  // frontera con el proveedor. El disparador de QA pasa a estar prohibido como
+  // todos los demás.
+  const FRONTERA = "components/domain/billing/wompi-card-form.tsx";
   const ficheros: string[] = [];
   const recorrer = (d: string) => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
@@ -351,18 +355,22 @@ check("Ningún fichero de PRODUCTO toca datos de tarjeta", () => {
   };
   for (const raiz of ["lib", "server", "components", "app"]) recorrer(raiz);
   for (const f of ficheros) {
-    if (PERMITIDO.has(f)) continue;
+    if (f === FRONTERA) continue;
     const src = sinComentarios(leer(f));
     for (const campo of ["cvc", "card_holder", "exp_month", "exp_year"]) {
       assert(!new RegExp(`["']?${campo}["']?\\s*:`).test(src),
         `${f} manipula el campo de tarjeta «${campo}»`);
     }
   }
-  // Y el que sí puede, solo acepta las tarjetas publicadas por Wompi.
-  assert(/ONLY_PUBLISHED_SANDBOX_TEST_CARDS_ALLOWED/.test(QA),
-    "el disparador aceptaría cualquier número de tarjeta");
-  assert(/4242424242424242/.test(QA) && /4111111111111111/.test(QA),
-    "no está la lista cerrada de tarjetas de prueba");
+  // Y el que sí puede es un componente de CLIENTE: si dejara de serlo, los
+  // campos pasarían a construirse en el servidor.
+  assert(/^"use client"/m.test(leer(FRONTERA)),
+    "la frontera dejó de ser código de navegador");
+  // El disparador de QA ya no tokeniza nada. Aquí se comprueba que no vuelva.
+  assert(!/ONLY_PUBLISHED_SANDBOX_TEST_CARDS_ALLOWED/.test(sinComentarios(QA)),
+    "el disparador de QA volvió a aceptar números de tarjeta");
+  assert(!/tokenize_test_card/.test(sinComentarios(QA)),
+    "volvió la tokenización desde el servidor");
 });
 
 check("El disparador de QA es PROVISIONAL y tiene sus candados", () => {

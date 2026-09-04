@@ -988,6 +988,18 @@ export const PAGE_KEYS: readonly PageKeyEntry[] = [
     route: "/select-org",
   },
   {
+    key: "platform.settings.billing",
+    label: "Sistema · Plan y facturación",
+    module: PLATFORM_SURFACE_KEY,
+    route: "/settings/billing",
+  },
+  {
+    key: "platform.settings.billing.checkout",
+    label: "Sistema · Contratar un plan",
+    module: PLATFORM_SURFACE_KEY,
+    route: "/settings/billing/checkout",
+  },
+  {
     key: "platform.settings.company",
     label: "Sistema · Datos de empresa",
     module: PLATFORM_SURFACE_KEY,
