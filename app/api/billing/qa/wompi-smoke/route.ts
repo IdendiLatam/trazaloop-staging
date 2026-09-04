@@ -36,7 +36,7 @@ export const runtime = "nodejs";
 
 const ACCIONES = ["preflight", "contracts", "prepare", "tokenize_test_card",
                   "create_payment_source", "charge", "get_transaction",
-                  "simulate_event", "renew"] as const;
+                  "simulate_event", "renew", "state", "link_payment_source"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -298,10 +298,11 @@ export async function POST(request: Request) {
     // que la renovación sepa después con qué cobrar. Es el mismo sitio donde el
     // otro proveedor guarda su suscripción: el dominio no necesita saber cuál
     // de las dos cosas es.
-    await admin.rpc("billing_attach_provider_subscription", {
+    const { error: eat } = await admin.rpc("billing_attach_provider_subscription", {
       p_intent_id: intentId, p_provider_subscription_id: String(fuente),
       p_init_point: null, p_provider_status: null, p_status: null,
       p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+    if (eat) return no(`ATTACH_FAILED:${eat.message}`, 500);
     const r = await proveedor.chargePaymentSource({
       paymentSourceId: fuente,
       amountCopMinor: Number(i.expected_total_amount),
@@ -449,10 +450,11 @@ export async function POST(request: Request) {
     const fuente = (origen as { provider_subscription_id: string } | null)
       ?.provider_subscription_id;
     if (!fuente) return no("PAYMENT_SOURCE_UNKNOWN", 424);
-    await admin.rpc("billing_attach_provider_subscription", {
+    const { error: eat } = await admin.rpc("billing_attach_provider_subscription", {
       p_intent_id: intentoId, p_provider_subscription_id: String(fuente),
       p_init_point: null, p_provider_status: null, p_status: null,
       p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+    if (eat) return no(`ATTACH_FAILED:${eat.message}`, 500);
 
     if (cuerpo.charge === false) {
       return NextResponse.json({ ok: true, period: periodo, attempt_id: intentoId,
@@ -473,6 +475,53 @@ export async function POST(request: Request) {
       : { ok: false, period: periodo, attempt_id: intentoId, reference: referencia,
           failure: r.failure, message: r.message,
           detail: (r as { detail?: string | null }).detail ?? null });
+  }
+
+  if (accion === "link_payment_source") {
+    // Diagnóstico: enlaza el medio de pago al intento y DEVUELVE el error tal
+    // cual, sin tragárselo. No mueve dinero.
+    const { data, error } = await admin.rpc("billing_attach_provider_subscription", {
+      p_intent_id: String(cuerpo.intent_id ?? ""),
+      p_provider_subscription_id: String(cuerpo.payment_source_id ?? ""),
+      p_init_point: null, p_provider_status: null, p_status: null,
+      p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+    return NextResponse.json({ ok: !error, result: data ?? null,
+      error: error ? { message: error.message, code: error.code,
+                       details: error.details, hint: error.hint } : null });
+  }
+
+  if (accion === "state") {
+    // Solo LEE. Es la vista del libro que necesita la prueba para demostrar
+    // que el derecho avanzó una vez y una sola: qué obligaciones existen, qué
+    // cobro saldó cada una, y hasta dónde llega la suscripción.
+    const orgId = String(cuerpo.organization_id ?? "");
+    if (!orgId) return no("ORGANIZATION_ID_REQUIRED", 400);
+
+    const { data: subs } = await admin.from("billing_subscriptions")
+      .select("id, status, plan_code, billing_interval, current_period_start, current_period_end, grace_until")
+      .eq("organization_id", orgId).order("created_at");
+    const { data: periodos } = await admin.from("billing_subscription_periods")
+      .select("id, subscription_id, period_sequence, period_start, period_end, base_amount, status, settled_payment_id, settled_at")
+      .eq("organization_id", orgId).order("period_sequence");
+    const { data: intentos, error: eint } = await admin.from("billing_checkout_intents")
+      .select("id, status, provider, provider_subscription_id, billing_subscription_id, period_id, expected_total_amount, created_at")
+      .eq("organization_id", orgId).order("created_at");
+    if (eint) return no(`READ_FAILED:${eint.message}`, 500);
+
+    const { data: pagos } = await admin.from("billing_payments")
+      .select("id, provider, provider_payment_id, status, total_amount, period_id, created_at")
+      .eq("organization_id", orgId).order("created_at");
+    const { data: eventos } = await admin.from("billing_provider_events")
+      .select("provider, topic, resource_id, processing_status, outcome, attempt_count")
+      .eq("organization_id", orgId).order("first_received_at");
+    const { data: asignaciones, error: ea } = await admin.from("organization_plan_assignments")
+      .select("plan_revision_id, scope, module_code, grant_kind, source, starts_at, ends_at")
+      .eq("organization_id", orgId).order("starts_at");
+    if (ea) return no(`READ_FAILED:${ea.message}`, 500);
+
+    return NextResponse.json({ ok: true, subscriptions: subs ?? [],
+      periods: periodos ?? [], intents: intentos ?? [], payments: pagos ?? [], events: eventos ?? [],
+      plan_assignments: asignaciones ?? [] });
   }
 
   if (accion === "get_transaction") {

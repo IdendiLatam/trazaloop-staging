@@ -137,6 +137,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
 | PE-05B2W2 | Wompi · webhook real | **0171** | **cerrado** · 2026-09-04 · evento real firmado, conciliado y liquidado una vez |
 | PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **enrutado PASS · periodo con DEFECTO** · 2026-09-04 |
+| PE-05B2W3.1 | Facturación · el periodo como objeto propio | **0172** | **calendario e identidad demostrados en real · renovación BLOQUEADA por el medio de pago** · 2026-09-04 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
