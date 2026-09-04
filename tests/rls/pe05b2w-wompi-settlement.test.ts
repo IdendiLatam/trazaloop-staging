@@ -165,8 +165,106 @@ async function main() {
       assert((comoSa ?? []).length > 0, "la plataforma no puede operar");
     });
 
+    // =====================================================================
+    console.log("\nB · La renovación · lo que NO puede pasar");
+    // =====================================================================
+
+    /**
+     * Toma la suscripción que ya dejó viva el bloque A y le anota su medio de
+     * pago. NO contrata otra vez: una empresa solo puede tener una viva, y
+     * volver a liquidar una contratación chocaría con el índice único —que es
+     * justo la razón por la que la renovación necesita su propio camino—.
+     */
+    const contratar = async () => {
+      const { data: viva } = await admin.from("billing_subscriptions")
+        .select("id, base_charge_amount, current_period_end")
+        .eq("organization_id", org).eq("status", "active").single();
+      assert(viva, "el bloque anterior no dejó una suscripción viva");
+      const v = viva as { id: string; base_charge_amount: number; current_period_end: string };
+      const { data: intento } = await admin.from("billing_checkout_intents")
+        .select("id").eq("billing_subscription_id", v.id).single();
+      assert(intento, "la suscripción viva no tiene intento enlazado");
+      await admin.rpc("billing_attach_provider_subscription", {
+        p_intent_id: (intento as { id: string }).id,
+        p_provider_subscription_id: `ps-${sello}`,
+        p_init_point: null, p_provider_status: null, p_status: null,
+        p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+      return v;
+    };
+    const renovar = async (o: { fuente?: string; tx: string; importe: number | null;
+                                moneda?: string; live?: boolean | null }) => {
+      const { data, error } = await admin.rpc("billing_record_renewal_payment", {
+        p_provider: WOMPI, p_provider_subscription_id: o.fuente ?? `ps-${sello}`,
+        p_provider_payment_id: o.tx, p_outcome: "approved",
+        p_amount: o.importe, p_currency: o.moneda ?? "COP",
+        p_live_mode: o.live === undefined ? false : o.live });
+      assert(!error, `renovar: ${error?.message}`);
+      return data as Record<string, unknown>;
+    };
+    const vivas = async () => {
+      const { data } = await admin.from("billing_subscriptions")
+        .select("id, status").eq("organization_id", org);
+      return ((data ?? []) as { status: string }[])
+        .filter((x) => ["active", "past_due", "pending", "cancel_at_period_end"]
+          .includes(x.status)).length;
+    };
+
+    let sub: Awaited<ReturnType<typeof contratar>> | null = null;
+
+    await check("Una renovación NO crea una segunda suscripción", async () => {
+      sub = await contratar();
+      assert(await vivas() === 1, "no quedó exactamente una viva tras contratar");
+      const antesA = await vendidas();
+      const total = sub.base_charge_amount + Math.round(sub.base_charge_amount * 0.19);
+      const r = await renovar({ tx: `w-ren-${sello}`, importe: total });
+      assert(r.outcome === "renewed", JSON.stringify(r));
+      assert(await vivas() === 1, "la renovación creó otra suscripción viva");
+      assert(await vendidas() === antesA, "la renovación duplicó la asignación vendida");
+      const { data } = await admin.from("billing_subscriptions")
+        .select("current_period_end").eq("id", sub.id).single();
+      assert((data as { current_period_end: string }).current_period_end
+        !== sub.current_period_end, "el periodo no avanzó");
+    });
+
+    await check("Y repetirla no avanza el periodo otra vez", async () => {
+      const { data: antes } = await admin.from("billing_subscriptions")
+        .select("current_period_end").eq("id", sub!.id).single();
+      for (let n = 0; n < 5; n += 1) {
+        const r = await renovar({ tx: `w-ren-${sello}`, importe: 1 });
+        assert(r.outcome === "already_settled", `la ${n + 1}ª dijo ${r.outcome}`);
+      }
+      const { data: despues } = await admin.from("billing_subscriptions")
+        .select("current_period_end").eq("id", sub!.id).single();
+      assert((antes as { current_period_end: string }).current_period_end
+        === (despues as { current_period_end: string }).current_period_end,
+        "el periodo avanzó con una reentrega");
+      assert(await vivas() === 1, "apareció otra suscripción viva");
+    });
+
+    await check("Importe o moneda equivocados NO renuevan", async () => {
+      const total = sub!.base_charge_amount + Math.round(sub!.base_charge_amount * 0.19);
+      const menos = await renovar({ tx: `w-mal-${sello}`, importe: total - 1 });
+      assert(menos.outcome === "reconciliation_mismatch", JSON.stringify(menos));
+      const otra = await renovar({ tx: `w-usd-${sello}`, importe: total, moneda: "USD" });
+      assert(otra.outcome === "reconciliation_mismatch", JSON.stringify(otra));
+      const p = await pagos();
+      assert(!p.find((x) => x.provider_payment_id === `w-mal-${sello}`), "anotó el de menos");
+      assert(!p.find((x) => x.provider_payment_id === `w-usd-${sello}`), "anotó el de otra moneda");
+    });
+
+    await check("Un destino desconocido o de otro entorno tampoco", async () => {
+      const total = sub!.base_charge_amount + Math.round(sub!.base_charge_amount * 0.19);
+      const ajeno = await renovar({ fuente: `ps-inexistente-${sello}`,
+                                    tx: `w-nodest-${sello}`, importe: total });
+      assert(ajeno.outcome === "reference_unknown", JSON.stringify(ajeno));
+      const live = await renovar({ tx: `w-live-${sello}`, importe: total, live: true });
+      assert(live.outcome === "environment_mismatch", JSON.stringify(live));
+      assert(await vivas() === 1, "alguno de los rechazos creó una suscripción");
+    });
+
     await check("Un cliente no alcanza ninguna función privilegiada", async () => {
-      for (const fn of ["billing_settle_provider_payment", "billing_record_provider_event"]) {
+      for (const fn of ["billing_settle_provider_payment", "billing_record_provider_event",
+                        "billing_record_renewal_payment"]) {
         const { error } = await ana.cli.rpc(fn, {});
         assert(error, `un cliente pudo llamar a ${fn}`);
       }

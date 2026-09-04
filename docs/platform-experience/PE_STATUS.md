@@ -136,7 +136,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2W | Wompi · viabilidad como proveedor paralelo | — | **descubrimiento cerrado** · 2026-09-03 · recomendado para sandbox |
 | PE-05B2W1 | Wompi en pruebas · fuente de pago y cobro recurrente | **0171** | **cerrado** · 2026-09-04 · listo para la prueba de webhook |
 | PE-05B2W2 | Wompi · webhook real | **0171** | **cerrado** · 2026-09-04 · evento real firmado, conciliado y liquidado una vez |
-| PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **esperando** · 2026-09-04 · falta registrar la URL estable |
+| PE-05B2W3 | Wompi · enrutado de renovación y alcance del derecho | **0171** | **cerrado** · 2026-09-04 · contratación y renovación, cada una por su camino |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -167,6 +167,15 @@ Los diez de PE-05B1:
 > `OVER_LIMIT` sin haber excedido nada. Ni una línea de Mercado Pago se
 > escribió. El hallazgo:
 > [comprobación previa de PE-05B2](PE_05B2_PREFLIGHT_TRIAL_AI.md).
+
+> **Contratar y renovar son cosas distintas, y ya van por caminos distintos.**
+> La contratación real dejó **1 suscripción viva** y **3 asignaciones vendidas**
+> —exactamente los módulos habilitados; `core` no, y pagar no habilitó nada—. La
+> renovación real se enrutó por su primitiva: **2 cobros, 1 suscripción, periodo
+> avanzado una vez**, y seis reentregas no lo movieron. De paso se corrigió la
+> referencia, que daba a entender que una contratación puede cobrarse varias
+> veces. **Sin migración: 0171.**
+> [Enrutado de renovación](PE_05B2W3_RENEWAL_ROUTING.md).
 
 > **Una URL de webhook que no caduca.** La registrada apuntaba a un despliegue
 > concreto, así que cada commit dejaba a Wompi hablando con código viejo — ya
