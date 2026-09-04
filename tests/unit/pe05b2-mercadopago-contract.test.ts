@@ -447,12 +447,23 @@ check("Lo esperado sale del SERVIDOR, no del proveedor", () => {
 });
 
 check("AD. El único camino al derecho pasa por la primitiva de B1", () => {
-  // Ni la ruta ni la capa escriben un cobro o una asignación a mano.
+  // Lo prohibido es ESCRIBIR. Leer el estado sí hace falta: el enrutado entre
+  // contratación y renovación se decide mirando la suscripción, y hacerlo a
+  // ciegas sería peor. La comprobación anterior buscaba el nombre de la tabla
+  // y no distinguía una consulta de una escritura.
   const codigo = sinComentarios(RUTA) + sinComentarios(CAPA);
-  for (const atajo of ["billing_payments", "billing_subscriptions",
-                       "organization_plan_assignments", "commercial_apply_assignment"]) {
-    assert(!codigo.includes(atajo), `el código de B2 escribe «${atajo}» directamente`);
+  for (const tabla of ["billing_payments", "billing_subscriptions",
+                       "organization_plan_assignments"]) {
+    for (const escritura of ["insert", "update", "delete", "upsert"]) {
+      const re = new RegExp(`from\\("${tabla}"\\)[\\s\\S]{0,120}?\\.${escritura}\\(`);
+      assert(!re.test(codigo), `el código de B2 hace «${escritura}» sobre «${tabla}»`);
+      const re2 = new RegExp(`\\.${escritura}\\([\\s\\S]{0,120}?from\\("${tabla}"\\)`);
+      assert(!re2.test(codigo), `el código de B2 hace «${escritura}» sobre «${tabla}»`);
+    }
   }
+  // Y conceder el derecho NO se toca desde aquí, ni leyéndolo.
+  assert(!codigo.includes("commercial_apply_assignment"),
+    "el código de B2 concede el derecho por su cuenta");
   assert(/public\.billing_settle_payment\(/.test(SQL171),
     "0171 no delega en la primitiva canónica de B1");
 });
