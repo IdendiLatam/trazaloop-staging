@@ -9,7 +9,7 @@ import {
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
-  classifyAttempt, settlePeriodPayment,
+  classifyAttempt, settlePeriodPayment, closeAttempt,
 } from "@/lib/db/billing-provider";
 
 export const dynamic = "force-dynamic";
@@ -188,6 +188,10 @@ export async function POST(request: Request) {
       amount: leida.value.amountCopMinor, currency: leida.value.currency,
       liveMode: clasificacion.environment === "production",
     });
+    // Y el intento deja de decir que está en vuelo, porque ya no lo está. La
+    // inicial cierra el suyo sola; esta se dirige al periodo, así que hay que
+    // cerrarlo aquí o la regla de «un solo cobro en vuelo» miente.
+    await closeAttempt(clase.intentId, r.outcome);
   }
 
   // `period_already_settled` NO es un proceso normal: es dinero de más sobre

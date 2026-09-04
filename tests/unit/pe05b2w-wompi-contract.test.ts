@@ -477,6 +477,32 @@ check("Ninguna llave real de Wompi vive en el repositorio", () => {
   }
 });
 
+check("La renovación cierra su intento · «en vuelo» tiene que ser verdad", () => {
+  // La contratación inicial cierra su intento sola: lo hace la primitiva que
+  // la salda. La renovación se dirige al PERIODO, así que si nadie cierra el
+  // intento se queda diciendo que hay un cobro en vuelo cuando ya no lo hay, y
+  // la regla de «un solo cobro en vuelo por obligación» pasa a mentir.
+  const cuerpo = sinComentarios(RUTA);
+  const i = cuerpo.indexOf("settlePeriodPayment");
+  assert(i > 0, "la ruta ya no salda periodos");
+  assert(/closeAttempt\(\s*clase\.intentId/.test(cuerpo.slice(i)),
+    "la renovación no cierra su intento");
+
+  // Y el cierre no inventa desenlaces: una reentrega no vuelve a escribirlo.
+  const lib = sinComentarios(leer("lib/db/billing-provider.ts"));
+  const j = lib.indexOf("export async function closeAttempt");
+  assert(j > 0, "no existe el cierre del intento");
+  const fn = lib.slice(j, j + 1400);
+  for (const [salida, estado] of [["renewed", "settled"], ["declined", "declined"],
+                                  ["failed", "failed"],
+                                  ["period_already_settled", "manual_review"]]) {
+    assert(new RegExp(`${salida}:\\s*"${estado}"`).test(fn),
+      `«${salida}» no deja el intento en «${estado}»`);
+  }
+  assert(!/already_settled:\s*"/.test(fn.replace(/period_already_settled:\s*"[a-z_]+"/, "")),
+    "una reentrega reescribe el desenlace del intento");
+});
+
 check("Y el otro proveedor no se tocó", () => {
   const mp = leer("lib/billing/providers/mercadopago.ts");
   assert(/new PreApproval\(/.test(mp), "el adaptador de Mercado Pago cambió de forma");

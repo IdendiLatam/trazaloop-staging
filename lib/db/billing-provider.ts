@@ -247,6 +247,37 @@ export async function classifyAttempt(attemptId: string): Promise<
     : { kind: "initial", intentId: d.id, organizationId: d.organization_id };
 }
 
+/**
+ * Cierra el intento de cobro cuando su cargo ya tiene desenlace.
+ *
+ * La contratación inicial cerraba su intento sola —lo hace la primitiva que la
+ * salda—, pero la renovación se dirige al PERIODO y no al intento, así que el
+ * intento se quedaba dicho «en vuelo» cuando ya no lo estaba. La regla de un
+ * solo cobro en vuelo por obligación depende de que ese estado sea verdad.
+ */
+export async function closeAttempt(
+  intentId: string,
+  outcome: string,
+): Promise<string | null> {
+  const estado = ({
+    renewed: "settled",
+    declined: "declined",
+    failed: "failed",
+    // Dinero de más sobre una obligación ya saldada: lo mira una persona.
+    period_already_settled: "manual_review",
+  } as Record<string, string>)[outcome];
+  // Una reentrega —`already_settled`— no toca nada: el intento lo cerró la
+  // primera entrega y volver a escribirlo sería inventar un segundo desenlace.
+  if (!estado) return null;
+
+  const admin = createAdminClient();
+  await admin.rpc("billing_attach_provider_subscription", {
+    p_intent_id: intentId, p_provider_subscription_id: null,
+    p_init_point: null, p_provider_status: null, p_status: estado,
+    p_synced_amount: null, p_provider_version: null, p_next_payment_date: null });
+  return estado;
+}
+
 /** Salda la obligación de un periodo. Una vez, y el dinero de más no se pierde. */
 export async function settlePeriodPayment(input: {
   periodId: string; provider: string; providerPaymentId: string;
