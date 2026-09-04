@@ -15,6 +15,7 @@ import {
   settlementOutcome, paymentSourceIsUsable, classifyProviderError,
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
+  eventEnvironmentContradicts,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -232,6 +233,31 @@ check("Sin sello, sin propiedades o con un campo ausente, no hay manifiesto", ()
   assert(eventChecksumPayload({ ...e, signature:
     { properties: ["transaction.no_existe"] } }, SECRETO_EVENTOS) === null,
     "un campo firmado ausente dio manifiesto");
+});
+
+check("El entorno lo establece la FIRMA, no un campo del cuerpo", () => {
+  // El ejemplo oficial de `transaction.updated` ni siquiera trae
+  // `environment`. Exigir un valor concreto rechazaría entregas legítimas por
+  // su forma, y cada entorno de Wompi ya tiene su URL y su secreto: que la
+  // firma cuadre con el de pruebas ES la evidencia.
+  assert(!eventEnvironmentContradicts(undefined, "sandbox"), "ausente no contradice");
+  assert(!eventEnvironmentContradicts(null, "sandbox"), "nulo no contradice");
+  assert(!eventEnvironmentContradicts("", "sandbox"), "vacío no contradice");
+  assert(!eventEnvironmentContradicts("test", "sandbox"), "test con sandbox");
+  assert(!eventEnvironmentContradicts("sandbox", "sandbox"), "sandbox con sandbox");
+  assert(!eventEnvironmentContradicts("prod", "production"), "prod con producción");
+  // Y lo que sí contradice, se rechaza.
+  assert(eventEnvironmentContradicts("prod", "sandbox"),
+    "un evento de producción pasó con llaves de pruebas");
+  assert(eventEnvironmentContradicts("production", "sandbox"), "la otra grafía");
+  assert(eventEnvironmentContradicts("test", "production"),
+    "un evento de pruebas pasó con llaves de producción");
+  // Un valor que no se sabe leer NO se da por bueno.
+  assert(eventEnvironmentContradicts("staging", "sandbox"), "un valor desconocido pasó");
+  // Y la ruta usa las LLAVES para decidir si el pago es de producción.
+  const codigo = sinComentarios(RUTA);
+  assert(/liveMode: clasificacion\.environment === "production"/.test(codigo),
+    "el modo en vivo se toma del cuerpo del evento en vez de las llaves");
 });
 
 check("Firma inválida → 401 y CERO efecto", () => {

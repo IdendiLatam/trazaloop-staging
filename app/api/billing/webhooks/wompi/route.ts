@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   WOMPI, WOMPI_EVENT_TRANSACTION_UPDATED, eventChecksumPayload,
   sanitizeEventEnvelope, mapTransactionStatus, settlementOutcome,
-  classifyWompiKeys, type WompiEvent,
+  classifyWompiKeys, eventEnvironmentContradicts, type WompiEvent,
 } from "@/lib/billing/wompi/mapping";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import {
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     provider: WOMPI, topic: evento.event, resourceId: recurso,
     signatureVerified: verificado, signatureFailureReason: razon,
     // Wompi declara su entorno en el propio evento.
-    liveMode: evento.environment === "prod",
+    liveMode: clasificacion.environment === "production",
     environment: clasificacion.environment === "sandbox" ? "test"
       : clasificacion.environment === "production" ? "live" : null,
     providerRequestId: request.headers.get("x-event-checksum"),
@@ -109,10 +109,15 @@ export async function POST(request: Request) {
                          outcome: resultado, errorClass: clase ?? null,
                          organizationId: org ?? null });
 
-  // ENTORNO. Un evento de producción sobre llaves de pruebas —o al revés— no
-  // hace nada, aunque venga firmado.
-  const esperadoEntorno = clasificacion.environment === "sandbox" ? "test" : "prod";
-  if (!clasificacion.environment || evento.environment !== esperadoEntorno) {
+  // ENTORNO. Lo establece la FIRMA: cada entorno de Wompi tiene su propia URL
+  // de eventos y su propio secreto, así que una firma que cuadra con el
+  // secreto de pruebas demuestra de dónde viene. El campo `environment` del
+  // cuerpo no está documentado para sandbox —el ejemplo oficial ni lo trae—,
+  // así que exigirle un valor concreto rechazaría entregas legítimas.
+  //
+  // Lo que sí se hace: si el campo VIENE y contradice a las llaves, se rechaza.
+  if (!clasificacion.environment
+      || eventEnvironmentContradicts(evento.environment, clasificacion.environment)) {
     await cerrar("rejected", "environment_mismatch", null, "ENVIRONMENT_MISMATCH");
     log("entorno_no_coincide", { event: evento.event,
                                  evento_entorno: evento.environment ?? null,
@@ -152,7 +157,9 @@ export async function POST(request: Request) {
     provider: WOMPI, externalReference: leida.value.reference,
     providerPaymentId: leida.value.transactionId, outcome: salida,
     amount: leida.value.amountCopMinor, currency: leida.value.currency,
-    liveMode: evento.environment === "prod",
+    // El entorno lo dice la firma, no el cuerpo: las llaves que verificaron
+    // este evento son las que mandan.
+    liveMode: clasificacion.environment === "production",
     failureReason: leida.value.statusMessage,
   });
   const estado = r.outcome === "activated" || r.outcome === "already_settled"

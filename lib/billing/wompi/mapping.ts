@@ -231,6 +231,35 @@ export function eventChecksumPayload(evento: WompiEvent, eventsSecret: string): 
 
 export const WOMPI_EVENT_TRANSACTION_UPDATED = "transaction.updated";
 
+/**
+ * QUÉ ENTORNO ES · y por qué no lo decide el campo `environment`.
+ *
+ * Wompi exige una URL de eventos DISTINTA en cada entorno, y cada entorno tiene
+ * su propio secreto. Así que si la firma cuadra con el secreto de pruebas, el
+ * evento viene demostrablemente de la configuración de pruebas: es evidencia
+ * criptográfica, no una declaración del propio mensaje.
+ *
+ * El campo `environment` del cuerpo NO está documentado para sandbox —el
+ * ejemplo oficial de `transaction.updated` ni siquiera lo incluye—, así que
+ * exigir un valor concreto rechazaría entregas legítimas por su forma.
+ *
+ * La regla, entonces:
+ *   · la firma establece el entorno;
+ *   · el campo, CUANDO VIENE, no puede contradecirlo;
+ *   · si contradice, se rechaza. Falla cerrado sobre lo que sí se afirma, no
+ *     sobre lo que no se dice.
+ */
+export function eventEnvironmentContradicts(
+  declarado: string | null | undefined, llaves: WompiEnvironment
+): boolean {
+  if (declarado === null || declarado === undefined || declarado === "") return false;
+  const d = declarado.trim().toLowerCase();
+  const deProduccion = d === "prod" || d === "production";
+  const dePruebas = d === "test" || d === "sandbox";
+  if (!deProduccion && !dePruebas) return true;         // no se sabe: se rechaza
+  return deProduccion ? llaves !== "production" : llaves !== "sandbox";
+}
+
 /** Del cuerpo del evento solo se guarda el sobre. Nunca tarjeta ni pagador. */
 export function sanitizeEventEnvelope(evento: WompiEvent): Record<string, unknown> {
   const tx = (evento.data?.transaction ?? {}) as Record<string, unknown>;
