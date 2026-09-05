@@ -38,7 +38,7 @@ const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
                   "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan",
-                  "renewal_runs"] as const;
+                  "renewal_runs", "inventory"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -580,6 +580,25 @@ export async function POST(request: Request) {
       .order("started_at", { ascending: false }).limit(5);
     if (error) return no(`READ_FAILED:${error.message}`, 500);
     return NextResponse.json({ ok: true, runs: data ?? [] });
+  }
+
+  if (accion === "inventory") {
+    // Solo LEE. Qué medios de pago y qué suscripciones hay, para poder decidir
+    // sobre datos reales y no sobre lo que uno recuerde.
+    const { data: metodos, error: em } = await admin.from("billing_payment_methods")
+      .select("id, organization_id, provider, provider_payment_method_id,"
+        + " environment, status, created_at").order("created_at");
+    if (em) return no(`READ_FAILED:${em.message}`, 500);
+    const { data: subs, error: es } = await admin.from("billing_subscriptions")
+      .select("id, organization_id, provider, plan_code, billing_interval, status,"
+        + " current_period_start, current_period_end, base_charge_amount,"
+        + " charge_currency, created_at").order("created_at");
+    if (es) return no(`READ_FAILED:${es.message}`, 500);
+    const { data: empresas, error: eo } = await admin.from("organizations")
+      .select("id, name, created_at").order("created_at");
+    if (eo) return no(`READ_FAILED:${eo.message}`, 500);
+    return NextResponse.json({ ok: true, payment_methods: metodos ?? [],
+      subscriptions: subs ?? [], organizations: empresas ?? [] });
   }
 
   if (accion === "state") {
