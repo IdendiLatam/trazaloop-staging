@@ -143,6 +143,16 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
     + "final dejaría bytes reservados y un archivo subido sin fila que lo represente.",
   "server/actions/evidences.ts:cancelEvidenceUploadAction":
     "Cancela y LIBERA. Es una reducción; en modo consulta debe poder hacerse.",
+  "server/actions/billing.ts:requestCancellationAction":
+    "Cancelar es una REDUCCIÓN, y además es la salida. Ponerle la puerta comercial "
+    + "delante dejaría atrapada a la empresa que agotó su cupo: no podría ni "
+    + "irse. No cobra, no concede y no crece.",
+  "server/actions/billing.ts:schedulePlanChangeAction":
+    "Bajar de plan es una REDUCCIÓN programada para el final del periodo pagado. "
+    + "Mismo motivo: quien agotó su cupo tiene que poder bajar, que es justamente "
+    + "lo que lo arregla. No cobra nada hoy.",
+  "server/actions/billing.ts:cancelScheduledChangeAction":
+    "Retira un cambio programado. Deja las cosas como estaban; no concede nada.",
   "server/actions/settings.ts:updateMyProfileAction":
     "Datos y seguridad de la propia persona: operación esencial de cuenta, nunca comercial.",
   "server/actions/platform.ts:listPlatformStaffAction":

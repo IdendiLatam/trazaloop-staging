@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { createServerClient } from "@/lib/supabase/server";
 import {
+  listRenewalOperations, type RenewalOperationRow,
+} from "@/lib/db/billing-operations";
+import {
   listCommercialEvents,
   listOrganizationAssignments,
   listPlanRevisions,
@@ -304,4 +307,18 @@ export async function assignPlanAction(
   revalidatePath("/platform/plans");
   revalidatePath(`/platform/organizations/${organizationId}`);
   return ok;
+}
+
+/**
+ * Trazaloop · PE-05B5F · El estado de las renovaciones, para quien opera.
+ *
+ * Solo lectura. Aquí no hay ningún botón que mueva dinero, y no por olvido:
+ * reintentar un cobro a mano es una operación financiera con su propia
+ * autoridad, y no se cuela dentro de una pantalla de consulta.
+ */
+export async function getRenewalOperationsAction(): Promise<{
+  rows: RenewalOperationRow[] | null;
+}> {
+  await requirePlatformStaff();
+  return { rows: await listRenewalOperations() };
 }

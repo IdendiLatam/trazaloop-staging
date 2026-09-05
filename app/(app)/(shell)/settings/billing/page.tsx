@@ -8,6 +8,7 @@ import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
 import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import { describeBillingState } from "@/lib/domain/billing-state";
+import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -100,6 +101,20 @@ export default async function BillingPage({
 
       {!esAdministrador ? (
         <InfoAlert message="Tu rol permite consultar el plan, pero no contratarlo." />
+      ) : estado?.hasSubscription ? (
+        <section className="rounded-md border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Cambiar o cancelar</h2>
+          <p className="pb-3 pt-1 text-sm text-ink-soft">
+            Ninguna de las dos cosas corta nada hoy: surten efecto cuando termina
+            el periodo que ya pagaste.
+          </p>
+          <PlanDecisions
+            planCode={estado.planCode}
+            currentPeriodEnd={estado.currentPeriodEnd}
+            cancelScheduled={estado.cancelAtPeriodEnd}
+            scheduledPlanLabel={estado.downgradeScheduled ? "el plan programado" : null}
+          />
+        </section>
       ) : null}
 
       <section className="space-y-3">

@@ -1,8 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { getPlanCatalogAction } from "@/server/actions/commercial-console";
+import {
+  getPlanCatalogAction, getRenewalOperationsAction,
+} from "@/server/actions/commercial-console";
 import { PlanCatalogConsole } from "@/components/domain/platform/plan-catalog-console";
+import { RenewalOperations } from "@/components/domain/platform/renewal-operations";
 import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
 
 /**
@@ -13,7 +16,10 @@ import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
  * plataforma cambia condiciones, y la base lo vuelve a comprobar.
  */
 export default async function PlatformPlansPage() {
-  const catalogo = await getPlanCatalogAction();
+  const [catalogo, renovaciones] = await Promise.all([
+    getPlanCatalogAction(),
+    getRenewalOperationsAction(),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -43,6 +49,19 @@ export default async function PlatformPlansPage() {
         limitsByRevision={catalogo.limitsByRevision}
         canManage={catalogo.canManage}
       />
+
+      <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">Renovaciones</h2>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Qué está por cobrarse, qué se está reintentando y qué necesita que lo
+            mire una persona. Esta pantalla <strong>solo mira</strong>: reintentar
+            un cobro a mano es una operación financiera aparte, con su propia
+            autoridad, y no se hace desde aquí.
+          </p>
+        </div>
+        <RenewalOperations rows={renovaciones.rows} />
+      </section>
 
       <section className="space-y-2 rounded-lg border border-hairline bg-surface p-4">
         <h2 className="eyebrow">Lo que NO se administra aquí</h2>

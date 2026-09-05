@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { requireSession } from "@/lib/auth/require-session";
 import { createServerClient } from "@/lib/supabase/server";
@@ -127,4 +129,87 @@ export async function readCheckoutStatusAction(
   const estado = await readCheckoutStatus(intentId, quien.organizationId);
   if (!estado) return { ok: false, error: "No encontramos esta contratación." };
   return { ok: true, status: estado };
+}
+
+/**
+ * Trazaloop · PE-05B5F · Las dos decisiones que puede tomar quien paga.
+ *
+ * Ninguna corta nada hoy. Las dos surten efecto al terminar el periodo que ya
+ * está pagado, y las dos las ejecuta el motor cuando llega esa fecha: aquí solo
+ * se PIDEN. Quién puede pedirlas se comprueba en SQL además de aquí, que es
+ * donde tiene que estar.
+ *
+ * Y ninguna es el retiro administrativo: eso es una decisión de plataforma,
+ * excepcional, y ningún camino de producto la alcanza.
+ */
+export type PlanChangeState = { error: string | null; ok?: boolean; detail?: string };
+
+async function suscripcionDe(organizationId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase.from("billing_subscriptions")
+    .select("id").eq("organization_id", organizationId)
+    .in("status", ["active", "past_due"]).maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/** Pedir la cancelación, o retirarla mientras no haya llegado la fecha. */
+export async function requestCancellationAction(cancel: boolean): Promise<PlanChangeState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const sub = await suscripcionDe(quien.organizationId);
+  if (!sub) return { error: "No hay un plan de pago activo que cancelar." };
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("billing_request_cancellation",
+    { p_subscription_id: sub, p_cancel: cancel });
+  if (error) return { error: "No pudimos registrar tu decisión. Inténtalo de nuevo." };
+  const r = (data ?? {}) as Record<string, unknown>;
+  revalidatePath("/settings/billing");
+  return { error: null, ok: true,
+    detail: typeof r.effective_at === "string" ? r.effective_at : undefined };
+}
+
+/** Programar un cambio de plan para el final del periodo pagado. */
+export async function schedulePlanChangeAction(
+  targetPlanCode: string
+): Promise<PlanChangeState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const sub = await suscripcionDe(quien.organizationId);
+  if (!sub) return { error: "No hay un plan de pago activo que cambiar." };
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("billing_schedule_plan_change",
+    { p_subscription_id: sub, p_target_plan_code: targetPlanCode });
+  if (error) {
+    // Cambiar de plan fija un precio nuevo, y eso necesita tipo de cambio. Se
+    // dice qué falta, no «error».
+    if ((error.message ?? "").includes("FX_RATE_UNAVAILABLE")) {
+      return { error: "Todavía no podemos calcular el precio del plan nuevo en pesos. "
+                    + "No se cambió nada; inténtalo de nuevo en un momento." };
+    }
+    if ((error.message ?? "").includes("PLAN_PRICE_NOT_CONFIGURED")) {
+      return { error: "Ese plan todavía no tiene precio publicado. No se cambió nada." };
+    }
+    return { error: "No pudimos programar el cambio de plan. No se cambió nada." };
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  revalidatePath("/settings/billing");
+  return { error: null, ok: true,
+    detail: typeof r.effective_at === "string" ? r.effective_at : undefined };
+}
+
+/** Y arrepentirse del cambio programado, mientras no haya llegado su día. */
+export async function cancelScheduledChangeAction(): Promise<PlanChangeState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const sub = await suscripcionDe(quien.organizationId);
+  if (!sub) return { error: "No hay un plan de pago activo." };
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.rpc("billing_cancel_scheduled_change",
+    { p_subscription_id: sub });
+  if (error) return { error: "No pudimos retirar el cambio programado." };
+  revalidatePath("/settings/billing");
+  return { error: null, ok: true };
 }
