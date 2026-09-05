@@ -37,7 +37,8 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
-                  "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan"] as const;
+                  "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan",
+                  "renewal_runs"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -569,6 +570,16 @@ export async function POST(request: Request) {
     const { data: resuelta } = await admin.rpc("billing_resolve_fx", {
       p_base: "USD", p_quote: "COP", p_at: new Date().toISOString() });
     return NextResponse.json({ ok: true, rates: data ?? [], resolved: resuelta });
+  }
+
+  if (accion === "renewal_runs") {
+    // Solo LEE. Para poder enseñar qué hizo la última pasada sin abrir la base.
+    const { data, error } = await admin.from("billing_renewal_runs")
+      .select("id, started_at, finished_at, status, due_found, charged, retried,"
+        + " lapsed, skipped, failures, decisions")
+      .order("started_at", { ascending: false }).limit(5);
+    if (error) return no(`READ_FAILED:${error.message}`, 500);
+    return NextResponse.json({ ok: true, runs: data ?? [] });
   }
 
   if (accion === "state") {

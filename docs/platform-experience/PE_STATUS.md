@@ -142,6 +142,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B2W4 | Facturación · contratación con tarjeta desde el navegador | **0173** | **PASS · compra humana real verificada en servidor** · 2026-09-04 |
 | PE-05B5A | Facturación · arquitectura del cobro automático | **0173** | **arquitectura lista · dos defectos del dominio de periodos encontrados** · 2026-09-04 |
 | PE-05B5B | Facturación · cimientos del cobro automático | **0174** | **PASS · defectos AA/AB reparados, 20 pruebas deterministas, sin planificador** · 2026-09-04 |
+| PE-05B5C | Facturación · ciclo de vida completo y puerta en seco | **0175** | **PASS · sin tarjeta, en duda, cancelación y bajada de plan · ruta sin capacidad de cobro** · 2026-09-05 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
