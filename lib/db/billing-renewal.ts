@@ -220,3 +220,41 @@ async function llamarTransicion(fn: string, subscriptionId: string): Promise<str
   if (error) throw new Error(`${fn.toUpperCase()}_FAILED:${error.message}`);
   return String((data as Record<string, unknown>).status);
 }
+
+/**
+ * La historia de las pasadas. OBSERVACIÓN, no autoridad: si esta tabla se
+ * perdiera entera, no se perdería ni un peso de verdad financiera. Por eso se
+ * abre y se cierra fuera de cualquier transacción de dinero, y por eso un fallo
+ * al escribirla no puede tumbar una pasada.
+ */
+export async function openRenewalRun(): Promise<string | null> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from("billing_renewal_runs")
+      .insert({ status: "running" }).select("id").single();
+    return (data as { id: string } | null)?.id ?? null;
+  } catch { return null; }
+}
+
+export async function closeRenewalRun(input: {
+  runId: string | null;
+  status: "success" | "partial" | "failed";
+  counts: Record<string, number>;
+  decisions: unknown[];
+}): Promise<void> {
+  if (!input.runId) return;
+  try {
+    const admin = createAdminClient();
+    await admin.from("billing_renewal_runs").update({
+      finished_at: new Date().toISOString(),
+      status: input.status,
+      due_found: input.counts.dueFound ?? 0,
+      charged: input.counts.charged ?? 0,
+      retried: input.counts.retried ?? 0,
+      lapsed: input.counts.lapsed ?? 0,
+      skipped: input.counts.skipped ?? 0,
+      failures: input.counts.failures ?? 0,
+      decisions: input.decisions,
+    }).eq("id", input.runId);
+  } catch { /* la observación no manda sobre el trabajo */ }
+}

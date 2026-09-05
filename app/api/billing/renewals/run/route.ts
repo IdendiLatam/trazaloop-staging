@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { runRenewalPass } from "@/lib/billing/renewal/orchestrator";
 import { fakeBillingProvider } from "@/lib/billing/providers/fake";
+import { openRenewalRun, closeRenewalRun } from "@/lib/db/billing-renewal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -65,12 +66,36 @@ export async function POST(request: Request) {
   const limite = Number.isInteger(cuerpo.limit) && (cuerpo.limit as number) > 0
     ? Math.min(cuerpo.limit as number, 200) : 100;
 
+  const runId = await openRenewalRun();
   const r = await runRenewalPass({
     // El doble, y en seco. Dos cierres para lo mismo, porque lo que hay al otro
     // lado es el dinero de alguien.
     provider: fakeBillingProvider("approve", "approve"),
     dryRun: true,
     limit: limite,
+  });
+
+  const porAccion = {
+    renew: r.decisions.filter((d) => d.action === "renew").length,
+    retry: r.decisions.filter((d) => d.action === "retry").length,
+    lapse_due: r.decisions.filter((d) => d.action === "lapse_due").length,
+    cancel_due: r.decisions.filter((d) => d.action === "cancel_due").length,
+    downgrade_due: r.decisions.filter((d) => d.action === "downgrade_due").length,
+    manual_review_required: r.manualReview,
+    payment_method_unavailable: r.paymentMethodUnavailable,
+  };
+
+  // Queda escrito qué se miró y qué se decidió. Identificadores y clases: ni un
+  // importe, ni un dato del proveedor, ni nada que no se pueda enseñar.
+  await closeRenewalRun({
+    runId, status: r.failures > 0 ? "partial" : "success",
+    counts: { dueFound: r.dueFound, charged: r.charged, retried: r.retried,
+              lapsed: r.lapsed, skipped: r.skipped, failures: r.failures },
+    decisions: r.decisions.map((d) => ({
+      mode: "dry_run", action: d.action, subscription_id: d.subscriptionId,
+      organization_id: d.organizationId, period_id: d.periodId,
+      attempt_number: d.attemptNumber, slot: d.slot, outcome: d.outcome,
+      failure_class: d.failureClass })),
   });
 
   // Solo recuentos y decisiones. Ni un identificador de proveedor, ni un
@@ -80,16 +105,9 @@ export async function POST(request: Request) {
     mode: "dry_run",
     environment: process.env.VERCEL_ENV ?? "local",
     provider_calls: 0,
+    run_id: runId,
     due_found: r.dueFound,
-    by_action: {
-      renew: r.decisions.filter((d) => d.action === "renew").length,
-      retry: r.decisions.filter((d) => d.action === "retry").length,
-      lapse_due: r.decisions.filter((d) => d.action === "lapse_due").length,
-      cancel_due: r.decisions.filter((d) => d.action === "cancel_due").length,
-      downgrade_due: r.decisions.filter((d) => d.action === "downgrade_due").length,
-      manual_review_required: r.manualReview,
-      payment_method_unavailable: r.paymentMethodUnavailable,
-    },
+    by_action: porAccion,
     errors: r.failures,
     decisions: r.decisions.map((d) => ({
       action: d.action, subscription_id: d.subscriptionId,
