@@ -399,7 +399,8 @@ async function main() {
     const { data: tasas } = await admin.from("commercial_fx_rates").select("id, note");
     for (const t of ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((x) => (x.note ?? "").includes(`QA PE-05B6C ${sello}`))) {
-      await admin.from("commercial_fx_rates").delete().eq("id", t.id);
+      await admin.from("commercial_fx_rates")
+        .update({ status: "retired" }).eq("id", t.id);
     }
     for (const id of personas) {
       await admin.from("platform_staff").delete().eq("user_id", id);

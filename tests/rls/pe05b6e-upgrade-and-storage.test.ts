@@ -854,7 +854,8 @@ async function main() {
 
   } finally {
     for (const org of orgs) await limpiar(org);
-    await admin.from("commercial_fx_rates").delete().eq("id", fxId);
+    await admin.from("commercial_fx_rates")
+      .update({ status: "retired" }).eq("id", fxId);
     for (const id of personas) {
       await admin.from("platform_staff").delete().eq("user_id", id);
       await admin.auth.admin.deleteUser(id);

@@ -151,6 +151,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B6C | Facturación · consola de campañas e historial del cliente | **0180** | **PASS · publicada no se reescribe · ciclo completo sin SQL** · 2026-09-05 |
 | PE-05B6D | Facturación · cambio de plan y cobro recurrente al importe nuevo | **0180** | **PASS · una transacción real a COP 476 000 sobre la MISMA fuente guardada · 17 pruebas deterministas del calendario anual** · 2026-09-05 |
 | PE-05B6E | Facturación · subida inmediata, bajada segura y periodicidad | **0181** | **PASS · una transacción real de COP 193 413 por la diferencia · 25 pruebas · 3 GB sobreviven a la bajada** · 2026-09-05 |
+| PE-05B6F | Facturación · administración del tipo de cambio y verdad histórica | **0182** | **PASS · el tipo de cambio se administra desde el producto · la historia ya no se inventa el plan · 18 pruebas · 0 cobros** · 2026-09-05 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
@@ -652,8 +653,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0181** |
-| Staging | **0181** |
+| Local | **0182** |
+| Staging | **0182** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

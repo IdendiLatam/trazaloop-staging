@@ -127,6 +127,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
     "0155_platform_faq_foundation.sql",

@@ -555,7 +555,8 @@ async function main() {
     const mias = ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((t) => (t.note ?? "").includes(`QA PE-05B2 ${sello}`));
     for (const t of mias) {
-      const { error } = await admin.from("commercial_fx_rates").delete().eq("id", t.id);
+      const { error } = await admin.from("commercial_fx_rates")
+        .update({ status: "retired" }).eq("id", t.id);
       if (error) console.error(`  (residuo) tipo de cambio ${t.id}: ${error.message}`);
     }
     const { data: quedan } = await admin.from("commercial_fx_rates").select("id, note");

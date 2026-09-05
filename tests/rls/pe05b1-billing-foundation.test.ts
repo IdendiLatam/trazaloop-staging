@@ -255,18 +255,25 @@ async function main() {
       const id = r.ok ? String(r.q.quote_id) : "";
       const total = r.ok ? n(r.q.total_amount) : 0;
 
-      const { data: nueva } = await sa.cli.from("commercial_fx_rates").insert({
-        base_currency: "USD", quote_currency: "COP", rate_micros: 9000_000_000,
-        effective_from: new Date().toISOString(), status: "active",
-        note: "PE-05B1 · subida de tasa para la prueba" }).select("id").single();
-      const nuevaId = (nueva as { id: string }).id;
+      // Desde B6F una tasa no se inserta a mano: se abre por su operación, que
+      // cierra la anterior donde empieza la nueva. Se programa para dentro de
+      // una hora para no dejar sin tasa a lo que viene después.
+      const { data: abierta, error: ea } = await sa.cli.rpc("commercial_fx_create", {
+        p_base_currency: "USD", p_quote_currency: "COP",
+        p_rate_micros: 9000_000_000,
+        p_effective_from: new Date(Date.now() + 3_600_000).toISOString(),
+        p_note: "PE-05B1 · subida de tasa para la prueba" });
+      assert(!ea, `abrir la tasa: ${ea?.message}`);
+      const nuevaId = String((abierta as J).fx_rate_id);
       try {
         const { data: despues } = await admin.from("billing_quotes")
           .select("total_amount, fx_rate_micros").eq("id", id).single();
         assert(n((despues as J).total_amount) === total, "el presupuesto emitido cambió de importe");
         assert(n((despues as J).fx_rate_micros) === TASA_MICROS, "cambió el tipo congelado");
       } finally {
-        await admin.from("commercial_fx_rates").delete().eq("id", nuevaId);
+        // Retirarla devuelve la vigencia abierta a la anterior, que es lo que
+        // necesitan las comprobaciones siguientes.
+        await sa.cli.rpc("commercial_fx_cancel_scheduled", { p_fx_rate_id: nuevaId });
       }
     });
 
@@ -582,7 +589,8 @@ async function main() {
     await admin.from("billing_quotes").delete().in("organization_id", [org, otraOrg]);
     await admin.from("billing_subscriptions").delete().in("organization_id", [org, otraOrg]);
     for (const id of reglasCreadas) await admin.from("billing_tax_rules").delete().eq("id", id);
-    if (fxId) await admin.from("commercial_fx_rates").delete().eq("id", fxId);
+    if (fxId) await admin.from("commercial_fx_rates")
+      .update({ status: "retired" }).eq("id", fxId);
     await admin.from("commercial_assignment_events").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
     await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);

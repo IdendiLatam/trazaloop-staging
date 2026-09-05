@@ -164,6 +164,12 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
     "Cambiar de periodicidad se programa para el final del periodo pagado y no "
     + "cobra nada hoy. Mismo motivo que bajar de plan: quien agotó su cupo tiene "
     + "que poder reorganizar su suscripción.",
+  "server/actions/commercial-fx.ts:createFxRateAction":
+    "Es de PLATAFORMA, no de una empresa: no hay empresa activa a la que "
+    + "ponerle una puerta comercial. La autorización real la comprueba la base, "
+    + "que exige superadministración.",
+  "server/actions/commercial-fx.ts:cancelScheduledFxRateAction": "Idem.",
+  "server/actions/commercial-fx.ts:closeCurrentFxRateAction": "Idem.",
   "server/actions/settings.ts:updateMyProfileAction":
     "Datos y seguridad de la propia persona: operación esencial de cuenta, nunca comercial.",
   "server/actions/platform.ts:listPlatformStaffAction":

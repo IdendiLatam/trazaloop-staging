@@ -486,15 +486,30 @@ async function main() {
         .select("id", { count: "exact", head: true }).eq("organization_id", e.org);
       assert((pagos ?? 0) === 1, "tocó la historia de cobros");
 
-      // Y la organización queda libre: una viva nueva cabe.
-      const { data: rev } = await admin.from("plan_revisions").select("id")
-        .eq("plan_code", "full").eq("status", "published").is("effective_to", null).single();
-      const { error } = await admin.from("billing_subscriptions").insert({
-        organization_id: e.org, provider: W, plan_code: "full",
-        plan_revision_id: (rev as { id: string }).id, billing_interval: "monthly",
-        catalog_amount_minor: 4000, catalog_currency: "USD",
-        base_charge_amount: 160000, charge_currency: "COP", status: "active" });
+      // Y la organización queda libre: puede volver a contratar. Antes esto se
+      // comprobaba metiendo a mano una suscripción viva suelta; desde B6F eso
+      // no cabe —una suscripción viva tiene su obligación— así que se comprueba
+      // igual que lo hace el producto: contratando otra vez.
+      const { data: q2 } = await e.quien.cli.rpc("billing_create_quote", {
+        p_organization_id: e.org, p_plan_code: "full", p_billing_interval: "monthly" });
+      const { data: i2 } = await e.quien.cli.rpc("billing_open_checkout_intent", {
+        p_quote_id: (q2 as { quote_id: string }).quote_id, p_provider: W,
+        p_environment: "test" });
+      const int2 = i2 as unknown as { intent_id: string; expected_total_amount: number };
+      const { error } = await admin.rpc("billing_settle_provider_payment", {
+        p_provider: W, p_external_reference: int2.intent_id,
+        p_provider_payment_id: `b5c-vuelta-${e.org.slice(0, 8)}`, p_outcome: "approved",
+        p_amount: int2.expected_total_amount, p_currency: "COP",
+        p_live_mode: false, p_failure_reason: null });
       assert(!error, `la retirada sigue bloqueando la empresa: ${error?.message}`);
+
+      const { data: vivas2 } = await admin.from("billing_subscriptions")
+        .select("id, status").eq("organization_id", e.org).eq("status", "active");
+      assert((vivas2 ?? []).length === 1, `quedaron ${(vivas2 ?? []).length} vivas`);
+      const { count: obligaciones } = await admin.from("billing_subscription_periods")
+        .select("id", { count: "exact", head: true })
+        .eq("subscription_id", ((vivas2 ?? [])[0] as { id: string }).id);
+      assert((obligaciones ?? 0) === 1, "la suscripción nueva nació sin obligación");
     });
 
     await check("Ningún rol de producto puede retirar una suscripción", async () => {
@@ -611,7 +626,8 @@ async function main() {
     const { data: tasas } = await admin.from("commercial_fx_rates").select("id, note");
     for (const t of ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((x) => (x.note ?? "").includes(`QA PE-05B5C ${sello}`))) {
-      await admin.from("commercial_fx_rates").delete().eq("id", t.id);
+      await admin.from("commercial_fx_rates")
+        .update({ status: "retired" }).eq("id", t.id);
     }
     for (const id of personas) {
       await admin.from("platform_staff").delete().eq("user_id", id);

@@ -290,7 +290,8 @@ async function main() {
     const { data: tasas } = await admin.from("commercial_fx_rates").select("id, note");
     for (const t of ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((x) => (x.note ?? "").includes(`QA PE-05B2W ${sello}`))) {
-      const { error: e } = await admin.from("commercial_fx_rates").delete().eq("id", t.id);
+      const { error: e } = await admin.from("commercial_fx_rates")
+        .update({ status: "retired" }).eq("id", t.id);
       if (e) console.error(`  (residuo) tasa ${t.id}: ${e.message}`);
     }
     for (const id of personas) {

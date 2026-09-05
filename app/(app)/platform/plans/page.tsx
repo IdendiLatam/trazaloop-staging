@@ -8,6 +8,8 @@ import { PlanCatalogConsole } from "@/components/domain/platform/plan-catalog-co
 import { RenewalOperations } from "@/components/domain/platform/renewal-operations";
 import { PromotionsConsole } from "@/components/domain/platform/promotions-console";
 import { getPromotionsAction } from "@/server/actions/promotions-console";
+import { getFxRatesAction } from "@/server/actions/commercial-fx";
+import { FxConsole } from "@/components/domain/platform/fx-console";
 import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
 
 /**
@@ -18,10 +20,11 @@ import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
  * plataforma cambia condiciones, y la base lo vuelve a comprobar.
  */
 export default async function PlatformPlansPage() {
-  const [catalogo, renovaciones, promociones] = await Promise.all([
+  const [catalogo, renovaciones, promociones, cambio] = await Promise.all([
     getPlanCatalogAction(),
     getRenewalOperationsAction(),
     getPromotionsAction(),
+    getFxRatesAction(),
   ]);
 
   return (
@@ -52,6 +55,20 @@ export default async function PlatformPlansPage() {
         limitsByRevision={catalogo.limitsByRevision}
         canManage={catalogo.canManage}
       />
+
+      <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">Tipo de cambio</h2>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            El catálogo está en dólares y el cobro se hace en pesos. La tasa que
+            los une es <strong>comercial</strong>: la decide la plataforma y tiene
+            fecha de entrada. No es la del mercado y no se consulta a ninguna API
+            al cobrar, porque el cliente tiene que ver el importe exacto antes de
+            pagar.
+          </p>
+        </div>
+        <FxConsole rates={cambio.rates} canManage={cambio.canManage} />
+      </section>
 
       <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
         <div className="space-y-1">
@@ -87,8 +104,8 @@ export default async function PlatformPlansPage() {
         <h2 className="eyebrow">Lo que NO se administra aquí</h2>
         <p className="text-sm text-ink-soft">
           El <strong>Acompañamiento especializado</strong> no es un plan: es un servicio aparte, con
-          su propia contratación, y no aparece en este catálogo. El cobro, los cupones y los
-          impuestos tampoco se gestionan aquí.
+          su propia contratación, y no aparece en este catálogo. El cobro y los impuestos
+          tampoco se gestionan aquí.
         </p>
       </section>
     </div>

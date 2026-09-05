@@ -35,6 +35,14 @@ const ESTADO_COBRO: Record<string, string> = {
   en_revision: "En verificación",
 };
 
+/** Qué fue cada cobro. Una renovación no es una contratación, y un cambio de
+ *  plan no es ninguna de las dos. */
+const CONCEPTO: Record<string, string> = {
+  suscripcion: "Suscripción",
+  renovacion: "Renovación",
+  cambio_de_plan: "Cambio de plan",
+};
+
 const dinero = (minor: number | null, moneda: string | null) =>
   minor === null || moneda === null ? null : money(minor, moneda);
 
@@ -167,14 +175,18 @@ export default async function BillingPage({
             impuestos de entonces. No es una factura electrónica.
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+            <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-hairline text-xs text-ink-soft">
                   <th className="py-2 pr-3 font-medium">Fecha</th>
+                  <th className="py-2 pr-3 font-medium">Concepto</th>
                   <th className="py-2 pr-3 font-medium">Plan</th>
-                  <th className="py-2 pr-3 font-medium">Estado</th>
+                  <th className="py-2 pr-3 font-medium">Periodicidad</th>
+                  <th className="py-2 pr-3 font-medium">Base</th>
                   <th className="py-2 pr-3 font-medium">Descuento</th>
+                  <th className="py-2 pr-3 font-medium">Impuestos</th>
                   <th className="py-2 pr-3 font-medium">Total</th>
+                  <th className="py-2 pr-3 font-medium">Estado</th>
                 </tr>
               </thead>
               <tbody>
@@ -182,20 +194,31 @@ export default async function BillingPage({
                   <tr key={c.id} className="border-b border-hairline/60">
                     <td className="py-2 pr-3">{longDate(c.paidAt ?? c.createdAt)}</td>
                     <td className="py-2 pr-3">
-                      {c.kind === "cambio_de_plan"
-                        ? `Cambio de ${c.changeSummary}`
-                        : `${planLabel(c.planCode)}${c.billingInterval
-                            ? ` · ${c.billingInterval === "annual" ? "anual" : "mensual"}`
-                            : ""}`}
+                      {CONCEPTO[c.concept]}
+                      {c.changeSummary ? ` · ${c.changeSummary}` : ""}
                     </td>
-                    {/* En palabras, no en código ni solo en color. */}
-                    <td className="py-2 pr-3">{ESTADO_COBRO[c.status]}</td>
+                    {/* El plan de ENTONCES, no el de hoy. Si no consta, se dice. */}
+                    <td className="py-2 pr-3">
+                      {c.planCode ? planLabel(c.planCode) : "—"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {c.billingInterval
+                        ? (c.billingInterval === "annual" ? "Anual" : "Mensual") : "—"}
+                    </td>
+                    <td className="py-2 pr-3">{money(c.baseAmount, c.currency)}</td>
                     <td className="py-2 pr-3">
                       {c.discountAmount > 0 ? `−${money(c.discountAmount, c.currency)}` : "—"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {money(c.taxAmount, c.currency)}
+                      {c.taxRateBasisPoints !== null
+                        ? ` (${(c.taxRateBasisPoints / 100).toFixed(0)} %)` : ""}
                     </td>
                     <td className="py-2 pr-3 font-medium">
                       {money(c.totalAmount, c.currency)}
                     </td>
+                    {/* En palabras, no en código ni solo en color. */}
+                    <td className="py-2 pr-3">{ESTADO_COBRO[c.status]}</td>
                   </tr>
                 ))}
               </tbody>

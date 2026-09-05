@@ -220,6 +220,8 @@ async function main() {
     note: `QA PE-05B6D ${sello} · tasa sintetica, NO comercial` }).select("id").single();
   assert(!efx, `tasa: ${efx?.message}`);
   const fxId = (fx as { id: string }).id;
+  // Toda tasa que abra esta suite, para poder retirarlas todas al terminar.
+  const tasasQA: string[] = [fxId];
 
   console.log("\nPE-05B6D · Cuándo empieza a valer un cambio de plan\n");
 
@@ -565,10 +567,15 @@ async function main() {
             `pidió cobrar ${(intento as { expected_total_amount: number })
               .expected_total_amount} y el Extra con IVA es ${esperado}`);
         } finally {
-          // La tasa vuelve pase lo que pase: si se queda cerrada, lo que falla
-          // después es esta prueba, no el producto.
-          await admin.from("commercial_fx_rates")
-            .update({ effective_to: null, status: "active" }).eq("id", fxId);
+          // Y vuelve a haber tasa, pase lo que pase. NO se reabre la cerrada:
+          // desde B6F una vigencia que ya terminó no se resucita —bajo ella se
+          // pusieron precios—. Se abre otra, que es lo que haría el producto.
+          const { data: otra } = await admin.from("commercial_fx_rates").insert({
+            base_currency: "USD", quote_currency: "COP", rate_micros: TASA_MICROS,
+            effective_from: new Date().toISOString(),
+            note: `QA PE-05B6D ${sello} · tasa sintetica de relevo, NO comercial`,
+          }).select("id").single();
+          if (otra) tasasQA.push((otra as { id: string }).id);
         }
       });
 
@@ -662,7 +669,10 @@ async function main() {
 
   } finally {
     for (const org of orgs) await limpiar(org);
-    await admin.from("commercial_fx_rates").delete().eq("id", fxId);
+    for (const t of tasasQA) {
+      await admin.from("commercial_fx_rates")
+        .update({ status: "retired" }).eq("id", t);
+    }
     for (const id of personas) await admin.auth.admin.deleteUser(id);
   }
 
