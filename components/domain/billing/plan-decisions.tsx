@@ -31,10 +31,13 @@ export function PlanDecisions({
   const [pendiente, empezar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [confirmando, setConfirmando] = useState<"cancelar" | "bajar" | null>(null);
+  const [confirmando, setConfirmando] = useState<"cancelar" | "cambiar" | null>(null);
 
   const fin = currentPeriodEnd ? longDate(currentPeriodEnd) : null;
-  const destino = planCode === "extra" ? "full" : null;
+  // Las dos direcciones, por la MISMA puerta y con la misma fecha. Subir de
+  // plan tampoco es inmediato: quien pagó su mes lo termina en el plan que
+  // pagó, y por eso no se cobra nada hoy ni en un sentido ni en el otro.
+  const destino = planCode === "extra" ? "full" : planCode === "full" ? "extra" : null;
 
   const lanzar = (fn: () => Promise<{ error: string | null }>, hecho: string) =>
     empezar(async () => {
@@ -65,7 +68,8 @@ export function PlanDecisions({
       <div className="space-y-3">
         <InfoAlert message={fin
           ? `Cambio a ${scheduledPlanLabel} programado para el ${fin}. Hasta entonces `
-            + "mantienes tu plan actual."
+            + "mantienes tu plan actual. No se prorratea el periodo en curso ni "
+            + "se genera abono por el tiempo restante."
           : `Cambio a ${scheduledPlanLabel} programado para el final del periodo pagado.`} />
         {error ? <ErrorAlert message={error} /> : null}
         <Button type="button" disabled={pendiente}
@@ -85,7 +89,7 @@ export function PlanDecisions({
       {confirmando === null ? (
         <div className="flex flex-wrap gap-2">
           {destino ? (
-            <Button type="button" onClick={() => setConfirmando("bajar")}>
+            <Button type="button" onClick={() => setConfirmando("cambiar")}>
               Cambiar a {planLabel(destino)}
             </Button>
           ) : null}
@@ -100,10 +104,12 @@ export function PlanDecisions({
           <p className="text-sm">
             {confirmando === "cancelar"
               ? `Tu plan seguirá activo hasta el ${fin ?? "final del periodo pagado"}. `
-                + "No se cobrará nada más y no se borra ningún dato."
+                + "No se cobrará nada más, no se devuelve la parte del periodo "
+                + "que no llegues a usar y no se borra ningún dato."
               : `El cambio a ${planLabel(destino)} entrará en vigor el `
                 + `${fin ?? "final del periodo pagado"}. Hasta entonces mantienes `
-                + "tu plan actual y no se cobra nada hoy."}
+                + "tu plan actual. Hoy no se cobra nada: no se prorratea el "
+                + "periodo en curso ni se genera abono por el tiempo restante."}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={pendiente}

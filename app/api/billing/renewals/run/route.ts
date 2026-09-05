@@ -111,7 +111,12 @@ export async function POST(request: Request) {
     counts: { dueFound: r.dueFound, charged: r.charged, retried: r.retried,
               lapsed: r.lapsed, skipped: r.skipped, failures: r.failures },
     decisions: r.decisions.map((d) => ({
-      mode: "dry_run", action: d.action, subscription_id: d.subscriptionId,
+      // Lo que quedó escrito tiene que ser lo que PASÓ. Antes esta línea decía
+      // siempre «dry_run», y por tanto una pasada que movió dinero de verdad se
+      // archivaba como si solo hubiera mirado: el registro contaba otra
+      // historia que los hechos.
+      mode: ejecutar ? "execute" : "dry_run",
+      action: d.action, subscription_id: d.subscriptionId,
       organization_id: d.organizationId, period_id: d.periodId,
       attempt_number: d.attemptNumber, slot: d.slot, outcome: d.outcome,
       failure_class: d.failureClass })),

@@ -38,7 +38,7 @@ const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
                   "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan",
-                  "renewal_runs", "inventory", "retire_subscription"] as const;
+                  "renewal_runs", "inventory", "retire_subscription", "close_qa_fx"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -336,10 +336,20 @@ export async function POST(request: Request) {
     const sello = Math.floor(Date.now() / 1000);
     const propiedades = ["transaction.id", "transaction.status",
                          "transaction.amount_in_cents"];
+    // Para reentregar el evento de una transacción REAL hay que repetir SU
+    // importe, no el de otra. Pero ese importe NO viene del navegador: se lee
+    // del pago ya registrado. Quien llama elige QUÉ transacción se reentrega,
+    // nunca por cuánto.
+    let centavos = 19_040_000;
+    if (cuerpo.transaction_id) {
+      const { data: pago } = await admin.from("billing_payments")
+        .select("total_amount").eq("provider_payment_id", idTransaccion).maybeSingle();
+      if (pago) centavos = (pago as { total_amount: number }).total_amount * 100;
+    }
     const datos = { transaction: { id: idTransaccion, status: "APPROVED",
-                                   amount_in_cents: 19_040_000, currency: "COP",
+                                   amount_in_cents: centavos, currency: "COP",
                                    reference: "qa-simulada" } };
-    const cadena = `${idTransaccion}APPROVED19040000${sello}${secreto}`;
+    const cadena = `${idTransaccion}APPROVED${centavos}${sello}${secreto}`;
     const checksum = cuerpo.break_signature === true
       ? "0".repeat(64)
       : createHash("sha256").update(cadena).digest("hex");
@@ -516,6 +526,26 @@ export async function POST(request: Request) {
       fx_rate_id: (nueva as { id: string }).id });
   }
 
+  if (accion === "close_qa_fx") {
+    // Cierra POR VIGENCIA la tasa sintética: no se borra ni se reescribe, se
+    // le pone fin. Lo que ya se presupuestó con ella sigue siendo cierto; lo
+    // que venga después vuelve a fallar cerrado, que es el estado correcto.
+    const { data: tasas } = await admin.from("commercial_fx_rates")
+      .select("id, note, status, effective_to")
+      .eq("base_currency", "USD").eq("quote_currency", "COP");
+    const vigente = ((tasas ?? []) as Record<string, unknown>[]).find((t) =>
+      String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION")
+      && t.status === "active" && !t.effective_to);
+    if (!vigente) return NextResponse.json({ ok: true, status: "no_open_qa_rate" });
+    const fin = new Date().toISOString();
+    const { error } = await admin.from("commercial_fx_rates")
+      .update({ effective_to: fin, status: "retired" })
+      .eq("id", vigente.id as string);
+    if (error) return no(`FX_CLOSE_FAILED:${error.message}`, 500);
+    return NextResponse.json({ ok: true, status: "closed",
+      fx_rate_id: vigente.id, effective_to: fin });
+  }
+
   if (accion === "recent_checkouts") {
     // Solo LEE. Sirve para localizar la contratación que hizo una persona
     // desde el navegador cuando no se sabe con qué empresa entró.
@@ -637,7 +667,10 @@ export async function POST(request: Request) {
     const { data: subs } = await admin.from("billing_subscriptions")
       .select("id, status, plan_code, billing_interval, current_period_start,"
         + " current_period_end, renews_at, grace_until, provider,"
-        + " base_charge_amount, charge_currency, fx_rate_micros, created_at")
+        + " base_charge_amount, charge_currency, fx_rate_micros, created_at,"
+        + " scheduled_plan_revision_id, scheduled_effective_at,"
+        + " scheduled_base_charge_amount, scheduled_charge_currency,"
+        + " scheduled_fx_rate_micros")
       .eq("organization_id", orgId).order("created_at");
     const { data: periodos } = await admin.from("billing_subscription_periods")
       .select("id, subscription_id, period_sequence, period_start, period_end, base_amount, status, settled_payment_id, settled_at")
