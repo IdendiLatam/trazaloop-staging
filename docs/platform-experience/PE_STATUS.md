@@ -144,6 +144,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B5B | Facturación · cimientos del cobro automático | **0174** | **PASS · defectos AA/AB reparados, 20 pruebas deterministas, sin planificador** · 2026-09-04 |
 | PE-05B5C | Facturación · ciclo de vida completo y puerta en seco | **0175** | **PASS · sin tarjeta, en duda, cancelación y bajada de plan · ruta sin capacidad de cobro** · 2026-09-05 |
 | PE-05B5D | Facturación · renovación real desde el planificador | **0176** | **PASS · un cobro real, webhook firmado, sin tipo de cambio vigente · ejecución apagada** · 2026-09-05 |
+| PE-05B5E | Facturación · el lado que falla, gracia y operación | **0177** | **PASS · cuatro defectos de vencimiento y huecos corregidos · ejecución apagada** · 2026-09-05 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
