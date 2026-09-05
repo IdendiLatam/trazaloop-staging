@@ -38,8 +38,7 @@ const ACCIONES = ["preflight", "contracts", "prepare",
                   "create_payment_source", "charge", "get_transaction",
                   "simulate_event", "renew", "state", "link_payment_source",
                   "seed_qa_fx", "fx_state", "recent_checkouts", "privacy_scan",
-                  "renewal_runs", "inventory", "retire_subscription",
-                  "b5d_fixture"] as const;
+                  "renewal_runs", "inventory", "retire_subscription"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 const no = (motivo: string, code = 403) =>
@@ -614,97 +613,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result: data });
   }
 
-  if (accion === "b5d_fixture") {
-    // El fixture de la prueba real de renovación. Crea SOLO historia nueva:
-    // una suscripción sintética con su ancla en el pasado, para que una —y solo
-    // una— renovación esté vencida hoy. No toca ni una fila anterior.
-    //
-    // Un contrato normal no puede empezar en el pasado, y con razón: por eso
-    // esto vive en el disparador de QA y nunca en el producto.
-    const orgId = String(cuerpo.organization_id ?? "");
-    const metodoId = String(cuerpo.payment_method_id ?? "");
-    const dias = Number(cuerpo.anchor_days_ago ?? 32);
-
-    const { data: pm } = await admin.from("billing_payment_methods")
-      .select("id, organization_id, provider, environment, status")
-      .eq("id", metodoId).single();
-    if (!pm) return no("PAYMENT_METHOD_NOT_FOUND", 404);
-    const m = pm as Record<string, unknown>;
-    if (m.organization_id !== orgId || m.status !== "active" || m.environment !== "test") {
-      return no("PAYMENT_METHOD_NOT_USABLE", 424);
-    }
-
-    // El presupuesto y el entorno de la contratación que ya tuvo esta empresa.
-    // No se crea uno nuevo: sería inventar dinero que nadie presupuestó.
-    const { data: origen } = await admin.from("billing_checkout_intents")
-      .select("quote_id, environment").eq("organization_id", orgId)
-      .order("created_at").limit(1).single();
-    if (!origen) return no("NO_ORIGIN_QUOTE", 424);
-    const o = origen as { quote_id: string; environment: string };
-
-    const { data: rev } = await admin.from("plan_revisions")
-      .select("id").eq("plan_code", "full").eq("status", "published")
-      .is("effective_to", null).single();
-    if (!rev) return no("PLAN_REVISION_MISSING", 424);
-
-    // El calendario sale de la primitiva canónica, no de una resta de fechas.
-    const ancla = new Date(Date.now() - dias * 86_400_000).toISOString();
-    const { data: lim } = await admin.rpc("billing_period_bounds", {
-      p_anchor: ancla, p_interval: "monthly", p_sequence: 1 });
-    const l = lim as { period_start: string; period_end: string };
-
-    const { data: sub, error: es } = await admin.from("billing_subscriptions").insert({
-      organization_id: orgId, provider: String(m.provider), plan_code: "full",
-      plan_revision_id: (rev as { id: string }).id, billing_interval: "monthly",
-      catalog_amount_minor: 4000, catalog_currency: "USD",
-      base_charge_amount: 160000, charge_currency: "COP", status: "active",
-      current_period_start: l.period_start, current_period_end: l.period_end,
-      renews_at: l.period_end,
-    }).select("id").single();
-    if (es || !sub) return no(`FIXTURE_SUBSCRIPTION_FAILED:${es?.message}`, 500);
-    const subId = (sub as { id: string }).id;
-
-    const { error: ep } = await admin.from("billing_subscription_periods").insert({
-      subscription_id: subId, organization_id: orgId, period_sequence: 1,
-      period_start: l.period_start, period_end: l.period_end,
-      base_amount: 160000, charge_currency: "COP",
-      status: "settled", settled_at: l.period_start,
-    });
-    if (ep) return no(`FIXTURE_PERIOD_FAILED:${ep.message}`, 500);
-
-    // Un intento cerrado que ata la suscripción a su presupuesto: es de donde
-    // la renovación heredará el entorno y el presupuesto de origen.
-    const { data: intento, error: ei } = await admin.from("billing_checkout_intents").insert({
-      organization_id: orgId, quote_id: o.quote_id, provider: String(m.provider),
-      environment: o.environment, expected_total_amount: 190400,
-      expected_currency: "COP", billing_interval: "monthly", plan_code: "full",
-      billing_subscription_id: subId, payment_method_id: metodoId,
-      status: "settled",
-      failure_reason: "QA-SYNTHETIC-NOT-FOR-PRODUCTION · PE-05B5D-REAL-RENEWAL-FIXTURE",
-    }).select("id").single();
-    if (ei) return no(`FIXTURE_INTENT_FAILED:${ei.message}`, 500);
-
-    // Y el derecho, por la primitiva de siempre: sobre los módulos funcionales
-    // que YA estaban habilitados, sin encender ninguno.
-    const { data: mods } = await admin.from("organization_modules")
-      .select("module_code, enabled").eq("organization_id", orgId).eq("enabled", true);
-    const { data: cat } = await admin.from("modules").select("code, is_functional");
-    const funcionales = new Set(((cat ?? []) as Record<string, unknown>[])
-      .filter((x) => x.is_functional === true).map((x) => String(x.code)));
-    let aplicados = 0;
-    for (const mm of (mods ?? []) as { module_code: string }[]) {
-      if (!funcionales.has(mm.module_code)) continue;
-      const { data: ok } = await admin.rpc("billing_apply_tier_to_module", {
-        p_organization_id: orgId, p_module_code: mm.module_code });
-      if (ok === true) aplicados += 1;
-    }
-
-    return NextResponse.json({ ok: true, subscription_id: subId,
-      intent_id: (intento as { id: string }).id,
-      anchor: ancla, period_start: l.period_start, period_end: l.period_end,
-      modules_granted: aplicados,
-      label: "QA-SYNTHETIC-NOT-FOR-PRODUCTION · PE-05B5D-REAL-RENEWAL-FIXTURE" });
-  }
+  // -------------------------------------------------------------------------
+  // El fixture de la prueba real de renovación ya no existe
+  // -------------------------------------------------------------------------
+  //
+  // Existió una sola vez, para crear la suscripción sintética con el ancla en
+  // el pasado que hacía falta para que UNA renovación estuviera vencida hoy.
+  // Cumplió, y se retira: un camino capaz de fechar historia comercial hacia
+  // atrás no debe quedarse esperando a que alguien lo encuentre. La guardia A2
+  // lo cazó además leyendo el catálogo a mano, que era la otra razón para no
+  // conservarlo.
+  //
+  // La suscripción que creó —e7f90816— y su historia se quedan: son la
+  // evidencia de la prueba.
 
   if (accion === "state") {
     // Solo LEE. Es la vista del libro que necesita la prueba para demostrar
