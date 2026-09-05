@@ -42,6 +42,8 @@ export default async function CheckoutPage({
   const activeModule = activeShellModuleFrom("/settings/billing/checkout", params);
   const volver = moduleAwareHref("/settings/billing", activeModule.key);
   const plan = typeof params.plan === "string" ? params.plan : "";
+  // El código viaja por la dirección; el descuento NO. Lo calcula la base.
+  const cupon = typeof params.coupon === "string" ? params.coupon.slice(0, 40) : null;
   const intervalo = params.interval === "annual" ? "annual" : "monthly";
 
   const org = await requireActiveOrg();
@@ -74,12 +76,13 @@ export default async function CheckoutPage({
           intentId={viva.intentId} planCode={plan} intervalo={intervalo}
           base={viva.baseAmount} impuesto={viva.taxAmount}
           total={viva.totalAmount} caduca={viva.expiresAt}
+          descuento={0} promocion={null}
         />
       </Marco>
     );
   }
 
-  const presupuesto = await createBillingQuote(org.organizationId, plan, intervalo);
+  const presupuesto = await createBillingQuote(org.organizationId, plan, intervalo, cupon);
   if (!presupuesto.ok) {
     return (
       <Marco volver={volver}>
@@ -109,6 +112,8 @@ export default async function CheckoutPage({
         planCode={presupuesto.planCode} intervalo={presupuesto.billingInterval}
         base={presupuesto.baseAmount} impuesto={presupuesto.taxAmount}
         total={presupuesto.totalAmount} caduca={presupuesto.expiresAt}
+        descuento={presupuesto.discountAmount}
+        promocion={presupuesto.promotionName}
       />
     </Marco>
   );
@@ -132,10 +137,11 @@ function Marco({ volver, children }: { volver: string; children: React.ReactNode
 
 async function Contratacion({
   intentId, planCode, intervalo, base, impuesto, total, caduca,
+  descuento, promocion,
 }: {
   intentId: string; planCode: string;
   intervalo: "monthly" | "annual"; base: number; impuesto: number;
-  total: number; caduca: string;
+  total: number; caduca: string; descuento: number; promocion: string | null;
 }) {
   const config = await getWompiPublicConfig();
 
@@ -156,6 +162,21 @@ async function Contratacion({
           <dd className="font-medium">{planLabel(planCode)}</dd>
           <dt className="text-ink-soft">Facturación</dt>
           <dd>{intervalo === "annual" ? "Anual" : "Mensual"}</dd>
+          {/*
+            Las cuatro líneas, sin esconder ninguna: precio, descuento,
+            impuestos y total. Un «precio antes» que no se explica es
+            publicidad; esto es aritmética.
+          */}
+          {descuento > 0 ? (
+            <>
+              <dt className="text-ink-soft">Precio</dt>
+              <dd>{pesos(base + descuento)}</dd>
+              <dt className="text-ink-soft">
+                Descuento{promocion ? ` · ${promocion}` : ""}
+              </dt>
+              <dd>−{pesos(descuento)}</dd>
+            </>
+          ) : null}
           <dt className="text-ink-soft">Base</dt>
           <dd>{pesos(base)}</dd>
           <dt className="text-ink-soft">Impuestos</dt>

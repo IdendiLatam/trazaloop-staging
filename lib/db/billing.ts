@@ -16,6 +16,11 @@ export type QuoteResult =
       billingInterval: "monthly" | "annual";
       catalogAmountMinor: number;
       catalogCurrency: string;
+      /** Lo que el cupón descontó, si lo hubo. Nunca llega del navegador. */
+      couponCode: string | null;
+      promotionName: string | null;
+      discountBasisPoints: number | null;
+      discountAmount: number;
       chargeCurrency: string;
       fxRateMicros: number;
       baseAmount: number;
@@ -28,6 +33,7 @@ export type QuoteResult =
   | { ok: false; code: QuoteErrorCode };
 
 export type QuoteErrorCode =
+  | "COUPON_NOT_APPLICABLE"
   | "NOT_AUTHORIZED"
   | "PLAN_NOT_PURCHASABLE"
   | "PLAN_PRICE_NOT_CONFIGURED"
@@ -37,6 +43,10 @@ export type QuoteErrorCode =
   | "SYSTEM_ERROR";
 
 export const QUOTE_ERROR_MESSAGE: Record<QuoteErrorCode, string> = {
+  // Se dice que no vale, y NO por qué: la regla interna de una campaña no es
+  // asunto de quien teclea el código, y contarla enseña a buscarle la vuelta.
+  COUPON_NOT_APPLICABLE:
+    "Ese código no se puede aplicar a este plan. No se cobró nada.",
   NOT_AUTHORIZED:
     "Solo quien administra la empresa puede contratar un plan.",
   PLAN_NOT_PURCHASABLE:
@@ -55,9 +65,9 @@ export const QUOTE_ERROR_MESSAGE: Record<QuoteErrorCode, string> = {
 };
 
 function clasificar(message: string): QuoteErrorCode {
-  for (const c of ["PLAN_NOT_PURCHASABLE", "PLAN_PRICE_NOT_CONFIGURED",
-    "FX_RATE_UNAVAILABLE", "TAX_RULE_UNAVAILABLE", "BILLING_INTERVAL_INVALID",
-    "NOT_AUTHORIZED"] as const) {
+  for (const c of ["COUPON_NOT_APPLICABLE", "PLAN_NOT_PURCHASABLE",
+    "PLAN_PRICE_NOT_CONFIGURED", "FX_RATE_UNAVAILABLE", "TAX_RULE_UNAVAILABLE",
+    "BILLING_INTERVAL_INVALID", "NOT_AUTHORIZED"] as const) {
     if (message.includes(c)) return c;
   }
   return "SYSTEM_ERROR";
@@ -73,13 +83,17 @@ const n = (v: unknown): number => (typeof v === "number" ? v : Number(v));
 export async function createBillingQuote(
   organizationId: string,
   planCode: string,
-  billingInterval: string
+  billingInterval: string,
+  couponCode?: string | null
 ): Promise<QuoteResult> {
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("billing_create_quote", {
     p_organization_id: organizationId,
     p_plan_code: planCode,
     p_billing_interval: billingInterval,
+    // Un CÓDIGO. Nunca un porcentaje y nunca un importe: el descuento lo
+    // calcula la base, que es la única que puede comprobar si aplica.
+    p_coupon_code: couponCode ?? null,
   });
   if (error) return { ok: false, code: clasificar(error.message ?? "") };
   const r = (data ?? {}) as Record<string, unknown>;
@@ -91,6 +105,11 @@ export async function createBillingQuote(
     billingInterval: r.billing_interval === "annual" ? "annual" : "monthly",
     catalogAmountMinor: n(r.catalog_amount_minor),
     catalogCurrency: String(r.catalog_currency),
+    couponCode: typeof r.coupon_code === "string" ? r.coupon_code : null,
+    promotionName: typeof r.promotion_name === "string" ? r.promotion_name : null,
+    discountBasisPoints: r.discount_basis_points === null
+      || r.discount_basis_points === undefined ? null : n(r.discount_basis_points),
+    discountAmount: n(r.discount_amount ?? 0),
     chargeCurrency: String(r.charge_currency),
     fxRateMicros: n(r.fx_rate_micros),
     baseAmount: n(r.base_amount),

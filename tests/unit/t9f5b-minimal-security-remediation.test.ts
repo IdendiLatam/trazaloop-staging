@@ -619,6 +619,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0176_billing_subscription_administrative_retirement.sql",
     "0177_billing_renewal_failure_hardening.sql",
     "0178_billing_customer_plan_transitions.sql",
+    "0179_billing_promotions.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -645,6 +646,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0176_billing_subscription_administrative_retirement.sql",
     "0177_billing_renewal_failure_hardening.sql",
     "0178_billing_customer_plan_transitions.sql",
+    "0179_billing_promotions.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
