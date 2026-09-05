@@ -273,8 +273,16 @@ export function buildAttemptReference(attemptId: string): string {
   return `pay_${attemptId.toLowerCase()}`;
 }
 
+/** El cobro de una SUBIDA de plan. Prefijo propio para que en el panel del
+ *  proveedor se distinga de una renovación de un vistazo; lo que identifica la
+ *  operación sigue siendo el intento, y quién es cada uno lo decide el dominio,
+ *  no el prefijo. */
+export function buildUpgradeReference(attemptId: string): string {
+  return `upg_${attemptId.toLowerCase()}`;
+}
+
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const RE_INTENTO = new RegExp(`^pay_(${UUID})$`, "i");
+const RE_INTENTO = new RegExp(`^(?:pay|upg)_(${UUID})$`, "i");
 
 /** Solo el formato exacto. Lo que no se reconozca va a revisión. */
 export function parseAttemptReference(referencia: string | null | undefined): string | null {

@@ -62,6 +62,7 @@ const VISTAS_DEFINER_CLASIFICADAS: Record<string, string> = {
   v_platform_organization_members: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_platform_organization_invitations: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_platform_support_ticket_summary: "Filtra con `is_platform_staff()` DENTRO de la vista.",
+  v_billing_subscription_changes: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_organization_plan_usage: "Acotada a la empresa de quien pregunta dentro de la vista.",
   v_organization_module_usage: "Idem.",
   v_organization_onboarding_status: "Idem.",
@@ -135,7 +136,7 @@ async function main() {
     await cli.auth.signInWithPassword({ email, password });
     try {
       for (const v of ["v_intelligence_usage_platform", "v_intelligence_usage_platform_by_use_case",
-                       "v_platform_organizations"]) {
+                       "v_platform_organizations", "v_billing_subscription_changes"]) {
         const { data: filas } = await cli.from(v).select("*");
         assert((filas?.length ?? 0) === 0, `${v} devolvió ${filas?.length} filas a alguien sin rol`);
       }

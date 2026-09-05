@@ -10,6 +10,9 @@ import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import { describeBillingState } from "@/lib/domain/billing-state";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
+import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
+import { storageImpactOf } from "@/lib/db/storage-impact";
+import { pendingUpgrade } from "@/lib/db/billing-upgrade";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -45,11 +48,20 @@ export default async function BillingPage({
   const activeModule = activeShellModuleFrom("/settings/billing", await searchParams);
   const org = await requireActiveOrg();
   const esAdministrador = org.roleCode === "admin";
-  const [estado, catalogo, historial] = await Promise.all([
+  const [estado, catalogo, historial, subidaEnCurso] = await Promise.all([
     getOrganizationBillingState(org.organizationId),
     listPublicPlanCatalog(),
     listPaymentHistory(org.organizationId),
+    pendingUpgrade(org.organizationId),
   ]);
+
+  // Bajar de plan puede dejar a la empresa por encima del espacio del plan
+  // nuevo. Las dos cifras se traen ANTES de que nadie confirme nada.
+  const revisionDestino = estado?.planCode === "extra"
+    ? ((catalogo ?? []).find((p) => p.planCode === "full")?.planRevisionId ?? null)
+    : null;
+  const espacio = revisionDestino
+    ? await storageImpactOf(org.organizationId, revisionDestino) : null;
 
   // Sin dato NO es «no hay planes»: es que no se pudo leer.
   const dePago = (catalogo ?? []).filter((p) => p.planCode !== "free");
@@ -109,6 +121,23 @@ export default async function BillingPage({
         )}
       </section>
 
+      {esAdministrador && estado?.hasSubscription && estado.planCode === "full"
+        && !estado.cancelAtPeriodEnd && !estado.downgradeScheduled ? (
+        <section className="rounded-md border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Subir a Extra</h2>
+          {subidaEnCurso ? (
+            <InfoAlert message={
+              "Estamos confirmando el pago del cambio a Extra. En cuanto se "
+              + "confirme, el plan queda activo. Tu plan actual sigue funcionando "
+              + "mientras tanto."} />
+          ) : (
+            <div className="pt-2">
+              <UpgradePanel targetPlanCode="extra" renewsAt={estado.renewsAt} />
+            </div>
+          )}
+        </section>
+      ) : null}
+
       {!esAdministrador ? (
         <InfoAlert message="Tu rol permite consultar el plan, pero no contratarlo." />
       ) : estado?.hasSubscription ? (
@@ -120,9 +149,12 @@ export default async function BillingPage({
           </p>
           <PlanDecisions
             planCode={estado.planCode}
+            billingInterval={estado.billingInterval}
             currentPeriodEnd={estado.currentPeriodEnd}
             cancelScheduled={estado.cancelAtPeriodEnd}
             scheduledPlanLabel={estado.downgradeScheduled ? "el plan programado" : null}
+            storageUsedBytes={espacio?.usedBytes ?? null}
+            targetStorageBytes={espacio?.targetQuotaBytes ?? null}
           />
         </section>
       ) : null}
@@ -150,9 +182,11 @@ export default async function BillingPage({
                   <tr key={c.id} className="border-b border-hairline/60">
                     <td className="py-2 pr-3">{longDate(c.paidAt ?? c.createdAt)}</td>
                     <td className="py-2 pr-3">
-                      {planLabel(c.planCode)}
-                      {c.billingInterval
-                        ? ` · ${c.billingInterval === "annual" ? "anual" : "mensual"}` : ""}
+                      {c.kind === "cambio_de_plan"
+                        ? `Cambio de ${c.changeSummary}`
+                        : `${planLabel(c.planCode)}${c.billingInterval
+                            ? ` · ${c.billingInterval === "annual" ? "anual" : "mensual"}`
+                            : ""}`}
                     </td>
                     {/* En palabras, no en código ni solo en color. */}
                     <td className="py-2 pr-3">{ESTADO_COBRO[c.status]}</td>

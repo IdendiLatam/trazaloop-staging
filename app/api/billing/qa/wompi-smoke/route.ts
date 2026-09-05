@@ -344,7 +344,17 @@ export async function POST(request: Request) {
     if (cuerpo.transaction_id) {
       const { data: pago } = await admin.from("billing_payments")
         .select("total_amount").eq("provider_payment_id", idTransaccion).maybeSingle();
-      if (pago) centavos = (pago as { total_amount: number }).total_amount * 100;
+      if (pago) {
+        centavos = (pago as { total_amount: number }).total_amount * 100;
+      } else {
+        // Todavía no hay pago escrito —es lo que pasa cuando la primera entrega
+        // no se pudo procesar—. El importe se le pregunta AL PROVEEDOR, que es
+        // quien sabe cuánto cobró; nunca al navegador.
+        const leida = await proveedor.getTransaction(idTransaccion);
+        if (leida.ok && leida.value.amountCopMinor !== null) {
+          centavos = leida.value.amountCopMinor * 100;
+        }
+      }
     }
     const datos = { transaction: { id: idTransaccion, status: "APPROVED",
                                    amount_in_cents: centavos, currency: "COP",

@@ -452,19 +452,29 @@ async function main() {
       assert(s.billing_interval === "monthly", `le cambió el intervalo a ${s.billing_interval}`);
     });
 
-    await check("F2. Cambiar de intervalo NO existe: la primitiva no lo admite", async () => {
-      // Esto no es un adorno. Mientras no exista la operación, lo peligroso
-      // sería que alguien la improvisara escribiendo `billing_interval` a mano
-      // y partiera por la mitad un año ya pagado. La prueba deja escrito que la
-      // única puerta que hay no tiene ese picaporte.
-      const { data, error } = await admin.rpc("billing_schedule_plan_change", {
-        p_subscription_id: "00000000-0000-0000-0000-000000000000",
-        p_target_plan_code: "extra", p_billing_interval: "annual" });
-      assert(error !== null, `aceptó un intervalo destino: ${JSON.stringify(data)}`);
-      assert(/function|schema cache|does not exist|PGRST202/i.test(
-        `${error?.message} ${(error as { code?: string } | null)?.code ?? ""}`),
-        `falló por otra razón: ${error?.message}`);
-    });
+    await check("F2. Cambiar de intervalo YA existe, y tampoco corta un año pagado",
+      async () => {
+        // Esta comprobación decía, hasta B6E, que la operación no existía: la
+        // única puerta no tenía ese picaporte. Ahora lo tiene, así que lo que se
+        // afirma es la MISMA invariante bajo la implementación nueva: cambiar de
+        // periodicidad sigue esperando al borde del periodo pagado, y un año
+        // pendiente se respeta entero aunque el destino sea mensual.
+        const e = await empresaPagando("F intervalo", "full", "annual");
+        const lim = await envejecer(e.subscriptionId, dias(60));
+        const { data, error } = await e.quien.cli.rpc("billing_schedule_transition", {
+          p_subscription_id: e.subscriptionId, p_target_plan_code: null,
+          p_target_billing_interval: "monthly" });
+        assert(!error, `programar la periodicidad: ${error?.message}`);
+        const r = data as Record<string, unknown>;
+        assert(r.status === "scheduled", JSON.stringify(r));
+        assert(r.effective_at === lim.period_end,
+          `entra el ${r.effective_at} y el año acaba el ${lim.period_end}`);
+        const faltan = (new Date(lim.period_end).getTime() - Date.now()) / 86_400_000;
+        assert(faltan > 290, `le cortaron el año: quedan ${Math.round(faltan)} días`);
+        // Y hoy no cambia nada.
+        const s = await suscripcion(e.subscriptionId);
+        assert(s.billing_interval === "annual", `ya es ${s.billing_interval}`);
+      });
 
     // =====================================================================
     console.log("\nG y H · El borde es el borde");

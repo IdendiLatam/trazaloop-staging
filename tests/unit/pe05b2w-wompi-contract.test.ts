@@ -16,6 +16,7 @@ import {
   integritySignaturePayload, eventChecksumPayload, sanitizeEventEnvelope,
   envelopeIsClean, readPath, WOMPI_EVENT_TRANSACTION_UPDATED,
   eventEnvironmentMatches, parseAttemptReference, buildAttemptReference,
+  buildUpgradeReference,
 } from "../../lib/billing/wompi/mapping";
 
 let passed = 0, failed = 0;
@@ -398,8 +399,18 @@ check("La referencia identifica UN intento, y no decide nada", () => {
   assert(parseAttemptReference(`PAY_${intento.toUpperCase()}`) === intento,
     "no se normaliza a minúsculas");
 
+  // PE-05B6E · La SUBIDA de plan usa su propio prefijo, y el lector tiene que
+  // reconocerlo. No es una preferencia de estilo: la primera entrega real de un
+  // `upg_` acabó en revisión manual con `unparseable_reference`, y el cobro ya
+  // estaba hecho. Quien añada un tercer prefijo tiene que pasar por aquí.
+  assert(buildUpgradeReference(intento) === `upg_${intento}`, "la referencia de subida");
+  assert(parseAttemptReference(`upg_${intento}`) === intento,
+    "una subida de plan no se lee de vuelta");
+  assert(parseAttemptReference(`UPG_${intento.toUpperCase()}`) === intento,
+    "la subida no se normaliza a minúsculas");
+
   // Nada de números en la cadena, nada de adivinar.
-  for (const malo of [intento, `pay_${intento}_2`, `sub_${intento}_2`,
+  for (const malo of [intento, `pay_${intento}_2`, `upg_${intento}_2`, `sub_${intento}_2`,
                       `int_${intento}`, `${intento}-1`, "pay_no-es-uuid",
                       "ORDER-123", "", null, undefined, `x_pay_${intento}`]) {
     assert(parseAttemptReference(malo as string) === null,

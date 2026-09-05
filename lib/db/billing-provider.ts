@@ -234,13 +234,23 @@ export async function subscriptionIsLive(subscriptionId: string): Promise<boolea
 export async function classifyAttempt(attemptId: string): Promise<
   | { kind: "initial"; intentId: string; organizationId: string }
   | { kind: "renewal"; intentId: string; periodId: string; organizationId: string }
+  | { kind: "upgrade"; intentId: string; changeId: string; organizationId: string }
   | null
 > {
   const admin = createAdminClient();
   const { data, error } = await admin.from("billing_checkout_intents")
-    .select("id, period_id, organization_id").eq("id", attemptId).single();
+    .select("id, period_id, subscription_change_id, organization_id")
+    .eq("id", attemptId).single();
   if (error || !data) return null;
-  const d = data as { id: string; period_id: string | null; organization_id: string };
+  const d = data as { id: string; period_id: string | null;
+                      subscription_change_id: string | null; organization_id: string };
+  // La SUBIDA se mira primero: no tiene periodo propio —se paga sobre uno que ya
+  // está saldado— y si se dejara caer en la rama de contratación acabaría
+  // creando una segunda suscripción para la misma empresa.
+  if (d.subscription_change_id) {
+    return { kind: "upgrade", intentId: d.id, changeId: d.subscription_change_id,
+             organizationId: d.organization_id };
+  }
   return d.period_id
     ? { kind: "renewal", intentId: d.id, periodId: d.period_id,
         organizationId: d.organization_id }

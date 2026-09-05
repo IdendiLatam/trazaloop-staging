@@ -35,3 +35,21 @@ export function timeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString("es-CO",
     { hour: "numeric", minute: "2-digit" });
 }
+
+/**
+ * Espacio, en la unidad que una persona usa para hablar de archivos.
+ *
+ * Se cuenta en potencias de 1024 —que es como lo cuenta el límite del plan— y
+ * se dice «MB» y «GB», que es como lo dice todo el mundo. Decir «MiB» sería
+ * más exacto y menos legible, y aquí importa que se entienda.
+ */
+export function storageSize(bytes: number): string {
+  const GB = 1024 * 1024 * 1024;
+  const MB = 1024 * 1024;
+  if (bytes >= GB) {
+    const v = bytes / GB;
+    return `${v >= 10 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1)} GB`;
+  }
+  if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+  return `${Math.max(0, Math.round(bytes / 1024))} KB`;
+}

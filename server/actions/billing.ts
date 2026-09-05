@@ -213,3 +213,159 @@ export async function cancelScheduledChangeAction(): Promise<PlanChangeState> {
   revalidatePath("/settings/billing");
   return { error: null, ok: true };
 }
+
+/**
+ * Trazaloop · PE-05B6E · Subir de plan hoy, pagando solo la diferencia.
+ *
+ * TRES PASOS, Y NINGUNO CONCEDE NADA POR SÍ SOLO
+ *
+ * Presupuestar dice cuánto. Confirmar cobra contra la tarjeta que la empresa ya
+ * tiene guardada —aquí no entra ni un dígito de tarjeta—. Y conceder Extra lo
+ * hace el evento firmado del proveedor, igual que en la contratación y en la
+ * renovación. Si el pago no se confirma, la empresa se queda donde estaba: en
+ * su plan actual, con su espacio actual, sin nada a medias.
+ */
+export type UpgradeQuoteState =
+  | { error: null; quote: import("@/lib/db/billing-upgrade").UpgradeQuote }
+  | { error: string; quote?: undefined };
+
+/** Por qué no se puede subir ahora, en palabras de quien lo lee. */
+const NO_SE_PUEDE: Record<string, string> = {
+  already_on_plan: "Ya tienes ese plan.",
+  not_upgradable: "Tu plan no está activo ahora mismo, así que no podemos cambiarlo todavía.",
+  change_already_scheduled:
+    "Ya tienes un cambio programado. Retíralo primero y vuelve a intentarlo.",
+  cancellation_scheduled:
+    "Tienes una cancelación programada. Retírala primero y vuelve a intentarlo.",
+  upgrade_already_pending:
+    "Ya hay un cambio a Extra en curso. Espera a que se confirme.",
+  period_unpaid:
+    "Tienes un cobro pendiente de tu periodo actual. Cuando se resuelva podrás cambiar de plan.",
+  period_ended:
+    "Tu periodo actual acaba de terminar. Vuelve a intentarlo en un momento.",
+  period_not_started: "Tu periodo todavía no ha empezado.",
+  anchor_missing: "No pudimos leer tu periodo de facturación. No se cambió nada.",
+  no_positive_delta:
+    "Para el tiempo que queda de tu periodo, ese plan no supone un importe adicional. "
+    + "Escríbenos y lo revisamos contigo.",
+  subscription_not_found: "No hay un plan de pago activo que cambiar.",
+  fx_unavailable:
+    "Todavía no podemos calcular el precio del plan nuevo en pesos. No se cambió nada.",
+  not_authorized: "Solo quien administra la empresa puede cambiar el plan.",
+  unavailable: "No pudimos preparar el cambio de plan. No se cambió nada.",
+};
+
+export async function quoteUpgradeAction(
+  targetPlanCode: string
+): Promise<UpgradeQuoteState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const sub = await suscripcionDe(quien.organizationId);
+  if (!sub) return { error: NO_SE_PUEDE.subscription_not_found };
+
+  const { quoteUpgrade } = await import("@/lib/db/billing-upgrade");
+  const r = await quoteUpgrade(sub, targetPlanCode);
+  if (!r.ok) return { error: NO_SE_PUEDE[r.block] ?? NO_SE_PUEDE.unavailable };
+  return { error: null, quote: r.quote };
+}
+
+export type UpgradeConfirmState = {
+  error: string | null;
+  /** El cobro salió; el desenlace lo trae el evento firmado. */
+  submitted?: boolean;
+  /** No sabemos si se cobró. Nadie vuelve a cobrar solo. */
+  uncertain?: boolean;
+};
+
+/**
+ * Confirmar cobra contra el medio de pago ya guardado. No se tokeniza nada, no
+ * se pide la tarjeta otra vez y no se crea una fuente nueva.
+ */
+export async function confirmUpgradeAction(
+  changeId: string
+): Promise<UpgradeConfirmState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+
+  const { openUpgradeIntent } = await import("@/lib/db/billing-upgrade");
+  const { wompiFromEnv } = await import("@/lib/billing/providers/wompi");
+  const proveedor = wompiFromEnv();
+  if (proveedor.environment === null) {
+    return { error: "El cobro no está disponible en este momento. No se cobró nada." };
+  }
+  const entorno = proveedor.environment === "production" ? "live" : "test";
+
+  const abierto = await openUpgradeIntent(changeId, proveedor.name, entorno);
+  if (!abierto.ok) {
+    return { error: NO_SE_PUEDE[abierto.block] ?? NO_SE_PUEDE.unavailable };
+  }
+
+  const { chargeUpgrade } = await import("@/lib/billing/upgrade-charge");
+  const cobro = await chargeUpgrade({
+    organizationId: quien.organizationId, intentId: abierto.intentId,
+    total: abierto.total, currency: abierto.currency, customerEmail: quien.email });
+
+  if (cobro.kind === "unavailable") {
+    return { error: cobro.reason === "NO_PAYMENT_METHOD"
+      ? "No encontramos una tarjeta guardada para cobrar la diferencia. No se cobró nada."
+      : "El cobro no está disponible en este momento. No se cobró nada." };
+  }
+  if (cobro.kind === "uncertain") {
+    return { error: "No pudimos confirmar el pago del cambio a Extra. Tu plan actual "
+                  + "sigue activo y no hemos modificado tu suscripción. Si el cobro "
+                  + "llegó a hacerse, lo veremos y te lo aplicaremos.",
+             uncertain: true };
+  }
+  if (cobro.kind === "declined") {
+    return { error: "El banco no autorizó el cobro de la diferencia. Tu plan actual "
+                  + "sigue activo y no hemos modificado tu suscripción." };
+  }
+
+  revalidatePath("/settings/billing");
+  return { error: null, submitted: true };
+}
+
+/** Retirar una subida presupuestada que todavía no se ha cobrado. */
+export async function cancelUpgradeAction(changeId: string): Promise<PlanChangeState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const { cancelUpgrade } = await import("@/lib/db/billing-upgrade");
+  const estado = await cancelUpgrade(changeId);
+  if (estado !== "cancelled") {
+    return { error: "No pudimos retirar el cambio. Vuelve a mirarlo en un momento." };
+  }
+  revalidatePath("/settings/billing");
+  return { error: null, ok: true };
+}
+
+/**
+ * Cambiar de periodicidad. Como bajar de plan: surte efecto cuando termina el
+ * periodo que ya se pagó, y un año pagado nunca se corta por la mitad.
+ */
+export async function scheduleIntervalChangeAction(
+  targetInterval: string
+): Promise<PlanChangeState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+  const sub = await suscripcionDe(quien.organizationId);
+  if (!sub) return { error: "No hay un plan de pago activo que cambiar." };
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("billing_schedule_transition", {
+    p_subscription_id: sub, p_target_plan_code: null,
+    p_target_billing_interval: targetInterval });
+  if (error) {
+    if ((error.message ?? "").includes("FX_RATE_UNAVAILABLE")) {
+      return { error: "Todavía no podemos calcular el precio en pesos de esa "
+                    + "periodicidad. No se cambió nada." };
+    }
+    return { error: "No pudimos programar el cambio de periodicidad. No se cambió nada." };
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  if (r.status === "change_already_scheduled") {
+    return { error: NO_SE_PUEDE.change_already_scheduled };
+  }
+  revalidatePath("/settings/billing");
+  return { error: null, ok: true,
+    detail: typeof r.effective_at === "string" ? r.effective_at : undefined };
+}

@@ -153,6 +153,17 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
     + "lo que lo arregla. No cobra nada hoy.",
   "server/actions/billing.ts:cancelScheduledChangeAction":
     "Retira un cambio programado. Deja las cosas como estaban; no concede nada.",
+  "server/actions/billing.ts:confirmUpgradeAction":
+    "SUBIR de plan es justamente lo que desatasca a quien agotó su cupo: es la "
+    + "puerta de salida del modo consulta, no algo que haya que impedir desde "
+    + "dentro de él. Y no concede nada por sí sola: el nivel lo abre el evento "
+    + "firmado del proveedor, después de conciliar el pago.",
+  "server/actions/billing.ts:cancelUpgradeAction":
+    "Retira una subida que todavía no se cobró. Deja las cosas como estaban.",
+  "server/actions/billing.ts:scheduleIntervalChangeAction":
+    "Cambiar de periodicidad se programa para el final del periodo pagado y no "
+    + "cobra nada hoy. Mismo motivo que bajar de plan: quien agotó su cupo tiene "
+    + "que poder reorganizar su suscripción.",
   "server/actions/settings.ts:updateMyProfileAction":
     "Datos y seguridad de la propia persona: operación esencial de cuenta, nunca comercial.",
   "server/actions/platform.ts:listPlatformStaffAction":

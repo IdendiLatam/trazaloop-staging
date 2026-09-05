@@ -11,6 +11,7 @@ import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
   classifyAttempt, settlePeriodPayment, closeAttempt,
 } from "@/lib/db/billing-provider";
+import { settleUpgradePayment } from "@/lib/db/billing-upgrade";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -171,7 +172,18 @@ export async function POST(request: Request) {
   }
 
   let r;
-  if (clase.kind === "initial") {
+  if (clase.kind === "upgrade") {
+    // La subida de plan salda SU ajuste y no toca el calendario: el periodo
+    // seguía pagado antes y sigue pagado después. Lo único que cambia es el
+    // nivel, y solo si este evento firmado dice que el dinero entró.
+    r = await settleUpgradePayment({
+      intentId: clase.intentId, provider: WOMPI,
+      providerPaymentId: leida.value.transactionId, outcome: salida,
+      amount: leida.value.amountCopMinor, currency: leida.value.currency,
+      liveMode: clasificacion.environment === "production",
+      failureReason: leida.value.statusMessage,
+    });
+  } else if (clase.kind === "initial") {
     r = await settleProviderPayment({
       provider: WOMPI, externalReference: clase.intentId,
       providerPaymentId: leida.value.transactionId, outcome: salida,
@@ -196,7 +208,8 @@ export async function POST(request: Request) {
 
   // `period_already_settled` NO es un proceso normal: es dinero de más sobre
   // una obligación ya saldada, y lo mira una persona.
-  const estado = ["activated", "renewed", "already_settled", "declined", "failed"]
+  const estado = ["activated", "renewed", "upgraded", "already_settled",
+                  "declined", "failed"]
     .includes(r.outcome) ? "processed" : "manual_review";
   await cerrar(estado, r.outcome, r.organizationId);
   log("pago_conciliado", { resource: recurso, kind: clase.kind, outcome: r.outcome,
