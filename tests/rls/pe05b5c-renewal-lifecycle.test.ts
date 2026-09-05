@@ -379,6 +379,133 @@ async function main() {
     });
 
     // =====================================================================
+    console.log("\nF · Retirar sin mentir sobre por qué terminó");
+    // =====================================================================
+
+    await check("Una suscripción SANA se puede retirar · y no finge un impago",
+      async () => {
+      const e = await empresaConPlan("retiro");
+      // Sana de verdad: su mes está pagado y todavía corriendo.
+      const { data: antes } = await admin.rpc("billing_lapse_subscription",
+        { p_subscription_id: e.subscriptionId });
+      assert((antes as Record<string, unknown>).status === "not_due",
+        "la caducidad aceptó una suscripción sin deuda");
+      const { data: cancelar } = await admin.rpc("billing_cancel_at_period_end",
+        { p_subscription_id: e.subscriptionId });
+      assert((cancelar as Record<string, unknown>).status === "not_scheduled",
+        "la cancelación aceptó algo que nadie anunció");
+
+      const { data, error } = await admin.rpc("billing_retire_subscription", {
+        p_subscription_id: e.subscriptionId, p_reason_code: "qa_fixture_retirement",
+        p_reason: "Retiro del fixture sintético de la prueba de renovación." });
+      assert(!error, `retirar: ${error?.message}`);
+      const r = data as Record<string, unknown>;
+      assert(r.status === "retired", JSON.stringify(r));
+
+      const { data: s } = await admin.from("billing_subscriptions")
+        .select("status, retired_at, retirement_reason_code, retirement_reason, cancelled_at")
+        .eq("id", e.subscriptionId).single();
+      const f = s as Record<string, unknown>;
+      // Que no diga «cancelled» ni «lapsed» no se comprueba comparando contra
+      // sí mismo —el compilador ya sabe que no lo es—: se comprueba en que la
+      // huella de esas dos historias NO está escrita. Si esto fuera una
+      // cancelación, `cancelled_at` tendría fecha.
+      assert(f.status === "retired", JSON.stringify(f));
+      assert(f.cancelled_at === null, "se marcó como si el cliente se hubiera ido");
+      assert(f.retirement_reason_code === "qa_fixture_retirement" && f.retired_at,
+        JSON.stringify(f));
+    });
+
+    await check("Sin motivo, o con uno inventado, no se retira nada", async () => {
+      const e = await empresaConPlan("retiro sin motivo");
+      for (const [codigo, motivo] of [
+        ["se_me_antojo", "Un motivo suficientemente largo."],
+        ["qa_fixture_retirement", "corto"],
+      ] as Array<[string, string]>) {
+        const { error } = await admin.rpc("billing_retire_subscription", {
+          p_subscription_id: e.subscriptionId, p_reason_code: codigo, p_reason: motivo });
+        assert(error, `se retiró con «${codigo}» / «${motivo}»`);
+      }
+      const { data: s } = await admin.from("billing_subscriptions")
+        .select("status").eq("id", e.subscriptionId).single();
+      assert((s as { status: string }).status === "active", "quedó tocada igualmente");
+    });
+
+    await check("La retirada no cobra, no abre meses, y no vuelve sola", async () => {
+      const e = await empresaConPlan("retirada inerte");
+      await envejecer(e.subscriptionId, 31);
+      assert(accionDe(await vencimientos(), e.subscriptionId) === "renew",
+        "no estaba vencida antes de retirarla");
+
+      await admin.rpc("billing_retire_subscription", {
+        p_subscription_id: e.subscriptionId, p_reason_code: "administrative_correction",
+        p_reason: "Corrección administrativa comprobada por la prueba." });
+
+      assert(!accionDe(await vencimientos(), e.subscriptionId),
+        "una retirada volvió a la cola de cobro");
+      const { data: abrir } = await admin.rpc("billing_open_next_period",
+        { p_subscription_id: e.subscriptionId });
+      const a = abrir as Record<string, unknown>;
+      assert(a.status === "retired" && a.reason === "RETIRED_SUBSCRIPTION_DOES_NOT_RESUME",
+        JSON.stringify(a));
+      // Ni caducar ni cancelar la resucitan.
+      for (const fn of ["billing_lapse_subscription", "billing_cancel_at_period_end"]) {
+        const { data } = await admin.rpc(fn, { p_subscription_id: e.subscriptionId });
+        assert((data as Record<string, unknown>).status !== "lapsed"
+          && (data as Record<string, unknown>).status !== "cancelled",
+          `${fn} movió una retirada`);
+      }
+      const r = await runRenewalPass({ provider: doble() });
+      assert(!r.decisions.some((x) => x.subscriptionId === e.subscriptionId),
+        "el planificador la volvió a mirar");
+    });
+
+    await check("Free vuelve solo · y la empresa puede contratar de nuevo", async () => {
+      const e = await empresaConPlan("retiro y vuelta");
+      assert((await plan(e)).plan_code === "full", "no estaba en Full antes");
+
+      await admin.rpc("billing_retire_subscription", {
+        p_subscription_id: e.subscriptionId, p_reason_code: "qa_fixture_retirement",
+        p_reason: "Retiro para comprobar que Free vuelve por sí solo." });
+
+      const p = await plan(e);
+      assert(p.plan_code === "free" && p.grant_kind === "base",
+        `quedó en ${JSON.stringify(p)}`);
+      const vs = await vivas(e.org);
+      assert(vs.length > 0 && vs.every((a) => a.grant_kind === "base"),
+        `se concedió un Free nuevo: ${JSON.stringify(vs)}`);
+      // Módulos, medio de pago e historial intactos.
+      const { data: mods } = await admin.from("organization_modules")
+        .select("module_code").eq("organization_id", e.org).eq("enabled", true);
+      assert((mods ?? []).length > 0, "apagó módulos");
+      const { count: tarjetas } = await admin.from("billing_payment_methods")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", e.org).eq("status", "active");
+      assert((tarjetas ?? 0) === 1, "revocó el medio de pago");
+      const { count: pagos } = await admin.from("billing_payments")
+        .select("id", { count: "exact", head: true }).eq("organization_id", e.org);
+      assert((pagos ?? 0) === 1, "tocó la historia de cobros");
+
+      // Y la organización queda libre: una viva nueva cabe.
+      const { data: rev } = await admin.from("plan_revisions").select("id")
+        .eq("plan_code", "full").eq("status", "published").is("effective_to", null).single();
+      const { error } = await admin.from("billing_subscriptions").insert({
+        organization_id: e.org, provider: W, plan_code: "full",
+        plan_revision_id: (rev as { id: string }).id, billing_interval: "monthly",
+        catalog_amount_minor: 4000, catalog_currency: "USD",
+        base_charge_amount: 160000, charge_currency: "COP", status: "active" });
+      assert(!error, `la retirada sigue bloqueando la empresa: ${error?.message}`);
+    });
+
+    await check("Ningún rol de producto puede retirar una suscripción", async () => {
+      const ajeno = await persona("b5c-rol");
+      const { error } = await ajeno.cli.rpc("billing_retire_subscription", {
+        p_subscription_id: "00000000-0000-4000-8000-000000000000",
+        p_reason_code: "administrative_correction", p_reason: "Intento desde el producto." });
+      assert(error, "un usuario de producto pudo retirar una suscripción");
+    });
+
+    // =====================================================================
     console.log("\nF · La puerta");
     // =====================================================================
 
