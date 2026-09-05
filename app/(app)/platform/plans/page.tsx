@@ -6,6 +6,8 @@ import {
 } from "@/server/actions/commercial-console";
 import { PlanCatalogConsole } from "@/components/domain/platform/plan-catalog-console";
 import { RenewalOperations } from "@/components/domain/platform/renewal-operations";
+import { PromotionsConsole } from "@/components/domain/platform/promotions-console";
+import { getPromotionsAction } from "@/server/actions/promotions-console";
 import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
 
 /**
@@ -16,9 +18,10 @@ import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
  * plataforma cambia condiciones, y la base lo vuelve a comprobar.
  */
 export default async function PlatformPlansPage() {
-  const [catalogo, renovaciones] = await Promise.all([
+  const [catalogo, renovaciones, promociones] = await Promise.all([
     getPlanCatalogAction(),
     getRenewalOperationsAction(),
+    getPromotionsAction(),
   ]);
 
   return (
@@ -49,6 +52,23 @@ export default async function PlatformPlansPage() {
         limitsByRevision={catalogo.limitsByRevision}
         canManage={catalogo.canManage}
       />
+
+      <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">Promociones y cupones</h2>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Un cupón cambia <strong>lo que se paga</strong>, nunca lo que el plan
+            incluye. Una campaña se crea en borrador, se le da un código y se
+            publica; desde ahí sus condiciones quedan fijas y para cambiarlas se
+            retira y se publica una sucesora.
+          </p>
+        </div>
+        <PromotionsConsole
+          promotions={promociones.promotions}
+          redemptions={promociones.redemptions}
+          canManage={promociones.canManage}
+        />
+      </section>
 
       <section className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
         <div className="space-y-1">

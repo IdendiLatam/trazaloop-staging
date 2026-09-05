@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getOrganizationBillingState } from "@/lib/db/billing";
+import { listPaymentHistory } from "@/lib/db/billing-history";
 import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
 import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
@@ -23,6 +24,14 @@ import {
  * Free no entra en la contratación con tarjeta: es el plan de entrada.
  */
 
+/** En palabras. Nunca el estado interno ni una clase de fallo. */
+const ESTADO_COBRO: Record<string, string> = {
+  pagado: "Pagado",
+  rechazado: "Rechazado",
+  no_completado: "No se completó",
+  en_revision: "En verificación",
+};
+
 const dinero = (minor: number | null, moneda: string | null) =>
   minor === null || moneda === null ? null : money(minor, moneda);
 
@@ -36,9 +45,10 @@ export default async function BillingPage({
   const activeModule = activeShellModuleFrom("/settings/billing", await searchParams);
   const org = await requireActiveOrg();
   const esAdministrador = org.roleCode === "admin";
-  const [estado, catalogo] = await Promise.all([
+  const [estado, catalogo, historial] = await Promise.all([
     getOrganizationBillingState(org.organizationId),
     listPublicPlanCatalog(),
+    listPaymentHistory(org.organizationId),
   ]);
 
   // Sin dato NO es «no hay planes»: es que no se pudo leer.
@@ -116,6 +126,49 @@ export default async function BillingPage({
           />
         </section>
       ) : null}
+
+      {historial === null || historial.length === 0 ? null : (
+        <section className="rounded-md border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Tus cobros</h2>
+          <p className="pb-3 pt-1 text-sm text-ink-soft">
+            Cada línea es lo que se cobró aquel día, con su descuento y sus
+            impuestos de entonces. No es una factura electrónica.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-xs text-ink-soft">
+                  <th className="py-2 pr-3 font-medium">Fecha</th>
+                  <th className="py-2 pr-3 font-medium">Plan</th>
+                  <th className="py-2 pr-3 font-medium">Estado</th>
+                  <th className="py-2 pr-3 font-medium">Descuento</th>
+                  <th className="py-2 pr-3 font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historial.map((c) => (
+                  <tr key={c.id} className="border-b border-hairline/60">
+                    <td className="py-2 pr-3">{longDate(c.paidAt ?? c.createdAt)}</td>
+                    <td className="py-2 pr-3">
+                      {planLabel(c.planCode)}
+                      {c.billingInterval
+                        ? ` · ${c.billingInterval === "annual" ? "anual" : "mensual"}` : ""}
+                    </td>
+                    {/* En palabras, no en código ni solo en color. */}
+                    <td className="py-2 pr-3">{ESTADO_COBRO[c.status]}</td>
+                    <td className="py-2 pr-3">
+                      {c.discountAmount > 0 ? `−${money(c.discountAmount, c.currency)}` : "—"}
+                    </td>
+                    <td className="py-2 pr-3 font-medium">
+                      {money(c.totalAmount, c.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Planes de pago</h2>

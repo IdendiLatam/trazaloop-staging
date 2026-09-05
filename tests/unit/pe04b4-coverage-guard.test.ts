@@ -164,6 +164,14 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
     + "depender del cupo del cliente: sería imposible reactivar a quien lo agotó.",
   "server/actions/platform-modules.ts:setOrganizationModuleAccessAction":
     "Consola de PLATAFORMA. Mismo motivo.",
+  "server/actions/promotions-console.ts:createPromotionAction":
+    "Consola de PLATAFORMA: campañas comerciales globales, no uso de cliente. "
+    + "Ponerle el cupo de una empresa delante no tendría sentido —no es de "
+    + "ninguna— y dejaría a la administración sin poder crear promociones.",
+  "server/actions/promotions-console.ts:publishPromotionAction": "Idem.",
+  "server/actions/promotions-console.ts:retirePromotionAction": "Idem.",
+  "server/actions/promotions-console.ts:createPromotionCodeAction": "Idem.",
+  "server/actions/promotions-console.ts:retirePromotionCodeAction": "Idem.",
   "server/actions/faq-admin.ts:createFaqCategoryAction":
     "Contenido de PLATAFORMA (la FAQ del producto), no de ninguna empresa.",
   "server/actions/faq-admin.ts:updateFaqCategoryAction": "Idem.",
