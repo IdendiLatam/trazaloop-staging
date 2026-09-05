@@ -146,6 +146,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B5D | Facturación · renovación real desde el planificador | **0176** | **PASS · un cobro real, webhook firmado, sin tipo de cambio vigente · ejecución apagada** · 2026-09-05 |
 | PE-05B5E | Facturación · el lado que falla, gracia y operación | **0177** | **PASS · cuatro defectos de vencimiento y huecos corregidos · ejecución apagada** · 2026-09-05 |
 | PE-05B5F | Facturación · operación, decisiones del cliente y cierre de B5 | **0178** | **PASS · consola de renovaciones, cancelar y bajar de plan, contrato en 19 comprobaciones** · 2026-09-05 |
+| PE-05B6A | Facturación · arquitectura de cupones y cambios de plan | **0178** | **arquitectura lista · duración del cupón BLOQUEADA (decisión de producto)** · 2026-09-05 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:
