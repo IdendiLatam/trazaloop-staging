@@ -78,11 +78,21 @@ export async function runRenewalPass(input: {
   limit?: number;
   /**
    * En seco: descubre y decide, pero NO ejecuta nada. Ni cobra, ni deja caer,
-   * ni cancela, ni cambia de plan. Es lo único que se despliega en B5C.
+   * ni cancela, ni cambia de plan.
    */
   dryRun?: boolean;
+  /**
+   * Lista blanca de suscripciones. Cuando existe, TODO lo demás se ignora sin
+   * tocarse. No es autoridad comercial: es un cierre extra para que una prueba
+   * con dinero real no pueda alcanzar a nadie que no estuviera invitado.
+   */
+  onlySubscriptions?: string[];
 }): Promise<RenewalRunResult> {
-  const vencidas = await listDueRenewals({ now: input.now, limit: input.limit });
+  const todas = await listDueRenewals({ now: input.now, limit: input.limit });
+  const permitidas = input.onlySubscriptions;
+  const vencidas = permitidas
+    ? todas.filter((d) => permitidas.includes(d.subscriptionId))
+    : todas;
   const decisiones: RenewalDecision[] = [];
 
   for (const d of vencidas) {

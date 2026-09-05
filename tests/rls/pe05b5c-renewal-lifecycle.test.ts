@@ -525,21 +525,66 @@ async function main() {
         "un GET no está rechazado");
     });
 
-    await check("E. La puerta desplegada NO puede cobrar · por construcción", async () => {
+    await check("E. Cobrar exige CUATRO cosas · y mirar no es una de ellas", async () => {
       const cuerpo = sinComentarios(RUTA);
-      assert(/dryRun: true/.test(cuerpo), "la pasada no es en seco");
-      assert(/fakeBillingProvider/.test(cuerpo), "le pasa un proveedor de verdad");
-      for (const p of ["wompiFromEnv", "chargeStoredPaymentMethod", "chargePaymentSource",
-                       "createPaymentSource", "tokens/cards"]) {
-        assert(!cuerpo.includes(p), `la puerta puede llegar al proveedor (${p})`);
-      }
+      // B5C decía «esta puerta no puede cobrar nunca». B5D le añade un modo que
+      // sí puede, así que la invariante ya no es «nunca»: es que no pueda sin
+      // las cuatro llaves a la vez. Se comprueba que las cuatro están, y que la
+      // de mirar no abre la de cobrar.
+      assert(/BILLING_RENEWAL_EXECUTION_ENABLED === "true"/.test(cuerpo),
+        "falta el interruptor de servidor");
+      assert(/BILLING_RENEWAL_EXECUTE_SECRET/.test(cuerpo),
+        "falta el secreto propio de ejecución");
+      assert(/BILLING_RENEWAL_EXECUTION_ALLOWLIST/.test(cuerpo)
+        && /listaBlanca\.length > 0/.test(cuerpo),
+        "falta la lista blanca, o no se exige que tenga a alguien");
       assert(/VERCEL_ENV === "production"/.test(cuerpo), "no se cierra en Producción");
-      // Y no devuelve nada que no se pueda enseñar.
-      for (const p of ["secreto", "SECRET", "provider_payment", "amount", "total"]) {
-        const i = cuerpo.indexOf("return NextResponse.json({\n    ok: true");
-        assert(i < 0 || !cuerpo.slice(i).includes(p),
-          `la respuesta lleva «${p}»`);
+
+      // DOS CABECERAS DISTINTAS. Si fueran la misma, quien diagnostica podría
+      // mover dinero.
+      assert(/x-billing-runner-secret/.test(cuerpo) && /x-billing-execute-secret/.test(cuerpo),
+        "mirar y cobrar comparten cabecera");
+      const bloqueEjecutar = cuerpo.slice(cuerpo.indexOf("const ejecutar"),
+                                          cuerpo.indexOf("const runId"));
+      assert(!/x-billing-runner-secret/.test(bloqueEjecutar),
+        "el secreto de mirar autoriza a cobrar");
+
+      // Y el cuerpo de la petición no aparece en la decisión: pedir ejecutar no
+      // autoriza a ejecutar.
+      assert(!/cuerpo\.(mode|execute)/.test(bloqueEjecutar),
+        "el navegador puede pedir el modo de ejecución");
+
+      // Sin las cuatro, la pasada es en seco Y el proveedor real ni se
+      // construye: no hay con qué cobrar aunque algo fallara.
+      assert(/dryRun: !ejecutar/.test(cuerpo), "no cae en seco cuando no se ejecuta");
+      assert(/ejecutar \? wompiFromEnv\(\) : fakeBillingProvider/.test(cuerpo),
+        "el proveedor real se construye aunque no se vaya a ejecutar");
+      assert(/onlySubscriptions: ejecutar \? listaBlanca : undefined/.test(cuerpo),
+        "la lista blanca no limita la ejecución");
+
+      // Ninguna sesión, y ningún dato de tarjeta.
+      for (const p of ["createPaymentSource", "tokens/cards", "cvc", "card_holder"]) {
+        assert(!cuerpo.includes(p), `la puerta toca datos de tarjeta (${p})`);
       }
+    });
+
+    await check("La lista blanca es la que decide a quién alcanza una ejecución",
+      async () => {
+      // El cierre no vive solo en la ruta: el orquestador filtra ANTES de mirar
+      // nada, así que una lista blanca vacía o ajena no alcanza a nadie.
+      const orq = sinComentarios(
+        readFileSync("lib/billing/renewal/orchestrator.ts", "utf8"));
+      assert(/permitidas\s*\?\s*todas\.filter/.test(orq),
+        "el orquestador no filtra por lista blanca");
+
+      const e = await empresaConPlan("fuera de lista");
+      await envejecer(e.subscriptionId, 31);
+      const r = await runRenewalPass({
+        provider: doble(),
+        onlySubscriptions: ["00000000-0000-4000-8000-000000000000"] });
+      assert(!r.decisions.some((x) => x.subscriptionId === e.subscriptionId),
+        "una suscripción fuera de la lista entró en la pasada");
+      assert(r.dueFound === 0, `alcanzó a ${r.dueFound} que no estaban invitadas`);
     });
 
     await check("En seco no toca nada · ni cobra, ni cancela, ni deja caer", async () => {

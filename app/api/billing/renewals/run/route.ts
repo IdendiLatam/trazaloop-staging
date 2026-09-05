@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { runRenewalPass } from "@/lib/billing/renewal/orchestrator";
 import { fakeBillingProvider } from "@/lib/billing/providers/fake";
+import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import { openRenewalRun, closeRenewalRun } from "@/lib/db/billing-renewal";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,19 @@ export const runtime = "nodejs";
  * responder 404 a quien no trae el secreto, para no confirmarle siquiera que
  * la puerta existe— en vez de crear un segundo marco de autenticación.
  *
- * EN ESTE TRAMO SOLO MIRA
+ * EN SECO POR DEFECTO, Y SIEMPRE QUE FALTE UNA SOLA COSA
  *
- * Y no por disciplina: por construcción. La pasada se llama SIEMPRE con
- * `dryRun: true`, y el proveedor que se le pasa es el DOBLE, que no abre una
- * conexión de red en su vida. Aunque alguien lograra saltarse lo primero, no
- * habría con qué cobrar. Ejecutar de verdad es de B5D, y exigirá cambiar este
- * fichero a la vista de todos.
+ * Mirar necesita un secreto. COBRAR necesita cuatro cosas a la vez, y si falta
+ * cualquiera se mira y no se cobra:
+ *
+ *   1. su propio secreto, distinto del de mirar;
+ *   2. un interruptor de servidor encendido a propósito;
+ *   3. una lista blanca de suscripciones, también de servidor;
+ *   4. no estar en Producción.
+ *
+ * El secreto de mirar NO abre la puerta de cobrar, y por eso son dos cabeceras
+ * distintas: si fueran la misma, cualquiera que pudiera diagnosticar podría
+ * mover dinero.
  *
  * NO HAY CRON
  *
@@ -66,12 +73,24 @@ export async function POST(request: Request) {
   const limite = Number.isInteger(cuerpo.limit) && (cuerpo.limit as number) > 0
     ? Math.min(cuerpo.limit as number, 200) : 100;
 
+  // LAS CUATRO COSAS. El cuerpo de la petición no aparece: pedir ejecutar no
+  // autoriza a ejecutar.
+  const secretoEjecucion = process.env.BILLING_RENEWAL_EXECUTE_SECRET;
+  const listaBlanca = (process.env.BILLING_RENEWAL_EXECUTION_ALLOWLIST ?? "")
+    .split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+  const ejecutar =
+    process.env.BILLING_RENEWAL_EXECUTION_ENABLED === "true"
+    && !!secretoEjecucion && secretoEjecucion.length >= 16
+    && secretoCoincide(request.headers.get("x-billing-execute-secret"), secretoEjecucion)
+    && listaBlanca.length > 0;
+
   const runId = await openRenewalRun();
   const r = await runRenewalPass({
-    // El doble, y en seco. Dos cierres para lo mismo, porque lo que hay al otro
-    // lado es el dinero de alguien.
-    provider: fakeBillingProvider("approve", "approve"),
-    dryRun: true,
+    // Cuando no se ejecuta, ni siquiera se construye el proveedor real: lo que
+    // recibe la pasada es el doble, que no abre una conexión en su vida.
+    provider: ejecutar ? wompiFromEnv() : fakeBillingProvider("approve", "approve"),
+    dryRun: !ejecutar,
+    onlySubscriptions: ejecutar ? listaBlanca : undefined,
     limit: limite,
   });
 
@@ -102,9 +121,10 @@ export async function POST(request: Request) {
   // importe, ni nada que no se pueda enseñar.
   return NextResponse.json({
     ok: true,
-    mode: "dry_run",
+    mode: ejecutar ? "execute" : "dry_run",
     environment: process.env.VERCEL_ENV ?? "local",
-    provider_calls: 0,
+    provider_calls: ejecutar
+      ? r.decisions.filter((d) => d.providerPaymentId || d.failureClass).length : 0,
     run_id: runId,
     due_found: r.dueFound,
     by_action: porAccion,
