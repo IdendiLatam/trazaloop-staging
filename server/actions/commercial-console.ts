@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { createServerClient } from "@/lib/supabase/server";
 import {
+  parseUsdToMinor, USD_PARSE_MESSAGE,
+} from "@/lib/domain/commercial-catalog";
+import {
   listRenewalOperations, type RenewalOperationRow,
 } from "@/lib/db/billing-operations";
 import {
@@ -163,12 +166,26 @@ export async function updateDraftRevisionAction(
   if (displayName) campos.display_name = displayName;
   const conditions = String(formData.get("public_conditions") ?? "").trim();
   if (conditions) campos.public_conditions = conditions;
-  const mensual = formData.get("monthly_price_minor");
-  const anual = formData.get("annual_price_minor");
-  if (typeof mensual === "string" && mensual.trim() !== "") campos.monthly_price_minor = Number(mensual);
-  if (typeof anual === "string" && anual.trim() !== "") campos.annual_price_minor = Number(anual);
+  // Quien administra escribe «40», no «4000». La traducción a centavos se hace
+  // AQUÍ: el importe de un plan es una decisión comercial y el servidor tiene
+  // que poder rehacer la cuenta sin fiarse de lo que le llegue del navegador.
+  const mensual = String(formData.get("monthly_price_usd") ?? "");
+  const anual = String(formData.get("annual_price_usd") ?? "");
+  if (mensual.trim() !== "") {
+    const r = parseUsdToMinor(mensual);
+    if (!r.ok) return { error: `Precio mensual: ${USD_PARSE_MESSAGE[r.reason]}` };
+    campos.monthly_price_minor = r.minor;
+  }
+  if (anual.trim() !== "") {
+    const r = parseUsdToMinor(anual);
+    if (!r.ok) return { error: `Precio anual: ${USD_PARSE_MESSAGE[r.reason]}` };
+    campos.annual_price_minor = r.minor;
+  }
 
   if (Object.keys(campos).length === 0) return { error: "No hay nada que cambiar." };
+
+  // Los dos precios se guardan JUNTOS o no se guarda ninguno: dejar uno
+  // cambiado y el otro no sería una tarifa a medias que nadie decidió.
 
   const { error } = await supabase
     .from("plan_revisions")

@@ -77,7 +77,82 @@ export function formatPrice(minor: number | null, currency: string | null): stri
   return `${currency ?? "USD"} ${valor}`;
 }
 
-export const PRICE_TAX_NOTE = "Los precios son ANTES DE IMPUESTOS · IVA aplicable según el país.";
+export const PRICE_TAX_NOTE =
+  "Los precios mostrados son antes de impuestos. Los impuestos aplicables se "
+  + "calculan por separado.";
+
+/** El descuento máximo del programa institucional, en puntos básicos. Es
+ *  política comercial, no un dato que nadie tenga que escribir dos veces. */
+export const INSTITUTIONAL_FULL_MAX_BPS = 4000;
+
+export const PROGRAM_LABEL: Record<string, string> = {
+  general: "General",
+  institutional_full: "Institucional · gremios y cámaras",
+};
+
+/**
+ * De lo que escribe una persona a lo que guarda la base.
+ *
+ * QUIÉN CONVIERTE Y POR QUÉ AQUÍ
+ *
+ * Quien administra escribe «40», que es lo que cuesta el plan. La base guarda
+ * 4000, que son centavos. Esa traducción NO puede vivir en el navegador: el
+ * importe de un plan es una decisión comercial, y el servidor tiene que poder
+ * repetir la cuenta sin fiarse de lo que le llegue.
+ *
+ * Y se hace en enteros. `40.50 * 100` en coma flotante da 4049.999…; aquí se
+ * separan la parte entera y los decimales y se suman, que da 4050 siempre.
+ *
+ * LO QUE NO SE ACEPTA, Y POR QUÉ
+ *
+ * Un separador de miles es ambiguo: «1.000» son mil pesos para quien escribe en
+ * español y uno para quien escribe en inglés. Adivinar cuál es sería inventar un
+ * precio, así que se rechaza y se dice cómo escribirlo.
+ */
+export type UsdParse =
+  | { ok: true; minor: number }
+  | { ok: false; reason: "empty" | "not_a_number" | "negative" | "ambiguous" | "too_precise" };
+
+export function parseUsdToMinor(entrada: string): UsdParse {
+  const texto = (entrada ?? "").trim();
+  if (texto === "") return { ok: false, reason: "empty" };
+  if (texto.startsWith("-")) return { ok: false, reason: "negative" };
+  // Ni notación científica, ni espacios, ni letras.
+  if (!/^[0-9]+(?:[.,][0-9]+)?$/.test(texto)) {
+    // Dos separadores, o uno en posición de millar: ambiguo, no inválido.
+    if (/^[0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]+)?$/.test(texto)) {
+      return { ok: false, reason: "ambiguous" };
+    }
+    return { ok: false, reason: "not_a_number" };
+  }
+  const [enteros, decimales = ""] = texto.split(/[.,]/);
+  // Un separador con exactamente tres decimales también es ambiguo: «1,000».
+  if (decimales.length === 3) return { ok: false, reason: "ambiguous" };
+  if (decimales.length > 2) return { ok: false, reason: "too_precise" };
+  const centavos = decimales.padEnd(2, "0");
+  const minor = Number(enteros) * 100 + Number(centavos);
+  if (!Number.isSafeInteger(minor)) return { ok: false, reason: "not_a_number" };
+  return { ok: true, minor };
+}
+
+export const USD_PARSE_MESSAGE: Record<
+  Exclude<UsdParse, { ok: true }>["reason"], string
+> = {
+  empty: "Escribe el precio.",
+  not_a_number: "Escribe solo el número, por ejemplo 40 o 40,50.",
+  negative: "El precio no puede ser negativo.",
+  ambiguous: "Escribe el precio sin separador de miles: 1000, no 1.000.",
+  too_precise: "Como mucho dos decimales: 40,50.",
+};
+
+/** De centavos a lo que se escribe en el formulario. 4000 → «40». */
+export function usdInputValue(minor: number | null): string {
+  if (minor === null || minor === undefined) return "";
+  const enteros = Math.trunc(minor / 100);
+  const centavos = Math.abs(minor % 100);
+  return centavos === 0 ? String(enteros)
+    : `${enteros},${String(centavos).padStart(2, "0")}`;
+}
 
 export const PLAN_DISPLAY_ORDER: readonly string[] = ["free", "full", "extra"];
 

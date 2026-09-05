@@ -7,6 +7,7 @@ import {
   listPromotions, listRedemptions,
   type PromotionRow, type RedemptionRow,
 } from "@/lib/db/promotions-console";
+import { INSTITUTIONAL_FULL_MAX_BPS } from "@/lib/domain/commercial-catalog";
 
 /**
  * Trazaloop · PE-05B6C · La consola de campañas.
@@ -60,13 +61,28 @@ export async function createPromotionAction(input: {
   if (!isSuperadmin) {
     return { error: "Crear campañas es de la administración de plataforma." };
   }
+  // EL TECHO Y EL PLAN SON POLÍTICA, NO UN DATO DEL FORMULARIO.
+  //
+  // Antes había que escribir dos porcentajes —el descuento y su techo— y marcar
+  // a mano que el institucional es solo para Full. Eso obliga a quien administra
+  // a conocer una regla interna para no romperla. Ahora la pone el servidor, y
+  // la base sigue siendo la autoridad: si esto se equivocara, 0180 lo rechaza.
+  const institucional = input.program === "institutional_full";
+  const techo = institucional ? INSTITUTIONAL_FULL_MAX_BPS : null;
+  const planes = institucional ? ["full"] : input.eligiblePlanCodes;
+
+  if (institucional && input.discountBasisPoints > INSTITUTIONAL_FULL_MAX_BPS) {
+    return { error: "El programa Institucional Full permite un descuento máximo "
+                  + "del 40 %." };
+  }
+
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("billing_create_promotion", {
     p_name: input.name, p_description: input.description, p_program: input.program,
     p_discount_basis_points: input.discountBasisPoints,
-    p_eligible_plan_codes: input.eligiblePlanCodes,
+    p_eligible_plan_codes: planes,
     p_eligible_intervals: input.eligibleIntervals,
-    p_max_discount_basis_points: input.maxDiscountBasisPoints,
+    p_max_discount_basis_points: techo,
     p_starts_at: input.startsAt, p_ends_at: input.endsAt,
     p_max_redemptions: input.maxRedemptions,
     p_max_per_organization: input.maxPerOrganization,
@@ -75,7 +91,8 @@ export async function createPromotionAction(input: {
     // La base rechaza lo que no cuadra —un institucional por encima del 40 %,
     // por ejemplo—. Se dice qué pasó sin copiar el error de Postgres.
     if ((error.message ?? "").includes("bp_institutional_shape")) {
-      return { error: "El programa institucional es solo para Full y como mucho del 40 %." };
+      return { error: "El programa Institucional Full permite un descuento máximo "
+                    + "del 40 %, y solo para Full." };
     }
     if ((error.message ?? "").includes("bp_ceiling_check")) {
       return { error: "El descuento no puede superar el techo de la campaña." };

@@ -152,6 +152,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B6D | Facturación · cambio de plan y cobro recurrente al importe nuevo | **0180** | **PASS · una transacción real a COP 476 000 sobre la MISMA fuente guardada · 17 pruebas deterministas del calendario anual** · 2026-09-05 |
 | PE-05B6E | Facturación · subida inmediata, bajada segura y periodicidad | **0181** | **PASS · una transacción real de COP 193 413 por la diferencia · 25 pruebas · 3 GB sobreviven a la bajada** · 2026-09-05 |
 | PE-05B6F | Facturación · administración del tipo de cambio y verdad histórica | **0182** | **PASS · el tipo de cambio se administra desde el producto · la historia ya no se inventa el plan · 18 pruebas · 0 cobros** · 2026-09-05 |
+| PE-05B6F.1 | Facturación · la administración comercial en idioma de negocio | **0182** | **PASS · sin migración · precios en USD humanos, sin techo que configurar, sin «revisión sucesora» · 21 pruebas** · 2026-09-05 |
 | PE-05B3…B6 | Precio final, checkout, consola y precios públicos | previstas | no empezado |
 
 Los diez de PE-05B1:

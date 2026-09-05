@@ -176,7 +176,12 @@ check("D5. Etiquetas humanas, no claves internas", () => {
   ]) {
     assert(cat.includes(`${clave}: "${etiqueta}"`), `falta la etiqueta humana de ${clave}`);
   }
-  assert(/ANTES DE IMPUESTOS/.test(cat), "no se dice que los precios son antes de impuestos");
+  // La invariante es que se DICE, no que se grite: B6F.1 pasó el aviso a
+  // minúsculas y añadió que el impuesto se calcula aparte, sin prometer un país.
+  assert(/antes de impuestos/i.test(cat),
+    "no se dice que los precios son antes de impuestos");
+  assert(/por separado/i.test(cat),
+    "no se dice que los impuestos se calculan aparte");
 });
 
 check("D6. «Sin configurar» no se enseña como «sin límite» ni como cero", () => {

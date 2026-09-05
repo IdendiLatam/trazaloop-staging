@@ -7,6 +7,7 @@ import {
 } from "@/server/actions/promotions-console";
 import type { PromotionRow, RedemptionRow } from "@/lib/db/promotions-console";
 import { longDate } from "@/lib/domain/billing-display";
+import { INSTITUTIONAL_FULL_MAX_BPS } from "@/lib/domain/commercial-catalog";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 
@@ -266,7 +267,6 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
   const [porcentaje, setPorcentaje] = useState("20");
   const [planes, setPlanes] = useState<string[]>(["full"]);
   const [intervalos, setIntervalos] = useState<string[]>(["monthly", "annual"]);
-  const [techo, setTecho] = useState("");
   const [fin, setFin] = useState("");
   const [maxCanjes, setMaxCanjes] = useState("");
 
@@ -276,7 +276,8 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
   const institucional = programa === "institutional_full";
   const bps = Math.round(Number(porcentaje.replace(",", ".")) * 100);
   const listo = nombre.trim().length >= 3 && bps > 0 && bps <= 10000
-    && planes.length > 0 && intervalos.length > 0;
+    && planes.length > 0 && intervalos.length > 0
+    && !(institucional && bps > INSTITUTIONAL_FULL_MAX_BPS);
 
   return (
     <div className="space-y-4 rounded-lg border border-hairline bg-canvas p-4">
@@ -300,11 +301,13 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
               if (e.target.value === "institutional_full") setPlanes(["full"]);
             }}>
             <option value="general">General</option>
-            <option value="institutional_full">Institucional · gremios y cámaras</option>
+            <option value="institutional_full">
+              Institucional · gremios y cámaras
+            </option>
           </select>
           {institucional ? (
             <span className="block text-xs text-ink-soft">
-              Solo Full, y hasta el 40 %. No tiene que ser 40: puede ser 10, 25 o 30.
+              Solo Full. No tiene que ser el 40 %: puede ser 10, 25 o 30.
             </span>
           ) : null}
         </label>
@@ -313,18 +316,38 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
           <span className="text-sm font-medium">Descuento (%)</span>
           <input className={campo} inputMode="decimal" value={porcentaje}
             onChange={(e) => setPorcentaje(e.target.value)} />
+          {institucional ? (
+            <span className="block text-xs text-ink-soft">
+              Este programa permite descuentos de hasta el 40 %.
+            </span>
+          ) : null}
+          {institucional && bps > INSTITUTIONAL_FULL_MAX_BPS ? (
+            <span className="block text-xs text-danger">
+              El programa Institucional Full permite un descuento máximo del 40 %.
+            </span>
+          ) : null}
         </label>
 
         <fieldset className="space-y-1">
           <legend className="text-sm font-medium">Planes elegibles</legend>
-          {["full", "extra"].map((p) => (
-            <label key={p} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={planes.includes(p)}
-                disabled={institucional && p === "extra"}
-                onChange={() => alternar(planes, p, setPlanes)} />
-              {p}
-            </label>
-          ))}
+          {institucional ? (
+            // No se invita a elegir algo que la política no permite: se dice
+            // cuál es y por qué, y no hay casilla que desmarcar por error.
+            <p className="text-sm">
+              Full
+              <span className="block text-xs text-ink-soft">
+                Este programa es solo para Full.
+              </span>
+            </p>
+          ) : (
+            [["full", "Full"], ["extra", "Extra"]].map(([v, l]) => (
+              <label key={v} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={planes.includes(v)}
+                  onChange={() => alternar(planes, v, setPlanes)} />
+                {l}
+              </label>
+            ))
+          )}
         </fieldset>
 
         <fieldset className="space-y-1">
@@ -338,12 +361,6 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
           ))}
         </fieldset>
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Techo máximo (%)</span>
-          <input className={campo} inputMode="decimal" value={techo}
-            onChange={(e) => setTecho(e.target.value)}
-            placeholder={institucional ? "40 por defecto" : "Sin techo"} />
-        </label>
         <label className="block space-y-1">
           <span className="text-sm font-medium">Fin</span>
           <input className={campo} type="date" value={fin}
@@ -366,14 +383,16 @@ function FormularioCampana({ pendiente, onCrear, onCancelar }: {
             discountBasisPoints: bps,
             eligiblePlanCodes: planes,
             eligibleIntervals: intervalos,
-            maxDiscountBasisPoints: techo.trim()
-              ? Math.round(Number(techo.replace(",", ".")) * 100) : null,
+            // El techo NO se pide: lo pone el programa, y el servidor lo
+            // vuelve a decidir. Que quien crea una campaña tenga que escribir
+            // dos porcentajes es pedirle que entienda una política interna.
+            maxDiscountBasisPoints: null,
             startsAt: new Date().toISOString(),
             endsAt: fin ? new Date(`${fin}T23:59:59Z`).toISOString() : null,
             maxRedemptions: maxCanjes ? Number(maxCanjes) : null,
             maxPerOrganization: 1,
           })}>
-          {pendiente ? "Creando…" : "Crear en borrador"}
+          {pendiente ? "Creando…" : "Crear campaña"}
         </Button>
         <Button type="button" onClick={onCancelar}>Cancelar</Button>
       </div>

@@ -38,9 +38,10 @@ export default async function PlatformPlansPage() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Planes y uso</h1>
         <p className="max-w-3xl text-sm text-ink-soft">
-          Las condiciones comerciales vigentes de Free, Full y Extra, y su historia. Una revisión
-          publicada <strong>no se edita</strong>: para cambiar condiciones se crea una sucesora en
-          borrador y se publica. {PRICE_TAX_NOTE}
+          Aquí puedes administrar las condiciones comerciales de cada plan. Cuando
+          cambias un plan, Trazaloop conserva las condiciones anteriores en el
+          historial para no modificar lo que ya fue ofrecido o contratado.{" "}
+          {PRICE_TAX_NOTE}
         </p>
         {!catalogo.canManage ? (
           <p className="max-w-3xl rounded-md border border-hairline bg-surface p-3 text-sm text-ink-soft">
@@ -74,10 +75,10 @@ export default async function PlatformPlansPage() {
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">Promociones y cupones</h2>
           <p className="max-w-3xl text-sm text-ink-soft">
-            Un cupón cambia <strong>lo que se paga</strong>, nunca lo que el plan
-            incluye. Una campaña se crea en borrador, se le da un código y se
-            publica; desde ahí sus condiciones quedan fijas y para cambiarlas se
-            retira y se publica una sucesora.
+            Un cupón cambia <strong>el precio que paga el cliente</strong>; no
+            cambia lo que incluye el plan. La campaña se crea primero como
+            borrador y se le da un código. Cuando la publiques, sus condiciones
+            quedarán fijas para los nuevos canjes.
           </p>
         </div>
         <PromotionsConsole

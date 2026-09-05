@@ -16,6 +16,7 @@ import {
   formatLimit,
   formatPrice,
   resourceLabel,
+  usdInputValue,
 } from "@/lib/domain/commercial-catalog";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,15 @@ const ESTADO_LABEL: Record<string, string> = {
   published: "Vigente",
   retired: "Retirada",
 };
+
+/** La fecha como la diría una persona, no como la guarda la base. */
+function fechaLegible(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-CO",
+    { day: "numeric", month: "long", year: "numeric" });
+}
 
 function limitesComoMapa(limits: PlanLimitRow[]) {
   return new Map(limits.map((l) => [l.resourceCode, { state: l.limitState, value: l.limitValue }]));
@@ -53,7 +63,7 @@ function PublicarForm({ revision, cambios }: {
     <form action={action} className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
       <input type="hidden" name="revision_id" value={revision.id} />
       <p className="text-sm font-semibold text-amber-900">
-        Publicar esta revisión cambia las condiciones que se ofrecen desde ya.
+        Publicar cambia las condiciones que se ofrecen desde ya.
       </p>
       {/* No se confirma sobre un JSON: se enseña, en palabras, qué cambia. */}
       {cambios.length > 0 ? (
@@ -66,13 +76,14 @@ function PublicarForm({ revision, cambios }: {
         </ul>
       ) : (
         <p className="text-sm text-amber-900">
-          No hay diferencias con la revisión vigente. Publicarla solo abriría un periodo nuevo.
+          No hay diferencias con las condiciones vigentes. Publicar solo abriría
+          una versión nueva con lo mismo.
         </p>
       )}
       <p className="text-xs text-amber-900">
-        Las empresas ya asignadas a la revisión anterior <strong>no se mueven</strong>: su
-        asignación sigue apuntando a la suya. Cambiar a una empresa de plan es una transición
-        aparte, con motivo.
+        Las empresas que ya tenían las condiciones anteriores <strong>no se mueven</strong>:
+        siguen con las suyas. Cambiar de plan a una empresa concreta es otra cosa, y se
+        hace aparte.
       </p>
       <ErrorAlert message={state.error} />
       <label className="block text-sm">
@@ -84,7 +95,7 @@ function PublicarForm({ revision, cambios }: {
         />
       </label>
       <Button type="submit" disabled={pending} className="!w-auto">
-        {pending ? "Publicando…" : "Publicar revisión"}
+        {pending ? "Publicando…" : "Publicar las nuevas condiciones"}
       </Button>
     </form>
   );
@@ -99,16 +110,32 @@ function EditarBorrador({ revision, limits }: { revision: PlanRevisionRow; limit
     <div className="space-y-3 rounded-md border border-hairline p-3">
       <form action={accionPrecio} className="space-y-2">
         <input type="hidden" name="revision_id" value={revision.id} />
-        <p className="text-sm font-medium text-ink">Precio (unidades menores, antes de impuestos)</p>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <input name="monthly_price_minor" type="number" min={0} placeholder="Mensual"
-            defaultValue={revision.monthlyPriceMinor ?? ""}
-            className="rounded-md border border-hairline bg-surface px-2 py-1 text-sm" />
-          <input name="annual_price_minor" type="number" min={0} placeholder="Anual"
-            defaultValue={revision.annualPriceMinor ?? ""}
-            className="rounded-md border border-hairline bg-surface px-2 py-1 text-sm" />
-          <Button type="submit" disabled={pendPrecio} className="!w-auto">Guardar precio</Button>
+        <p className="text-sm font-medium text-ink">Precios antes de impuestos</p>
+        {/* Dos campos, cada uno con su nombre. Antes eran dos casillas sin
+            etiqueta y había que saber que USD 40 se escribía «4000». */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block space-y-1">
+            <span className="text-sm text-ink-soft">Precio mensual (USD)</span>
+            <input name="monthly_price_usd" inputMode="decimal" placeholder="40"
+              defaultValue={usdInputValue(revision.monthlyPriceMinor)}
+              className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-sm" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm text-ink-soft">Precio anual (USD)</span>
+            <input name="annual_price_usd" inputMode="decimal" placeholder="400"
+              defaultValue={usdInputValue(revision.annualPriceMinor)}
+              className="w-full rounded-md border border-hairline bg-surface px-2 py-1 text-sm" />
+          </label>
+          <div className="flex items-end">
+            <Button type="submit" disabled={pendPrecio} className="!w-auto">
+              Guardar precios
+            </Button>
+          </div>
         </div>
+        <p className="text-xs text-ink-soft">
+          Escribe el precio como se dice: 40 para USD 40. El precio anual es un
+          precio propio, no doce mensuales.
+        </p>
         <ErrorAlert message={precio.error} />
       </form>
 
@@ -133,8 +160,8 @@ function EditarBorrador({ revision, limits }: { revision: PlanRevisionRow; limit
           <Button type="submit" disabled={pendLimite} className="!w-auto">Guardar condición</Button>
         </div>
         <p className="text-xs text-ink-soft">
-          «Sin configurar» no es «sin límite»: es que nadie lo ha decidido, y el producto lo trata
-          como una negativa.
+          Si una condición no está configurada, Trazaloop la considera{" "}
+          <strong>no incluida</strong> hasta que definas su valor.
         </p>
         <ErrorAlert message={limite.error} />
       </form>
@@ -167,11 +194,11 @@ export function PlanCatalogConsole({ revisions, limitsByRevision, canManage }: {
               <h2 className="text-lg font-semibold capitalize tracking-tight">{planCode}</h2>
               {vigente ? (
                 <span className="text-sm text-ink-soft">
-                  Revisión {vigente.revisionNumber} · vigente desde{" "}
-                  {(vigente.effectiveFrom ?? "").slice(0, 10)}
+                  Versión {vigente.revisionNumber} · vigente desde{" "}
+                  {fechaLegible(vigente.effectiveFrom)}
                 </span>
               ) : (
-                <span className="text-sm text-ink-soft">Sin revisión vigente</span>
+                <span className="text-sm text-ink-soft">Sin condiciones vigentes</span>
               )}
             </div>
 
@@ -199,9 +226,16 @@ export function PlanCatalogConsole({ revisions, limitsByRevision, canManage }: {
 
             {canManage && borrador ? (
               <>
-                <p className="text-sm font-medium text-ink">
-                  Borrador · revisión {borrador.revisionNumber}
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-ink">
+                    Nuevas condiciones — Borrador
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    Versión {borrador.revisionNumber}. Las condiciones actuales se
+                    conservarán en el historial. Los cambios solo aplicarán cuando
+                    publiques las nuevas condiciones.
+                  </p>
+                </div>
                 <EditarBorrador revision={borrador} limits={limitsByRevision[borrador.id] ?? []} />
                 <PublicarForm
                   revision={borrador}
@@ -234,7 +268,7 @@ export function PlanCatalogConsole({ revisions, limitsByRevision, canManage }: {
                     className="w-72 rounded-md border border-hairline bg-surface px-2 py-1 text-sm" />
                 </label>
                 <Button type="submit" disabled={pendNuevo} className="!w-auto">
-                  Crear revisión sucesora
+                  Cambiar condiciones del plan
                 </Button>
               </form>
             ) : null}
@@ -242,20 +276,20 @@ export function PlanCatalogConsole({ revisions, limitsByRevision, canManage }: {
             {historia.length > 0 ? (
               <details className="rounded-md border border-hairline bg-surface p-3">
                 <summary className="cursor-pointer text-sm font-medium text-ink">
-                  Historia de revisiones ({historia.length})
+                  Historial de condiciones ({historia.length})
                 </summary>
                 <p className="mt-2 text-xs text-ink-soft">
-                  Lo que se ofreció antes no se esconde: hubo empresas que contrataron bajo esas
-                  condiciones.
+                  Trazaloop conserva las condiciones anteriores para mantener la
+                  historia comercial: hubo empresas que contrataron con ellas.
                 </p>
                 <ul className="mt-2 space-y-1 text-sm">
                   {historia.map((r) => (
                     <li key={r.id} className="flex flex-wrap justify-between gap-2">
                       <span>
-                        Revisión {r.revisionNumber} · {ESTADO_LABEL[r.status] ?? r.status}
+                        Versión {r.revisionNumber} · {ESTADO_LABEL[r.status] ?? r.status}
                       </span>
                       <span className="code text-xs text-ink-soft">
-                        {(r.effectiveFrom ?? "").slice(0, 10)} → {(r.effectiveTo ?? "").slice(0, 10) || "—"}
+                        {fechaLegible(r.effectiveFrom)} → {fechaLegible(r.effectiveTo)}
                         {" · "}
                         {formatPrice(r.monthlyPriceMinor, r.currency)}
                       </span>
