@@ -1,7 +1,7 @@
 import "server-only";
 import type { BillingProvider, RenewalFailureClass } from "@/lib/billing/provider";
 import {
-  listDueRenewals, openNextPeriod, openRenewalAttempt, markProviderSubmitted,
+  listDueRenewals, openNextPeriod, openRenewalAttempt, claimProviderSubmission,
   markRenewalFailure, lapseSubscription, cancelAtPeriodEnd, applyScheduledChange,
   type DueRenewal,
 } from "@/lib/db/billing-renewal";
@@ -187,20 +187,31 @@ async function resolverUna(
     return { ...vacia(d, "skipped:attempt_not_available"), periodId };
   }
 
+  // Una pasarela que ni sabe cobrar contra un medio guardado no se intenta.
+  //
+  // Lo demás —que esté configurada, que responda— lo dice el propio adaptador
+  // al volver, con la clase `provider_unavailable`, y esa clase BORRA la
+  // frontera del envío: no hubo cargo, así que el intento se retoma tal cual y
+  // no gasta ninguno de los cuatro huecos del cliente. Comprobar aquí `live`
+  // sería confundir «no configurada» con «es un doble determinista».
   if (!proveedor.chargeStoredPaymentMethod) {
     await markRenewalFailure({ intentId: intento.intentId,
       failureClass: "provider_unavailable",
-      reason: "PROVIDER_HAS_NO_STORED_CHARGE" });
-    return { ...vacia(d, "skipped:provider_cannot_charge"), periodId,
+      reason: "PROVIDER_NOT_READY_BEFORE_SUBMISSION" });
+    return { ...vacia(d, "skipped:provider_unavailable"), periodId,
              attemptId: intento.intentId, failureClass: "provider_unavailable" };
   }
 
   // ------------------------------------------------------------------
-  // LA FRONTERA. Se marca ANTES de llamar. Si el proceso muere justo
-  // después, lo que queda escrito es «salió», que es la verdad, y la
-  // recuperación no puede confundirlo con «no salió».
+  // EL TURNO DE ENVIAR. Tomarlo y marcar la frontera son el mismo paso, y
+  // solo lo consigue uno: si dos trabajadores llegan a la vez, el segundo
+  // no manda nada. Y si el intento ya había salido, no se vuelve a enviar.
   // ------------------------------------------------------------------
-  await markProviderSubmitted(intento.intentId);
+  const turno = await claimProviderSubmission(periodId);
+  if (turno.status !== "claimed") {
+    return { ...vacia(d, `skipped:${turno.status}`), periodId,
+             attemptId: intento.intentId };
+  }
 
   const r = await proveedor.chargeStoredPaymentMethod({
     providerPaymentMethodId: intento.providerPaymentMethodId,

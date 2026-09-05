@@ -7,6 +7,7 @@ import { getOrganizationBillingState } from "@/lib/db/billing";
 import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
 import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
+import { describeBillingState } from "@/lib/domain/billing-state";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -42,6 +43,16 @@ export default async function BillingPage({
   // Sin dato NO es «no hay planes»: es que no se pudo leer.
   const dePago = (catalogo ?? []).filter((p) => p.planCode !== "free");
 
+  const situacion = describeBillingState({
+    status: estado?.status ?? null,
+    hasSubscription: estado?.hasSubscription ?? false,
+    graceUntil: estado?.graceUntil ?? null,
+    cancelScheduled: estado?.cancelAtPeriodEnd ?? false,
+    downgradeScheduled: estado?.downgradeScheduled ?? false,
+    manualReview: estado?.manualReview ?? false,
+    paymentMethodMissing: estado?.paymentMethodMissing ?? false,
+  });
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
@@ -54,6 +65,9 @@ export default async function BillingPage({
 
       <section className="rounded-md border border-hairline bg-surface p-4">
         <h2 className="text-sm font-semibold">Ahora mismo</h2>
+        {estado !== null && estado.hasSubscription && situacion.state !== "active" ? (
+          <p className="pt-2 text-sm text-ink-soft">{situacion.detail}</p>
+        ) : null}
         {estado === null ? (
           <p className="pt-2 text-sm text-ink-soft">
             No pudimos leer el estado de facturación. Vuelve a intentarlo en un momento.
@@ -65,7 +79,11 @@ export default async function BillingPage({
             <dt className="text-ink-soft">Facturación</dt>
             <dd>{estado.billingInterval === "annual" ? "Anual" : "Mensual"}</dd>
             <dt className="text-ink-soft">Estado</dt>
-            <dd>{estado.status}</dd>
+            {/*
+              Nunca el estado interno. `past_due` no le dice nada a nadie, y
+              «rechazado» sería una afirmación que a veces no podemos sostener.
+            */}
+            <dd>{situacion.title}</dd>
             {estado.renewsAt ? (
               <>
                 <dt className="text-ink-soft">Siguiente cobro</dt>

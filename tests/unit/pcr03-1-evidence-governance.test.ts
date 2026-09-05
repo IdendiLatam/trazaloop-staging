@@ -109,6 +109,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0174_billing_renewal_foundation.sql",
     "0175_billing_renewal_lifecycle.sql",
     "0176_billing_subscription_administrative_retirement.sql",
+    "0177_billing_renewal_failure_hardening.sql",
     // PE-03B1: cimientos del tutorial audiovisual — identidad, versiones
     // inmutables, cubo privado tutorial-media y reserva de subida.
     "0159_platform_tutorial_media_foundation.sql",
@@ -133,6 +134,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0174_billing_renewal_foundation.sql",
     "0175_billing_renewal_lifecycle.sql",
     "0176_billing_subscription_administrative_retirement.sql",
+    "0177_billing_renewal_failure_hardening.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",
@@ -315,6 +317,7 @@ check("M1 0106 es la migración de PCR-03.1; posteriores solo el resto del bloqu
     "0174_billing_renewal_foundation.sql",
     "0175_billing_renewal_lifecycle.sql",
     "0176_billing_subscription_administrative_retirement.sql",
+    "0177_billing_renewal_failure_hardening.sql",
     "0153_quality_attention_convergence.sql",
     "0152_quality_process_automation_source.sql",
     "0151_quality_interested_parties_automation_and_outputs.sql",

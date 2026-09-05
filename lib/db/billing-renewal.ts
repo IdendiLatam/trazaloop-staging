@@ -122,6 +122,16 @@ export async function openRenewalAttempt(input: {
 }): Promise<RenewalAttempt | null> {
   const admin = createAdminClient();
 
+  // ¿Quedó uno a medias? Un proceso que se cayó antes de enviar dejó un intento
+  // vivo y SIN enviar. Se retoma con su misma referencia: crear otro le gastaría
+  // al cliente uno de sus cuatro cobros por una caída nuestra.
+  const { data: aMedias } = await admin.from("billing_checkout_intents")
+    .select("id, expected_total_amount, expected_currency")
+    .eq("period_id", input.periodId)
+    .in("status", ["created", "provider_created", "authorized"])
+    .is("provider_submitted_at", null)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
   const { data: sub } = await admin.from("billing_subscriptions")
     .select("plan_code, billing_interval, provider, charge_currency")
     .eq("id", input.subscriptionId).single();
@@ -154,6 +164,22 @@ export async function openRenewalAttempt(input: {
     return null;
   }
 
+  const reanudado = aMedias as {
+    id: string; expected_total_amount: number; expected_currency: string;
+  } | null;
+  if (reanudado) {
+    const { data: correoR } = await admin.rpc("billing_renewal_customer_email",
+      { p_organization_id: input.organizationId });
+    return {
+      intentId: reanudado.id,
+      expectedTotalAmount: Number(reanudado.expected_total_amount),
+      expectedCurrency: String(reanudado.expected_currency),
+      providerPaymentMethodId: m.provider_payment_method_id,
+      customerEmail: typeof correoR === "string" && correoR.length > 0
+        ? correoR : "facturacion@trazaloop.com",
+    };
+  }
+
   const { data: intento, error } = await admin.from("billing_checkout_intents")
     .insert({
       organization_id: input.organizationId, quote_id: o.quote_id,
@@ -180,12 +206,23 @@ export async function openRenewalAttempt(input: {
   };
 }
 
-/** La frontera del envío. Se escribe ANTES de la llamada, nunca después. */
-export async function markProviderSubmitted(intentId: string): Promise<void> {
+/**
+ * Toma el turno de enviar, y con él la frontera del envío.
+ *
+ * No es un `update` cualquiera: solo un proceso puede pasar el intento de «sin
+ * enviar» a «enviado». El que pierde no manda nada, que es exactamente lo que
+ * evita dos cargos por el mismo mes cuando dos trabajadores coinciden.
+ */
+export async function claimProviderSubmission(
+  periodId: string
+): Promise<{ status: string; intentId?: string; resumed?: boolean }> {
   const admin = createAdminClient();
-  await admin.from("billing_checkout_intents")
-    .update({ status: "provider_created", provider_submitted_at: new Date().toISOString() })
-    .eq("id", intentId);
+  const { data, error } = await admin.rpc("billing_claim_renewal_attempt",
+    { p_period_id: periodId });
+  if (error) throw new Error(`CLAIM_FAILED:${error.message}`);
+  const r = (data ?? {}) as Record<string, unknown>;
+  return { status: String(r.status), intentId: r.intent_id as string | undefined,
+           resumed: r.resumed === true };
 }
 
 export async function markRenewalFailure(input: {

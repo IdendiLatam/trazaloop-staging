@@ -116,6 +116,11 @@ export type OrganizationBillingState = {
   graceUntil: string | null;
   lastPaymentStatus: string | null;
   lastPaymentAt: string | null;
+  /** Hay dinero en duda: ni se afirma que falló, ni que se cobró. */
+  manualReview: boolean;
+  /** No hay medio de pago utilizable para el próximo cobro. */
+  paymentMethodMissing: boolean;
+  downgradeScheduled: boolean;
 };
 
 /** `null` = no se pudo leer. Distinto de «no tiene suscripción». */
@@ -130,6 +135,21 @@ export async function getOrganizationBillingState(
   const r = data as Record<string, unknown>;
   const num = (v: unknown) => (v === null || v === undefined ? null : n(v));
   const str = (v: unknown) => (typeof v === "string" ? v : null);
+
+  // Dos cosas que la pantalla necesita para hablar sin mentir: si hay dinero en
+  // duda —y entonces no se dice ni que falló ni que se cobró— y si falta con
+  // qué cobrar. Se preguntan al dominio; no se deducen del estado.
+  const subId = str(r.subscription_id);
+  let enDuda = false;
+  if (subId) {
+    const { data: duda } = await supabase.rpc("billing_has_unresolved_charge",
+      { p_subscription_id: subId });
+    enDuda = duda === true;
+  }
+  const { count: tarjetas } = await supabase.from("billing_payment_methods")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId).eq("status", "active");
+
   return {
     hasSubscription: r.has_subscription === true,
     subscriptionId: str(r.subscription_id),
@@ -142,6 +162,10 @@ export async function getOrganizationBillingState(
     renewsAt: str(r.renews_at),
     cancelAtPeriodEnd: r.cancel_at_period_end === true,
     graceUntil: str(r.grace_until),
+    manualReview: enDuda,
+    paymentMethodMissing: (tarjetas ?? 0) === 0,
+    downgradeScheduled: r.scheduled_plan_revision_id !== null
+      && r.scheduled_plan_revision_id !== undefined,
     lastPaymentStatus: str(r.last_payment_status),
     lastPaymentAt: str(r.last_payment_at),
   };

@@ -397,9 +397,11 @@ async function main() {
       const f = s as { status: string; grace_until: string | null };
       assert(f.status === "past_due", `la suscripción quedó ${f.status}`);
       assert(f.grace_until, "no se anotó hasta cuándo hay gracia");
-      // Y la gracia sale del VENCIMIENTO, no del reloj de quien anotó el fallo.
+      // Y la gracia sale del VENCIMIENTO —el principio del mes impagado—, no
+      // del reloj de quien anotó el fallo ni del final de ese mes. Medirla desde
+      // el final le regalaba al moroso el mes entero y una semana encima.
       const ps = await periodos(e.subscriptionId);
-      const esperado = new Date(new Date(String(ps[1].period_end)).getTime()
+      const esperado = new Date(new Date(String(ps[1].period_start)).getTime()
         + 168 * HORA).toISOString();
       assert(new Date(f.grace_until!).getTime() === new Date(esperado).getTime(),
         `gracia ${f.grace_until} en vez de ${esperado}`);
