@@ -98,7 +98,7 @@ export default async function PlatformPlansPage() {
             autoridad, y no se hace desde aquí.
           </p>
         </div>
-        <RenewalOperations rows={renovaciones.rows} />
+        <RenewalOperations rows={renovaciones.rows} alerts={renovaciones.alerts} />
       </section>
 
       <section className="space-y-2 rounded-lg border border-hairline bg-surface p-4">

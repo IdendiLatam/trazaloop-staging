@@ -335,7 +335,12 @@ export async function assignPlanAction(
  */
 export async function getRenewalOperationsAction(): Promise<{
   rows: RenewalOperationRow[] | null;
+  alerts: import("@/lib/db/billing-alerts").OperationsAlert[] | null;
 }> {
   await requirePlatformStaff();
-  return { rows: await listRenewalOperations() };
+  const { listOperationsAlerts } = await import("@/lib/db/billing-alerts");
+  const [rows, alerts] = await Promise.all([
+    listRenewalOperations(), listOperationsAlerts(),
+  ]);
+  return { rows, alerts };
 }

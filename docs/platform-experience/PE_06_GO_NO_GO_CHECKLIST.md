@@ -1,6 +1,6 @@
 # PE-06 · Lista de GO / NO-GO
 
-*Actualizado al cerrar **PE-06C1**, el 6 de septiembre de 2026.*
+*Actualizado al cerrar **PE-06C2**, el 6 de septiembre de 2026.*
 
 **El corte solo procede cuando todo lo BLOQUEANTE está en GO.** Un `PENDIENTE`
 no es un `GO` pequeño: es un NO-GO con nombre.
@@ -41,9 +41,9 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 | B8 | Superadministración humana no depende de una empresa de prueba | sí | **GO** — vive en `platform_staff` |
 | B9 | Grafo de dependencias medido, no adivinado | sí | **GO** — 98 tablas, 62 claves foráneas, 69 disparadores |
 | B10 | Ensayo de limpieza + migración posterior | sí | **GO** — 23 filas, 0 empresas, global intacto, 71 migraciones |
-| B11 | **Exportación lógica del estado global** | sí | **NO-GO** — falta credencial de Producción |
-| B12 | Purga con puerta propia para Producción, sin debilitar la de Staging | sí | **PENDIENTE INTERNO** — PE-06C2 |
-| B13 | Decisión sobre la cuenta externa sin empresa | sí | **PENDIENTE · DECISIÓN DE PRODUCTO** |
+| B11 | **Exportación lógica del estado global** | sí | **GO** — 4 artefactos verificados con huella, fuera del repositorio |
+| B12 | Purga con puerta propia para Producción, sin debilitar la de Staging | sí | **GO** — inerte, cinco puertas probadas una a una |
+| B13 | Decisión sobre la cuenta externa sin empresa | **no** | **GO** — registro nunca completado: sin privilegio, sin acceso, sin datos. Se preserva |
 
 ## C · Migración
 
@@ -59,12 +59,13 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 
 | # | Puerta | Bloqueante | Estado |
 |---|---|---|---|
-| D1 | Variables públicas apuntan a Producción y se comprueba tras construir | sí | PENDIENTE INTERNO |
-| D2 | Ninguna construcción de Preview se promueve a Producción | sí | **PENDIENTE INTERNO** — regla escrita, falta aplicarla |
-| D3 | Decisión sobre `QUALITY_MODULE_ENABLED` | sí | **CERRADA** — `ENABLE_AT_CUTOVER`; falta ponerla en PE-06C/D |
+| D1 | Variables públicas apuntan a Producción y se comprueba tras construir | sí | **GO** — `npm run verify:build-target`, probado en sus tres salidas |
+| D2 | Ninguna construcción de Preview se promueve a Producción | sí | **GO** — `FRESH_PRODUCTION_TARGET_BUILD`, con guardián que lo comprueba |
+| D3 | `QUALITY_MODULE_ENABLED` en Producción | sí | **PENDIENTE INTERNO** — decisión cerrada; se pone en el corte. Es de ejecución: no exige reconstruir |
 | D4 | Credenciales de Intelligence, si Quality entra | condicional | PENDIENTE INTERNO |
-| D5 | Retirar `MERCADOPAGO_*` de Preview | no | PENDIENTE INTERNO |
+| D5 | Retirar `MERCADOPAGO_*` de Preview | no | PENDIENTE INTERNO — no se toca mientras Preview se usa para verificar |
 | D6 | Protección de Preview sigue activa | sí | **GO** — 401 en API, redirección a SSO en pantalla |
+| D7 | Punto de entrega y destinatario de avisos en Producción | sí para el cobro automático | **PENDIENTE INTERNO** — `BILLING_OPERATIONS_ALERT_ENDPOINT` y `_RECIPIENT` |
 
 ## E · Wompi y cobro
 
@@ -94,7 +95,7 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 | F2 | Secreto de mirar puesto en Producción | sí | PENDIENTE INTERNO |
 | F3 | Pasadas en seco observadas con vencimientos reales | sí | PENDIENTE INTERNO |
 | F4 | Llamador externo seguro configurado | sí | PENDIENTE INTERNO |
-| F5 | Aviso activo ante `provider_unknown` | sí | **NO-GO** — no existe |
+| F5 | Aviso activo ante `provider_unknown` | sí | **GO** — señal duradera, entrega probada, sin duplicar y sin tocar dinero |
 | F6 | Interruptor, secreto de ejecución y lista blanca | sí | apagados a propósito |
 
 ## G · Impuestos y legal
@@ -135,20 +136,26 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 
 | | |
 |---|---|
-| **GO** | 22 |
-| **NO-GO** | 2 · **exportación del estado global (B11)** y aviso ante cobro en duda (F5) |
+| **GO** | 28 |
+| **NO-GO** | **0** |
 | **RECOMENDACIÓN** | 2 · copia de seguridad y PITR, degradados |
 | **PENDIENTE EXTERNO** | 11 · todas de Wompi/Gateway y contabilidad |
-| **PENDIENTE INTERNO** | 15 |
-| **DECISIÓN DE PRODUCTO** | 2 · 3DS y la cuenta externa sin empresa |
+| **PENDIENTE INTERNO** | 11 · configuración del corte |
+| **DECISIÓN DE PRODUCTO** | 1 · 3DS |
 
-**Veredicto: sigue siendo NO-GO**, y quedan dos puertas internas.
+**Veredicto: ya no hay ningún NO-GO interno.**
 
-Las copias **dejaron de bloquear**: los datos de inquilino son desechables por
-decisión de producto, así que lo único irrepetible es un puñado de filas
-globales. Pero no se degradó gratis: a cambio entra **B11**, exportar ese estado
-global antes de tocar nada. Es una red proporcionada al riesgo real, y hoy no
-está hecha.
+Lo que queda es de dos clases, y conviene no mezclarlas:
 
-La otra sigue siendo el aviso cuando un cobro queda en duda, que bloquea encender
-el cobro automático, no el despliegue.
+**Once puertas externas**, todas del Gateway de Wompi y de la verificación
+contable. No dependen de nadie de este lado.
+
+**Once tareas internas de configuración**, que son del propio corte: poner las
+variables, fijar el tipo de cambio, apuntar el punto de avisos, acordar la
+ventana. Ninguna es trabajo de producto pendiente.
+
+Y una decisión de producto: 3DS.
+
+**Se puede salir sin cobro.** Si el Gateway no llega a tiempo, el producto sale
+con Free y la contratación fallando cerrado, que es lo que ya hace hoy sin
+credenciales. Todo lo demás funciona.

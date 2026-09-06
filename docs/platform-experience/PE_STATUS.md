@@ -156,6 +156,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-06A | Salida a Producción · arquitectura, inventario del salto y puertas | — | **PLAN LISTO** · 71 migraciones clasificadas · NO-GO para el corte, como se esperaba · 2026-09-05 |
 | PE-06B | Salida a Producción · ensayo de la migración y línea base de Producción | — | **PASS** · 0111→0182 en 13 s, dos escenarios, guardianes vistos parar · 2026-09-05 |
 | PE-06C1 | Salida a Producción · estrategia de limpieza y estado global | — | **PASS** · las 3 empresas son de prueba y **desechables** · limpiar antes de migrar · lo legal y la auditoría se preservan · 2026-09-06 |
+| PE-06C2 | Salida a Producción · salvaguarda, avisos de cobro en duda y entorno | **0183** | **PASS** · estado global exportado y verificado · el cobro en duda ya avisa, una vez y sin tocar dinero · **cero NO-GO internos** · 2026-09-06 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
 Los diez de PE-05B1:
@@ -657,8 +658,8 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0182** |
-| Staging | **0182** |
+| Local | **0183** |
+| Staging | **0183** |
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es

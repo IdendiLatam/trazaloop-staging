@@ -19,13 +19,34 @@ import { longDate } from "@/lib/domain/billing-display";
  * investiga un cobro necesita poder buscarlo en la base. Es lo contrario de la
  * pantalla del cliente, y por eso son dos vocabularios distintos.
  */
-export function RenewalOperations({ rows }: { rows: RenewalOperationRow[] | null }) {
+/** Qué pasó, dicho para quien opera y no para quien programó. */
+const AVISO: Record<string, string> = {
+  renewal_provider_unknown: "Una renovación salió al proveedor y no sabemos si se cobró",
+  renewal_integrity_mismatch: "Una renovación no cuadró con lo prometido",
+  upgrade_provider_unknown: "Una subida de plan salió al proveedor y no sabemos si se cobró",
+  manual_review_required: "Un cobro quedó a la espera de que alguien lo mire",
+};
+const ENTREGA: Record<string, string> = {
+  pending: "sin avisar todavía",
+  sent: "avisado",
+  failed: "no se pudo avisar",
+  acknowledged: "visto",
+};
+
+export function RenewalOperations({ rows, alerts }: {
+  rows: RenewalOperationRow[] | null;
+  alerts?: import("@/lib/db/billing-alerts").OperationsAlert[] | null;
+}) {
   const [filtro, setFiltro] = useState<"todos" | OperationalState>("todos");
   const [busqueda, setBusqueda] = useState("");
 
   const conEstado = useMemo(
     () => (rows ?? []).map((r) => ({ row: r, estado: describeOperationalState(r) })),
     [rows]);
+
+  // Lo que hace falta mirar YA va primero: un cobro del que no se sabe el
+  // desenlace no espera turno detrás de un buscador.
+  const sinResolver = (alerts ?? []).filter((a) => a.status !== "acknowledged");
 
   const visibles = useMemo(() => conEstado.filter(({ row, estado }) => {
     if (filtro !== "todos" && estado.state !== filtro) return false;
@@ -49,6 +70,34 @@ export function RenewalOperations({ rows }: { rows: RenewalOperationRow[] | null
 
   return (
     <div className="space-y-4">
+      {sinResolver.length > 0 ? (
+        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
+          <p className="text-sm font-semibold text-amber-900">
+            {sinResolver.length === 1
+              ? "Hay un cobro que necesita que alguien lo mire"
+              : `Hay ${sinResolver.length} cobros que necesitan que alguien los mire`}
+          </p>
+          <p className="text-xs text-amber-900">
+            No se concedió nada y nadie va a volver a cobrar solo. Lo que falta es
+            decidir qué pasó con el dinero.
+          </p>
+          <ul className="space-y-1 text-sm text-amber-900">
+            {sinResolver.slice(0, 8).map((a) => (
+              <li key={a.id} className="flex flex-wrap justify-between gap-2">
+                <span>
+                  {AVISO[a.alertType] ?? a.alertType}
+                  {a.organizationName ? ` · ${a.organizationName}` : ""}
+                </span>
+                <span className="text-xs">
+                  {longDate(a.createdAt)} · {ENTREGA[a.status] ?? a.status}
+                  {a.status === "failed" && a.lastError ? ` (${a.lastError})` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
         {FILTROS.map((f) => (
           <button key={f.key} type="button" onClick={() => setFiltro(f.key)}

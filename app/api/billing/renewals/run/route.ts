@@ -4,6 +4,8 @@ import { runRenewalPass } from "@/lib/billing/renewal/orchestrator";
 import { fakeBillingProvider } from "@/lib/billing/providers/fake";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
 import { openRenewalRun, closeRenewalRun } from "@/lib/db/billing-renewal";
+import { scanUncertainCharges } from "@/lib/db/billing-alerts";
+import { dispatchPendingAlerts } from "@/lib/billing/alerts/dispatch";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -122,6 +124,15 @@ export async function POST(request: Request) {
       failure_class: d.failureClass })),
   });
 
+  // Y ANTES DE CONTESTAR, SE MIRA SI ALGO QUEDÓ EN DUDA.
+  //
+  // Se hace aquí porque esta ruta ya es la puerta de operación y ya tiene su
+  // secreto: inventar un segundo endpoint sería una segunda puerta que cuidar.
+  // El barrido lee la verdad que ya existe y no decide nada; la entrega, si
+  // falla, tampoco. Corre también en seco: enterarse no es cobrar.
+  const barrido = await scanUncertainCharges();
+  const avisos = await dispatchPendingAlerts();
+
   // Solo recuentos y decisiones. Ni un identificador de proveedor, ni un
   // importe, ni nada que no se pueda enseñar.
   return NextResponse.json({
@@ -131,6 +142,9 @@ export async function POST(request: Request) {
     provider_calls: ejecutar
       ? r.decisions.filter((d) => d.providerPaymentId || d.failureClass).length : 0,
     run_id: runId,
+    alerts: { scanned: barrido.scanned, raised: barrido.raised,
+              pending: avisos.pending, sent: avisos.sent, failed: avisos.failed,
+              channel_configured: avisos.channelConfigured },
     due_found: r.dueFound,
     by_action: porAccion,
     errors: r.failures,
