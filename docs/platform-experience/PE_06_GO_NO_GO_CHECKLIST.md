@@ -1,6 +1,6 @@
 # PE-06 · Lista de GO / NO-GO
 
-*Actualizado al cerrar **PE-06B**, el 5 de septiembre de 2026.*
+*Actualizado al cerrar **PE-06C1**, el 6 de septiembre de 2026.*
 
 **El corte solo procede cuando todo lo BLOQUEANTE está en GO.** Un `PENDIENTE`
 no es un `GO` pequeño: es un NO-GO con nombre.
@@ -27,10 +27,23 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 | # | Puerta | Bloqueante | Estado |
 |---|---|---|---|
 | B1 | Inventario de Producción en solo lectura, ejecutado | sí | **GO** — 5-sep-2026, 21:15 UTC-5 |
-| B2 | `organizations` = 0 confirmado, o plan alternativo para 0163 | sí | **GO por la segunda vía** — son **3**, y 0163 se ensayó con esa forma exacta |
+| B2 | `organizations` = 0 confirmado, o plan alternativo para 0163 | sí | **GO** — son 3, **de prueba y desechables**; se limpian antes de migrar |
 | B3 | Inventario de objetos de almacenamiento por cubo | sí | **GO** — 8 · 1 · 1 objetos; bytes desconocidos |
-| B4 | Copia de seguridad reciente verificada | sí | **NO-GO** — `backups: []` |
-| B5 | Recuperación a un punto en el tiempo | sí | **NO-GO** — `pitr_enabled: false` |
+| B4 | Copia de seguridad reciente verificada | **no** | **RECOMENDACIÓN** — los datos de inquilino son desechables |
+| B5 | Recuperación a un punto en el tiempo | **no** | **RECOMENDACIÓN** — `pitr_enabled: false`, ya no bloquea |
+
+### B bis · Limpieza de los inquilinos de prueba
+
+| # | Puerta | Bloqueante | Estado |
+|---|---|---|---|
+| B6 | Las 3 empresas clasificadas como desechables por producto | sí | **GO** |
+| B7 | Estado global inventariado y clasificado | sí | **GO** |
+| B8 | Superadministración humana no depende de una empresa de prueba | sí | **GO** — vive en `platform_staff` |
+| B9 | Grafo de dependencias medido, no adivinado | sí | **GO** — 98 tablas, 62 claves foráneas, 69 disparadores |
+| B10 | Ensayo de limpieza + migración posterior | sí | **GO** — 23 filas, 0 empresas, global intacto, 71 migraciones |
+| B11 | **Exportación lógica del estado global** | sí | **NO-GO** — falta credencial de Producción |
+| B12 | Purga con puerta propia para Producción, sin debilitar la de Staging | sí | **PENDIENTE INTERNO** — PE-06C2 |
+| B13 | Decisión sobre la cuenta externa sin empresa | sí | **PENDIENTE · DECISIÓN DE PRODUCTO** |
 
 ## C · Migración
 
@@ -122,19 +135,20 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 
 | | |
 |---|---|
-| **GO** | 17 |
-| **NO-GO** | 3 · **copia de seguridad (B4)**, **PITR (B5)** y aviso ante cobro en duda (F5) |
+| **GO** | 22 |
+| **NO-GO** | 2 · **exportación del estado global (B11)** y aviso ante cobro en duda (F5) |
+| **RECOMENDACIÓN** | 2 · copia de seguridad y PITR, degradados |
 | **PENDIENTE EXTERNO** | 11 · todas de Wompi/Gateway y contabilidad |
-| **PENDIENTE INTERNO** | 14 |
-| **DECISIÓN DE PRODUCTO** | 1 · 3DS |
+| **PENDIENTE INTERNO** | 15 |
+| **DECISIÓN DE PRODUCTO** | 2 · 3DS y la cuenta externa sin empresa |
 
-**Veredicto: sigue siendo NO-GO**, pero por otras razones que ayer.
+**Veredicto: sigue siendo NO-GO**, y quedan dos puertas internas.
 
-El ensayo de la migración **se cerró**: la cadena entera se aplicó dos veces
-sobre la forma real de Producción, los guardianes se vieron parar y 0163 se probó
-con sus tres modos de acceso y sus bordes.
+Las copias **dejaron de bloquear**: los datos de inquilino son desechables por
+decisión de producto, así que lo único irrepetible es un puñado de filas
+globales. Pero no se degradó gratis: a cambio entra **B11**, exportar ese estado
+global antes de tocar nada. Es una red proporcionada al riesgo real, y hoy no
+está hecha.
 
-Lo que ha empeorado es lo de las copias: **PITR está apagado y no hay copia
-física listada**, y las migraciones no tienen vuelta atrás. Migrar Producción hoy
-sería hacerlo sin red. Esa es ahora la puerta interna más importante, y es
-barata de cerrar.
+La otra sigue siendo el aviso cuando un cobro queda en duda, que bloquea encender
+el cobro automático, no el despliegue.

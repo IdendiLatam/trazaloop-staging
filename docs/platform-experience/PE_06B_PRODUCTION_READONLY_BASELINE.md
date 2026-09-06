@@ -25,6 +25,12 @@ nombre de fichero, ni un correo, ni un dato personal.** Solo cuentas y agregados
 
 ---
 
+> **Reclasificado en PE-06C1 (6 de septiembre de 2026).** El dueño de producto
+> aclaró que **las tres empresas son de prueba y sus datos son desechables**. Lo
+> que sigue se conserva porque es lo que se midió y sigue siendo cierto, pero la
+> conclusión de «hay datos de cliente que preservar» queda **superada** por
+> [`PE_06C1_PRODUCTION_CLEANUP_STRATEGY.md`](PE_06C1_PRODUCTION_CLEANUP_STRATEGY.md).
+
 ## El hecho que cambia el corte
 
 > **Producción tiene 3 empresas.**
@@ -40,8 +46,9 @@ MIGRATION_0163_ACTUAL_DATA_REHEARSAL_REQUIRED = YES   ← hecho en este tramo
 
 Y no son empresas vacías: hay **8 órdenes de producción, 10 evidencias, 6
 proveedores, 8 materiales, 7 productos y 8 archivos** en el cubo de evidencias.
-**Hay trabajo real de cliente en Producción.** Cualquier plan que dijera «no hay
-nada que preservar» ya no es cierto.
+Hay trabajo real registrado en Producción. *(PE-06C1: es trabajo de **pruebas**,
+y el dueño de producto lo declaró desechable. Lo global —legales, auditoría,
+plataforma— sí se preserva.)*
 
 ---
 
@@ -165,9 +172,10 @@ encender PITR o tomar y **verificar** una copia lógica.
    [`PE_06B_MIGRATION_REHEARSAL.md`](PE_06B_MIGRATION_REHEARSAL.md).
 2. **0147 no borrará nada**: su única metodología está referenciada por tres
    cálculos, así que toma el camino seguro documentado.
-3. **Hay datos de cliente que preservar.** El corte deja de ser «desplegar sobre
-   una base vacía».
-4. **Sin copia verificada no se migra.**
+3. **Hay datos que mirar antes de migrar.** *(PE-06C1: son de prueba y se
+   limpian antes del corte.)*
+4. ~~Sin copia verificada no se migra.~~ *(PE-06C1: degradado a recomendación;
+   lo obligatorio pasa a ser exportar el estado global.)*
 5. Este inventario **se vuelve a tomar** justo antes del corte.
 
 ```

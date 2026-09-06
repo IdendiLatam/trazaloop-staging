@@ -154,7 +154,8 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B6F | Facturación · administración del tipo de cambio y verdad histórica | **0182** | **PASS · el tipo de cambio se administra desde el producto · la historia ya no se inventa el plan · 18 pruebas · 0 cobros** · 2026-09-05 |
 | PE-05B6F.1 | Facturación · la administración comercial en idioma de negocio | **0182** | **PASS · sin migración · precios en USD humanos, sin techo que configurar, sin «revisión sucesora» · 21 pruebas** · 2026-09-05 |
 | PE-06A | Salida a Producción · arquitectura, inventario del salto y puertas | — | **PLAN LISTO** · 71 migraciones clasificadas · NO-GO para el corte, como se esperaba · 2026-09-05 |
-| PE-06B | Salida a Producción · ensayo de la migración y línea base de Producción | — | **PASS** · 0111→0182 en 13 s, dos escenarios, guardianes vistos parar · **Producción tiene 3 empresas con datos reales** · PITR apagado · 2026-09-05 |
+| PE-06B | Salida a Producción · ensayo de la migración y línea base de Producción | — | **PASS** · 0111→0182 en 13 s, dos escenarios, guardianes vistos parar · 2026-09-05 |
+| PE-06C1 | Salida a Producción · estrategia de limpieza y estado global | — | **PASS** · las 3 empresas son de prueba y **desechables** · limpiar antes de migrar · lo legal y la auditoría se preservan · 2026-09-06 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
 Los diez de PE-05B1:
