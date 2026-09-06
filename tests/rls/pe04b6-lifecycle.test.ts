@@ -66,7 +66,7 @@ async function main() {
 
   const plan = async (cli = dueño.cli) => {
     const { data, error } = await cli.rpc("plan_effective_for_organization",
-      { p_organization_id: org, p_as_of: new Date().toISOString() });
+      { p_organization_id: org });
     assert(!error, `plan: ${error?.message}`);
     return data as J;
   };
@@ -87,7 +87,7 @@ async function main() {
   };
   const soporteDe = async (cli = dueño.cli) => {
     const { data, error } = await cli.rpc("organization_support_entitlement",
-      { p_organization_id: org, p_as_of: new Date().toISOString() });
+      { p_organization_id: org });
     assert(!error, `soporte: ${error?.message}`);
     return data as J;
   };
@@ -477,7 +477,7 @@ async function main() {
       }
       for (const [mod, code] of Object.entries(mezcla)) {
         const { data } = await dueño.cli.rpc("plan_effective_for_module", {
-          p_organization_id: org, p_module_code: mod, p_as_of: new Date().toISOString() });
+          p_organization_id: org, p_module_code: mod });
         assert((data as J).plan_code === code, `${mod} resolvió ${(data as J).plan_code}`);
       }
       // Los recursos de EMPRESA toman el nivel más alto elegible.
@@ -559,7 +559,7 @@ async function main() {
       // Un UPDATE filtrado por RLS no da error: da cero filas. Se comprueba el
       // efecto, no el error.
       const { error: eLee } = await soporte.cli.rpc("organization_support_entitlement",
-        { p_organization_id: org, p_as_of: new Date().toISOString() });
+        { p_organization_id: org });
       assert(!eLee, `soporte no pudo leer: ${eLee?.message}`);
 
       const revId = await revision("extra");

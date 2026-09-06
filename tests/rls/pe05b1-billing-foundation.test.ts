@@ -96,7 +96,7 @@ async function main() {
   };
   const planEfectivo = async () => {
     const { data } = await dueño.cli.rpc("plan_effective_for_organization",
-      { p_organization_id: org, p_as_of: new Date().toISOString() });
+      { p_organization_id: org });
     return (data as J).plan_code as string | undefined;
   };
   const limpiarFacturacion = async () => {

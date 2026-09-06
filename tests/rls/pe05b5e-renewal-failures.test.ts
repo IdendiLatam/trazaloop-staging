@@ -137,7 +137,7 @@ const vencimientos = async () => {
 };
 const plan = async (e: { org: string; quien: { cli: SupabaseClient } }) => {
   const { data } = await e.quien.cli.rpc("plan_effective_for_organization",
-    { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+    { p_organization_id: e.org });
   return data as Record<string, unknown>;
 };
 

@@ -129,9 +129,13 @@ const vencimientos = async () => {
 };
 const accionDe = (filas: Record<string, unknown>[], sub: string) =>
   filas.find((f) => f.subscription_id === sub)?.action as string | undefined;
+// Sin `p_as_of`: el instante lo pone la base, que es de donde sale la verdad.
+// Pasarle el reloj del anfitrion abria una ventana de milisegundos -- el reloj
+// del contenedor va unas decimas por delante -- en la que un derecho recien
+// cerrado todavia se leia vivo. Ademas es como lo llama el producto.
 const plan = async (e: { org: string; quien: { cli: SupabaseClient } }) => {
   const { data } = await e.quien.cli.rpc("plan_effective_for_organization",
-    { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+    { p_organization_id: e.org });
   return data as Record<string, unknown>;
 };
 const vivas = async (org: string) => {

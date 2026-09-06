@@ -153,10 +153,11 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B6E | Facturación · subida inmediata, bajada segura y periodicidad | **0181** | **PASS · una transacción real de COP 193 413 por la diferencia · 25 pruebas · 3 GB sobreviven a la bajada** · 2026-09-05 |
 | PE-05B6F | Facturación · administración del tipo de cambio y verdad histórica | **0182** | **PASS · el tipo de cambio se administra desde el producto · la historia ya no se inventa el plan · 18 pruebas · 0 cobros** · 2026-09-05 |
 | PE-05B6F.1 | Facturación · la administración comercial en idioma de negocio | **0182** | **PASS · sin migración · precios en USD humanos, sin techo que configurar, sin «revisión sucesora» · 21 pruebas** · 2026-09-05 |
-| PE-06A | Salida a Producción · arquitectura, inventario del salto y puertas | — | **PLAN LISTO** · 71 migraciones clasificadas · NO-GO para el corte, como se esperaba · 2026-09-05 |
+| PE-06A | Salida a Producción · arquitectura, inventario del salto y puertas | — | **PLAN LISTO** · 71 migraciones clasificadas *(recontadas en C3: **72**, hasta 0183)* · NO-GO para el corte, como se esperaba · 2026-09-05 |
 | PE-06B | Salida a Producción · ensayo de la migración y línea base de Producción | — | **PASS** · 0111→0182 en 13 s, dos escenarios, guardianes vistos parar · 2026-09-05 |
 | PE-06C1 | Salida a Producción · estrategia de limpieza y estado global | — | **PASS** · las 3 empresas son de prueba y **desechables** · limpiar antes de migrar · lo legal y la auditoría se preservan · 2026-09-06 |
 | PE-06C2 | Salida a Producción · salvaguarda, avisos de cobro en duda y entorno | **0183** | **PASS** · estado global exportado y verificado · el cobro en duda ya avisa, una vez y sin tocar dinero · **cero NO-GO internos** · 2026-09-06 |
+| PE-06C3 | Salida a Producción · manual de corte, comandos preparados y ensayo en seco | — | **PASS** · manual ejecutable de 12 fases · **72** migraciones 0112→0183 sobre base limpia, dos ensayos (25 s y 15 s), esquema idéntico a Local · limpieza ensayada en seco con sus cinco puertas · un intermitente de la batería localizado y cerrado (el reloj del anfitrión leía un derecho recién cerrado como vivo) · Producción **sin tocar**, sigue en 0111 · 2026-09-06 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
 Los diez de PE-05B1:
@@ -663,12 +664,23 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 | Producción | **0111** |
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
-un paso de B5B: es una decisión aparte que empieza por aplicar 49 migraciones.
+un paso de B5B: es una decisión aparte que empieza por aplicar migraciones.
+
+**Son 72**, de 0112 a 0183, recontadas en PE-06C3 y ensayadas dos veces sobre
+base limpia: 0 fallos, menos de medio minuto, y un esquema idéntico al de Local.
+El salto está escrito paso a paso en
+[`PE_06D_PRODUCTION_CUTOVER_RUNBOOK.md`](PE_06D_PRODUCTION_CUTOVER_RUNBOOK.md).
 
 ---
 
 ## Lo que queda pendiente y está escrito
 
+- **El corte a Producción, paso a paso.**
+  [`PE_06D_PRODUCTION_CUTOVER_RUNBOOK.md`](PE_06D_PRODUCTION_CUTOVER_RUNBOOK.md)
+  es la fuente de verdad: 12 fases con precondición, comando, resultado
+  esperado, parada y contención, más su registro de evidencia. **Preparado y no
+  ejecutado.** Lo que bloquea y lo que no está clasificado en
+  [`PE_06_GO_NO_GO_CHECKLIST.md`](PE_06_GO_NO_GO_CHECKLIST.md).
 - [`PE_02B6_DEFERRED_HELP_BACKLOG.md`](PE_02B6_DEFERRED_HELP_BACKLOG.md) — las
   siete familias de pantalla sin ayuda contextual administrada, y por qué no se
   inventó contenido para ellas.

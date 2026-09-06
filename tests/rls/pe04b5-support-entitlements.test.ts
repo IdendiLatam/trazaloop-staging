@@ -77,7 +77,7 @@ async function main() {
 
   const derecho = async (cli = ana.cli, o = org): Promise<Ent> => {
     const { data, error } = await cli.rpc("organization_support_entitlement", {
-      p_organization_id: o, p_as_of: new Date().toISOString() });
+      p_organization_id: o });
     assert(!error, `derecho: ${error?.message}`);
     return data as unknown as Ent;
   };
@@ -575,7 +575,7 @@ async function main() {
 
     await check("Ni el derecho de soporte de otra empresa", async () => {
       const { error } = await ajeno.cli.rpc("organization_support_entitlement", {
-        p_organization_id: org, p_as_of: new Date().toISOString() });
+        p_organization_id: org });
       assert(error, "un ajeno leyó el derecho de soporte de otra empresa");
     });
 
@@ -600,7 +600,7 @@ async function main() {
       const { data: cat, error: e1 } = await soporte.cli.from("plan_revisions").select("id").limit(1);
       assert(!e1 && (cat ?? []).length > 0, `soporte no pudo leer el catálogo: ${e1?.message}`);
       const { error: e2 } = await soporte.cli.rpc("organization_support_entitlement", {
-        p_organization_id: org, p_as_of: new Date().toISOString() });
+        p_organization_id: org });
       assert(!e2, `soporte no pudo leer el derecho: ${e2?.message}`);
     });
 

@@ -443,7 +443,7 @@ async function main() {
       await runRenewalPass({ provider: fakeBillingProvider("approve", "retryable_decline") });
 
       const { data: antes } = await e.quien.cli.rpc("plan_effective_for_organization",
-        { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+        { p_organization_id: e.org });
       assert((antes as Record<string, unknown>).plan_code === "full",
         JSON.stringify(antes));
 
@@ -457,7 +457,7 @@ async function main() {
       assert(d?.outcome === "lapsed", JSON.stringify(d));
 
       const { data: luego } = await e.quien.cli.rpc("plan_effective_for_organization",
-        { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+        { p_organization_id: e.org });
       assert((luego as Record<string, unknown>).plan_code === "free",
         `quedó en ${JSON.stringify(luego)}`);
       assert((luego as Record<string, unknown>).grant_kind === "base",

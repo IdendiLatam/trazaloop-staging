@@ -180,6 +180,12 @@ function receptor(): Promise<{ url: string; recibidos: unknown[]; cerrar: () => 
 }
 
 async function main() {
+  // Una tasa sintetica que quedo viva por una ejecucion interrumpida bloquearia
+  // esta: 0182 prohibe dos activas a la vez. Se retira -- nunca se borra, que la
+  // historia financiera no se borra ni siendo de QA -- y solo las etiquetadas.
+  await admin.from("commercial_fx_rates").update({ status: "retired" })
+    .eq("status", "active").like("note", "QA PE-06C2 %");
+
   const { data: fx, error: efx } = await admin.from("commercial_fx_rates").insert({
     base_currency: "USD", quote_currency: "COP", rate_micros: TASA_MICROS,
     effective_from: new Date(Date.now() - 86_400_000).toISOString(),

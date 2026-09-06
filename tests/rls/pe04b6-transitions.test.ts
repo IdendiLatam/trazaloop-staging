@@ -63,12 +63,12 @@ async function main() {
   };
   const plan = async () => {
     const { data } = await dueño.cli.rpc("plan_effective_for_organization",
-      { p_organization_id: org, p_as_of: new Date().toISOString() });
+      { p_organization_id: org });
     return (data as J).plan_code as string | undefined;
   };
   const planModulo = async (m: string) => {
     const { data } = await dueño.cli.rpc("plan_effective_for_module",
-      { p_organization_id: org, p_module_code: m, p_as_of: new Date().toISOString() });
+      { p_organization_id: org, p_module_code: m });
     return (data as J).plan_code as string | undefined;
   };
   const asignar = async (code: string, opciones?: {
@@ -369,7 +369,7 @@ async function main() {
       }
       assert((await asignar("full")).ok, "no se pudo bajar");
       const { data: enFull } = await dueño.cli.rpc("organization_support_entitlement",
-        { p_organization_id: org, p_as_of: new Date().toISOString() });
+        { p_organization_id: org });
       assert((enFull as J).functional_guidance_allowed === false, "Full conservó la orientación funcional");
       const { count } = await admin.from("support_tickets")
         .select("id", { count: "exact", head: true }).eq("organization_id", org);
@@ -377,7 +377,7 @@ async function main() {
 
       assert((await asignar("extra")).ok, "no se pudo volver");
       const { data: vuelta } = await dueño.cli.rpc("organization_support_entitlement",
-        { p_organization_id: org, p_as_of: new Date().toISOString() });
+        { p_organization_id: org });
       assert((vuelta as J).functional_cases_used === 2 && (vuelta as J).functional_cases_remaining === 0,
         `al volver: ${(vuelta as J).functional_cases_used}/${(vuelta as J).functional_cases_limit}`);
     });

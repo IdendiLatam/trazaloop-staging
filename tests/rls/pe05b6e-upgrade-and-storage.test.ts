@@ -229,7 +229,7 @@ const estadoAlmacenamiento = async (
 
 const planVigente = async (e: { org: string; quien: { cli: SupabaseClient } }) => {
   const { data } = await e.quien.cli.rpc("plan_effective_for_organization",
-    { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+    { p_organization_id: e.org });
   return (data ?? {}) as Record<string, unknown>;
 };
 
@@ -558,7 +558,7 @@ async function main() {
         const e = await empresaPagando("M ia", "full", "monthly");
         await envejecer(e.subscriptionId, dias(10));
         const { data: antes } = await e.quien.cli.rpc("ai_monthly_allowance",
-          { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+          { p_organization_id: e.org });
         assert(Number((antes as Record<string, unknown>).limit_value) === 500,
           `techo Full ${JSON.stringify(antes)}`);
 
@@ -575,7 +575,7 @@ async function main() {
 
         await subir(e, "extra");
         const { data: despues } = await e.quien.cli.rpc("ai_monthly_allowance",
-          { p_organization_id: e.org, p_as_of: new Date().toISOString() });
+          { p_organization_id: e.org });
         assert(Number((despues as Record<string, unknown>).limit_value) === 2000,
           `techo Extra ${JSON.stringify(despues)}`);
         assert(await consumido() === gastadoAntes,
