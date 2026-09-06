@@ -153,6 +153,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-05B6E | Facturación · subida inmediata, bajada segura y periodicidad | **0181** | **PASS · una transacción real de COP 193 413 por la diferencia · 25 pruebas · 3 GB sobreviven a la bajada** · 2026-09-05 |
 | PE-05B6F | Facturación · administración del tipo de cambio y verdad histórica | **0182** | **PASS · el tipo de cambio se administra desde el producto · la historia ya no se inventa el plan · 18 pruebas · 0 cobros** · 2026-09-05 |
 | PE-05B6F.1 | Facturación · la administración comercial en idioma de negocio | **0182** | **PASS · sin migración · precios en USD humanos, sin techo que configurar, sin «revisión sucesora» · 21 pruebas** · 2026-09-05 |
+| PE-06A | Salida a Producción · arquitectura, inventario del salto y puertas | — | **PLAN LISTO** · 71 migraciones clasificadas · NO-GO para el corte, como se esperaba · 2026-09-05 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
 Los diez de PE-05B1:
