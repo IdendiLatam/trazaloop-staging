@@ -1,6 +1,6 @@
 # PE-06 · Lista de GO / NO-GO
 
-*Estado al cerrar PE-06A, el 5 de septiembre de 2026.*
+*Actualizado al cerrar **PE-06B**, el 5 de septiembre de 2026.*
 
 **El corte solo procede cuando todo lo BLOQUEANTE está en GO.** Un `PENDIENTE`
 no es un `GO` pequeño: es un NO-GO con nombre.
@@ -26,11 +26,11 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 
 | # | Puerta | Bloqueante | Estado |
 |---|---|---|---|
-| B1 | Inventario de Producción en solo lectura, ejecutado | sí | **PENDIENTE INTERNO** — PE-06B |
-| B2 | `organizations` = 0 confirmado, o plan alternativo para 0163 | sí | **PENDIENTE INTERNO** |
-| B3 | Inventario de objetos de almacenamiento por cubo | sí | PENDIENTE INTERNO |
-| B4 | Copia de seguridad reciente verificada | sí | **PENDIENTE INTERNO** — PE-06C |
-| B5 | Ventana de recuperación a un punto en el tiempo conocida | sí | PENDIENTE INTERNO |
+| B1 | Inventario de Producción en solo lectura, ejecutado | sí | **GO** — 5-sep-2026, 21:15 UTC-5 |
+| B2 | `organizations` = 0 confirmado, o plan alternativo para 0163 | sí | **GO por la segunda vía** — son **3**, y 0163 se ensayó con esa forma exacta |
+| B3 | Inventario de objetos de almacenamiento por cubo | sí | **GO** — 8 · 1 · 1 objetos; bytes desconocidos |
+| B4 | Copia de seguridad reciente verificada | sí | **NO-GO** — `backups: []` |
+| B5 | Recuperación a un punto en el tiempo | sí | **NO-GO** — `pitr_enabled: false` |
 
 ## C · Migración
 
@@ -38,9 +38,9 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 |---|---|---|---|
 | C1 | Las 71 migraciones clasificadas | sí | **GO** |
 | C2 | Sin `drop table`, `drop column` ni borrados de datos de inquilino | sí | **GO** — un solo `delete`, de catálogo y condicionado |
-| C3 | Ensayo 0112→0182 sobre base limpia, con evidencia | sí | **NO-GO** — no se ha hecho |
-| C4 | Ensayo con datos parecidos a Producción | sí | **NO-GO** — depende de B1 |
-| C5 | Duración medida y ventana de corte acordada | sí | PENDIENTE INTERNO |
+| C3 | Ensayo 0112→0182 sobre base limpia, con evidencia | sí | **GO** — 71 migraciones, 0 fallos, 13 s |
+| C4 | Ensayo con la forma real de Producción y con bordes | sí | **GO** — escenarios A y B, 0163 e idempotencia probados |
+| C5 | Duración medida y ventana de corte acordada | sí | **PARCIAL** — 13 s medidos en local; falta acordar ventana |
 
 ## D · Configuración de Producción
 
@@ -48,7 +48,7 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 |---|---|---|---|
 | D1 | Variables públicas apuntan a Producción y se comprueba tras construir | sí | PENDIENTE INTERNO |
 | D2 | Ninguna construcción de Preview se promueve a Producción | sí | **PENDIENTE INTERNO** — regla escrita, falta aplicarla |
-| D3 | Decisión sobre `QUALITY_MODULE_ENABLED` | sí | **PENDIENTE · DECISIÓN DE PRODUCTO** |
+| D3 | Decisión sobre `QUALITY_MODULE_ENABLED` | sí | **CERRADA** — `ENABLE_AT_CUTOVER`; falta ponerla en PE-06C/D |
 | D4 | Credenciales de Intelligence, si Quality entra | condicional | PENDIENTE INTERNO |
 | D5 | Retirar `MERCADOPAGO_*` de Preview | no | PENDIENTE INTERNO |
 | D6 | Protección de Preview sigue activa | sí | **GO** — 401 en API, redirección a SSO en pantalla |
@@ -122,11 +122,19 @@ Clases: **GO** · **NO-GO** · **PENDIENTE EXTERNO** · **PENDIENTE INTERNO** ·
 
 | | |
 |---|---|
-| **GO** | 12 |
-| **NO-GO** | 3 · ensayo de migración (C3, C4) y aviso ante cobro en duda (F5) |
+| **GO** | 17 |
+| **NO-GO** | 3 · **copia de seguridad (B4)**, **PITR (B5)** y aviso ante cobro en duda (F5) |
 | **PENDIENTE EXTERNO** | 11 · todas de Wompi/Gateway y contabilidad |
-| **PENDIENTE INTERNO** | 19 |
-| **DECISIÓN DE PRODUCTO** | 2 · Quality en Producción, y 3DS |
+| **PENDIENTE INTERNO** | 14 |
+| **DECISIÓN DE PRODUCTO** | 1 · 3DS |
 
-**Veredicto de hoy: NO-GO para el corte**, y era lo esperado. Nada de lo que
-falta es trabajo pendiente de PE-05: son puertas de salida.
+**Veredicto: sigue siendo NO-GO**, pero por otras razones que ayer.
+
+El ensayo de la migración **se cerró**: la cadena entera se aplicó dos veces
+sobre la forma real de Producción, los guardianes se vieron parar y 0163 se probó
+con sus tres modos de acceso y sus bordes.
+
+Lo que ha empeorado es lo de las copias: **PITR está apagado y no hay copia
+física listada**, y las migraciones no tienen vuelta atrás. Migrar Producción hoy
+sería hacerlo sin red. Esa es ahora la puerta interna más importante, y es
+barata de cerrar.
