@@ -85,7 +85,37 @@ export const CANDADOS: Array<{ tabla: string; trigger: string; porque: string }>
   { tabla: "recycled_content_calculations", trigger: "t_recycled_calc_immutable",
     porque: "Un cálculo de trazabilidad es evidencia y el producto se niega a "
           + "borrarlo. Para un inquilino de prueba se baja a propósito." },
+  { tabla: "audit_dossiers", trigger: "t_audit_dossiers_protect_delete",
+    porque: "Un expediente de auditoría no se borra NUNCA por el producto: el "
+          + "guardián no mira el estado, se niega y ya está." },
+  { tabla: "traceability_exercises", trigger: "t_traceability_exercises_protect_delete",
+    porque: "Un ejercicio terminado o archivado es historial de preparación. El "
+          + "de Producción está «completed», así que este guardián se dispararía." },
+  { tabla: "diagnostics", trigger: "t_diagnostics_lock_completed",
+    porque: "Un diagnóstico completado no se modifica ni se elimina. El de "
+          + "Producción está «completed»." },
+  { tabla: "evidences", trigger: "t_evidences_guard_integrity",
+    porque: "Una evidencia validada no se elimina. Ocho de las diez de "
+          + "Producción están en «valid»." },
 ];
+
+/**
+ * Los que NO se bajan, y por qué —que es la mitad importante de la lista—:
+ *
+ *   · `t_production_orders_protect_history` y los guardianes estructurales de
+ *     lotes y consumos: solo se niegan cuando la orden está cerrada o
+ *     cancelada, y en Producción las ocho están en borrador o en curso.
+ *   · `t_textile_diagnostics_lock_completed`: el único diagnóstico textil está
+ *     «in_progress».
+ *   · `trg_protect_global_textile_fiber_types`: defiende las fibras del
+ *     catálogo base, que tienen `organization_id` nulo y por tanto el filtro de
+ *     borrado no las alcanza jamás.
+ *   · `audit_row_change`: no impide nada; escribe en `audit_log`. Que la
+ *     limpieza quede registrada es exactamente lo que se quiere.
+ *
+ * Si uno de estos se dispara igualmente, la transacción se deshace entera y la
+ * herramienta lo dice. Bajar candados «por si acaso» sería quitarles el sentido.
+ */
 
 export type Resultado = {
   ok: boolean;
