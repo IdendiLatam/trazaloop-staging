@@ -139,22 +139,39 @@ function bloqueado(motivo: string): Resultado {
  * Se recorre cada cubo por prefijo. Un objeto cuyo primer tramo de ruta no sea
  * una empresa aprobada no se toca ni se mira dos veces: el prefijo ES la
  * pertenencia, y esa es toda la comprobación que hace falta.
+ *
+ * Va en DOS tiempos a propósito. Primero se INVENTARÍA —solo lectura—, y eso
+ * ocurre ANTES de abrir la transacción de la base: si la credencial no sirve,
+ * se sabe cuando todavía no se ha borrado nada. Después, ya con la base
+ * confirmada, se borra exactamente la lista inventariada.
+ *
+ * La cabecera va en las dos formas, `apikey` y `Authorization`, que es lo que
+ * acepta tanto una llave heredada `service_role` como una moderna
+ * `sb_secret_…`. La herramienta no opina sobre el formato: opina el servidor,
+ * y si dice que no, esto se para.
  */
-async function borrarFicheros(
+function cabecerasDe(llave: string) {
+  return { apikey: llave, Authorization: `Bearer ${llave}`,
+           "Content-Type": "application/json" };
+}
+
+async function inventariarFicheros(
   base: string, llave: string, aprobadas: string[]
-): Promise<number> {
-  const cabeceras = { apikey: llave, Authorization: `Bearer ${llave}`,
-                      "Content-Type": "application/json" };
+): Promise<Array<{ cubo: string; ruta: string }>> {
+  const cabeceras = cabecerasDe(llave);
 
   const cubosR = await fetch(`${base}/storage/v1/bucket`, { headers: cabeceras });
-  if (!cubosR.ok) throw new Error(`no se pudieron listar los cubos (${cubosR.status})`);
+  if (!cubosR.ok) {
+    throw new Error(`la credencial de Storage no sirve para listar los cubos `
+      + `(HTTP ${cubosR.status}). No se ha tocado nada.`);
+  }
   const cubos = (await cubosR.json()) as Array<{ name: string }>;
 
   const listar = async (cubo: string, prefijo: string) => {
     const r = await fetch(`${base}/storage/v1/object/list/${cubo}`, {
       method: "POST", headers: cabeceras,
       body: JSON.stringify({ prefix: prefijo, limit: 1000 }) });
-    if (!r.ok) throw new Error(`no se pudo listar ${cubo}/${prefijo} (${r.status})`);
+    if (!r.ok) throw new Error(`no se pudo listar ${cubo}/${prefijo} (HTTP ${r.status})`);
     return (await r.json()) as Array<{ name: string; id: string | null }>;
   };
 
@@ -170,19 +187,37 @@ async function borrarFicheros(
     return salida;
   };
 
-  let total = 0;
+  const inventario: Array<{ cubo: string; ruta: string }> = [];
   for (const { name: cubo } of cubos) {
-    const rutas: string[] = [];
-    for (const org of aprobadas) rutas.push(...await recorrer(cubo, `${org}/`, 0));
-    if (rutas.length === 0) continue;
-    for (const r of rutas) {
-      if (!aprobadas.includes(r.split("/")[0])) {
-        throw new Error(`ruta fuera de las empresas aprobadas: ${cubo}/${r}`);
+    for (const org of aprobadas) {
+      for (const ruta of await recorrer(cubo, `${org}/`, 0)) {
+        if (!aprobadas.includes(ruta.split("/")[0])) {
+          throw new Error(`ruta fuera de las empresas aprobadas: ${cubo}/${ruta}`);
+        }
+        inventario.push({ cubo, ruta });
       }
     }
+  }
+  return inventario;
+}
+
+async function borrarFicheros(
+  base: string, llave: string, aprobadas: string[],
+  inventario: Array<{ cubo: string; ruta: string }>
+): Promise<number> {
+  const cabeceras = cabecerasDe(llave);
+  const porCubo = new Map<string, string[]>();
+  for (const { cubo, ruta } of inventario) {
+    if (!aprobadas.includes(ruta.split("/")[0])) {
+      throw new Error(`ruta fuera de las empresas aprobadas: ${cubo}/${ruta}`);
+    }
+    porCubo.set(cubo, [...(porCubo.get(cubo) ?? []), ruta]);
+  }
+  let total = 0;
+  for (const [cubo, rutas] of porCubo) {
     const r = await fetch(`${base}/storage/v1/object/${cubo}`, {
       method: "DELETE", headers: cabeceras, body: JSON.stringify({ prefixes: rutas }) });
-    if (!r.ok) throw new Error(`no se pudieron borrar ficheros de ${cubo} (${r.status})`);
+    if (!r.ok) throw new Error(`no se pudieron borrar ficheros de ${cubo} (HTTP ${r.status})`);
     total += rutas.length;
   }
   return total;
@@ -295,6 +330,21 @@ export async function limpiar(opciones: {
     // Una sola transacción, que se comprueba a sí misma antes de confirmar. Si
     // al final lo global no está donde estaba, deshace y no confirma: nadie
     // tiene que acordarse de mirar.
+    // ---- La credencial de Storage se PRUEBA antes de tocar la base -------
+    // Comprobar que la variable no está vacía no comprueba nada: lo que hay que
+    // saber es si el servidor la acepta. Y hay que saberlo AHORA, porque si se
+    // descubriera después de confirmar el borrado quedaría media limpieza —los
+    // ficheros huérfanos y pagándose—, que es justo lo que esta puerta evita.
+    let inventario: Array<{ cubo: string; ruta: string }>;
+    try {
+      inventario = await inventariarFicheros(storageUrl!, storageKey!, aprobadas);
+    } catch (e) {
+      return bloqueado(`${e instanceof Error ? e.message : e} · la base NO se ha `
+        + "tocado: la credencial de Storage se comprueba antes de borrar nada.");
+    }
+    console.log(`Ficheros a borrar   : ${inventario.length} `
+      + `(inventariados con la credencial ya probada)`);
+
     console.log("\nEJECUTANDO · una transacción, con verificación antes de confirmar.");
     const borradas: Record<string, number> = {};
     await pg.query("begin");
@@ -376,7 +426,7 @@ export async function limpiar(opciones: {
       + `${Object.keys(borradas).length} tabla(s)`);
 
     // ---- Y los ficheros, que no viven en la base ------------------------
-    const ficheros = await borrarFicheros(storageUrl!, storageKey!, aprobadas);
+    const ficheros = await borrarFicheros(storageUrl!, storageKey!, aprobadas, inventario);
     console.log(`Ficheros borrados   : ${ficheros}`);
     console.log(`Cuentas de Auth     : intactas`);
 
