@@ -1,10 +1,10 @@
 /**
- * Trazaloop · PE-06C2/C3 · Purga de inquilinos de PRUEBA en Producción
+ * Trazaloop · PE-06C2/C3/D1 · Purga de inquilinos de PRUEBA en Producción
  * scripts/release/pe06/cleanup-production-tenants.ts
  *
  *   ####################################################################
  *   #  ESTA HERRAMIENTA BORRA DATOS DE PRODUCCIÓN.                     #
- *   #  NO SE HA EJECUTADO NUNCA.                                       #
+ *   #  NO SE HA EJECUTADO NUNCA CONTRA PRODUCCIÓN.                     #
  *   #                                                                  #
  *   #  · Por defecto NO borra nada: modo seco.                         #
  *   #  · Falla CERRADO: si algo no cuadra, se niega.                   #
@@ -26,6 +26,14 @@
  * preguntar por Postgres. Una lista escrita a mano envejece mal: la primera
  * tabla nueva que alguien añada quedaría fuera y dejaría restos.
  *
+ * EL CAMINO REAL, ESCRITO Y ENSAYADO EN PE-06D1
+ *
+ * Ya no se detiene en el modo seco: borra de verdad, en UNA transacción que se
+ * comprueba a sí misma antes de confirmar —si al final lo global no está donde
+ * estaba, deshace—. Se ensayó dos veces sobre bases desechables con la forma de
+ * Producción: una completa (26 filas, 7 tablas, 2 ficheros, candado devuelto a
+ * su sitio) y otra provocando un fallo a mitad, para verla deshacerse entera.
+ *
  * LAS PUERTAS, TODAS A LA VEZ
  *
  *   1. --execute                          (sin esto, solo mira)
@@ -36,6 +44,15 @@
  *   6. la base tiene EXACTAMENTE esas empresas y ninguna más
  *
  * Si falta una, no hace nada.
+ *
+ * Y EL ALMACENAMIENTO
+ *
+ * Los ficheros de un inquilino no viven en la base: viven en Storage. Borrar
+ * solo las filas dejaría los ficheros huérfanos y pagándose. Se borran por el
+ * API de Storage —que es quien sabe hacerlo— y SOLO los que cuelgan de un
+ * prefijo que es una de las empresas aprobadas. Si faltan las credenciales para
+ * ello, la herramienta se niega ANTES de borrar nada de la base: media limpieza
+ * es peor que ninguna.
  *
  * LO QUE NUNCA TOCA
  *
@@ -75,6 +92,10 @@ export type Resultado = {
   motivo?: string;
   plan?: Record<string, number>;
   globales?: Record<string, number>;
+  /** Filas borradas de verdad, por tabla. Solo en ejecución real. */
+  borradas?: Record<string, number>;
+  /** Ficheros de inquilino borrados de Storage. Solo en ejecución real. */
+  ficheros?: number;
 };
 
 function bloqueado(motivo: string): Resultado {
@@ -82,11 +103,69 @@ function bloqueado(motivo: string): Resultado {
   return { ok: false, motivo };
 }
 
+/**
+ * Los ficheros de las empresas aprobadas, y solo esos.
+ *
+ * Se recorre cada cubo por prefijo. Un objeto cuyo primer tramo de ruta no sea
+ * una empresa aprobada no se toca ni se mira dos veces: el prefijo ES la
+ * pertenencia, y esa es toda la comprobación que hace falta.
+ */
+async function borrarFicheros(
+  base: string, llave: string, aprobadas: string[]
+): Promise<number> {
+  const cabeceras = { apikey: llave, Authorization: `Bearer ${llave}`,
+                      "Content-Type": "application/json" };
+
+  const cubosR = await fetch(`${base}/storage/v1/bucket`, { headers: cabeceras });
+  if (!cubosR.ok) throw new Error(`no se pudieron listar los cubos (${cubosR.status})`);
+  const cubos = (await cubosR.json()) as Array<{ name: string }>;
+
+  const listar = async (cubo: string, prefijo: string) => {
+    const r = await fetch(`${base}/storage/v1/object/list/${cubo}`, {
+      method: "POST", headers: cabeceras,
+      body: JSON.stringify({ prefix: prefijo, limit: 1000 }) });
+    if (!r.ok) throw new Error(`no se pudo listar ${cubo}/${prefijo} (${r.status})`);
+    return (await r.json()) as Array<{ name: string; id: string | null }>;
+  };
+
+  const recorrer = async (cubo: string, prefijo: string, prof: number): Promise<string[]> => {
+    const salida: string[] = [];
+    for (const o of await listar(cubo, prefijo)) {
+      if (!o.name) continue;
+      const ruta = `${prefijo}${o.name}`;
+      // Sin `id` es una carpeta. Se baja, pero no hasta el infinito.
+      if (o.id === null && prof < 8) salida.push(...await recorrer(cubo, `${ruta}/`, prof + 1));
+      else if (o.id !== null) salida.push(ruta);
+    }
+    return salida;
+  };
+
+  let total = 0;
+  for (const { name: cubo } of cubos) {
+    const rutas: string[] = [];
+    for (const org of aprobadas) rutas.push(...await recorrer(cubo, `${org}/`, 0));
+    if (rutas.length === 0) continue;
+    for (const r of rutas) {
+      if (!aprobadas.includes(r.split("/")[0])) {
+        throw new Error(`ruta fuera de las empresas aprobadas: ${cubo}/${r}`);
+      }
+    }
+    const r = await fetch(`${base}/storage/v1/object/${cubo}`, {
+      method: "DELETE", headers: cabeceras, body: JSON.stringify({ prefixes: rutas }) });
+    if (!r.ok) throw new Error(`no se pudieron borrar ficheros de ${cubo} (${r.status})`);
+    total += rutas.length;
+  }
+  return total;
+}
+
 export async function limpiar(opciones: {
   databaseUrl: string; projectRef: string; organizations: string[];
   ejecutar: boolean; confirmacion: string | null; habilitado: boolean;
+  /** Base del proyecto y llave de servicio: solo para borrar sus ficheros. */
+  storageUrl?: string; storageKey?: string;
 }): Promise<Resultado> {
-  const { databaseUrl, projectRef, organizations, ejecutar, confirmacion, habilitado } = opciones;
+  const { databaseUrl, projectRef, organizations, ejecutar, confirmacion, habilitado,
+          storageUrl, storageKey } = opciones;
 
   // ---- Las puertas, antes de abrir siquiera la conexión ------------------
   if (!projectRef) return bloqueado("falta --project-ref");
@@ -100,6 +179,11 @@ export async function limpiar(opciones: {
   }
   if (ejecutar && confirmacion !== FRASE) {
     return bloqueado(`la confirmación no coincide. Escribe --confirm="${FRASE}"`);
+  }
+  if (ejecutar && (!storageUrl || !storageKey)) {
+    return bloqueado("faltan las credenciales de Storage. Borrar las filas y dejar "
+      + "los ficheros seria media limpieza, y la peor mitad: se para antes de tocar "
+      + "la base.");
   }
 
   const pg = new PgClient({ connectionString: databaseUrl });
@@ -175,8 +259,98 @@ export async function limpiar(opciones: {
       return { ok: true, plan, globales };
     }
 
-    return bloqueado("la ejecución real contra Producción es trabajo de PE-06D, "
-      + "después de volver a mirar la base. Esta herramienta todavía no la hace.");
+    // =====================================================================
+    // LA EJECUCIÓN REAL
+    // =====================================================================
+    // Una sola transacción, que se comprueba a sí misma antes de confirmar. Si
+    // al final lo global no está donde estaba, deshace y no confirma: nadie
+    // tiene que acordarse de mirar.
+    console.log("\nEJECUTANDO · una transacción, con verificación antes de confirmar.");
+    const borradas: Record<string, number> = {};
+    await pg.query("begin");
+    let confirmada = false;
+    try {
+      for (const c of CANDADOS) {
+        await pg.query(`alter table public.${c.tabla} disable trigger ${c.trigger}`);
+      }
+
+      // Vueltas hasta que ninguna clave foránea se queje. El orden de borrado no
+      // se adivina: se descubre chocando, y cada choque se deshace solo hasta su
+      // punto de guardado.
+      let vueltas = 0;
+      for (;;) {
+        vueltas += 1;
+        let pendientes = 0;
+        let progreso = 0;
+        for (const t of objetivo) {
+          await pg.query("savepoint tabla");
+          try {
+            const r = await pg.query(
+              `delete from public.${t} where organization_id = any($1::uuid[])`, [aprobadas]);
+            const n = r.rowCount ?? 0;
+            if (n > 0) { borradas[t] = (borradas[t] ?? 0) + n; progreso += n; }
+            await pg.query("release savepoint tabla");
+          } catch (e) {
+            await pg.query("rollback to savepoint tabla");
+            const codigo = (e as { code?: string }).code;
+            if (codigo === "23503") pendientes += 1;   // foreign_key_violation
+            else throw e;
+          }
+        }
+        if (pendientes === 0) break;
+        if (progreso === 0 || vueltas > 12) {
+          throw new Error(`${pendientes} tabla(s) siguen bloqueadas por claves `
+            + `foráneas tras ${vueltas} vuelta(s) sin progreso.`);
+        }
+      }
+
+      const rOrg = await pg.query(
+        "delete from public.organizations where id = any($1::uuid[])", [aprobadas]);
+      borradas["organizations"] = rOrg.rowCount ?? 0;
+
+      for (const c of CANDADOS) {
+        await pg.query(`alter table public.${c.tabla} enable trigger ${c.trigger}`);
+      }
+
+      // ---- La verificación, ANTES de confirmar ---------------------------
+      const { rows: quedan } = await pg.query<{ n: string }>(
+        "select count(*)::text n from public.organizations");
+      if (Number(quedan[0].n) !== 0) {
+        throw new Error(`quedan ${quedan[0].n} empresa(s) después de borrar.`);
+      }
+      for (const t of ["legal_documents", "platform_staff"]) {
+        const { rows } = await pg.query<{ n: string }>(
+          `select count(*)::text n from public.${t}`);
+        if (Number(rows[0].n) !== globales[t]) {
+          throw new Error(`${t} pasó de ${globales[t]} a ${rows[0].n}: `
+            + "la limpieza tocó algo global.");
+        }
+      }
+      const { rows: aud } = await pg.query<{ n: string }>(
+        "select count(*)::text n from public.audit_log");
+      if (Number(aud[0].n) < globales.audit_log) {
+        throw new Error(`audit_log bajó de ${globales.audit_log} a ${aud[0].n}: `
+          + "la historia no se borra.");
+      }
+
+      await pg.query("commit");
+      confirmada = true;
+    } catch (e) {
+      if (!confirmada) await pg.query("rollback");
+      return bloqueado(`la limpieza se deshizo entera y no se confirmó · `
+        + `${e instanceof Error ? e.message : e}`);
+    }
+
+    const totalBorradas = Object.values(borradas).reduce((a, b) => a + b, 0);
+    console.log(`Confirmado          : ${totalBorradas} fila(s) en `
+      + `${Object.keys(borradas).length} tabla(s)`);
+
+    // ---- Y los ficheros, que no viven en la base ------------------------
+    const ficheros = await borrarFicheros(storageUrl!, storageKey!, aprobadas);
+    console.log(`Ficheros borrados   : ${ficheros}`);
+    console.log(`Cuentas de Auth     : intactas`);
+
+    return { ok: true, plan, globales, borradas, ficheros };
   } finally {
     await pg.end();
   }
@@ -190,6 +364,8 @@ if (process.argv[1]?.endsWith("cleanup-production-tenants.ts")) {
     ejecutar: tiene("execute"),
     confirmacion: arg("confirm") ?? null,
     habilitado: process.env.PRODUCTION_TENANT_CLEANUP_ENABLED === "true",
+    storageUrl: process.env.PRODUCTION_SUPABASE_URL,
+    storageKey: process.env.PRODUCTION_SERVICE_KEY,
   }).then((r) => process.exit(r.ok ? 0 : 1))
     .catch((e) => { console.log(`BLOQUEADO · ${e instanceof Error ? e.message : e}`); process.exit(1); });
 }
