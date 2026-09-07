@@ -70,6 +70,8 @@ Un `NO-GO` sería una quinta clase. **No queda ninguna.**
 | C4 | Ensayo con la forma real de Producción y con bordes | sí | **LISTO** — escenarios A y B; con base limpia 0163 crea **0** asignaciones |
 | C5 | Duración medida y ventana de corte acordada | sí | **ACCIÓN EN EL CORTE** — 15–25 s medidos; la ventana se acuerda al fijar fecha |
 | C6 | Esquema resultante verificado contra Local | sí | **LISTO** — 320 tablas y 87 vistas, **el mismo conjunto exacto** que Local en 0183, 0 sin RLS |
+| C7 | **El dato de Producción cabe en el esquema que se le aplica** | sí | **ACCIÓN EN EL CORTE** — la 0136 se paró contra 92 guías legadas que Local no tiene. Reconciliar **antes** de reanudar: `reconcile-production-trazadoc-hints.ts`, ensayado con la forma real del fallo. Ver [`PE_06D1_MIGRATION_0136_INCIDENT.md`](PE_06D1_MIGRATION_0136_INCIDENT.md) |
+| C8 | El ensayo usa el DATO real, no solo la FORMA | sí | **LISTO** — la lección de la 0136: una copia base sintética no reproduce lo que rompe. Los ensayos de reanudación parten del contenido real archivado |
 
 ## D · Configuración de Producción
 

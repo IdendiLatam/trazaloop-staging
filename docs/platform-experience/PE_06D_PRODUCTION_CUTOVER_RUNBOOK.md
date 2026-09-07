@@ -177,6 +177,13 @@ se sigue a la fase 4**: se restaura desde la red de la fase 2 y se replantea.
 | ☐ | objetos de inquilino en los cubos | 0 |
 | ☐ | `legal_documents` · `platform_staff` · `audit_log` | **intactos** |
 
+> **Ya se ejecutó una vez, el 6 de septiembre de 2026, y se paró en la 0136.**
+> Aplicó `0112` → `0135` y abortó contra un dato real que ni Local ni Staging
+> tienen. El relato completo está en
+> [`PE_06D1_MIGRATION_0136_INCIDENT.md`](PE_06D1_MIGRATION_0136_INCIDENT.md).
+> **Antes de volver a lanzarlo hay que reconciliar** las guías legadas de
+> TrazaDocs con `scripts/release/pe06/reconcile-production-trazadoc-hints.ts`.
+
 > ⚠️ **El comando de abajo es real y muta Producción.** Es el único de este
 > manual que aplica DDL, y no tiene vuelta atrás. No se copia «para ver qué
 > pasa»: se ejecuta cuando las casillas de arriba están todas marcadas.
@@ -215,6 +222,7 @@ a mano para «desatascar».**
 |---|---|---|
 | ☐ | cabecera de migración | **0183** |
 | ☐ | relaciones de `public` | **407** = 320 tablas + 87 vistas |
+| ☐ | guías de TrazaDocs de más de 4000 caracteres | **0** |
 | ☐ | tablas base sin RLS | **0** |
 | ☐ | 0163 creó asignaciones | **0** (no había empresas) |
 | ☐ | `billing_operations_alerts` | existe |

@@ -158,6 +158,8 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-06C1 | Salida a Producción · estrategia de limpieza y estado global | — | **PASS** · las 3 empresas son de prueba y **desechables** · limpiar antes de migrar · lo legal y la auditoría se preservan · 2026-09-06 |
 | PE-06C2 | Salida a Producción · salvaguarda, avisos de cobro en duda y entorno | **0183** | **PASS** · estado global exportado y verificado · el cobro en duda ya avisa, una vez y sin tocar dinero · **cero NO-GO internos** · 2026-09-06 |
 | PE-06C3 | Salida a Producción · manual de corte, comandos preparados y ensayo en seco | — | **PASS** · manual ejecutable de 12 fases · **72** migraciones 0112→0183 sobre base limpia, dos ensayos (25 s y 15 s), esquema idéntico a Local · limpieza ensayada en seco con sus cinco puertas · un intermitente de la batería localizado y cerrado (el reloj del anfitrión leía un derecho recién cerrado como vivo) · Producción **sin tocar**, sigue en 0111 · 2026-09-06 |
+| PE-06D1 | Corte a Producción · limpieza de inquilinos y migración | **0135** | **PARCIAL** · inquilinos borrados y verificados · 0112→0135 aplicadas · la **0136 se paró** contra 92 guías legadas · Producción consistente, sin desplegar · 2026-09-06 |
+| PE-06D1-R1 | Reconciliación previa a la 0136 | — | **PASS** · diff completo de las 250 · 92 a reconciliar · incidente reproducido y ensayo 0136→0183 en verde · Producción **aún sin reconciliar** · 2026-09-06 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
 Los diez de PE-05B1:
@@ -661,7 +663,13 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 |---|---|
 | Local | **0183** |
 | Staging | **0183** |
-| Producción | **0111** |
+| Producción | **0135** · en pausa |
+
+Producción dejó de estar en 0111 el 6 de septiembre de 2026: se aplicaron 24
+migraciones y la **0136 se paró** contra un dato que ni Local ni Staging tienen.
+Está **consistente**, sin migración a medias y sin desplegar. Lo que falta para
+reanudar —y por qué— está en
+[`PE_06D1_MIGRATION_0136_INCIDENT.md`](PE_06D1_MIGRATION_0136_INCIDENT.md).
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
 un paso de B5B: es una decisión aparte que empieza por aplicar migraciones.
