@@ -30,7 +30,7 @@ Un `NO-GO` sería una quinta clase. **No queda ninguna.**
 | A3 | `typecheck` y `lint` sin errores | sí | **LISTO** |
 | A4 | Guardián SEC-01 en verde | sí | **LISTO** |
 | A5 | Local y Staging alineadas en **0183**, sin deriva | sí | **LISTO** — huellas de tablas, funciones y vistas idénticas |
-| A6 | Árbol de trabajo limpio y commit de salida congelado | sí | **ACCIÓN EN EL CORTE** — fase 6 |
+| A6 | Árbol de trabajo limpio y commit de salida congelado | sí | **LISTO** — desplegado desde `a7dd5e0` el 7-sep-2026 |
 | A7 | 0 tablas de `public` sin RLS | sí | **LISTO** (Local y Staging) |
 | A8 | Manual de corte ejecutable, no una lista vaga | sí | **LISTO** — PE-06D, 12 fases con parada y contención |
 | A9 | **La batería no falla de forma intermitente** | sí | **LISTO** — PE-05B5C se puso 2 en rojo en 1 de 4 pases; la causa era la prueba, no el producto: leía el plan efectivo pasándole el reloj del anfitrión, unas décimas por detrás del reloj de la base, y un derecho recién cerrado se leía vivo. Corregido en las 10 suites que lo hacían: ahora el instante lo pone la base, como hace el producto |
@@ -79,7 +79,7 @@ Un `NO-GO` sería una quinta clase. **No queda ninguna.**
 |---|---|---|---|
 | D1 | Variables públicas apuntan a Producción y se comprueba tras construir | sí | **LISTO** — `npm run verify:build-target`, probado en sus tres salidas |
 | D2 | Ninguna construcción de Preview se promueve a Producción | sí | **LISTO** — `FRESH_PRODUCTION_TARGET_BUILD`, con guardián que lo comprueba |
-| D3 | `QUALITY_MODULE_ENABLED` en Producción | sí | **ACCIÓN EN EL CORTE** — fase 7.1. Es de ejecución: no exige reconstruir |
+| D3 | `QUALITY_MODULE_ENABLED` en Producción | sí | **LISTO** — puesto en `true` antes de construir, así que el despliegue nuevo ya lo recogió |
 | D4 | Credenciales de Intelligence | sí, para anunciar créditos | **ACCIÓN EN EL CORTE** — fase 7.2. `PRODUCTION_AI_DECISION = ENABLE_AT_CUTOVER` |
 | D5 | Retirar `MERCADOPAGO_*` de Preview | no | **RECOMENDACIÓN** — no se toca mientras Preview se usa para verificar |
 | D6 | Protección de Preview sigue activa | sí | **LISTO** — 401 en API, redirección a SSO en pantalla |

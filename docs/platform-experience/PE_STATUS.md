@@ -158,7 +158,7 @@ Y lo que se corrigió después de aquella revisión, en
 | PE-06C1 | Salida a Producción · estrategia de limpieza y estado global | — | **PASS** · las 3 empresas son de prueba y **desechables** · limpiar antes de migrar · lo legal y la auditoría se preservan · 2026-09-06 |
 | PE-06C2 | Salida a Producción · salvaguarda, avisos de cobro en duda y entorno | **0183** | **PASS** · estado global exportado y verificado · el cobro en duda ya avisa, una vez y sin tocar dinero · **cero NO-GO internos** · 2026-09-06 |
 | PE-06C3 | Salida a Producción · manual de corte, comandos preparados y ensayo en seco | — | **PASS** · manual ejecutable de 12 fases · **72** migraciones 0112→0183 sobre base limpia, dos ensayos (25 s y 15 s), esquema idéntico a Local · limpieza ensayada en seco con sus cinco puertas · un intermitente de la batería localizado y cerrado (el reloj del anfitrión leía un derecho recién cerrado como vivo) · Producción **sin tocar**, sigue en 0111 · 2026-09-06 |
-| PE-06D1 | Corte a Producción · limpieza de inquilinos y migración | **0183** | **PASS** · inquilinos borrados y verificados · 0112→0135, parada en la 0136, reconciliación, y 0136→0183 · **72 migraciones en total, 0 fallos** · esquema idéntico a Local · sin desplegar · 2026-09-07 |
+| PE-06D1 | Corte a Producción · limpieza, migración y despliegue | **0183** | **PASS** · inquilinos borrados · 0112→0135, parada en la 0136, reconciliación, y 0136→0183 · **72 migraciones, 0 fallos** · esquema idéntico a Local · **aplicación desplegada** con Quality encendido y el cobro apagado · 2026-09-07 |
 | PE-06D1-R1 | Reconciliación previa a la 0136 | — | **PASS** · diff completo de las 250 · **92 reconciliadas** en Producción, 0 borradas, 0 creadas · la 0136 aplicó después sin un error · 2026-09-07 |
 | **PE-05 · CIERRE** | **Cobrar de verdad: presupuesto, tarjeta, renovación, cambios de plan, cupones e historia** | **0182** | **PASS DEFINITIVO EN SANDBOX · Producción NO desplegada** · 2026-09-05 |
 
@@ -671,8 +671,10 @@ la **0136 abortando** contra un dato que ni Local ni Staging tienen, la
 reconciliación de 92 guías legadas, y las 48 restantes. El relato está en
 [`PE_06D1_MIGRATION_0136_INCIDENT.md`](PE_06D1_MIGRATION_0136_INCIDENT.md).
 
-**La aplicación todavía no se ha desplegado contra este esquema.** La que está
-publicada es anterior, y responde con normalidad.
+**Y la aplicación ya está desplegada contra él**, desde el 7 de septiembre: una
+construcción nueva con destino Producción, verificada antes de publicar, con
+Quality encendido. Sin cobro: sin credenciales de Wompi, sin ejecución de
+renovación y sin planificador.
 
 Producción no tiene las tablas de la FAQ ni las de la ayuda. Publicar allí no es
 un paso de B5B: es una decisión aparte que empieza por aplicar migraciones.

@@ -22,6 +22,12 @@ const eslintConfig = defineConfig([
     // archivos del repositorio y deben seguir cubiertos.
     "supabase/.temp/**",
     "supabase/.branches/**",
+    // PE-06D1 · El artefacto que produce `vercel build`. Es lo mismo que
+    // `.next/**` —código generado, con `require()` y polyfills que la regla
+    // prohíbe en fuente— pero en otra carpeta, así que no lo cubría el ignorado
+    // por defecto. Sin esto, cualquier `lint` posterior a una construcción de
+    // producción daba 60 errores en falso y escondía los de verdad.
+    ".vercel/**",
   ]),
   {
     // Un parámetro con guion bajo delante es una declaración explícita del

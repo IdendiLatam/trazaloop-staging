@@ -242,6 +242,12 @@ a mano para «desatascar».**
 
 > ⚠️ **El paso 4 publica en Producción.** Los tres primeros son inofensivos.
 
+> **Ejecutado el 7 de septiembre de 2026.** Construcción nueva con destino
+> Producción, verificador en 0, y despliegue del artefacto preconstruido —nunca
+> una promoción de Preview—. Despliegue `3N47k5J3ywMgKTSUdukcVdkHpXqo`.
+> Aprendido por el camino: tras `vercel build`, `npm run lint` daba 60 errores
+> del propio artefacto porque `.vercel/**` no estaba en el ignorado. Corregido.
+
 ```bash
 # 1 · traer la configuración de PRODUCCIÓN, no la de Preview
 npx vercel pull --environment=production --scope idendi-latam-s-projects
