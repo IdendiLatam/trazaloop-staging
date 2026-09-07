@@ -1,7 +1,14 @@
 # PE-06D1 · La 0136 se paró contra un dato real de Producción
 
-*6 de septiembre de 2026. Producción quedó, y sigue, en **0135**: consistente,
-sin migración a medias y sin desplegar.*
+*6 de septiembre de 2026. **Cerrado el 7 de septiembre**: Producción está en
+**0183**.*
+
+> **Cómo terminó.** Se reconciliaron las 92 guías en Producción —0 filas
+> borradas, 0 creadas, identidades intactas— y las 48 migraciones restantes
+> aplicaron en 36 segundos sin un fallo. El esquema resultante tiene el mismo
+> conjunto exacto de 407 relaciones que Local, 0 tablas sin RLS, y la 0136
+> produjo las 332 revisiones esperadas con longitud máxima 296. Lo que sigue
+> abajo es el relato de por qué hizo falta.
 
 ---
 
