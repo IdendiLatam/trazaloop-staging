@@ -41,7 +41,8 @@ export const runtime = "nodejs";
 
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
-                  "retire_qa_fx", "customer_forensics", "update_amount", "cancel"] as const;
+                  "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
+                  "probe_payer_email"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -63,7 +64,27 @@ function automationSecretMatches(
   return timingSafeEqual(a, b);
 }
 
+/**
+ * El envoltorio existe por una lección de MERCADOPAGO-SBX-01: una excepción no
+ * capturada aquí sale como «Internal Server Error» en texto plano, y quien
+ * llama no puede distinguir «falló el bypass», «falló Mercado Pago» o «falló
+ * una variable de entorno». Un disparador de diagnóstico que no sabe decir qué
+ * le pasó sirve de poco. La causa se devuelve como JSON, con su nombre y su
+ * mensaje —nunca la pila, que puede llevar rutas y valores—.
+ */
 export async function POST(request: Request) {
+  try {
+    return await manejar(request);
+  } catch (e) {
+    return NextResponse.json({
+      ok: false, error: "QA_TRIGGER_UNHANDLED_EXCEPTION",
+      exception: e instanceof Error ? e.name : "UnknownError",
+      message: e instanceof Error ? e.message : String(e),
+    }, { status: 500 });
+  }
+}
+
+async function manejar(request: Request) {
   // --- Candado 1 · jamás en Producción ------------------------------------
   const entornoVercel = process.env.VERCEL_ENV ?? "local";
   if (entornoVercel === "production") {
@@ -85,12 +106,18 @@ export async function POST(request: Request) {
   //
   // La comparación es en tiempo constante, y si el secreto no está expuesto al
   // despliegue esta vía sencillamente no existe.
-  const { isStaff, isSuperadmin } = await checkPlatformStatus();
+  // El secreto se comprueba PRIMERO: quien lo presenta ya está identificado, y
+  // preguntarle a la base quién es sería una consulta que no decide nada y una
+  // forma más de fallar. Lo aprendió MERCADOPAGO-SBX-01, donde el diagnóstico
+  // dependía de una base que la automatización no necesita para nada.
   const porAutomatizacion = automationSecretMatches(
     request.headers.get("x-vercel-protection-bypass"),
     process.env.VERCEL_AUTOMATION_BYPASS_SECRET);
-  if (!porAutomatizacion && (!isStaff || !isSuperadmin)) {
-    return no("NOT_PLATFORM_SUPERADMIN");
+  let isStaff = false;
+  let isSuperadmin = false;
+  if (!porAutomatizacion) {
+    ({ isStaff, isSuperadmin } = await checkPlatformStatus());
+    if (!isStaff || !isSuperadmin) return no("NOT_PLATFORM_SUPERADMIN");
   }
   const identidad = porAutomatizacion ? "automation" : "superadmin";
 
@@ -200,6 +227,99 @@ export async function POST(request: Request) {
   // una variable invitaría a confundirlo con un dato comercial.
   const PAGADOR_QA_DOCUMENTADO = "test_payer@example.com";
   const comprador = PAGADOR_QA_DOCUMENTADO;
+  // -------------------------------------------------------------------------
+  // probe_payer_email · MERCADOPAGO-SBX-01 · ticket WCS-49142
+  // -------------------------------------------------------------------------
+  //
+  // LA PREGUNTA, Y POR QUÉ HACE FALTA UNA LLAMADA PARA RESPONDERLA
+  //
+  // PE-05B2 se quedó parado en el pagador: Mercado Pago valida `payer_email`
+  // ANTES que la recurrencia, así que mientras no haya un correo aceptado no se
+  // puede ni preguntar si el anual existe. Se probaron tres formas y las tres
+  // fallaron: el ejemplo de la documentación por sitio, el apodo en minúsculas
+  // y `test_user_<User ID>` por «User bad request».
+  //
+  // Soporte indica ahora una cuarta: `test_user_<número>@testuser.com` donde el
+  // número es el del APODO —`TESTUSER<número>`— y NO el User ID. Son distintos,
+  // y esa forma no se ha intentado nunca.
+  //
+  // No hay manera de preguntarlo sin llamar: la API de Clientes quedó fuera del
+  // camino crítico y no existe un validador de correos. La llamada mínima que
+  // decide es crear un preapproval PENDIENTE, que no cobra nada y que el
+  // comprador tendría que autorizar después abriendo su enlace.
+  //
+  // LO QUE ESTA ACCIÓN NO HACE
+  //
+  // No toca ninguna tabla. No crea empresa, ni presupuesto, ni intento, ni tasa.
+  // Es una pregunta al proveedor y su respuesta: atarla a la fontanería de
+  // Trazaloop mezclaría dos experimentos y añadiría formas de fallar que no
+  // tienen nada que ver con lo que se quiere saber.
+  //
+  // Y el importe NO llega de quien llama. Es una constante del experimento, del
+  // mismo modo que en el resto de esta ruta el dinero sale siempre del dominio.
+  if (accion === "probe_payer_email") {
+    const correo = String(cuerpo.email ?? "");
+    // Una lista cerrada de FORMAS, no un campo libre: esto contesta una
+    // pregunta concreta, no es un probador de correos ajenos.
+    const formas: Array<{ nombre: string; patron: RegExp }> = [
+      { nombre: "test_user_<numero>@testuser.com", patron: /^test_user_[0-9]{1,25}@testuser\.com$/ },
+      { nombre: "test_payer_<numero>@testuser.com", patron: /^test_payer_[0-9]{1,25}@testuser\.com$/ },
+    ];
+    const forma = formas.find((f) => f.patron.test(correo));
+    if (!forma) return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
+
+    const IMPORTE_SONDA = 5000;      // COP. Constante del experimento.
+    const MONEDA_SONDA = "COP";
+    const referencia = `WCS-49142-probe-${randomUUID()}`;
+    // La URL de vuelta se calcula AQUÍ: esta acción no depende de nada que se
+    // prepare más abajo, y así se puede mover sin romperla.
+    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const volverSonda = `${sitioSonda.replace(/\/$/, "")}/billing/return`;
+    const cuerpoMp = {
+      reason: "Trazaloop · sonda de pagador (WCS-49142)",
+      external_reference: referencia,
+      payer_email: correo,
+      back_url: volverSonda,
+      status: "pending",
+      auto_recurring: {
+        frequency: 1, frequency_type: "months",
+        transaction_amount: IMPORTE_SONDA, currency_id: MONEDA_SONDA,
+      },
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` },
+        body: JSON.stringify(cuerpoMp),
+      });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("sonda_pagador", { http: r.status, forma: forma.nombre,
+                                    aceptado: r.ok, referencia });
+      return NextResponse.json({
+        ok: r.ok, http: r.status, form: forma.nombre,
+        // Lo que se pidió, para que la evidencia se lea sin adivinar.
+        request: { ...cuerpoMp, payer_email: correo },
+        // Y lo que contestó. En el fallo, el mensaje es TODA la información.
+        response: r.ok
+          ? { id: j.id ?? null, status: j.status ?? null,
+              init_point: j.init_point ?? null,
+              auto_recurring: j.auto_recurring ?? null,
+              next_payment_date: j.next_payment_date ?? null,
+              external_reference: j.external_reference ?? null,
+              date_created: j.date_created ?? null,
+              last_modified: j.last_modified ?? null,
+              version: j.version ?? null,
+              payer_id: j.payer_id ?? null }
+          : { message: j.message ?? null, error: j.error ?? null,
+              status: j.status ?? null, cause: j.cause ?? null },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
   const admin = createAdminClient();
   const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
   const volver = `${sitio.replace(/\/$/, "")}/billing/return`;
