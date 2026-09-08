@@ -42,7 +42,7 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
-                  "probe_payer_email"] as const;
+                  "probe_payer_email", "authprobe"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -106,6 +106,45 @@ async function manejar(request: Request) {
   //
   // La comparación es en tiempo constante, y si el secreto no está expuesto al
   // despliegue esta vía sencillamente no existe.
+  // --- Diagnóstico de la propia autorización -------------------------------
+  //
+  // Va ANTES del candado 2 a propósito, y es la única cosa de esta ruta que lo
+  // hace. Cuando el camino de automatización no encaja, la respuesta
+  // «NOT_PLATFORM_SUPERADMIN» no distingue entre tres causas muy distintas: que
+  // la cabecera no llegue —Vercel podría consumirla en el borde—, que el
+  // proyecto no inyecte el secreto al despliegue, o que los dos existan y no
+  // coincidan. Sin poder distinguirlas, arreglarlo es adivinar.
+  //
+  // Devuelve BOOLEANOS. Ni el secreto, ni su longitud, ni un prefijo. Y solo
+  // existe fuera de Producción: el candado 1 ya cortó ahí arriba.
+  {
+    let cuerpoDiag: Record<string, unknown> = {};
+    try { cuerpoDiag = (await request.clone().json()) as Record<string, unknown>; }
+    catch { cuerpoDiag = {}; }
+    if (String(cuerpoDiag.action ?? "") === "authprobe") {
+      const url = new URL(request.url);
+      const cab = request.headers.get("x-vercel-protection-bypass");
+      const qs = url.searchParams.get("x-vercel-protection-bypass");
+      const esperado = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+      return NextResponse.json({
+        ok: true, action: "authprobe",
+        vercel_environment: entornoVercel,
+        // ¿Llega la cabecera hasta la función, o la consume el borde?
+        bypass_header_present: Boolean(cab),
+        bypass_query_present: Boolean(qs),
+        // ¿Está el secreto inyectado en el despliegue?
+        automation_secret_env_present: Boolean(esperado),
+        // ¿Coinciden? Comparación seleccionada en tiempo constante.
+        matches_header: automationSecretMatches(cab, esperado),
+        matches_query: automationSecretMatches(qs, esperado),
+        // Qué otras variables de sistema SÍ llegan, para saber si el proyecto
+        // expone las de sistema en general. Solo nombres, nunca valores.
+        system_env_visible: ["VERCEL_ENV", "VERCEL_URL", "VERCEL_TARGET_ENV"]
+          .filter((k) => Boolean(process.env[k])),
+      });
+    }
+  }
+
   // El secreto se comprueba PRIMERO: quien lo presenta ya está identificado, y
   // preguntarle a la base quién es sería una consulta que no decide nada y una
   // forma más de fallar. Lo aprendió MERCADOPAGO-SBX-01, donde el diagnóstico
