@@ -117,6 +117,24 @@ check("7. La sonda del pagador es autocontenida", () => {
   }
 });
 
+check("7 bis. La sonda anual también es autocontenida", () => {
+  const iSonda = mp.indexOf('if (accion === "probe_annual")');
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  assert(iSonda > 0 && iSonda < iAdmin, "la sonda anual debe ir antes del cliente administrativo");
+  const bloque = mp.slice(iSonda, iAdmin);
+  for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc("]) {
+    assert(!bloque.includes(prohibido), `la sonda anual no puede depender de ${prohibido}`);
+  }
+  // La recurrencia es constante del experimento, no un parámetro de quien llama.
+  assert(!/frequency:\s*Number\(|cuerpo\.frequency/.test(bloque),
+    "la recurrencia no puede llegar de quien llama: es una constante del experimento");
+  assert(/frequency: 12, frequency_type: "months"/.test(bloque),
+    "la sonda debe pedir exactamente 12 months");
+  // Y el veredicto se calcula sobre lo DEVUELTO, no sobre lo enviado.
+  assert(/ar\.frequency === 12 && ar\.frequency_type === "months"/.test(bloque),
+    "el veredicto debe leer el auto_recurring devuelto, no el enviado");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");

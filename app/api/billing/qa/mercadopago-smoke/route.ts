@@ -42,7 +42,7 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
-                  "probe_payer_email", "authprobe"] as const;
+                  "probe_payer_email", "probe_annual", "authprobe"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -352,6 +352,91 @@ async function manejar(request: Request) {
               payer_id: j.payer_id ?? null }
           : { message: j.message ?? null, error: j.error ?? null,
               status: j.status ?? null, cause: j.cause ?? null },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // probe_annual · MP-SBX-01B · ¿existe el ciclo de 12 meses?
+  // -------------------------------------------------------------------------
+  //
+  // La pregunta lleva abierta desde PE-05B2 y no se podía ni formular: Mercado
+  // Pago valida el pagador ANTES que la recurrencia, así que mientras el correo
+  // fue rechazado el anual quedó sin respuesta. Con el pagador ya aceptado
+  // (MP-SBX-01A), esta es la primera vez que la pregunta llega a su destino.
+  //
+  // LO QUE SE MIRA EN LA RESPUESTA, Y POR QUÉ
+  //
+  // No basta con que la API devuelva 201. Hay que leer el `auto_recurring` QUE
+  // VUELVE: un proveedor puede aceptar la petición y normalizar el ciclo por
+  // dentro —a 1 mes— sin decir nada. Si eso pasara y Trazaloop diera por bueno
+  // el 201, vendería un plan anual y cobraría doce veces. Por eso la evidencia
+  // es lo devuelto, no lo enviado.
+  //
+  // La recurrencia es una CONSTANTE de este experimento, no un parámetro: esto
+  // contesta una pregunta concreta, no es un creador de suscripciones a medida.
+  if (accion === "probe_annual") {
+    const correo = String(cuerpo.email ?? "");
+    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
+      return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
+    }
+    const IMPORTE_SONDA = 5000;      // COP. Constante del experimento.
+    const MONEDA_SONDA = "COP";
+    const referencia = `WCS-49142-annual-12m-${randomUUID()}`;
+    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const volverSonda = `${sitioSonda.replace(/\/$/, "")}/billing/return`;
+    // `start_date` NO se manda: se quiere ver qué fecha elige el proveedor por
+    // su cuenta. Fijarla sería responder nosotros la pregunta que hacemos.
+    const cuerpoMp = {
+      reason: "Trazaloop · sonda anual 12 meses (WCS-49142)",
+      external_reference: referencia,
+      payer_email: correo,
+      back_url: volverSonda,
+      status: "pending",
+      auto_recurring: {
+        frequency: 12, frequency_type: "months",
+        transaction_amount: IMPORTE_SONDA, currency_id: MONEDA_SONDA,
+      },
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` },
+        body: JSON.stringify(cuerpoMp),
+      });
+      const j = (await r.json()) as Record<string, unknown>;
+      const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
+      log_seguro("sonda_anual", { http: r.status, aceptado: r.ok,
+                                  devuelto: `${ar.frequency}/${ar.frequency_type}`, referencia });
+      // El veredicto se calcula aquí y se dice: leerlo a ojo desde un JSON
+      // grande es justo donde se cuela un «pasó» que no pasó.
+      const preserva = ar.frequency === 12 && ar.frequency_type === "months";
+      return NextResponse.json({
+        ok: r.ok, http: r.status,
+        request: { payer_email: correo, frequency: 12, frequency_type: "months",
+                   transaction_amount: IMPORTE_SONDA, currency_id: MONEDA_SONDA,
+                   external_reference: referencia, status: "pending" },
+        response: r.ok
+          ? { id: j.id ?? null, status: j.status ?? null,
+              auto_recurring: ar,
+              start_date: (ar.start_date ?? j.date_created) ?? null,
+              next_payment_date: j.next_payment_date ?? null,
+              external_reference: j.external_reference ?? null,
+              payer_id: j.payer_id ?? null,
+              init_point: j.init_point ?? null,
+              date_created: j.date_created ?? null,
+              version: j.version ?? null }
+          : { message: j.message ?? null, error: j.error ?? null,
+              status: j.status ?? null, cause: j.cause ?? null },
+        verdict: r.ok
+          ? (preserva
+            ? "ACEPTA_Y_PRESERVA_12_MESES"
+            : `NORMALIZO_SILENCIOSAMENTE_A_${ar.frequency}_${ar.frequency_type}`)
+          : "RECHAZADO",
       });
     } catch (e) {
       return NextResponse.json({ ok: false,
