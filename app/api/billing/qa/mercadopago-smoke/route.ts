@@ -42,7 +42,8 @@ export const runtime = "nodejs";
 const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
-                  "probe_payer_email", "probe_annual", "authprobe"] as const;
+                  "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
+                  "probe_amount_change", "authprobe"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -437,6 +438,241 @@ async function manejar(request: Request) {
             ? "ACEPTA_Y_PRESERVA_12_MESES"
             : `NORMALIZO_SILENCIOSAMENTE_A_${ar.frequency}_${ar.frequency_type}`)
           : "RECHAZADO",
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // MP-SBX-01C · qué significa cambiar el importe de una suscripción viva
+  // -------------------------------------------------------------------------
+  //
+  // LA PREGUNTA
+  //
+  // `PUT /preapproval/{id}` con otro `transaction_amount`, ¿solo cambia el
+  // próximo cobro, cobra en el acto, prorratea, o hace otra cosa? Trazaloop
+  // necesita la respuesta antes de prometerle nada a nadie: si cobrara en el
+  // acto, un cambio de plan generaría un cargo que el cliente no pidió.
+  //
+  // DOS SUSCRIPCIONES, NO UNA
+  //
+  // Subir y bajar se prueban por separado y aisladas. Reutilizar una sola
+  // mezclaría los dos efectos en el mismo historial de pagos y haría imposible
+  // atribuir un cargo a uno u otro cambio.
+  //
+  // EL DINERO NO LLEGA DE QUIEN LLAMA
+  //
+  // Los importes son constantes de cada caso. Quien llama elige el CASO —«up» o
+  // «down»—, no la cifra. Es la misma regla que rige el resto de esta ruta.
+  const CASOS_01C = {
+    up:   { inicial: 5000, destino: 9000 },
+    down: { inicial: 9000, destino: 5000 },
+  } as const;
+  type Caso01C = keyof typeof CASOS_01C;
+  const MONEDA_01C = "COP";
+
+  const leerCaso = (v: unknown): Caso01C | null =>
+    v === "up" || v === "down" ? v : null;
+
+  /** El estado que importa de un preapproval, sin nada superfluo. */
+  const estadoDe = (j: Record<string, unknown>) => {
+    const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
+    return {
+      id: j.id ?? null, status: j.status ?? null,
+      transaction_amount: ar.transaction_amount ?? null,
+      currency_id: ar.currency_id ?? null,
+      frequency: ar.frequency ?? null, frequency_type: ar.frequency_type ?? null,
+      start_date: ar.start_date ?? null, end_date: ar.end_date ?? null,
+      next_payment_date: j.next_payment_date ?? null,
+      external_reference: j.external_reference ?? null,
+      payer_id: j.payer_id ?? null,
+      date_created: j.date_created ?? null,
+      last_modified: j.last_modified ?? null,
+      version: j.version ?? null,
+      // `summarized` es donde Mercado Pago cuenta lo COBRADO. Es la prueba
+      // directa de si un cambio de importe disparó un cargo.
+      summarized: j.summarized ?? null,
+    };
+  };
+
+  /** Los pagos de esa suscripción, por su referencia externa. */
+  const pagosDe = async (referencia: string) => {
+    const r = await fetch(
+      "https://api.mercadopago.com/v1/payments/search"
+      + `?external_reference=${encodeURIComponent(referencia)}&sort=date_created&criteria=desc`,
+      { headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` } });
+    const j = (await r.json()) as Record<string, unknown>;
+    const filas = Array.isArray(j.results) ? (j.results as Record<string, unknown>[]) : [];
+    return {
+      http: r.status,
+      total: (j.paging as Record<string, unknown> | undefined)?.total ?? filas.length,
+      payments: filas.map((p) => ({
+        id: p.id ?? null, status: p.status ?? null,
+        status_detail: p.status_detail ?? null,
+        transaction_amount: p.transaction_amount ?? null,
+        currency_id: p.currency_id ?? null,
+        date_created: p.date_created ?? null,
+        date_approved: p.date_approved ?? null,
+        description: p.description ?? null,
+      })),
+    };
+  };
+
+  // --- Crear una suscripción diaria aislada --------------------------------
+  if (accion === "probe_daily") {
+    const correo = String(cuerpo.email ?? "");
+    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
+      return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
+    }
+    const caso = leerCaso(cuerpo.case);
+    if (!caso) return no("CASE_MUST_BE_UP_OR_DOWN", 400);
+
+    const referencia = `WCS-49142-01C-${caso.toUpperCase()}-${randomUUID()}`;
+    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const cuerpoMp = {
+      reason: `Trazaloop · sonda 01C-${caso.toUpperCase()} (WCS-49142)`,
+      external_reference: referencia,
+      payer_email: correo,
+      back_url: `${sitioSonda.replace(/\/$/, "")}/billing/return`,
+      status: "pending",
+      auto_recurring: {
+        frequency: 1, frequency_type: "days",
+        transaction_amount: CASOS_01C[caso].inicial, currency_id: MONEDA_01C,
+      },
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+                   Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` },
+        body: JSON.stringify(cuerpoMp),
+      });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("sonda_diaria", { http: r.status, caso, aceptado: r.ok, referencia });
+      return NextResponse.json({
+        ok: r.ok, http: r.status, case: caso,
+        plan_del_experimento: CASOS_01C[caso],
+        request: { payer_email: correo, frequency: 1, frequency_type: "days",
+                   transaction_amount: CASOS_01C[caso].inicial,
+                   currency_id: MONEDA_01C, external_reference: referencia,
+                   status: "pending" },
+        response: r.ok
+          ? { ...estadoDe(j), init_point: j.init_point ?? null }
+          : { message: j.message ?? null, error: j.error ?? null, cause: j.cause ?? null },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- Leer el estado y los pagos, sin cambiar nada ------------------------
+  if (accion === "probe_state") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
+    try {
+      const r = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` } });
+      const j = (await r.json()) as Record<string, unknown>;
+      if (!r.ok) {
+        return NextResponse.json({ ok: false, http: r.status,
+          message: j.message ?? null, error: j.error ?? null });
+      }
+      const estado = estadoDe(j);
+      const pagos = await pagosDe(String(estado.external_reference ?? ""));
+      return NextResponse.json({ ok: true, http: r.status,
+        leido_en: new Date().toISOString(), state: estado, payments: pagos });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- Cambiar el importe, con foto antes y después ------------------------
+  //
+  // Las dos fotos las toma ESTA acción, no quien llama: si el «antes» se
+  // capturase en una llamada aparte, entre las dos podría caer un cobro del
+  // ciclo diario y se le atribuiría al cambio de importe. Aquí la distancia
+  // entre la foto previa y el PUT es de milisegundos.
+  if (accion === "probe_amount_change") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
+    const caso = leerCaso(cuerpo.case);
+    if (!caso) return no("CASE_MUST_BE_UP_OR_DOWN", 400);
+    const destino = CASOS_01C[caso].destino;
+
+    const cab = { "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+    try {
+      // 1 · ANTES
+      const r0 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+        { headers: cab });
+      const j0 = (await r0.json()) as Record<string, unknown>;
+      if (!r0.ok) {
+        return NextResponse.json({ ok: false, fase: "antes", http: r0.status,
+          message: j0.message ?? null });
+      }
+      const antes = estadoDe(j0);
+      const referencia = String(antes.external_reference ?? "");
+      const pagosAntes = await pagosDe(referencia);
+
+      // La suscripción tiene que estar VIVA para que la pregunta signifique
+      // algo: cambiarle el importe a una pendiente no dice nada de renovaciones.
+      if (antes.status !== "authorized") {
+        return NextResponse.json({ ok: false, error: "PREAPPROVAL_NOT_AUTHORIZED",
+          explicacion: "Cambiar el importe de una suscripción que nadie ha autorizado "
+            + "no responde la pregunta: no hay ciclo vivo que pueda cobrar.",
+          state: antes, payments: pagosAntes });
+      }
+
+      const tAntes = new Date().toISOString();
+
+      // 2 · EL CAMBIO
+      const r1 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`, {
+        method: "PUT", headers: cab,
+        body: JSON.stringify({ auto_recurring: {
+          transaction_amount: destino, currency_id: MONEDA_01C } }),
+      });
+      const j1 = (await r1.json()) as Record<string, unknown>;
+      const tDespues = new Date().toISOString();
+
+      // 3 · DESPUÉS, leído de nuevo y no del eco del PUT
+      const r2 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+        { headers: cab });
+      const j2 = (await r2.json()) as Record<string, unknown>;
+      const despues = estadoDe(j2);
+      const pagosDespues = await pagosDe(referencia);
+
+      const idsAntes = new Set(pagosAntes.payments.map((p) => String(p.id)));
+      const nuevos = pagosDespues.payments.filter((p) => !idsAntes.has(String(p.id)));
+
+      log_seguro("cambio_importe", { caso, http_put: r1.status,
+        antes: antes.transaction_amount, despues: despues.transaction_amount,
+        pagos_nuevos: nuevos.length });
+
+      return NextResponse.json({
+        ok: r1.ok, case: caso,
+        http: { antes: r0.status, put: r1.status, despues: r2.status },
+        cambio_pedido: { de: antes.transaction_amount, a: destino, currency_id: MONEDA_01C },
+        antes: { state: antes, payments: pagosAntes },
+        put_response: r1.ok
+          ? estadoDe(j1)
+          : { message: j1.message ?? null, error: j1.error ?? null, cause: j1.cause ?? null },
+        despues: { state: despues, payments: pagosDespues },
+        instantes: { antes: tAntes, despues: tDespues },
+        // El veredicto inmediato, calculado y no leído a ojo. Lo que pase en el
+        // PRÓXIMO ciclo no se afirma aquí: todavía no ha ocurrido.
+        veredicto_inmediato: {
+          importe_aplicado: despues.transaction_amount === destino,
+          pagos_nuevos: nuevos.length,
+          detalle_pagos_nuevos: nuevos,
+          cobro_inmediato: nuevos.length > 0,
+          next_payment_date_antes: antes.next_payment_date,
+          next_payment_date_despues: despues.next_payment_date,
+          next_payment_date_cambio: antes.next_payment_date !== despues.next_payment_date,
+        },
       });
     } catch (e) {
       return NextResponse.json({ ok: false,

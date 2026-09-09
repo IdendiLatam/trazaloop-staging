@@ -135,6 +135,35 @@ check("7 bis. La sonda anual también es autocontenida", () => {
     "el veredicto debe leer el auto_recurring devuelto, no el enviado");
 });
 
+check("7 ter. Las sondas de 01C no dependen de la base ni del dinero de quien llama", () => {
+  const iCasos = mp.indexOf("const CASOS_01C");
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  assert(iCasos > 0 && iCasos < iAdmin, "01C debe ir antes del cliente administrativo");
+  const bloque = mp.slice(iCasos, iAdmin);
+  for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc("]) {
+    assert(!bloque.includes(prohibido), `01C no puede depender de ${prohibido}`);
+  }
+  // Los importes son constantes del experimento: quien llama elige el CASO.
+  assert(/up:\s*\{ inicial: 5000, destino: 9000 \}/.test(bloque)
+      && /down:\s*\{ inicial: 9000, destino: 5000 \}/.test(bloque),
+    "los importes de cada caso deben estar fijados en el código");
+  assert(!/transaction_amount:\s*Number\(cuerpo|cuerpo\.amount/.test(bloque),
+    "el importe no puede llegar de quien llama");
+  // Subir y bajar se prueban en suscripciones distintas.
+  assert(/CASE_MUST_BE_UP_OR_DOWN/.test(bloque),
+    "el caso debe ser una lista cerrada de dos valores");
+  // La foto de ANTES la toma la misma acción que hace el PUT.
+  const iCambio = mp.indexOf('accion === "probe_amount_change"');
+  const bloqueCambio = mp.slice(iCambio, iAdmin);
+  assert(bloqueCambio.indexOf("const antes = estadoDe(j0)") < bloqueCambio.indexOf('method: "PUT"'),
+    "el estado previo se captura antes del PUT, en la misma llamada");
+  assert(/antes\.status !== "authorized"/.test(bloqueCambio),
+    "cambiar el importe de una suscripción no autorizada no responde la pregunta");
+  // Y el después se relee del proveedor, no del eco del PUT.
+  assert(bloqueCambio.includes("no del eco del PUT") || /const despues = estadoDe\(j2\)/.test(bloqueCambio),
+    "el estado posterior debe releerse, no tomarse de la respuesta del PUT");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");
