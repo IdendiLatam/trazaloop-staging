@@ -385,6 +385,25 @@ check("7 undecies. La cancelación con plan manda UNA sola clave", () => {
   assert(/provider_request_id/.test(bloque), "debe capturar la trazabilidad del proveedor");
 });
 
+check("7 duodecies. `qa_version` no promete una procedencia que no tiene", () => {
+  const i = mp.indexOf('accion === "qa_version"');
+  const iFin = mp.indexOf('if (accion === "preflight")', i);
+  const bloque = mp.slice(i, iFin);
+  // El campo no puede llamarse `git_commit_sha` a secas: un despliegue por CLI
+  // captura el HEAD del momento, que no es el commit del código subido si se
+  // desplegó antes de confirmar. El nombre tiene que decir lo que es.
+  assert(!/\bgit_commit_sha:/.test(bloque),
+    "no se puede llamar git_commit_sha a algo que no lo garantiza");
+  assert(/vercel_git_head_at_deploy:/.test(bloque),
+    "el campo debe nombrarse por lo que es: el HEAD que vio Vercel");
+  assert(/source_revision_marker:/.test(bloque),
+    "la autoridad para identificar el despliegue es el marcador");
+  assert(/provenance_note:/.test(bloque),
+    "y la salvedad tiene que viajar con el dato, no vivir en una conversación");
+  assert(/\?\? "unavailable"/.test(bloque),
+    "sin metadatos se dice «unavailable», no null silencioso");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");

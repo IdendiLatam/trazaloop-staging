@@ -45,7 +45,7 @@ export const runtime = "nodejs";
  * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
  * que no puede quedarse desfasada respecto de lo que la ruta admite.
  */
-const QA_MARCADOR = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
+const QA_MARCADOR = "MPPLAN01R2-2026-09-09-plan-initpoint-discovery-cancel";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -244,9 +244,25 @@ async function manejar(request: Request) {
     return NextResponse.json({
       ok: true,
       commit_or_marker: QA_MARCADOR,
-      // Si el despliegue trae metadatos de Git, se dicen; si no, se dice que no.
-      git_commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-      git_commit_ref: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+      // LA AUTORIDAD ES EL MARCADOR, NO EL SHA.
+      //
+      // Un despliegue hecho con el CLI desde un directorio de trabajo captura
+      // el `HEAD` del momento, que NO es necesariamente el commit que contiene
+      // el código subido: si se despliega antes de confirmar, el SHA nombra un
+      // commit anterior mientras viaja código que aún no está en ninguno. Pasó,
+      // y la única razón por la que se detectó es que alguien comparó las dos
+      // procedencias en vez de confiar en una.
+      //
+      // Por eso el campo se llama por lo que ES —el HEAD que Vercel vio al
+      // desplegar— y no por lo que se querría que fuera. El dato con el que hay
+      // que comprobar que se está llamando al despliegue correcto es
+      // `commit_or_marker`, que se sube a mano con cada cambio.
+      source_revision_marker: QA_MARCADOR,
+      vercel_git_head_at_deploy: process.env.VERCEL_GIT_COMMIT_SHA ?? "unavailable",
+      vercel_git_ref_at_deploy: process.env.VERCEL_GIT_COMMIT_REF ?? "unavailable",
+      provenance_note: "vercel_git_head_at_deploy es el HEAD que vio Vercel al "
+        + "desplegar; si el despliegue se hizo antes de confirmar, NO corresponde "
+        + "al código desplegado. La autoridad es source_revision_marker.",
       deployment_url: process.env.VERCEL_URL ?? null,
       vercel_environment: entornoVercel,
       // Derivado del catálogo: no puede mentir sobre lo que la ruta admite.
