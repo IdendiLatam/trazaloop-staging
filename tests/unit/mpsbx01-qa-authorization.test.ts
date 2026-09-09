@@ -392,16 +392,32 @@ check("7 duodecies. `qa_version` no promete una procedencia que no tiene", () =>
   // El campo no puede llamarse `git_commit_sha` a secas: un despliegue por CLI
   // captura el HEAD del momento, que no es el commit del código subido si se
   // desplegó antes de confirmar. El nombre tiene que decir lo que es.
-  assert(!/\bgit_commit_sha:/.test(bloque),
-    "no se puede llamar git_commit_sha a algo que no lo garantiza");
+  // `git_commit_sha` puede existir, pero SOLO como «unavailable»: mientras un
+  // despliegue por CLI no pueda demostrar que el HEAD capturado es el del
+  // código subido, prometerlo sería inventar procedencia.
+  assert(/git_commit_sha: "unavailable"/.test(bloque),
+    "git_commit_sha solo puede declararse no disponible");
+  assert(!/git_commit_sha: process\.env/.test(bloque),
+    "no se puede servir la variable de entorno bajo ese nombre");
   assert(/vercel_git_head_at_deploy:/.test(bloque),
-    "el campo debe nombrarse por lo que es: el HEAD que vio Vercel");
+    "el dato crudo se nombra por lo que es: el HEAD que vio Vercel");
   assert(/source_revision_marker:/.test(bloque),
-    "la autoridad para identificar el despliegue es el marcador");
+    "la autoridad para identificar el DESPLIEGUE es el marcador de revisión");
+  assert(/build_marker: QA_DISENO/.test(bloque),
+    "y el DISEÑO se identifica aparte: dos despliegues del mismo diseño deben "
+    + "poder distinguirse");
   assert(/provenance_note:/.test(bloque),
     "y la salvedad tiene que viajar con el dato, no vivir en una conversación");
   assert(/\?\? "unavailable"/.test(bloque),
     "sin metadatos se dice «unavailable», no null silencioso");
+  // Diseño y revisión no pueden ser la misma constante.
+  const iD = mp.indexOf("const QA_DISENO");
+  const iM = mp.indexOf("const QA_MARCADOR");
+  assert(iD > 0 && iM > 0, "deben existir las dos constantes");
+  const valD = mp.slice(iD, mp.indexOf(";", iD));
+  const valM = mp.slice(iM, mp.indexOf(";", iM));
+  assert(valD.split("=")[1].trim() !== valM.split("=")[1].trim(),
+    "el diseño y la revisión del despliegue no pueden compartir valor");
 });
 
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {

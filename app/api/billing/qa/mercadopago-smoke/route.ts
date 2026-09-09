@@ -45,7 +45,16 @@ export const runtime = "nodejs";
  * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
  * que no puede quedarse desfasada respecto de lo que la ruta admite.
  */
-const QA_MARCADOR = "MPPLAN01R2-2026-09-09-plan-initpoint-discovery-cancel";
+/** El DISEÑO que implementa esta ruta. No cambia mientras el diseño no cambie. */
+const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
+
+/**
+ * La revisión concreta que responde. Se sube A MANO en cada despliegue, y por
+ * eso es distinta del diseño: dos despliegues del MISMO diseño tienen que poder
+ * distinguirse, que es justo lo que falló cuando una llamada fue a un
+ * despliegue anterior y devolvió `ACTION_UNKNOWN`.
+ */
+const QA_MARCADOR = "MPPLAN01R3-2026-09-09-provenance-honest";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -244,6 +253,10 @@ async function manejar(request: Request) {
     return NextResponse.json({
       ok: true,
       commit_or_marker: QA_MARCADOR,
+      // El diseño que se implementa, y la revisión que responde. Son cosas
+      // distintas: el primero identifica QUÉ experimento es, el segundo QUÉ
+      // despliegue está contestando.
+      build_marker: QA_DISENO,
       // LA AUTORIDAD ES EL MARCADOR, NO EL SHA.
       //
       // Un despliegue hecho con el CLI desde un directorio de trabajo captura
@@ -258,11 +271,21 @@ async function manejar(request: Request) {
       // que comprobar que se está llamando al despliegue correcto es
       // `commit_or_marker`, que se sube a mano con cada cambio.
       source_revision_marker: QA_MARCADOR,
+      // Se declara NO DISPONIBLE a propósito. El valor existe —Vercel lo
+      // inyecta— pero un despliegue por CLI desde un directorio de trabajo no
+      // puede DEMOSTRAR que ese commit contenga el código subido: si se
+      // despliega antes de confirmar, nombra un commit anterior con toda
+      // fidelidad y toda falsedad. Mientras eso no se pueda garantizar por
+      // construcción, este campo no promete lo que no puede cumplir.
+      git_commit_sha: "unavailable",
+      // El dato crudo sigue estando, nombrado por lo que ES y no por lo que se
+      // querría que fuera. Sirve como pista, nunca como prueba.
       vercel_git_head_at_deploy: process.env.VERCEL_GIT_COMMIT_SHA ?? "unavailable",
       vercel_git_ref_at_deploy: process.env.VERCEL_GIT_COMMIT_REF ?? "unavailable",
-      provenance_note: "vercel_git_head_at_deploy es el HEAD que vio Vercel al "
-        + "desplegar; si el despliegue se hizo antes de confirmar, NO corresponde "
-        + "al código desplegado. La autoridad es source_revision_marker.",
+      provenance_note: "git_commit_sha se declara unavailable porque un despliegue "
+        + "por CLI no garantiza que el HEAD capturado sea el del código subido. "
+        + "La autoridad para identificar el despliegue es source_revision_marker; "
+        + "build_marker identifica el DISEÑO del experimento.",
       deployment_url: process.env.VERCEL_URL ?? null,
       vercel_environment: entornoVercel,
       // Derivado del catálogo: no puede mentir sobre lo que la ruta admite.
