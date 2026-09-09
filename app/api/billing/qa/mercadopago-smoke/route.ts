@@ -54,7 +54,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPPLAN01R5-2026-09-09-cancel-cancelled-spelling";
+const QA_MARCADOR = "MPPLAN02-2026-09-09-annual-plan";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -65,8 +65,8 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
-                  "qa_version", "plan_create", "probe_plan_state",
-                  "plan_cancel_raw"] as const;
+                  "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
+                  "plan_cancel_raw", "plan_get"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -1145,6 +1145,75 @@ async function manejar(request: Request) {
       currency_id: j.currency_id ?? null,
       date_created: j.date_created ?? null, date_approved: j.date_approved ?? null } };
   };
+
+  // --- 1 bis · MP-PLAN-02 · ¿existe el plan ANUAL? -------------------------
+  //
+  // Ya se demostró que un `preapproval` suelto acepta y preserva 12 meses. Un
+  // `preapproval_plan` es OTRO objeto, con su propio validador, y el camino de
+  // Producción va a ser por plan. Dar por hecho que se comporta igual sería
+  // repetir el error de fiarse del código de estado.
+  //
+  // No hace falta checkout ni cobro: basta crear y volver a leer.
+  if (accion === "plan_create_annual") {
+    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const cuerpoMp = {
+      reason: "Trazaloop Full Annual QA · MP-PLAN-02",
+      auto_recurring: {
+        frequency: 12, frequency_type: "months",
+        transaction_amount: PLAN01.amount, currency_id: PLAN01.currency,
+      },
+      back_url: `${sitio.replace(/\/$/, "")}/billing/return`,
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval_plan", {
+        method: "POST", headers: cabMp(), body: JSON.stringify(cuerpoMp) });
+      const j = (await r.json()) as Record<string, unknown>;
+      const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
+      log_seguro("plan_anual_creado", { http: r.status, aceptado: r.ok,
+        devuelto: `${ar.frequency}/${ar.frequency_type}` });
+      return NextResponse.json({
+        ok: r.ok, http: r.status, request_transport: "native_fetch",
+        request_body_enviado: cuerpoMp,
+        provider_request_id: trazasDe(r.headers),
+        plan: r.ok ? {
+          preapproval_plan_id: j.id ?? null, status: j.status ?? null,
+          reason: j.reason ?? null, auto_recurring: ar,
+          date_created: j.date_created ?? null, init_point: j.init_point ?? null,
+        } : { message: j.message ?? null, error: j.error ?? null, cause: j.cause ?? null },
+        // El veredicto se lee de lo DEVUELTO, nunca del 201.
+        veredicto: r.ok
+          ? (ar.frequency === 12 && ar.frequency_type === "months"
+            ? "ACEPTA_Y_PRESERVA_12_MESES"
+            : `NORMALIZO_A_${ar.frequency}_${ar.frequency_type}`)
+          : "RECHAZADO",
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- 1 ter · releer un plan, sin tocarlo ---------------------------------
+  if (accion === "plan_get") {
+    const planId = String(cuerpo.preapproval_plan_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(planId)) return no("PREAPPROVAL_PLAN_ID_INVALID", 400);
+    try {
+      const r = await fetch(
+        `https://api.mercadopago.com/preapproval_plan/${encodeURIComponent(planId)}`,
+        { headers: cabMp() });
+      const j = (await r.json()) as Record<string, unknown>;
+      const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
+      return NextResponse.json({ ok: r.ok, http: r.status,
+        plan: r.ok ? { preapproval_plan_id: j.id ?? null, status: j.status ?? null,
+          reason: j.reason ?? null, auto_recurring: ar,
+          date_created: j.date_created ?? null }
+          : { message: j.message ?? null, error: j.error ?? null },
+        preserva_12_meses: ar.frequency === 12 && ar.frequency_type === "months" });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
 
   // --- 2 · encontrar la suscripción que creó el checkout -------------------
   //
