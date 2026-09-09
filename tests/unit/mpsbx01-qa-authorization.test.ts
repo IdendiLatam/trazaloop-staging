@@ -308,7 +308,6 @@ check("7 octies. MP-PLAN-01 · cifras constantes, sin SDK y sin base", () => {
   assert(i > 0 && i < iAdmin, "MP-PLAN-01 debe ir antes del cliente administrativo");
   const bloque = mp.slice(i, iAdmin);
 
-  // Ni base, ni SDK, ni dinero de quien llama.
   for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc(",
                            "PreApproval", "proveedor."]) {
     assert(!bloque.includes(prohibido), `MP-PLAN-01 no puede usar ${prohibido}`);
@@ -318,31 +317,72 @@ check("7 octies. MP-PLAN-01 · cifras constantes, sin SDK y sin base", () => {
     "las cifras del plan deben estar fijadas en el código");
   assert(!/transaction_amount:\s*Number\(cuerpo|cuerpo\.amount/.test(bloque),
     "el importe no puede llegar de quien llama");
-
-  // La suscripción va atada al plan a propósito: eso es el experimento.
-  const iSub = bloque.indexOf('accion === "plan_subscribe"');
-  const bloqueSub = bloque.slice(iSub, bloque.indexOf('accion === "probe_plan_state"'));
-  assert(/preapproval_plan_id: planId/.test(bloqueSub),
-    "la suscripción tiene que declarar su plan");
-  assert(/PREAPPROVAL_PLAN_ID_INVALID/.test(bloqueSub),
-    "el identificador de plan debe validarse antes de usarse");
-
-  // Y la cancelación con plan manda SOLO el estado: si hiciera falta `reason`,
-  // seria otra pregunta distinta y habria que verlo, no suponerlo.
-  const iCan = bloque.indexOf('accion === "plan_cancel_raw"');
-  const bloqueCan = bloque.slice(iCan);
-  const iIni = bloqueCan.indexOf("const cuerpoPut");
-  const body = bloqueCan.slice(iIni, bloqueCan.indexOf(";", iIni) + 1);
-  assert(/status: grafia/.test(body), "el body debe llevar el estado");
-  assert(!body.includes("preapproval_plan_id"),
-    "no se reenvía el plan al cancelar: ya está en el objeto");
-  assert(/sdk_used_for_put: false/.test(bloqueCan), "debe declarar que no usa el SDK");
-
-  // Cada aparición del token arma la cabecera, y ninguna otra cosa.
   for (const l of bloque.split("\n").filter((x) => x.includes("MERCADOPAGO_ACCESS_TOKEN"))) {
     assert(l.includes("Authorization"),
       `el token solo puede armar la cabecera, y aparece en: ${l.trim().slice(0, 60)}`);
   }
+});
+
+check("7 nonies. El camino por API sin testigo de tarjeta NO existe", () => {
+  // La documentación exige `card_token_id` y `status: authorized` para una
+  // suscripción con plan creada por API. Probarlo sin tarjeta no demostraría
+  // nada sobre la viabilidad del plan, así que la acción se retiró del
+  // catálogo en vez de dejarla apagada: un camino que no debe usarse y sigue
+  // ahí es una trampa esperando a la próxima prisa.
+  // Se mira el CATÁLOGO, no el fichero entero: `qa_version` nombra la acción a
+  // propósito, para declarar en voz alta que NO está disponible.
+  const iCat = mp.indexOf("const ACCIONES = [");
+  const catalogo = mp.slice(iCat, mp.indexOf("] as const;", iCat));
+  assert(!catalogo.includes("plan_subscribe"),
+    "plan_subscribe no puede estar en el catálogo de acciones");
+  assert(!mp.includes('accion === "plan_subscribe"'),
+    "tampoco puede quedar su implementación");
+  assert(/plan_subscribe_api_available/.test(mp),
+    "y qa_version debe decir explícitamente que no está disponible");
+  // Se busca la CLAVE, no la palabra. Las dos apariciones que hay son
+  // comentarios que explican que NO se envía, y una guarda que se dispara con
+  // la prosa que la defiende es peor que no tenerla: enseña a ignorarla.
+  const sinComentarios = mp
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+    .join("\n");
+  assert(!/card_token_id\s*:/.test(sinComentarios),
+    "no se manda ningún testigo de tarjeta: esta fase no lo usa");
+});
+
+check("7 decies. El descubrimiento NO supone el identificador", () => {
+  const bloque = bloqueDe("probe_plan_state");
+  assert(/preapproval\/search/.test(bloque),
+    "la suscripción se busca en el proveedor, no se adivina");
+  assert(/preapproval_plan_id=\$\{encodeURIComponent\(planId\)\}/.test(bloque),
+    "se busca POR el plan, que es exclusivo del experimento");
+  assert(/MAS_DE_UNA_SUSCRIPCION_PARA_UN_PLAN_EXCLUSIVO/.test(bloque),
+    "con más de una candidata hay que parar: elegir sería sortear la evidencia");
+  assert(/SIN_SUSCRIPCIONES_PARA_ESE_PLAN/.test(bloque),
+    "sin candidatas se dice, no se inventa");
+  assert(/plan_coincide/.test(bloque),
+    "el criterio obligatorio es que la suscripción sea de ESE plan");
+  assert(/primer_pago_es_5000_cop/.test(bloque),
+    "el primer cobro se comprueba en importe y moneda, no solo en existencia");
+});
+
+check("7 undecies. La cancelación con plan manda UNA sola clave", () => {
+  const bloque = bloqueDe("plan_cancel_raw");
+  const iIni = bloque.indexOf("const cuerpoPut");
+  const body = bloque.slice(iIni, bloque.indexOf(";", iIni) + 1);
+  assert(/status: "canceled"/.test(body), "el estado debe ser exactamente «canceled»");
+  for (const prohibido of ["reason", "preapproval_plan_id", "auto_recurring",
+                           "external_reference", "card_token_id", "back_url"]) {
+    assert(!body.includes(prohibido), `el body no puede llevar ${prohibido}`);
+  }
+  // Se cuentan las claves DENTRO de las llaves. Contar sobre la línea entera
+  // hacía que `cuerpoPut:` aportara una falsa clave: la prueba medía la
+  // declaración de la variable, no el objeto.
+  const dentro = body.slice(body.indexOf("{") + 1, body.lastIndexOf("}"));
+  const claves = (dentro.match(/[A-Za-z_]+\s*:/g) ?? []).length;
+  assert(claves === 1, `el body debe tener exactamente 1 clave y tiene ${claves}`);
+  assert(/sdk_used_for_put: false/.test(bloque), "debe declarar que no usa el SDK");
+  assert(/provider_request_id/.test(bloque), "debe capturar la trazabilidad del proveedor");
 });
 
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {

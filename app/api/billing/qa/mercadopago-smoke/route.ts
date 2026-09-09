@@ -45,7 +45,7 @@ export const runtime = "nodejs";
  * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
  * que no puede quedarse desfasada respecto de lo que la ruta admite.
  */
-const QA_MARCADOR = "MPPLAN01-2026-09-09-create-subscribe-cancel";
+const QA_MARCADOR = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -56,7 +56,7 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
-                  "qa_version", "plan_create", "plan_subscribe", "probe_plan_state",
+                  "qa_version", "plan_create", "probe_plan_state",
                   "plan_cancel_raw"] as const;
 type Accion = (typeof ACCIONES)[number];
 
@@ -254,8 +254,12 @@ async function manejar(request: Request) {
       cancel_min_available: (ACCIONES as readonly string[]).includes("cancel_min"),
       cancel_raw_available: (ACCIONES as readonly string[]).includes("cancel_raw"),
       // MP-PLAN-01 · el experimento del plan asociado, en bloque.
-      mp_plan_01_available: ["plan_create", "plan_subscribe", "probe_plan_state",
-        "plan_cancel_raw"].every((a) => (ACCIONES as readonly string[]).includes(a)),
+      mp_plan_01_available: ["plan_create", "probe_plan_state", "plan_cancel_raw"]
+        .every((a) => (ACCIONES as readonly string[]).includes(a)),
+      // Y se dice en voz alta lo que NO está: el camino por API sin testigo de
+      // tarjeta se retiró a propósito, no se olvidó.
+      plan_subscribe_api_available:
+        (ACCIONES as readonly string[]).includes("plan_subscribe"),
       probe_annual_available: (ACCIONES as readonly string[]).includes("probe_annual"),
       probe_amount_change_available:
         (ACCIONES as readonly string[]).includes("probe_amount_change"),
@@ -1041,57 +1045,21 @@ async function manejar(request: Request) {
     }
   }
 
-  // --- 2 · la suscripción, atada al plan -----------------------------------
+  // --- 2 · encontrar la suscripción que creó el checkout -------------------
   //
-  // Se manda `preapproval_plan_id` A PROPÓSITO: es justamente lo que distingue
-  // este experimento del anterior. Si el proveedor exige además un testigo de
-  // tarjeta, lo dirá, y entonces el camino es el `init_point` DEL PLAN.
-  if (accion === "plan_subscribe") {
-    const planId = String(cuerpo.preapproval_plan_id ?? "");
-    if (!/^[a-f0-9]{16,64}$/i.test(planId)) return no("PREAPPROVAL_PLAN_ID_INVALID", 400);
-    const correo = String(cuerpo.email ?? "");
-    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
-      return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
-    }
-    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
-    const referencia = `MP-PLAN-01-sub-${randomUUID()}`;
-    const cuerpoMp = {
-      preapproval_plan_id: planId,
-      reason: PLAN01.reason,
-      external_reference: referencia,
-      payer_email: correo,
-      back_url: `${sitio.replace(/\/$/, "")}/billing/return`,
-      status: "pending",
-    };
-    try {
-      const r = await fetch("https://api.mercadopago.com/preapproval", {
-        method: "POST", headers: cabMp(), body: JSON.stringify(cuerpoMp) });
-      const j = (await r.json()) as Record<string, unknown>;
-      log_seguro("suscripcion_con_plan", { http: r.status, aceptado: r.ok, referencia });
-      return NextResponse.json({
-        ok: r.ok, http: r.status, request_transport: "native_fetch",
-        request_body_enviado: cuerpoMp,
-        provider_request_id: trazasDe(r.headers),
-        subscription: r.ok
-          ? { ...estadoDe(j), init_point: j.init_point ?? null }
-          : { message: j.message ?? null, error: j.error ?? null, cause: j.cause ?? null },
-        // Si el proveedor exige tarjeta, el camino es el enlace DEL PLAN.
-        siguiente_si_falla: "Si esto exige card_token_id, autoriza por el init_point "
-          + "del plan y luego usa probe_plan_state con el preapproval_plan_id.",
-      });
-    } catch (e) {
-      return NextResponse.json({ ok: false,
-        message: e instanceof Error ? e.name : "UnknownError" });
-    }
-  }
-
-  // --- 3 · el estado, por id o buscando por plan ---------------------------
+  // El identificador NO lo elegimos nosotros: lo crea Mercado Pago cuando el
+  // pagador autoriza por el enlace del plan. Así que se busca, y se busca por
+  // el plan, que es exclusivo de este experimento. Suponer el identificador
+  // sería inventarse la mitad de la evidencia.
   if (accion === "probe_plan_state") {
     const id = String(cuerpo.preapproval_id ?? "");
     const planId = String(cuerpo.preapproval_plan_id ?? "");
     try {
       let j: Record<string, unknown> | null = null;
       let http = 0;
+      let candidatas = 1;
+      let porBusqueda = false;
+
       if (/^[a-f0-9]{16,64}$/i.test(id)) {
         const r = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
           { headers: cabMp() });
@@ -1099,34 +1067,61 @@ async function manejar(request: Request) {
         j = (await r.json()) as Record<string, unknown>;
         if (!r.ok) return NextResponse.json({ ok: false, http, message: j.message ?? null });
       } else if (/^[a-f0-9]{16,64}$/i.test(planId)) {
-        // Autorizar por el enlace del plan crea la suscripción del lado del
-        // proveedor: aquí se la busca, porque su identificador no lo elegimos.
+        porBusqueda = true;
         const r = await fetch(
           "https://api.mercadopago.com/preapproval/search"
           + `?preapproval_plan_id=${encodeURIComponent(planId)}`, { headers: cabMp() });
         http = r.status;
         const b = (await r.json()) as Record<string, unknown>;
         const filas = Array.isArray(b.results) ? (b.results as Record<string, unknown>[]) : [];
-        if (filas.length === 0) {
+        candidatas = filas.length;
+        if (candidatas === 0) {
           return NextResponse.json({ ok: false, http,
             error: "SIN_SUSCRIPCIONES_PARA_ESE_PLAN",
-            explicacion: "El plan existe pero nadie lo ha autorizado todavía." });
+            explicacion: "El plan existe pero todavía no hay ninguna suscripción: "
+              + "nadie ha completado el checkout, o aún no se ha propagado.",
+            candidatas: 0 });
+        }
+        // El plan es exclusivo del experimento: más de una candidata significa
+        // que la autorización se hizo dos veces, y elegir una al azar sería
+        // decidir por sorteo cuál es la evidencia.
+        if (candidatas > 1) {
+          return NextResponse.json({ ok: false, http,
+            error: "MAS_DE_UNA_SUSCRIPCION_PARA_UN_PLAN_EXCLUSIVO",
+            candidatas,
+            resumen: filas.map((f) => ({ id: f.id ?? null, status: f.status ?? null,
+              date_created: f.date_created ?? null })) });
         }
         j = filas[0];
       } else {
         return no("SE_NECESITA_PREAPPROVAL_ID_O_PLAN_ID", 400);
       }
+
       const estado = estadoDe(j);
       const pagos = await pagosDe(String(estado.external_reference ?? ""));
+      const primero = pagos.payments.find((x) => x.status === "approved") ?? null;
       return NextResponse.json({ ok: true, http, leido_en: new Date().toISOString(),
+        encontrada_por: porBusqueda ? "busqueda_por_plan" : "id_directo",
+        candidatas,
+        // Lo que el encargo pide, con sus nombres.
+        subscription_id: estado.id,
+        preapproval_plan_id: estado.preapproval_plan_id,
+        payer_id: estado.payer_id,
         state: estado, payments: pagos,
         verificaciones: {
+          // El criterio obligatorio: la suscripción tiene que ser DE ese plan.
+          plan_coincide: planId
+            ? String(estado.preapproval_plan_id ?? "") === planId
+            : "no se pidió comprobar (se buscó por id directo)",
           esta_autorizada: estado.status === "authorized",
-          plan_asociado: estado.preapproval_plan_id,
           importe_es_5000: Number(estado.transaction_amount) === PLAN01.amount,
+          moneda_es_cop: estado.currency_id === PLAN01.currency,
           ciclo_es_1_mes: estado.frequency === 1 && estado.frequency_type === "months",
           tiene_primer_pago: Number(pagos.total) >= 1,
-          primer_pago_aprobado: pagos.payments.some((x) => x.status === "approved"),
+          primer_pago_aprobado: Boolean(primero),
+          primer_pago_es_5000_cop: Boolean(primero)
+            && Number(primero!.transaction_amount) === PLAN01.amount
+            && primero!.currency_id === PLAN01.currency,
         } });
     } catch (e) {
       return NextResponse.json({ ok: false,
@@ -1142,7 +1137,9 @@ async function manejar(request: Request) {
   if (accion === "plan_cancel_raw") {
     const id = String(cuerpo.preapproval_id ?? "");
     if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
-    const grafia = cuerpo.status_spelling === "cancelled" ? "cancelled" : "canceled";
+    // El body es el que fijó el encargo: UNA clave. Sin `reason`, sin plan, sin
+    // `auto_recurring`. Aquí no hay parámetro de grafía: la pregunta ya no es
+    // cuál de las dos acepta el proveedor, sino si con plan la cancelación pasa.
     const url = `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`;
     try {
       const r0 = await fetch(url, { headers: cabMp() });
@@ -1152,7 +1149,7 @@ async function manejar(request: Request) {
       const antes = estadoDe(j0);
       const pagosAntes = await pagosDe(String(antes.external_reference ?? ""));
 
-      const cuerpoPut: Record<string, unknown> = { status: grafia };
+      const cuerpoPut: Record<string, unknown> = { status: "canceled" };
       const r1 = await fetch(url, { method: "PUT", headers: cabMp(),
         body: JSON.stringify(cuerpoPut) });
       const j1 = (await r1.json().catch(() => ({}))) as Record<string, unknown>;
@@ -1164,7 +1161,7 @@ async function manejar(request: Request) {
       const pagosDespues = await pagosDe(String(antes.external_reference ?? ""));
       const idsAntes = new Set(pagosAntes.payments.map((x) => String(x.id)));
 
-      log_seguro("cancelacion_con_plan", { http: r1.status, grafia,
+      log_seguro("cancelacion_con_plan", { http: r1.status,
         estado_despues: despues.status });
 
       return NextResponse.json({
