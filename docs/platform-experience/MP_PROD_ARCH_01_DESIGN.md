@@ -227,8 +227,23 @@ param». Y el `GET` posterior es obligatorio — el eco del `PUT` no es evidenci
 
 ## J · Subidas y bajadas, en el MVP
 
-**Sin depender del cambio de importe**, que no está demostrado con plan y falló
-sin él.
+**Decisión de arquitectura congelada el 9 de septiembre de 2026:**
+
+```
+MP_AMOUNT_CHANGE = CLOSED_NOT_REQUIRED_FOR_MVP
+```
+
+No es que el MVP «no dependa» del cambio de importe: es que **no va a depender**,
+y eso deja de estar sujeto a lo que conteste una prueba futura. El `PUT` de
+importe falló sin plan —cuatro veces, con y sin `reason`, en cambio y en no-op— y
+con plan no se ha probado. Probarlo exigiría otro plan, otra suscripción,
+autorización humana y otro ciclo de cobro, para habilitar un camino que este
+diseño no usa.
+
+Que quede claro lo que **no** se afirma. No está demostrado que el cambio de
+importe sea imposible con plan asociado: **no se ha intentado**. Con plan solo se
+probó la cancelación, y que aquella funcionara no dice nada de esta. Lo que hay
+es una decisión —el MVP no lo necesita—, no una respuesta. Ver [PE_05B2_AMOUNT_CHANGE.md](PE_05B2_AMOUNT_CHANGE.md).
 
 **Subir** (Full → Extra), en este orden:
 1. Se crea una suscripción nueva contra el plan de Extra.

@@ -130,7 +130,26 @@ MP_AMOUNT_CHANGE_APPLIED             = NO
 MP_IMMEDIATE_CHARGE_ON_AMOUNT_CHANGE = NOT_TESTED
 MP_PRORATION_ON_AMOUNT_CHANGE        = NOT_TESTED
 MP_NEXT_RENEWAL_USES_NEW_AMOUNT      = NOT_TESTED
+
+MP_AMOUNT_CHANGE                     = CLOSED_NOT_REQUIRED_FOR_MVP
 ```
+
+**Cerrado por decisión de arquitectura**, el 9 de septiembre de 2026: el MVP no
+necesita modificar el importe de una suscripción viva, porque subir y bajar se
+resuelven con transiciones de suscripción y de periodo. Las razones y su alcance
+están en [PE_05B2_AMOUNT_CHANGE.md](PE_05B2_AMOUNT_CHANGE.md).
+
+Que se cierre la necesidad **no convierte en resueltas** las líneas que dicen
+`NOT_TESTED`. Y hay que añadir una más, porque es la que más fácil sería dar por
+buena sin serlo:
+
+```
+MP_AMOUNT_CHANGE_WITH_PLAN = NOT_TESTED
+```
+
+Con plan asociado solo se probó **una** operación: la cancelación. Que esa
+funcionara **no dice nada** sobre `transaction_amount`, que nunca se intentó
+sobre una suscripción con plan.
 
 **Nada de esto se ha probado, y por eso se dice «no probado» y no «no ocurre».**
 Ningún cambio de importe llegó a aplicarse —ni la subida en 01C-UP ni la bajada
