@@ -362,8 +362,45 @@ check("7 decies. El descubrimiento NO supone el identificador", () => {
     "sin candidatas se dice, no se inventa");
   assert(/plan_coincide/.test(bloque),
     "el criterio obligatorio es que la suscripción sea de ESE plan");
-  assert(/primer_pago_es_5000_cop/.test(bloque),
+  assert(/first_payment_is_5000_cop/.test(bloque),
     "el primer cobro se comprueba en importe y moneda, no solo en existencia");
+});
+
+check("7 tredecies. Las facturas se preguntan por suscripción, y un 400 no es un cero", () => {
+  const iF = mp.indexOf("const facturasDe = async");
+  assert(iF > 0, "debe existir el ayudante de facturas");
+  const bloque = mp.slice(iF, mp.indexOf("const pagoDe = async"));
+  assert(/authorized_payments\/search/.test(bloque),
+    "una suscripción se observa por sus facturas, no por una referencia externa");
+  assert(/preapproval_id=\$\{encodeURIComponent\(preapprovalId\)\}/.test(bloque),
+    "se filtra por el identificador de la suscripción, que siempre existe");
+  assert(!/997a004f|dfb9ed12/.test(mp),
+    "ningún identificador del experimento puede quedar incrustado en la lógica");
+  // El cuerpo del error se devuelve: descartarlo fue lo que convirtió un
+  // «preguntaste mal» en un «no hubo cobro».
+  assert(/if \(!r\.ok\)/.test(bloque) && /message: j\.message/.test(bloque),
+    "un fallo debe devolver su causa, no un total cero silencioso");
+
+  // Y el ayudante viejo deja de preguntar con el filtro vacío.
+  const iP = mp.indexOf("const pagosDe = async");
+  const viejo = mp.slice(iP, iP + 900);
+  assert(/if \(!referencia\)/.test(viejo),
+    "sin referencia externa no se debe llamar: el filtro vacío devuelve 400");
+  assert(/no_aplica/.test(viejo), "y se dice que ese camino no aplica");
+});
+
+check("7 quattuordecies. Los cuatro veredictos del cobro van separados", () => {
+  const bloque = bloqueDe("probe_plan_state");
+  for (const campo of ["subscription_reports_charge", "authorized_payment_found",
+                       "first_payment_approved", "first_payment_is_5000_cop"]) {
+    assert(bloque.includes(campo), `falta el veredicto ${campo}`);
+  }
+  // El resumen del proveedor y la factura son fuentes DISTINTAS: si se
+  // calcularan del mismo dato, coincidir no probaría nada.
+  assert(/charged_quantity/.test(bloque) && /facturas\.total/.test(bloque),
+    "el resumen y las facturas deben leerse de fuentes distintas");
+  assert(/pagoFinal\?\.status === "approved"/.test(bloque),
+    "que el pago esté aprobado se lee del pago, no del resumen");
 });
 
 check("7 undecies. La cancelación con plan manda UNA sola clave", () => {

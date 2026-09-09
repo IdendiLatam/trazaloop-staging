@@ -54,7 +54,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPPLAN01R3-2026-09-09-provenance-honest";
+const QA_MARCADOR = "MPPLAN01R4-2026-09-09-authorized-payments";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -588,6 +588,15 @@ async function manejar(request: Request) {
 
   /** Los pagos de esa suscripción, por su referencia externa. */
   const pagosDe = async (referencia: string) => {
+    // Sin referencia externa no se pregunta: el filtro vacío devuelve 400 y ese
+    // 400 se leía como «no hay pagos». Una suscripción creada por el checkout
+    // de un plan NO lleva referencia nuestra, así que este camino sencillamente
+    // no aplica ahí, y decirlo vale más que un error mudo.
+    if (!referencia) {
+      return { http: 0, total: 0, payments: [] as Array<Record<string, unknown>>,
+        no_aplica: "sin external_reference no se puede buscar por ese filtro; "
+          + "use authorized_payments con el preapproval_id" };
+    }
     const r = await fetch(
       "https://api.mercadopago.com/v1/payments/search"
       + `?external_reference=${encodeURIComponent(referencia)}&sort=date_created&criteria=desc`,
@@ -1084,6 +1093,59 @@ async function manejar(request: Request) {
     }
   }
 
+  /**
+   * Las FACTURAS de una suscripción. Es el endpoint que corresponde a una
+   * suscripción recurrente, y se filtra por su identificador —que siempre
+   * existe—, no por una referencia externa que puede no existir.
+   */
+  const facturasDe = async (preapprovalId: string) => {
+    const r = await fetch(
+      "https://api.mercadopago.com/authorized_payments/search"
+      + `?preapproval_id=${encodeURIComponent(preapprovalId)}`,
+      { headers: cabMp() });
+    const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      // El cuerpo del error se DEVUELVE. Descartarlo fue justo lo que convirtió
+      // un «preguntaste mal» en un «no hubo cobro».
+      return { http: r.status, total: 0, results: [],
+        error: { message: j.message ?? null, error: j.error ?? null,
+                 cause: j.cause ?? null } };
+    }
+    const filas = Array.isArray(j.results) ? (j.results as Record<string, unknown>[]) : [];
+    return {
+      http: r.status,
+      total: (j.paging as Record<string, unknown> | undefined)?.total ?? filas.length,
+      results: filas.map((f) => {
+        const pago = (f.payment ?? {}) as Record<string, unknown>;
+        return {
+          id: f.id ?? null, preapproval_id: f.preapproval_id ?? null,
+          status: f.status ?? null,
+          transaction_amount: f.transaction_amount ?? null,
+          currency_id: f.currency_id ?? null,
+          debit_date: f.debit_date ?? null,
+          date_created: f.date_created ?? null,
+          payment: { id: pago.id ?? null, status: pago.status ?? null,
+                     status_detail: pago.status_detail ?? null },
+        };
+      }),
+    };
+  };
+
+  /** El pago, leído en su propio recurso. La prueba financiera final. */
+  const pagoDe = async (pagoId: string) => {
+    const r = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(pagoId)}`,
+      { headers: cabMp() });
+    const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!r.ok) {
+      return { http: r.status, error: { message: j.message ?? null, error: j.error ?? null } };
+    }
+    return { http: r.status, payment: {
+      id: j.id ?? null, status: j.status ?? null, status_detail: j.status_detail ?? null,
+      transaction_amount: j.transaction_amount ?? null,
+      currency_id: j.currency_id ?? null,
+      date_created: j.date_created ?? null, date_approved: j.date_approved ?? null } };
+  };
+
   // --- 2 · encontrar la suscripción que creó el checkout -------------------
   //
   // El identificador NO lo elegimos nosotros: lo crea Mercado Pago cuando el
@@ -1138,8 +1200,19 @@ async function manejar(request: Request) {
 
       const estado = estadoDe(j);
       const pagos = await pagosDe(String(estado.external_reference ?? ""));
-      const primero = pagos.payments.find((x) => x.status === "approved") ?? null;
+      // La observación que SÍ corresponde a una suscripción: sus facturas.
+      const facturas = await facturasDe(String(estado.id ?? ""));
+      const conPago = facturas.results.find(
+        (f) => (f.payment as Record<string, unknown>)?.id) ?? null;
+      const detallePago = conPago
+        ? await pagoDe(String((conPago.payment as Record<string, unknown>).id))
+        : null;
+      const resumen = (estado.summarized ?? {}) as Record<string, unknown>;
+      const pagoFinal = (detallePago && "payment" in detallePago
+        ? (detallePago.payment as Record<string, unknown>) : null);
       return NextResponse.json({ ok: true, http, leido_en: new Date().toISOString(),
+        authorized_payments: facturas,
+        payment_detail: detallePago,
         encontrada_por: porBusqueda ? "busqueda_por_plan" : "id_directo",
         candidatas,
         // Lo que el encargo pide, con sus nombres.
@@ -1156,11 +1229,18 @@ async function manejar(request: Request) {
           importe_es_5000: Number(estado.transaction_amount) === PLAN01.amount,
           moneda_es_cop: estado.currency_id === PLAN01.currency,
           ciclo_es_1_mes: estado.frequency === 1 && estado.frequency_type === "months",
-          tiene_primer_pago: Number(pagos.total) >= 1,
-          primer_pago_aprobado: Boolean(primero),
-          primer_pago_es_5000_cop: Boolean(primero)
-            && Number(primero!.transaction_amount) === PLAN01.amount
-            && primero!.currency_id === PLAN01.currency,
+          // Cuatro afirmaciones SEPARADAS. Mezclarlas fue lo que permitió leer
+          // un 400 de una consulta mal formada como «no hubo cobro».
+          subscription_reports_charge:
+            Number(resumen.charged_quantity ?? 0) >= 1
+            && Number(resumen.charged_amount ?? 0) === PLAN01.amount,
+          authorized_payment_found: Number(facturas.total) >= 1,
+          first_payment_approved: pagoFinal?.status === "approved",
+          first_payment_is_5000_cop: Boolean(pagoFinal)
+            && Number(pagoFinal!.transaction_amount) === PLAN01.amount
+            && pagoFinal!.currency_id === PLAN01.currency,
+          // El camino viejo se conserva, pero etiquetado como lo que es.
+          busqueda_por_referencia_externa_aplica: Boolean(estado.external_reference),
         } });
     } catch (e) {
       return NextResponse.json({ ok: false,
