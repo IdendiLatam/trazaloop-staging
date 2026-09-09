@@ -36,6 +36,17 @@ export const runtime = "nodejs";
  * Y no devuelve el token, ni parte de él, ni su longitud.
  */
 
+/**
+ * Marcador de versión del disparador. Se sube A MANO cuando se añade o cambia
+ * una acción, y sirve para lo único que no se podía comprobar y hacía falta:
+ * saber si el despliegue que se está llamando es el que se acaba de desplegar.
+ *
+ * Nació de un `ACTION_UNKNOWN:cancel_min` contra un despliegue anterior. La
+ * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
+ * que no puede quedarse desfasada respecto de lo que la ruta admite.
+ */
+const QA_MARCADOR = "MPSBX01-2026-09-08-cancel_min";
+
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
 // exportar sus manejadores y su configuración, así que la marca vive aquí.
@@ -44,7 +55,7 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
-                  "probe_amount_change", "cancel_min", "authprobe"] as const;
+                  "probe_amount_change", "cancel_min", "authprobe", "qa_version"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -223,6 +234,27 @@ async function manejar(request: Request) {
     ? await proveedor.resolveEnvironment()
     : { environment: "live" as const, siteId: null, countryId: null,
         isTestUser: false, reachable: false };
+
+  // Qué versión del disparador responde aquí. No llama a Mercado Pago, no toca
+  // la base y no devuelve ningún secreto: solo el marcador, la identidad del
+  // despliegue que Vercel ya publica, y qué acciones admite.
+  if (accion === "qa_version") {
+    return NextResponse.json({
+      ok: true,
+      commit_or_marker: QA_MARCADOR,
+      // Si el despliegue trae metadatos de Git, se dicen; si no, se dice que no.
+      git_commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+      git_commit_ref: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+      deployment_url: process.env.VERCEL_URL ?? null,
+      vercel_environment: entornoVercel,
+      // Derivado del catálogo: no puede mentir sobre lo que la ruta admite.
+      acciones_disponibles: [...ACCIONES].sort(),
+      cancel_min_available: (ACCIONES as readonly string[]).includes("cancel_min"),
+      probe_annual_available: (ACCIONES as readonly string[]).includes("probe_annual"),
+      probe_amount_change_available:
+        (ACCIONES as readonly string[]).includes("probe_amount_change"),
+    });
+  }
 
   if (accion === "preflight") {
     return NextResponse.json({

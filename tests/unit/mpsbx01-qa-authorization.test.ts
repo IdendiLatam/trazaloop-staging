@@ -217,6 +217,32 @@ check("7 quinquies. La cancelación mínima manda DOS claves y ninguna más", ()
     "sin PUT aceptado no se puede declarar cancelada");
 });
 
+check("7 sexies. `qa_version` no llama al proveedor ni devuelve secretos", () => {
+  const i = mp.indexOf('accion === "qa_version"');
+  assert(i > 0, "no se encuentra qa_version");
+  // El bloque termina donde empieza `preflight`. Recortar por un número de
+  // caracteres dejaba dentro código ajeno, y la prueba fallaba por lo que hacía
+  // el vecino: exactamente el tipo de falso rojo que enseña a ignorar pruebas.
+  const iFin = mp.indexOf('if (accion === "preflight")', i);
+  assert(iFin > i, "no se encuentra el final del bloque");
+  const bloque = mp.slice(i, iFin);
+  assert(!bloque.includes("api.mercadopago.com"), "no puede llamar al proveedor");
+  assert(!bloque.includes("MERCADOPAGO_ACCESS_TOKEN"), "no puede tocar el token");
+  assert(!bloque.includes("admin.") && !bloque.includes("createAdminClient"),
+    "no puede tocar la base");
+  assert(!/VERCEL_AUTOMATION_BYPASS_SECRET/.test(bloque), "no puede devolver el secreto");
+  // La lista de acciones se DERIVA del catálogo: escrita a mano envejecería
+  // justo cuando más falta hace, que es al añadir una acción nueva.
+  assert(/acciones_disponibles: \[\.\.\.ACCIONES\]/.test(bloque),
+    "las acciones deben derivarse del catálogo, no escribirse");
+  assert(/cancel_min_available: \(ACCIONES as readonly string\[\]\)\.includes\("cancel_min"\)/.test(bloque),
+    "la disponibilidad debe derivarse del catálogo");
+  // Y va antes de los candados del proveedor: sirve para diagnosticar aunque
+  // el token falte.
+  const iToken = mp.indexOf("if (!tokenPuesto) return no(");
+  assert(i < iToken, "qa_version debe responder aunque no haya credencial de proveedor");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");
