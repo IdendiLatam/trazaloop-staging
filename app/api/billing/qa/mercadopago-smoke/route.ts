@@ -54,7 +54,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPPLAN01R4-2026-09-09-authorized-payments";
+const QA_MARCADOR = "MPPLAN01R5-2026-09-09-cancel-cancelled-spelling";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1250,57 +1250,98 @@ async function manejar(request: Request) {
 
   // --- 4 · cancelar la que SÍ tiene plan -----------------------------------
   //
-  // El body es el mínimo documentado para cambiar el estado. `reason` no se
-  // manda: con plan asociado no es requerido, y el experimento consiste
-  // precisamente en ver si esa es la diferencia.
+  // DÓNDE ESTAMOS
+  //
+  // Con `{"status":"canceled"}` el proveedor contestó «Invalid preapproval
+  // status param: canceled». Es un error DISTINTO y mucho mejor que el
+  // anterior: ya no habla de un plan que falta —la suscripción lo tiene— sino
+  // del valor del estado. Queda una sola variable, y PE-05B2 ya había
+  // documentado que Mercado Pago usa las dos grafías según qué página se mire.
+  //
+  // Por eso la grafía es un parámetro de lista cerrada y quien llama la declara:
+  // en una prueba que existe para decidir entre dos valores, esconder cuál se
+  // manda sería esconder el experimento.
+  //
+  // El body sigue teniendo UNA sola clave. Nada más cambia.
   if (accion === "plan_cancel_raw") {
     const id = String(cuerpo.preapproval_id ?? "");
     if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
-    // El body es el que fijó el encargo: UNA clave. Sin `reason`, sin plan, sin
-    // `auto_recurring`. Aquí no hay parámetro de grafía: la pregunta ya no es
-    // cuál de las dos acepta el proveedor, sino si con plan la cancelación pasa.
+    const grafia = cuerpo.status_spelling === "canceled" ? "canceled" : "cancelled";
     const url = `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`;
     try {
+      // --- ANTES ---------------------------------------------------------
       const r0 = await fetch(url, { headers: cabMp() });
       const j0 = (await r0.json()) as Record<string, unknown>;
       if (!r0.ok) return NextResponse.json({ ok: false, fase: "antes", http: r0.status,
         message: j0.message ?? null });
       const antes = estadoDe(j0);
-      const pagosAntes = await pagosDe(String(antes.external_reference ?? ""));
+      // Por SUSCRIPCIÓN, nunca por referencia externa: esa consulta no aplica a
+      // una suscripción creada por el checkout de un plan.
+      const facturasAntes = await facturasDe(id);
+      const conPagoAntes = facturasAntes.results.find(
+        (f) => (f.payment as Record<string, unknown>)?.id) ?? null;
+      const pagoAntes = conPagoAntes
+        ? await pagoDe(String((conPagoAntes.payment as Record<string, unknown>).id))
+        : null;
 
-      const cuerpoPut: Record<string, unknown> = { status: "canceled" };
+      // --- EL CAMBIO -----------------------------------------------------
+      const cuerpoPut: Record<string, unknown> = { status: grafia };
       const r1 = await fetch(url, { method: "PUT", headers: cabMp(),
         body: JSON.stringify(cuerpoPut) });
       const j1 = (await r1.json().catch(() => ({}))) as Record<string, unknown>;
       const aceptado = r1.status >= 200 && r1.status < 300;
 
+      // --- DESPUÉS -------------------------------------------------------
       const r2 = await fetch(url, { headers: cabMp() });
       const j2 = (await r2.json()) as Record<string, unknown>;
       const despues = estadoDe(j2);
-      const pagosDespues = await pagosDe(String(antes.external_reference ?? ""));
-      const idsAntes = new Set(pagosAntes.payments.map((x) => String(x.id)));
+      const facturasDespues = await facturasDe(id);
+      const conPagoDespues = facturasDespues.results.find(
+        (f) => (f.payment as Record<string, unknown>)?.id) ?? null;
+      const pagoDespues = conPagoDespues
+        ? await pagoDe(String((conPagoDespues.payment as Record<string, unknown>).id))
+        : null;
 
-      log_seguro("cancelacion_con_plan", { http: r1.status,
-        estado_despues: despues.status });
+      const idsAntes = new Set(facturasAntes.results.map((f) => String(f.id)));
+      const nuevas = facturasDespues.results.filter((f) => !idsAntes.has(String(f.id)));
+
+      log_seguro("cancelacion_con_plan", { http: r1.status, grafia,
+        estado_despues: despues.status, facturas_nuevas: nuevas.length });
 
       return NextResponse.json({
         ok: aceptado, request_transport: "native_fetch", sdk_used_for_put: false,
-        request_body_enviado: cuerpoPut, claves_enviadas: Object.keys(cuerpoPut).sort(),
+        request_url: url,
+        request_body_enviado: cuerpoPut,
+        claves_enviadas: Object.keys(cuerpoPut).sort(),
+        grafia_enviada: grafia,
         provider_http: r1.status,
-        provider_response: aceptado ? { status: j1.status ?? null }
-          : { message: j1.message ?? null, error: j1.error ?? null, cause: j1.cause ?? null },
+        provider_response: aceptado
+          ? { status: j1.status ?? null, id: j1.id ?? null }
+          : { message: j1.message ?? null, error: j1.error ?? null,
+              cause: j1.cause ?? null },
         provider_request_id: trazasDe(r1.headers),
-        state_before: antes, state_after: despues,
-        payments_before: pagosAntes, payments_after: pagosDespues,
+        state_before: antes,
+        state_after: despues,
+        authorized_payments_before: facturasAntes,
+        authorized_payments_after: facturasDespues,
+        payment_detail_before: pagoAntes,
+        payment_detail_after: pagoDespues,
         veredicto: {
           put_aceptado: aceptado,
+          // Se registra la grafía TAL CUAL la devuelve el proveedor, que es el
+          // dato que zanja la duda de la documentación.
+          estado_devuelto_por_el_proveedor: despues.status,
           cancelada: aceptado
             && (despues.status === "cancelled" || despues.status === "canceled"),
-          pagos_nuevos: pagosDespues.payments.filter((x) => !idsAntes.has(String(x.id))).length,
+          facturas_nuevas: nuevas.length,
+          // Cancelar no puede reescribir lo ya cobrado.
+          facturas_historicas_intactas:
+            JSON.stringify(facturasAntes.results) === JSON.stringify(
+              facturasDespues.results.filter((f) => idsAntes.has(String(f.id)))),
         },
       });
     } catch (e) {
-      return NextResponse.json({ ok: false,
+      return NextResponse.json({ ok: false, request_transport: "native_fetch",
         message: e instanceof Error ? e.name : "UnknownError" });
     }
   }

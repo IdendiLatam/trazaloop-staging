@@ -403,23 +403,41 @@ check("7 quattuordecies. Los cuatro veredictos del cobro van separados", () => {
     "que el pago esté aprobado se lee del pago, no del resumen");
 });
 
-check("7 undecies. La cancelación con plan manda UNA sola clave", () => {
+check("7 undecies. La cancelación con plan manda UNA sola clave y observa por suscripción", () => {
   const bloque = bloqueDe("plan_cancel_raw");
   const iIni = bloque.indexOf("const cuerpoPut");
   const body = bloque.slice(iIni, bloque.indexOf(";", iIni) + 1);
-  assert(/status: "canceled"/.test(body), "el estado debe ser exactamente «canceled»");
+  const dentro = body.slice(body.indexOf("{") + 1, body.lastIndexOf("}"));
+  const claves = (dentro.match(/[A-Za-z_]+\s*:/g) ?? []).length;
+  assert(claves === 1, `el body debe tener exactamente 1 clave y tiene ${claves}`);
+  assert(/status: grafia/.test(body), "la única clave es el estado");
   for (const prohibido of ["reason", "preapproval_plan_id", "auto_recurring",
                            "external_reference", "card_token_id", "back_url"]) {
     assert(!body.includes(prohibido), `el body no puede llevar ${prohibido}`);
   }
-  // Se cuentan las claves DENTRO de las llaves. Contar sobre la línea entera
-  // hacía que `cuerpoPut:` aportara una falsa clave: la prueba medía la
-  // declaración de la variable, no el objeto.
-  const dentro = body.slice(body.indexOf("{") + 1, body.lastIndexOf("}"));
-  const claves = (dentro.match(/[A-Za-z_]+\s*:/g) ?? []).length;
-  assert(claves === 1, `el body debe tener exactamente 1 clave y tiene ${claves}`);
-  assert(/sdk_used_for_put: false/.test(bloque), "debe declarar que no usa el SDK");
-  assert(/provider_request_id/.test(bloque), "debe capturar la trazabilidad del proveedor");
+  // La grafía es una lista cerrada de las DOS documentadas, y quien llama la
+  // declara: en una prueba que existe para decidir entre dos valores, esconder
+  // cuál se manda sería esconder el experimento.
+  assert(/cuerpo\.status_spelling === "canceled" \? "canceled" : "cancelled"/.test(bloque),
+    "la grafía debe elegirse entre las dos documentadas");
+  // Y se registra la que DEVUELVE el proveedor, que es lo que zanja la duda.
+  assert(/estado_devuelto_por_el_proveedor/.test(bloque),
+    "hay que registrar cómo devuelve el estado el proveedor, no solo el nuestro");
+
+  // La observación va por suscripción, nunca por referencia externa.
+  assert(/facturasDe\(id\)/.test(bloque),
+    "las facturas se piden por el identificador de la suscripción");
+  assert(!/pagosDe\(/.test(bloque),
+    "no se puede usar el ayudante viejo por referencia externa");
+  assert(/authorized_payments_before/.test(bloque)
+      && /authorized_payments_after/.test(bloque)
+      && /payment_detail_before/.test(bloque)
+      && /payment_detail_after/.test(bloque),
+    "hace falta la foto completa antes y después");
+  assert(/facturas_historicas_intactas/.test(bloque),
+    "cancelar no puede reescribir lo ya cobrado, y hay que comprobarlo");
+  assert(/provider_request_id/.test(bloque), "y la trazabilidad del proveedor");
+  assert(/sdk_used_for_put: false/.test(bloque), "sin SDK");
 });
 
 check("7 duodecies. `qa_version` no promete una procedencia que no tiene", () => {
