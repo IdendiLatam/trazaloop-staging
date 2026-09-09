@@ -59,6 +59,9 @@ const VISTAS_DEFINER_CLASIFICADAS: Record<string, string> = {
   v_intelligence_usage_platform: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_intelligence_usage_platform_by_use_case: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_platform_organizations: "Filtra con `is_platform_staff()` DENTRO de la vista.",
+  v_billing_provider_plans: "Filtra con `is_platform_staff()` DENTRO de la vista. "
+    + "Corre como propietaria a propósito: la tabla no tiene privilegios para "
+    + "ningún rol de ejecución, así que esta es la única superficie de lectura.",
   v_platform_organization_members: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_platform_organization_invitations: "Filtra con `is_platform_staff()` DENTRO de la vista.",
   v_platform_support_ticket_summary: "Filtra con `is_platform_staff()` DENTRO de la vista.",
@@ -139,7 +142,8 @@ async function main() {
     try {
       for (const v of ["v_intelligence_usage_platform", "v_intelligence_usage_platform_by_use_case",
                        "v_platform_organizations", "v_billing_subscription_changes",
-                       "v_commercial_fx_rates", "v_billing_operations_alerts"]) {
+                       "v_commercial_fx_rates", "v_billing_operations_alerts",
+                       "v_billing_provider_plans"]) {
         const { data: filas } = await cli.from(v).select("*");
         assert((filas?.length ?? 0) === 0, `${v} devolvió ${filas?.length} filas a alguien sin rol`);
       }
