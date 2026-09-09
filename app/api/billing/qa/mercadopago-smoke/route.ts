@@ -54,7 +54,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPPLAN02-2026-09-09-annual-plan";
+const QA_MARCADOR = "MPPLAN02R-2026-09-09-request-origin";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -395,7 +395,7 @@ async function manejar(request: Request) {
     const referencia = `WCS-49142-probe-${randomUUID()}`;
     // La URL de vuelta se calcula AQUÍ: esta acción no depende de nada que se
     // prepare más abajo, y así se puede mover sin romperla.
-    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const sitioSonda = new URL(request.url).origin;
     const volverSonda = `${sitioSonda.replace(/\/$/, "")}/billing/return`;
     const cuerpoMp = {
       reason: "Trazaloop · sonda de pagador (WCS-49142)",
@@ -469,7 +469,7 @@ async function manejar(request: Request) {
     const IMPORTE_SONDA = 5000;      // COP. Constante del experimento.
     const MONEDA_SONDA = "COP";
     const referencia = `WCS-49142-annual-12m-${randomUUID()}`;
-    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const sitioSonda = new URL(request.url).origin;
     const volverSonda = `${sitioSonda.replace(/\/$/, "")}/billing/return`;
     // `start_date` NO se manda: se quiere ver qué fecha elige el proveedor por
     // su cuenta. Fijarla sería responder nosotros la pregunta que hacemos.
@@ -628,7 +628,7 @@ async function manejar(request: Request) {
     if (!caso) return no("CASE_MUST_BE_UP_OR_DOWN", 400);
 
     const referencia = `WCS-49142-01C-${caso.toUpperCase()}-${randomUUID()}`;
-    const sitioSonda = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const sitioSonda = new URL(request.url).origin;
     const cuerpoMp = {
       reason: `Trazaloop · sonda 01C-${caso.toUpperCase()} (WCS-49142)`,
       external_reference: referencia,
@@ -1058,7 +1058,7 @@ async function manejar(request: Request) {
 
   // --- 1 · el plan ---------------------------------------------------------
   if (accion === "plan_create") {
-    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const sitio = new URL(request.url).origin;
     const cuerpoMp = {
       reason: PLAN01.reason,
       auto_recurring: {
@@ -1155,7 +1155,7 @@ async function manejar(request: Request) {
   //
   // No hace falta checkout ni cobro: basta crear y volver a leer.
   if (accion === "plan_create_annual") {
-    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const sitio = new URL(request.url).origin;
     const cuerpoMp = {
       reason: "Trazaloop Full Annual QA · MP-PLAN-02",
       auto_recurring: {
@@ -1416,7 +1416,7 @@ async function manejar(request: Request) {
   }
 
   const admin = createAdminClient();
-  const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+  const sitio = new URL(request.url).origin;
   const volver = `${sitio.replace(/\/$/, "")}/billing/return`;
 
   // -------------------------------------------------------------------------
