@@ -190,6 +190,33 @@ check("7 quater. El PUT lleva el `reason` real y NUNCA preapproval_plan_id", () 
   }
 });
 
+check("7 quinquies. La cancelación mínima manda DOS claves y ninguna más", () => {
+  const i = mp.indexOf('accion === "cancel_min"');
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  assert(i > 0 && i < iAdmin, "cancel_min debe ir antes del cliente administrativo");
+  const bloque = mp.slice(i, iAdmin);
+  const iIni = bloque.indexOf("const cuerpoPut");
+  const iFin = bloque.indexOf("};", iIni);
+  assert(iIni >= 0 && iFin > iIni, "no se encuentra la construcción del body");
+  const body = bloque.slice(iIni, iFin + 2);
+  // Exactamente `reason` y `status`.
+  assert(/reason: antes\.reason/.test(body),
+    "el reason debe ser el leído del proveedor, no un literal ni algo de quien llama");
+  assert(/status: grafia/.test(body), "el status debe salir de la grafía elegida");
+  for (const prohibido of ["preapproval_plan_id", "auto_recurring", "external_reference",
+                           "card_token_id", "back_url"]) {
+    assert(!body.includes(prohibido), `el body mínimo no puede llevar ${prohibido}`);
+  }
+  const claves = (body.match(/^\s+[a-z_]+:/gm) ?? []).length;
+  assert(claves === 2, `el body debe tener exactamente 2 claves y tiene ${claves}`);
+  // La grafía es una lista cerrada de dos valores, no texto libre.
+  assert(/cuerpo\.status_spelling === "cancelled" \? "cancelled" : "canceled"/.test(bloque),
+    "la grafía debe ser una elección entre las dos documentadas");
+  // Y el veredicto no da nada por hecho sin 2xx.
+  assert(/cancelada: aceptado/.test(bloque),
+    "sin PUT aceptado no se puede declarar cancelada");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");

@@ -80,11 +80,13 @@ MP_ANNUAL_NORMALIZATION = NONE
 ### El montaje
 
 Dos suscripciones diarias independientes —subir y bajar por separado, para que
-un cargo no se pueda atribuir al experimento equivocado—. Se autorizó **01C-UP**
-con la cuenta de prueba y su tarjeta de sandbox, y llegó su primer cobro:
+un cargo no se pueda atribuir al experimento equivocado—. **Las dos** se
+autorizaron con la cuenta de prueba y su tarjeta de sandbox, y las dos
+recibieron su primer cobro:
 
 ```
-01C-UP   status authorized · transaction_amount 5000 · 1 pago de 5000 aprobado
+01C-UP     status authorized · transaction_amount 5000 · 1 pago de 5000 aprobado
+01C-DOWN   status authorized · transaction_amount 9000 · 1 pago de 9000 aprobado
 ```
 
 ### Intento 1 · sin `reason`
@@ -131,9 +133,10 @@ MP_NEXT_RENEWAL_USES_NEW_AMOUNT      = NOT_TESTED
 ```
 
 **Nada de esto se ha probado, y por eso se dice «no probado» y no «no ocurre».**
-El cambio real 5 000 → 9 000 **no se ejecutó**, y **01C-DOWN no se ha tocado**:
-seguir probando variantes sería adivinar, y cada intento es una llamada real a un
-tercero.
+Ningún cambio de importe llegó a aplicarse —ni la subida en 01C-UP ni la bajada
+en 01C-DOWN—: el `PUT` fue rechazado las dos veces que se intentó, y no se
+probaron más variantes. Seguir adivinando bodies es gastar llamadas reales a un
+tercero para acumular mensajes de error, no evidencia.
 
 ### Lo que hay que preguntarle a soporte
 

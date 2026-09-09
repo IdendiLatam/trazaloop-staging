@@ -44,7 +44,7 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
-                  "probe_amount_change", "authprobe"] as const;
+                  "probe_amount_change", "cancel_min", "authprobe"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -718,6 +718,101 @@ async function manejar(request: Request) {
           next_payment_date_antes: antes.next_payment_date,
           next_payment_date_despues: despues.next_payment_date,
           next_payment_date_cambio: antes.next_payment_date !== despues.next_payment_date,
+        },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // cancel_min · la cancelación mínima documentada
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ HACE FALTA OTRA ACCIÓN SI YA EXISTE `cancel`
+  //
+  // La `cancel` de esta ruta delega en el adaptador, que manda
+  // `{ "status": "cancelled" }` y NADA más. Contra 01C-UP eso devolvió el mismo
+  // 400 que el cambio de importe: «Invalid value for preapproval_plan_id», un
+  // campo que tampoco ahí se envía. Igual que en el `PUT` del importe, la
+  // sospecha es que sin `reason` el validador toma la rama de las suscripciones
+  // CON plan asociado.
+  //
+  // UNA SOLA VARIABLE POR INTENTO
+  //
+  // PE-05B2 dejó escrito que la documentación usa las DOS grafías, `cancelled` y
+  // `canceled`. El intento que falló usó la primera. Si ahora se cambiara a la
+  // vez el `reason` y la grafía y volviera a fallar, no sabríamos cuál de las
+  // dos cosas importaba. Por eso la grafía es un parámetro de lista cerrada:
+  // se prueba una, y si hace falta la otra, sin volver a desplegar.
+  //
+  // El body lleva EXACTAMENTE dos claves. Ni `preapproval_plan_id`, ni
+  // `auto_recurring`, ni `external_reference`, ni `card_token_id`, ni `back_url`.
+  if (accion === "cancel_min") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
+    const grafia = cuerpo.status_spelling === "cancelled" ? "cancelled" : "canceled";
+    const cab = { "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+    try {
+      // 1 · Leer, para tomar el `reason` REAL. No se inventa ni se teclea.
+      const r0 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+        { headers: cab });
+      const j0 = (await r0.json()) as Record<string, unknown>;
+      if (!r0.ok) {
+        return NextResponse.json({ ok: false, fase: "antes", http: r0.status,
+          message: j0.message ?? null });
+      }
+      const antes = estadoDe(j0);
+      const pagosAntes = await pagosDe(String(antes.external_reference ?? ""));
+
+      // 2 · El body mínimo documentado. Dos claves, contadas.
+      const cuerpoPut: Record<string, unknown> = {
+        reason: antes.reason,
+        status: grafia,
+      };
+      const r1 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`, {
+        method: "PUT", headers: cab, body: JSON.stringify(cuerpoPut) });
+      const j1 = (await r1.json()) as Record<string, unknown>;
+
+      // 3 · Releer del proveedor, no del eco del PUT.
+      const r2 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+        { headers: cab });
+      const j2 = (await r2.json()) as Record<string, unknown>;
+      const despues = estadoDe(j2);
+      const pagosDespues = await pagosDe(String(antes.external_reference ?? ""));
+
+      const idsAntes = new Set(pagosAntes.payments.map((x) => String(x.id)));
+      const nuevos = pagosDespues.payments.filter((x) => !idsAntes.has(String(x.id)));
+      const aceptado = r1.status >= 200 && r1.status < 300;
+
+      log_seguro("cancelacion_minima", { http_put: r1.status, grafia,
+        estado_despues: despues.status, pagos_nuevos: nuevos.length });
+
+      return NextResponse.json({
+        ok: aceptado,
+        http: { antes: r0.status, put: r1.status, despues: r2.status },
+        request_body_enviado: cuerpoPut,
+        claves_enviadas: Object.keys(cuerpoPut).sort(),
+        grafia_usada: grafia,
+        antes: { state: antes, payments: pagosAntes },
+        put_response: aceptado
+          ? { status: j1.status ?? null }
+          : { message: j1.message ?? null, error: j1.error ?? null, cause: j1.cause ?? null },
+        despues: { state: despues, payments: pagosDespues },
+        veredicto: {
+          put_aceptado: aceptado,
+          // Igual que con el importe: sin 2xx no se da nada por hecho.
+          cancelada: aceptado
+            && (despues.status === "cancelled" || despues.status === "canceled"),
+          estado_despues: despues.status,
+          pagos_nuevos: nuevos.length,
+          detalle_pagos_nuevos: nuevos,
+          // Los pagos históricos no pueden cambiar por cancelar.
+          pagos_historicos_intactos:
+            JSON.stringify(pagosAntes.payments) === JSON.stringify(
+              pagosDespues.payments.filter((x) => idsAntes.has(String(x.id)))),
         },
       });
     } catch (e) {
