@@ -45,7 +45,7 @@ export const runtime = "nodejs";
  * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
  * que no puede quedarse desfasada respecto de lo que la ruta admite.
  */
-const QA_MARCADOR = "MPSBX01-2026-09-08-cancel_min";
+const QA_MARCADOR = "MPSBX01-2026-09-09-cancel_raw";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -55,7 +55,8 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "get", "search", "site", "create_test_user", "read_test_user", "ensure_test_payer",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
-                  "probe_amount_change", "cancel_min", "authprobe", "qa_version"] as const;
+                  "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
+                  "qa_version"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -250,6 +251,7 @@ async function manejar(request: Request) {
       // Derivado del catálogo: no puede mentir sobre lo que la ruta admite.
       acciones_disponibles: [...ACCIONES].sort(),
       cancel_min_available: (ACCIONES as readonly string[]).includes("cancel_min"),
+      cancel_raw_available: (ACCIONES as readonly string[]).includes("cancel_raw"),
       probe_annual_available: (ACCIONES as readonly string[]).includes("probe_annual"),
       probe_amount_change_available:
         (ACCIONES as readonly string[]).includes("probe_amount_change"),
@@ -849,6 +851,110 @@ async function manejar(request: Request) {
       });
     } catch (e) {
       return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // cancel_raw · quitar el SDK de la ecuación
+  // -------------------------------------------------------------------------
+  //
+  // QUÉ VARIABLE ELIMINA
+  //
+  // `PreApproval.update` del SDK oficial devolvió 400 «Invalid value for
+  // preapproval_plan_id» sobre una suscripción que no tiene plan. Antes de
+  // rediseñar Trazaloop alrededor de `preapproval_plan` conviene descartar que
+  // el intermediario esté metiendo algo por su cuenta.
+  //
+  // El forense del SDK 3.6.0 dice que NO —`update` pasa el body ya serializado
+  // y el transporte solo añade cabeceras— pero leer un fichero y comprobarlo
+  // contra la API son cosas distintas. Esta acción lo comprueba: `fetch`
+  // nativo, cero clases del SDK, y el body construido aquí mismo.
+  //
+  // Y captura la trazabilidad del proveedor: si esto acaba en un ticket, el
+  // identificador de petición vale más que cualquier descripción nuestra.
+  if (accion === "cancel_raw") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
+    const grafia = cuerpo.status_spelling === "cancelled" ? "cancelled" : "canceled";
+    const url = `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`;
+    // La cabecera se arma aquí y no sale de aquí. Nunca se devuelve ni se
+    // registra: lo que viaja en `Authorization` no aparece en ninguna respuesta.
+    const cab = { "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+    /** Las cabeceras del proveedor que sirven para un ticket, y solo esas. */
+    const trazas = (h: Headers) => {
+      const out: Record<string, string> = {};
+      for (const k of ["x-request-id", "x-caller-id", "x-correlation-id",
+                       "x-amzn-trace-id", "date", "content-type"]) {
+        const v = h.get(k);
+        if (v) out[k] = v;
+      }
+      return out;
+    };
+    try {
+      // 1 · GET crudo
+      const r0 = await fetch(url, { headers: cab });
+      const j0 = (await r0.json()) as Record<string, unknown>;
+      if (!r0.ok) {
+        return NextResponse.json({ ok: false, fase: "antes", provider_http: r0.status,
+          provider_response: { message: j0.message ?? null, error: j0.error ?? null },
+          provider_request_id: trazas(r0.headers) });
+      }
+      const antes = estadoDe(j0);
+      const referencia = String(antes.external_reference ?? "");
+      // 2 · pagos actuales
+      const pagosAntes = await pagosDe(referencia);
+
+      // 3 y 4 · el body EXACTO, con el `reason` real leído en el paso 1
+      const cuerpoPut: Record<string, unknown> = { reason: antes.reason, status: grafia };
+
+      const r1 = await fetch(url, {
+        method: "PUT", headers: cab, body: JSON.stringify(cuerpoPut) });
+      const j1 = (await r1.json().catch(() => ({}))) as Record<string, unknown>;
+      const aceptado = r1.status >= 200 && r1.status < 300;
+
+      // 6 y 7 · releer, y los pagos de después
+      const r2 = await fetch(url, { headers: cab });
+      const j2 = (await r2.json()) as Record<string, unknown>;
+      const despues = estadoDe(j2);
+      const pagosDespues = await pagosDe(referencia);
+
+      const idsAntes = new Set(pagosAntes.payments.map((x) => String(x.id)));
+      const nuevos = pagosDespues.payments.filter((x) => !idsAntes.has(String(x.id)));
+
+      log_seguro("cancelacion_cruda", { provider_http: r1.status, grafia,
+        estado_despues: despues.status, pagos_nuevos: nuevos.length });
+
+      return NextResponse.json({
+        ok: aceptado,
+        request_transport: "native_fetch",
+        sdk_used_for_put: false,
+        request_url: url,
+        request_body_enviado: cuerpoPut,
+        claves_enviadas: Object.keys(cuerpoPut).sort(),
+        provider_http: r1.status,
+        provider_response: aceptado
+          ? { status: j1.status ?? null, id: j1.id ?? null }
+          : { message: j1.message ?? null, error: j1.error ?? null,
+              cause: j1.cause ?? null, status: j1.status ?? null },
+        provider_request_id: trazas(r1.headers),
+        state_before: antes,
+        state_after: despues,
+        payments_before: pagosAntes,
+        payments_after: pagosDespues,
+        veredicto: {
+          put_aceptado: aceptado,
+          cancelada: aceptado
+            && (despues.status === "cancelled" || despues.status === "canceled"),
+          pagos_nuevos: nuevos.length,
+          pagos_historicos_intactos:
+            JSON.stringify(pagosAntes.payments) === JSON.stringify(
+              pagosDespues.payments.filter((x) => idsAntes.has(String(x.id)))),
+        },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false, request_transport: "native_fetch",
         message: e instanceof Error ? e.name : "UnknownError" });
     }
   }

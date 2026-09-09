@@ -243,6 +243,51 @@ check("7 sexies. `qa_version` no llama al proveedor ni devuelve secretos", () =>
   assert(i < iToken, "qa_version debe responder aunque no haya credencial de proveedor");
 });
 
+check("7 septies. `cancel_raw` no usa el SDK y manda exactamente reason + status", () => {
+  const i = mp.indexOf('accion === "cancel_raw"');
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  assert(i > 0 && i < iAdmin, "cancel_raw debe ir antes del cliente administrativo");
+  const bloque = mp.slice(i, iAdmin);
+
+  // Ni una clase del SDK en el camino del PUT. Ese es todo el objetivo.
+  for (const delSdk of ["PreApproval", "new PreApproval", "MercadoPagoConfig",
+                        "proveedor.cancelSubscription", "proveedor."]) {
+    assert(!bloque.includes(delSdk), `cancel_raw no puede usar ${delSdk}`);
+  }
+  assert(/await fetch\(url, \{\s*\n?\s*method: "PUT"/.test(bloque)
+      || /method: "PUT", headers: cab, body: JSON\.stringify\(cuerpoPut\)/.test(bloque),
+    "el PUT tiene que ser fetch nativo");
+  assert(/request_transport: "native_fetch"/.test(bloque)
+      && /sdk_used_for_put: false/.test(bloque),
+    "la respuesta debe declarar el transporte");
+
+  // El body: exactamente dos claves.
+  const iIni = bloque.indexOf("const cuerpoPut");
+  const iFin = bloque.indexOf("};", iIni);
+  const body = bloque.slice(iIni, iFin >= 0 ? iFin + 2 : bloque.indexOf(";", iIni) + 1);
+  assert(/reason: antes\.reason/.test(body), "el reason debe ser el leído del proveedor");
+  assert(/status: grafia/.test(body), "el status sale de la grafía elegida");
+  for (const prohibido of ["preapproval_plan_id", "auto_recurring", "external_reference",
+                           "card_token_id", "back_url"]) {
+    assert(!body.includes(prohibido), `el body no puede llevar ${prohibido}`);
+  }
+  // Y `canceled` es el valor por omisión, como pide el encargo.
+  assert(/cuerpo\.status_spelling === "cancelled" \? "cancelled" : "canceled"/.test(bloque),
+    "por omisión debe enviarse «canceled»");
+
+  // El token no puede salir por ninguna vía.
+  assert(!/Authorization[^\n]*(NextResponse|log_seguro)/.test(bloque),
+    "la cabecera de autorización no se devuelve ni se registra");
+  // El token aparece UNA vez, y en la línea que arma `Authorization`. Contar es
+  // más honesto que trocear el texto: el intento anterior partía por "const cab"
+  // y se dejaba dentro la propia línea que buscaba.
+  const usosDelToken = bloque.split("MERCADOPAGO_ACCESS_TOKEN").length - 1;
+  assert(usosDelToken === 1, `el token debe usarse una sola vez y se usa ${usosDelToken}`);
+  const lineaToken = bloque.split("\n").find((l) => l.includes("MERCADOPAGO_ACCESS_TOKEN")) ?? "";
+  assert(lineaToken.includes("Authorization"),
+    "el token solo puede aparecer al construir la cabecera de autorización");
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");
