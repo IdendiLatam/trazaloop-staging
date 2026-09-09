@@ -481,6 +481,13 @@ async function manejar(request: Request) {
     const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
     return {
       id: j.id ?? null, status: j.status ?? null,
+      // `reason` es obligatorio al ACTUALIZAR una suscripción sin plan
+      // asociado, así que hay que leerlo para poder devolverlo tal cual.
+      reason: j.reason ?? null,
+      // Y se mira si de verdad hay plan: la suscripción se creó sin él, y esa
+      // es justamente la rama del validador que se activa al omitir `reason`.
+      preapproval_plan_id: Object.prototype.hasOwnProperty.call(j, "preapproval_plan_id")
+        ? (j.preapproval_plan_id ?? null) : "(ausente en la respuesta)",
       transaction_amount: ar.transaction_amount ?? null,
       currency_id: ar.currency_id ?? null,
       frequency: ar.frequency ?? null, frequency_type: ar.frequency_type ?? null,
@@ -601,7 +608,9 @@ async function manejar(request: Request) {
     if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
     const caso = leerCaso(cuerpo.case);
     if (!caso) return no("CASE_MUST_BE_UP_OR_DOWN", 400);
-    const destino = CASOS_01C[caso].destino;
+    // Modo `noop`: el MISMO importe. Sirve para demostrar que el PUT mínimo es
+    // aceptado sin mezclarlo con la pregunta financiera, que es otra.
+    const modo = cuerpo.mode === "noop" ? "noop" : "change";
 
     const cab = { "Content-Type": "application/json",
                   Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
@@ -630,10 +639,33 @@ async function manejar(request: Request) {
       const tAntes = new Date().toISOString();
 
       // 2 · EL CAMBIO
+      //
+      // POR QUÉ VA `reason`, Y POR QUÉ NO VA `preapproval_plan_id`
+      //
+      // El primer intento mandó solo `auto_recurring` y Mercado Pago contestó
+      // 400 «Invalid value for preapproval_plan_id» — un mensaje que despista,
+      // porque ese campo NO se enviaba: ni con valor, ni nulo, ni vacío. La
+      // lectura que encaja con la documentación es que, sin `reason`, el
+      // validador toma la rama de las suscripciones CON plan asociado y se
+      // queja del identificador de plan que allí sería obligatorio.
+      //
+      // `reason` no se inventa: se devuelve EL DE LA SUSCRIPCIÓN, tal y como
+      // acaba de leerse. Mandar otro sería renombrarla por el camino.
+      //
+      // Y no se manda nada más. Ni `status`, ni `card_token_id`, ni
+      // `external_reference`, ni `back_url`: cada campo de más es una forma
+      // nueva de que la respuesta signifique algo distinto de lo que se
+      // pregunta.
+      const importePedido = modo === "noop"
+        ? Number(antes.transaction_amount)
+        : CASOS_01C[caso].destino;
+      const cuerpoPut: Record<string, unknown> = {
+        reason: antes.reason,
+        auto_recurring: { transaction_amount: importePedido, currency_id: MONEDA_01C },
+      };
       const r1 = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`, {
         method: "PUT", headers: cab,
-        body: JSON.stringify({ auto_recurring: {
-          transaction_amount: destino, currency_id: MONEDA_01C } }),
+        body: JSON.stringify(cuerpoPut),
       });
       const j1 = (await r1.json()) as Record<string, unknown>;
       const tDespues = new Date().toISOString();
@@ -648,14 +680,20 @@ async function manejar(request: Request) {
       const idsAntes = new Set(pagosAntes.payments.map((p) => String(p.id)));
       const nuevos = pagosDespues.payments.filter((p) => !idsAntes.has(String(p.id)));
 
-      log_seguro("cambio_importe", { caso, http_put: r1.status,
+      log_seguro("cambio_importe", { caso, modo, http_put: r1.status,
         antes: antes.transaction_amount, despues: despues.transaction_amount,
         pagos_nuevos: nuevos.length });
 
       return NextResponse.json({
-        ok: r1.ok, case: caso,
+        ok: r1.ok, case: caso, mode: modo,
         http: { antes: r0.status, put: r1.status, despues: r2.status },
-        cambio_pedido: { de: antes.transaction_amount, a: destino, currency_id: MONEDA_01C },
+        // El body EXACTO que salió. Sin esto, discutir un 400 es discutir de oídas.
+        request_body_enviado: cuerpoPut,
+        claves_enviadas: Object.keys(cuerpoPut).sort(),
+        preapproval_plan_id_enviado: Object.prototype.hasOwnProperty.call(
+          cuerpoPut, "preapproval_plan_id"),
+        cambio_pedido: { de: antes.transaction_amount, a: importePedido,
+                         currency_id: MONEDA_01C },
         antes: { state: antes, payments: pagosAntes },
         put_response: r1.ok
           ? estadoDe(j1)
@@ -665,7 +703,7 @@ async function manejar(request: Request) {
         // El veredicto inmediato, calculado y no leído a ojo. Lo que pase en el
         // PRÓXIMO ciclo no se afirma aquí: todavía no ha ocurrido.
         veredicto_inmediato: {
-          importe_aplicado: despues.transaction_amount === destino,
+          importe_aplicado: despues.transaction_amount === importePedido,
           pagos_nuevos: nuevos.length,
           detalle_pagos_nuevos: nuevos,
           cobro_inmediato: nuevos.length > 0,

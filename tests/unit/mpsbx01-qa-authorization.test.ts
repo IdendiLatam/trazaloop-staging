@@ -164,6 +164,28 @@ check("7 ter. Las sondas de 01C no dependen de la base ni del dinero de quien ll
     "el estado posterior debe releerse, no tomarse de la respuesta del PUT");
 });
 
+check("7 quater. El PUT lleva el `reason` real y NUNCA preapproval_plan_id", () => {
+  const iCambio = mp.indexOf('accion === "probe_amount_change"');
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  const bloque = mp.slice(iCambio, iAdmin);
+  // El 400 decía «Invalid value for preapproval_plan_id» sin que se enviara.
+  // Que siga sin enviarse es exactamente lo que hay que fijar.
+  assert(!/preapproval_plan_id:\s/.test(bloque),
+    "el body del PUT no puede llevar preapproval_plan_id, ni siquiera como null");
+  // `reason` se toma de la suscripción leída, no de una constante ni del cuerpo.
+  assert(/reason: antes\.reason/.test(bloque),
+    "el reason debe ser el de la suscripción, leído del proveedor: inventarlo la renombraría");
+  assert(!/reason:\s*["`]/.test(bloque), "el reason no puede ser un literal");
+  assert(!/cuerpo\.reason/.test(bloque), "el reason no puede llegar de quien llama");
+  // Y nada más viaja en el body.
+  const m = bloque.match(/const cuerpoPut[^;]*;/s);
+  assert(Boolean(m), "no se encuentra la construcción del body");
+  for (const prohibido of ["status", "card_token_id", "external_reference", "back_url"]) {
+    assert(!new RegExp(`\\b${prohibido}:`).test(m![0]),
+      `el body mínimo no debe incluir ${prohibido}`);
+  }
+});
+
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
   const i = mp.indexOf('=== "authprobe"');
   assert(i > 0, "no se encuentra el diagnóstico");
