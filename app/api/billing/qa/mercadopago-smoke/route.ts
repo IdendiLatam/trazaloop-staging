@@ -45,7 +45,7 @@ export const runtime = "nodejs";
  * lista de acciones responde sola —se deriva del catálogo, no se escribe—, así
  * que no puede quedarse desfasada respecto de lo que la ruta admite.
  */
-const QA_MARCADOR = "MPSBX01-2026-09-09-cancel_raw";
+const QA_MARCADOR = "MPPLAN01-2026-09-09-create-subscribe-cancel";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -56,7 +56,8 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
-                  "qa_version"] as const;
+                  "qa_version", "plan_create", "plan_subscribe", "probe_plan_state",
+                  "plan_cancel_raw"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -252,6 +253,9 @@ async function manejar(request: Request) {
       acciones_disponibles: [...ACCIONES].sort(),
       cancel_min_available: (ACCIONES as readonly string[]).includes("cancel_min"),
       cancel_raw_available: (ACCIONES as readonly string[]).includes("cancel_raw"),
+      // MP-PLAN-01 · el experimento del plan asociado, en bloque.
+      mp_plan_01_available: ["plan_create", "plan_subscribe", "probe_plan_state",
+        "plan_cancel_raw"].every((a) => (ACCIONES as readonly string[]).includes(a)),
       probe_annual_available: (ACCIONES as readonly string[]).includes("probe_annual"),
       probe_amount_change_available:
         (ACCIONES as readonly string[]).includes("probe_amount_change"),
@@ -955,6 +959,232 @@ async function manejar(request: Request) {
       });
     } catch (e) {
       return NextResponse.json({ ok: false, request_transport: "native_fetch",
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // MP-PLAN-01 · ¿se puede CREAR → COBRAR → CANCELAR con plan asociado?
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ ESTE EXPERIMENTO EXISTE
+  //
+  // Sin plan asociado, el proveedor rechaza CUALQUIER `PUT /preapproval/{id}`
+  // —cambiar el importe y cancelar fallan igual— con «Invalid value for
+  // preapproval_plan_id», un campo que no se envía y que la suscripción no
+  // tiene. Con el SDK descartado como causa, la pregunta pasa a ser otra: si el
+  // camino soportado de verdad es el de las suscripciones CON plan.
+  //
+  // UNA SOLA PREGUNTA
+  //
+  // Crear, cobrar y cancelar. Nada más. Ni importe, ni prorrateo, ni bajada, ni
+  // cupones, ni anual, ni webhooks: mezclarlos aquí volvería a dar un resultado
+  // que no se sabe a qué atribuir.
+  //
+  // LAS CIFRAS SON CONSTANTES
+  //
+  // Como en todo lo demás de esta ruta, el dinero no llega de quien llama.
+  const PLAN01 = {
+    reason: "Trazaloop Full Monthly QA · MP-PLAN-01",
+    amount: 5000,
+    currency: "COP",
+    frequency: 1,
+    frequency_type: "months",
+  } as const;
+
+  const cabMp = () => ({ "Content-Type": "application/json",
+                         Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` });
+  /** Las cabeceras que sirven para un ticket de soporte, y solo esas. */
+  const trazasDe = (h: Headers) => {
+    const out: Record<string, string> = {};
+    for (const k of ["x-request-id", "x-caller-id", "x-correlation-id", "date"]) {
+      const v = h.get(k);
+      if (v) out[k] = v;
+    }
+    return out;
+  };
+
+  // --- 1 · el plan ---------------------------------------------------------
+  if (accion === "plan_create") {
+    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const cuerpoMp = {
+      reason: PLAN01.reason,
+      auto_recurring: {
+        frequency: PLAN01.frequency, frequency_type: PLAN01.frequency_type,
+        transaction_amount: PLAN01.amount, currency_id: PLAN01.currency,
+      },
+      back_url: `${sitio.replace(/\/$/, "")}/billing/return`,
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval_plan", {
+        method: "POST", headers: cabMp(), body: JSON.stringify(cuerpoMp) });
+      const j = (await r.json()) as Record<string, unknown>;
+      const ar = (j.auto_recurring ?? {}) as Record<string, unknown>;
+      log_seguro("plan_creado", { http: r.status, aceptado: r.ok });
+      return NextResponse.json({
+        ok: r.ok, http: r.status, request_transport: "native_fetch",
+        request_body_enviado: cuerpoMp,
+        provider_request_id: trazasDe(r.headers),
+        plan: r.ok ? {
+          preapproval_plan_id: j.id ?? null, status: j.status ?? null,
+          reason: j.reason ?? null,
+          transaction_amount: ar.transaction_amount ?? null,
+          currency_id: ar.currency_id ?? null,
+          frequency: ar.frequency ?? null, frequency_type: ar.frequency_type ?? null,
+          date_created: j.date_created ?? null,
+          init_point: j.init_point ?? null,
+        } : { message: j.message ?? null, error: j.error ?? null, cause: j.cause ?? null },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- 2 · la suscripción, atada al plan -----------------------------------
+  //
+  // Se manda `preapproval_plan_id` A PROPÓSITO: es justamente lo que distingue
+  // este experimento del anterior. Si el proveedor exige además un testigo de
+  // tarjeta, lo dirá, y entonces el camino es el `init_point` DEL PLAN.
+  if (accion === "plan_subscribe") {
+    const planId = String(cuerpo.preapproval_plan_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(planId)) return no("PREAPPROVAL_PLAN_ID_INVALID", 400);
+    const correo = String(cuerpo.email ?? "");
+    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
+      return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
+    }
+    const sitio = process.env.NEXT_PUBLIC_SITE_URL ?? "https://trazaloop.com";
+    const referencia = `MP-PLAN-01-sub-${randomUUID()}`;
+    const cuerpoMp = {
+      preapproval_plan_id: planId,
+      reason: PLAN01.reason,
+      external_reference: referencia,
+      payer_email: correo,
+      back_url: `${sitio.replace(/\/$/, "")}/billing/return`,
+      status: "pending",
+    };
+    try {
+      const r = await fetch("https://api.mercadopago.com/preapproval", {
+        method: "POST", headers: cabMp(), body: JSON.stringify(cuerpoMp) });
+      const j = (await r.json()) as Record<string, unknown>;
+      log_seguro("suscripcion_con_plan", { http: r.status, aceptado: r.ok, referencia });
+      return NextResponse.json({
+        ok: r.ok, http: r.status, request_transport: "native_fetch",
+        request_body_enviado: cuerpoMp,
+        provider_request_id: trazasDe(r.headers),
+        subscription: r.ok
+          ? { ...estadoDe(j), init_point: j.init_point ?? null }
+          : { message: j.message ?? null, error: j.error ?? null, cause: j.cause ?? null },
+        // Si el proveedor exige tarjeta, el camino es el enlace DEL PLAN.
+        siguiente_si_falla: "Si esto exige card_token_id, autoriza por el init_point "
+          + "del plan y luego usa probe_plan_state con el preapproval_plan_id.",
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- 3 · el estado, por id o buscando por plan ---------------------------
+  if (accion === "probe_plan_state") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    const planId = String(cuerpo.preapproval_plan_id ?? "");
+    try {
+      let j: Record<string, unknown> | null = null;
+      let http = 0;
+      if (/^[a-f0-9]{16,64}$/i.test(id)) {
+        const r = await fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`,
+          { headers: cabMp() });
+        http = r.status;
+        j = (await r.json()) as Record<string, unknown>;
+        if (!r.ok) return NextResponse.json({ ok: false, http, message: j.message ?? null });
+      } else if (/^[a-f0-9]{16,64}$/i.test(planId)) {
+        // Autorizar por el enlace del plan crea la suscripción del lado del
+        // proveedor: aquí se la busca, porque su identificador no lo elegimos.
+        const r = await fetch(
+          "https://api.mercadopago.com/preapproval/search"
+          + `?preapproval_plan_id=${encodeURIComponent(planId)}`, { headers: cabMp() });
+        http = r.status;
+        const b = (await r.json()) as Record<string, unknown>;
+        const filas = Array.isArray(b.results) ? (b.results as Record<string, unknown>[]) : [];
+        if (filas.length === 0) {
+          return NextResponse.json({ ok: false, http,
+            error: "SIN_SUSCRIPCIONES_PARA_ESE_PLAN",
+            explicacion: "El plan existe pero nadie lo ha autorizado todavía." });
+        }
+        j = filas[0];
+      } else {
+        return no("SE_NECESITA_PREAPPROVAL_ID_O_PLAN_ID", 400);
+      }
+      const estado = estadoDe(j);
+      const pagos = await pagosDe(String(estado.external_reference ?? ""));
+      return NextResponse.json({ ok: true, http, leido_en: new Date().toISOString(),
+        state: estado, payments: pagos,
+        verificaciones: {
+          esta_autorizada: estado.status === "authorized",
+          plan_asociado: estado.preapproval_plan_id,
+          importe_es_5000: Number(estado.transaction_amount) === PLAN01.amount,
+          ciclo_es_1_mes: estado.frequency === 1 && estado.frequency_type === "months",
+          tiene_primer_pago: Number(pagos.total) >= 1,
+          primer_pago_aprobado: pagos.payments.some((x) => x.status === "approved"),
+        } });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
+  // --- 4 · cancelar la que SÍ tiene plan -----------------------------------
+  //
+  // El body es el mínimo documentado para cambiar el estado. `reason` no se
+  // manda: con plan asociado no es requerido, y el experimento consiste
+  // precisamente en ver si esa es la diferencia.
+  if (accion === "plan_cancel_raw") {
+    const id = String(cuerpo.preapproval_id ?? "");
+    if (!/^[a-f0-9]{16,64}$/i.test(id)) return no("PREAPPROVAL_ID_INVALID", 400);
+    const grafia = cuerpo.status_spelling === "cancelled" ? "cancelled" : "canceled";
+    const url = `https://api.mercadopago.com/preapproval/${encodeURIComponent(id)}`;
+    try {
+      const r0 = await fetch(url, { headers: cabMp() });
+      const j0 = (await r0.json()) as Record<string, unknown>;
+      if (!r0.ok) return NextResponse.json({ ok: false, fase: "antes", http: r0.status,
+        message: j0.message ?? null });
+      const antes = estadoDe(j0);
+      const pagosAntes = await pagosDe(String(antes.external_reference ?? ""));
+
+      const cuerpoPut: Record<string, unknown> = { status: grafia };
+      const r1 = await fetch(url, { method: "PUT", headers: cabMp(),
+        body: JSON.stringify(cuerpoPut) });
+      const j1 = (await r1.json().catch(() => ({}))) as Record<string, unknown>;
+      const aceptado = r1.status >= 200 && r1.status < 300;
+
+      const r2 = await fetch(url, { headers: cabMp() });
+      const j2 = (await r2.json()) as Record<string, unknown>;
+      const despues = estadoDe(j2);
+      const pagosDespues = await pagosDe(String(antes.external_reference ?? ""));
+      const idsAntes = new Set(pagosAntes.payments.map((x) => String(x.id)));
+
+      log_seguro("cancelacion_con_plan", { http: r1.status, grafia,
+        estado_despues: despues.status });
+
+      return NextResponse.json({
+        ok: aceptado, request_transport: "native_fetch", sdk_used_for_put: false,
+        request_body_enviado: cuerpoPut, claves_enviadas: Object.keys(cuerpoPut).sort(),
+        provider_http: r1.status,
+        provider_response: aceptado ? { status: j1.status ?? null }
+          : { message: j1.message ?? null, error: j1.error ?? null, cause: j1.cause ?? null },
+        provider_request_id: trazasDe(r1.headers),
+        state_before: antes, state_after: despues,
+        payments_before: pagosAntes, payments_after: pagosDespues,
+        veredicto: {
+          put_aceptado: aceptado,
+          cancelada: aceptado
+            && (despues.status === "cancelled" || despues.status === "canceled"),
+          pagos_nuevos: pagosDespues.payments.filter((x) => !idsAntes.has(String(x.id))).length,
+        },
+      });
+    } catch (e) {
+      return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
     }
   }

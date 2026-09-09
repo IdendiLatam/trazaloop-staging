@@ -85,6 +85,21 @@ for (const ruta of RUTAS) {
 console.log("\nsolo mercadopago-smoke");
 const mp = readFileSync(RUTAS[0], "utf8");
 
+/**
+ * El trozo de código que pertenece a UNA acción, y solo a ella.
+ *
+ * Acotar por un hito lejano —el cliente administrativo, o un número de
+ * caracteres— parecía cómodo y ya ha dado dos rojos falsos: al insertar una
+ * acción nueva delante, las pruebas de las viejas empezaron a leer código
+ * ajeno. Un bloque termina donde empieza la siguiente acción.
+ */
+function bloqueDe(accion: string): string {
+  const ini = mp.indexOf(`accion === "${accion}"`);
+  if (ini < 0) throw new Error(`no se encuentra la acción ${accion}`);
+  const sig = mp.indexOf('if (accion === "', ini + 10);
+  return mp.slice(ini, sig > ini ? sig : mp.length);
+}
+
 check("5. El camino de máquina NO consulta platform_staff", () => {
   const iAuto = mp.indexOf("const porAutomatizacion");
   const iCheck = mp.indexOf("checkPlatformStatus()");
@@ -110,7 +125,7 @@ check("7. La sonda del pagador es autocontenida", () => {
   const iAdmin = mp.indexOf("const admin = createAdminClient()");
   assert(iSonda > 0 && iSonda < iAdmin,
     "la sonda debe ir antes del cliente administrativo");
-  const bloque = mp.slice(iSonda, iAdmin);
+  const bloque = bloqueDe("probe_payer_email");
   for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc("]) {
     assert(!bloque.includes(prohibido),
       `la sonda no puede depender de ${prohibido}: es una pregunta al proveedor`);
@@ -121,7 +136,7 @@ check("7 bis. La sonda anual también es autocontenida", () => {
   const iSonda = mp.indexOf('if (accion === "probe_annual")');
   const iAdmin = mp.indexOf("const admin = createAdminClient()");
   assert(iSonda > 0 && iSonda < iAdmin, "la sonda anual debe ir antes del cliente administrativo");
-  const bloque = mp.slice(iSonda, iAdmin);
+  const bloque = bloqueDe("probe_annual");
   for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc("]) {
     assert(!bloque.includes(prohibido), `la sonda anual no puede depender de ${prohibido}`);
   }
@@ -165,9 +180,7 @@ check("7 ter. Las sondas de 01C no dependen de la base ni del dinero de quien ll
 });
 
 check("7 quater. El PUT lleva el `reason` real y NUNCA preapproval_plan_id", () => {
-  const iCambio = mp.indexOf('accion === "probe_amount_change"');
-  const iAdmin = mp.indexOf("const admin = createAdminClient()");
-  const bloque = mp.slice(iCambio, iAdmin);
+  const bloque = bloqueDe("probe_amount_change");
   // El 400 decía «Invalid value for preapproval_plan_id» sin que se enviara.
   // Que siga sin enviarse es exactamente lo que hay que fijar.
   assert(!/preapproval_plan_id:\s/.test(bloque),
@@ -194,7 +207,7 @@ check("7 quinquies. La cancelación mínima manda DOS claves y ninguna más", ()
   const i = mp.indexOf('accion === "cancel_min"');
   const iAdmin = mp.indexOf("const admin = createAdminClient()");
   assert(i > 0 && i < iAdmin, "cancel_min debe ir antes del cliente administrativo");
-  const bloque = mp.slice(i, iAdmin);
+  const bloque = bloqueDe("cancel_min");
   const iIni = bloque.indexOf("const cuerpoPut");
   const iFin = bloque.indexOf("};", iIni);
   assert(iIni >= 0 && iFin > iIni, "no se encuentra la construcción del body");
@@ -247,7 +260,7 @@ check("7 septies. `cancel_raw` no usa el SDK y manda exactamente reason + status
   const i = mp.indexOf('accion === "cancel_raw"');
   const iAdmin = mp.indexOf("const admin = createAdminClient()");
   assert(i > 0 && i < iAdmin, "cancel_raw debe ir antes del cliente administrativo");
-  const bloque = mp.slice(i, iAdmin);
+  const bloque = bloqueDe("cancel_raw");
 
   // Ni una clase del SDK en el camino del PUT. Ese es todo el objetivo.
   for (const delSdk of ["PreApproval", "new PreApproval", "MercadoPagoConfig",
@@ -278,14 +291,58 @@ check("7 septies. `cancel_raw` no usa el SDK y manda exactamente reason + status
   // El token no puede salir por ninguna vía.
   assert(!/Authorization[^\n]*(NextResponse|log_seguro)/.test(bloque),
     "la cabecera de autorización no se devuelve ni se registra");
-  // El token aparece UNA vez, y en la línea que arma `Authorization`. Contar es
-  // más honesto que trocear el texto: el intento anterior partía por "const cab"
-  // y se dejaba dentro la propia línea que buscaba.
-  const usosDelToken = bloque.split("MERCADOPAGO_ACCESS_TOKEN").length - 1;
-  assert(usosDelToken === 1, `el token debe usarse una sola vez y se usa ${usosDelToken}`);
-  const lineaToken = bloque.split("\n").find((l) => l.includes("MERCADOPAGO_ACCESS_TOKEN")) ?? "";
-  assert(lineaToken.includes("Authorization"),
-    "el token solo puede aparecer al construir la cabecera de autorización");
+  // El invariante NO es cuántas veces aparece el token —contar mide el código
+  // vecino, y ya dio un rojo falso— sino que CADA aparición esté armando la
+  // cabecera de autorización y ninguna otra cosa.
+  const lineasToken = bloque.split("\n").filter((l) => l.includes("MERCADOPAGO_ACCESS_TOKEN"));
+  assert(lineasToken.length > 0, "el token tiene que usarse para autenticar");
+  for (const l of lineasToken) {
+    assert(l.includes("Authorization"),
+      `el token solo puede armar la cabecera, y aparece en: ${l.trim().slice(0, 60)}`);
+  }
+});
+
+check("7 octies. MP-PLAN-01 · cifras constantes, sin SDK y sin base", () => {
+  const i = mp.indexOf("const PLAN01 = {");
+  const iAdmin = mp.indexOf("const admin = createAdminClient()");
+  assert(i > 0 && i < iAdmin, "MP-PLAN-01 debe ir antes del cliente administrativo");
+  const bloque = mp.slice(i, iAdmin);
+
+  // Ni base, ni SDK, ni dinero de quien llama.
+  for (const prohibido of ["billing_checkout_intents", "admin.from(", "admin.rpc(",
+                           "PreApproval", "proveedor."]) {
+    assert(!bloque.includes(prohibido), `MP-PLAN-01 no puede usar ${prohibido}`);
+  }
+  assert(/amount: 5000/.test(bloque) && /currency: "COP"/.test(bloque)
+      && /frequency: 1/.test(bloque) && /frequency_type: "months"/.test(bloque),
+    "las cifras del plan deben estar fijadas en el código");
+  assert(!/transaction_amount:\s*Number\(cuerpo|cuerpo\.amount/.test(bloque),
+    "el importe no puede llegar de quien llama");
+
+  // La suscripción va atada al plan a propósito: eso es el experimento.
+  const iSub = bloque.indexOf('accion === "plan_subscribe"');
+  const bloqueSub = bloque.slice(iSub, bloque.indexOf('accion === "probe_plan_state"'));
+  assert(/preapproval_plan_id: planId/.test(bloqueSub),
+    "la suscripción tiene que declarar su plan");
+  assert(/PREAPPROVAL_PLAN_ID_INVALID/.test(bloqueSub),
+    "el identificador de plan debe validarse antes de usarse");
+
+  // Y la cancelación con plan manda SOLO el estado: si hiciera falta `reason`,
+  // seria otra pregunta distinta y habria que verlo, no suponerlo.
+  const iCan = bloque.indexOf('accion === "plan_cancel_raw"');
+  const bloqueCan = bloque.slice(iCan);
+  const iIni = bloqueCan.indexOf("const cuerpoPut");
+  const body = bloqueCan.slice(iIni, bloqueCan.indexOf(";", iIni) + 1);
+  assert(/status: grafia/.test(body), "el body debe llevar el estado");
+  assert(!body.includes("preapproval_plan_id"),
+    "no se reenvía el plan al cancelar: ya está en el objeto");
+  assert(/sdk_used_for_put: false/.test(bloqueCan), "debe declarar que no usa el SDK");
+
+  // Cada aparición del token arma la cabecera, y ninguna otra cosa.
+  for (const l of bloque.split("\n").filter((x) => x.includes("MERCADOPAGO_ACCESS_TOKEN"))) {
+    assert(l.includes("Authorization"),
+      `el token solo puede armar la cabecera, y aparece en: ${l.trim().slice(0, 60)}`);
+  }
 });
 
 check("8. El diagnóstico de autorización no devuelve el secreto", () => {
