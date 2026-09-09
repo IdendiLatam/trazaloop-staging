@@ -178,7 +178,11 @@ check("7 quater. El PUT lleva el `reason` real y NUNCA preapproval_plan_id", () 
   assert(!/reason:\s*["`]/.test(bloque), "el reason no puede ser un literal");
   assert(!/cuerpo\.reason/.test(bloque), "el reason no puede llegar de quien llama");
   // Y nada más viaja en el body.
-  const m = bloque.match(/const cuerpoPut[^;]*;/s);
+  // Sin la bandera `s`: se busca el bloque hasta el cierre de la llave, y se
+  // hace con índices en vez de con una expresión que el objetivo no admite.
+  const iIni = bloque.indexOf("const cuerpoPut");
+  const iFin = bloque.indexOf("};", iIni);
+  const m = iIni >= 0 && iFin > iIni ? [bloque.slice(iIni, iFin + 2)] : null;
   assert(Boolean(m), "no se encuentra la construcción del body");
   for (const prohibido of ["status", "card_token_id", "external_reference", "back_url"]) {
     assert(!new RegExp(`\\b${prohibido}:`).test(m![0]),

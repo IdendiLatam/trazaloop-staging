@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import { recurrenceFor } from "@/lib/billing/mercadopago/mapping";
+import { veredictoDeCambio } from "@/lib/billing/mercadopago/qa-amount-verdict";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -700,13 +701,20 @@ async function manejar(request: Request) {
           : { message: j1.message ?? null, error: j1.error ?? null, cause: j1.cause ?? null },
         despues: { state: despues, payments: pagosDespues },
         instantes: { antes: tAntes, despues: tDespues },
-        // El veredicto inmediato, calculado y no leído a ojo. Lo que pase en el
-        // PRÓXIMO ciclo no se afirma aquí: todavía no ha ocurrido.
+        // El veredicto inmediato, calculado por una función pura y ejercitada
+        // con los casos reales —incluido el 400 que llegó a decir «aplicado»
+        // porque en un NO-OP el número coincidía—. Lo que pase en el PRÓXIMO
+        // ciclo no se afirma aquí: todavía no ha ocurrido.
         veredicto_inmediato: {
-          importe_aplicado: despues.transaction_amount === importePedido,
+          ...veredictoDeCambio({
+            putHttp: r1.status,
+            antes: antes.transaction_amount === null ? null : Number(antes.transaction_amount),
+            despues: despues.transaction_amount === null ? null : Number(despues.transaction_amount),
+            objetivo: importePedido,
+            pagosNuevos: nuevos.length,
+          }),
           pagos_nuevos: nuevos.length,
           detalle_pagos_nuevos: nuevos,
-          cobro_inmediato: nuevos.length > 0,
           next_payment_date_antes: antes.next_payment_date,
           next_payment_date_despues: despues.next_payment_date,
           next_payment_date_cambio: antes.next_payment_date !== despues.next_payment_date,
