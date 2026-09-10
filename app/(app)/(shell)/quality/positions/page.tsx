@@ -11,6 +11,7 @@ import {
   getQualityPositionUsage,
 } from "@/lib/db/quality-processes";
 import { canManagePositions } from "@/lib/domain/quality-processes";
+import { PositionsImport } from "@/components/domain/quality/positions-import";
 import { QualityPositionsManager } from "@/components/domain/quality/positions-manager";
 import { ExportPdfButton } from "@/components/ui/export-pdf-button";
 
@@ -54,6 +55,8 @@ export default async function QualityPositionsPage() {
           se pierde quién respondía por él en una fecha determinada.
         </p>
       </header>
+
+      {canManagePositions(org.roleCode) ? <PositionsImport /> : null}
 
       <QualityPositionsManager
         positions={positions}
