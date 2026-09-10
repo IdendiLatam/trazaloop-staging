@@ -12,6 +12,7 @@ import {
   setGroupActive, setRequirementRelevance, setStrategyStatus, supersedeAssessment,
   unlinkPeripheral, updateStrategy,
   type StakeholderOwnerKind,
+  setExternalPartyStatus, searchIdentities,
 } from "@/lib/db/quality-interested-parties";
 import {
   canManageInterestedParties, DOMAIN_ERRORS, ENTRY_KINDS, LINK_KINDS,
@@ -201,6 +202,59 @@ export async function setGroupActiveAction(
 // ---------------------------------------------------------------------------
 // La identidad externa
 // ---------------------------------------------------------------------------
+
+/**
+ * Retirar una identidad externa.
+ *
+ * NO es borrar, y la pantalla no debe llamarlo así. Una parte interesada que ya
+ * fue analizada, evaluada como proveedor o incluida en el alcance de una
+ * auditoría es historia: la base lo defiende con `RESTRICT` y el producto lo
+ * defiende aquí ofreciendo la operación correcta. Retirar la saca de los
+ * selectores y del alta; no toca ni un análisis ni una referencia pasada.
+ */
+export async function retireExternalPartyAction(
+  _prev: IpActionState, formData: FormData
+): Promise<IpActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  const id = text(formData, "party_id");
+  if (!id) return { error: "Falta la parte interesada." };
+  return state(
+    await setExternalPartyStatus(g.ok.organizationId, id, "retired"),
+    "Parte interesada retirada. Su historia se conserva."
+  );
+}
+
+/** Devolverla al uso. Idempotente: reactivar lo ya activo no escribe nada. */
+export async function reactivateExternalPartyAction(
+  _prev: IpActionState, formData: FormData
+): Promise<IpActionState> {
+  const g = await gate();
+  if (!g.ok) return { error: g.error };
+  const id = text(formData, "party_id");
+  if (!id) return { error: "Falta la parte interesada." };
+  return state(
+    await setExternalPartyStatus(g.ok.organizationId, id, "active"),
+    "Parte interesada reactivada."
+  );
+}
+
+/**
+ * Buscar una IDENTIDAD, tenga análisis o no.
+ *
+ * El buscador del listado consulta análisis, así que una parte recién dada de
+ * alta era invisible en él. Ésta mira la tabla de identidad, que es donde vive
+ * el nombre, y compara contra la columna normalizada: lo mismo que la unicidad
+ * considera «el mismo nombre» es lo que aquí se encuentra.
+ */
+export async function searchIdentitiesAction(
+  q: string, opciones: { kind?: "external_party" | "group"; includeRetired?: boolean } = {}
+) {
+  const g = await gate();
+  if (!g.ok) return { error: g.error, rows: [] as Awaited<ReturnType<typeof searchIdentities>> };
+  const rows = await searchIdentities(g.ok.organizationId, { q, ...opciones });
+  return { error: null, rows };
+}
 
 /**
  * Registrar una entidad externa que todavía no existe.

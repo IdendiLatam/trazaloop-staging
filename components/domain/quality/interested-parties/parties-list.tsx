@@ -53,10 +53,15 @@ export function InterestedPartiesList({
 
   return (
     <section className="space-y-4">
+      {/* STABILIZATION-03 · Este buscador consulta ANÁLISIS, no identidades, y
+          la etiqueta lo dice. Prometía «buscar por nombre de la parte» y una
+          parte recién dada de alta y todavía sin analizar era invisible: quien
+          la buscaba no la encontraba y la volvía a crear. Buscar identidades
+          está donde se crean, en el panel de alta. */}
       <ListSearchForm
         basePath={basePath}
         q={params.q}
-        placeholder="Buscar por nombre de la parte o del colectivo"
+        placeholder="Buscar en los análisis por nombre de la parte o del colectivo"
         hiddenParams={hidden}
       />
 

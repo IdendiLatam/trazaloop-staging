@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { IdentityFinder } from "./identity-finder";
 import { ErrorAlert, SuccessAlert } from "@/components/ui/alert";
 import {
   RELEVANCE_LABEL, RELEVANCE_STATES, SUGGESTED_METHOD,
@@ -69,6 +70,8 @@ export function NewPartyPanel({
             Categorías: clasificar es lo que después permite filtrar y revisar por grupos.
           </p>
         ) : null}
+
+        <IdentityFinder />
 
         <form action={analisisAction} className="mt-3 space-y-3">
           <h3 className="text-sm font-semibold">Nuevo análisis</h3>

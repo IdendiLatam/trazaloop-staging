@@ -128,6 +128,21 @@ export const DOMAIN_ERRORS = {
   permission_denied: "Tu rol no permite administrar partes interesadas.",
   review_target_required:
     "Una revisión tiene que revisar algo: el análisis, la estrategia o los dos.",
+
+  // STABILIZATION-03 · La identidad es única por empresa, y el nombre de una
+  // identidad retirada sigue siendo suyo. Los dos casos se separan porque la
+  // respuesta útil es distinta: uno es «ya la tienes», el otro es «la tienes,
+  // guardada, y puedes recuperarla».
+  external_party_duplicate:
+    "Ya existe una parte interesada con ese nombre.",
+  external_party_duplicate_retired:
+    "Ya existe una parte interesada retirada con ese nombre. Puedes reactivarla.",
+  stakeholder_group_duplicate:
+    "Ya existe un colectivo con ese nombre.",
+  stakeholder_group_duplicate_inactive:
+    "Ya existe un colectivo inactivo con ese nombre. Puedes reactivarlo.",
+  external_party_status_invalid:
+    "Ese estado no existe para una parte interesada.",
 } as const;
 
 export type DomainErrorCode = keyof typeof DOMAIN_ERRORS;
@@ -162,6 +177,12 @@ export function mapDbError(error: { message?: string; code?: string } | null): D
   if (m.includes("score_needs_method")) return "score_needs_method";
   if (m.includes("current_party_uniq") || m.includes("current_group_uniq")
       || m.includes("current_uniq")) return "duplicate_current";
+  // STABILIZATION-03 · Las dos unicidades de identidad de 0188. Se distinguen
+  // por el nombre del índice, no por el texto del mensaje, que cambia con la
+  // versión de PostgreSQL.
+  if (m.includes("quality_external_parties_org_name_uniq")) return "external_party_duplicate";
+  if (m.includes("quality_stakeholder_groups_org_name_uniq")) return "stakeholder_group_duplicate";
+  if (m.includes("external_party_status_invalid")) return "external_party_status_invalid";
   if (m.includes("no permite")) return "permission_denied";
   if (m.includes("foreign key") || m.includes("violates foreign key")) return "cross_tenant_reference";
   return null;

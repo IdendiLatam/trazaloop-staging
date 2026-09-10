@@ -6,6 +6,7 @@ import {
   normalizePageQuery, pageRange, sanitizeSearchTerm, type PageResult,
 } from "@/lib/domain/pagination";
 import { readAllStrict } from "@/lib/db/paged-read";
+import { normalizarIdentidad, terminoDeBusqueda } from "@/lib/domain/identidad-normalizada";
 import {
   done, fail, mapDbError, reviewState, today,
   PERIPHERAL_REF_KINDS,
@@ -265,7 +266,23 @@ export async function createGroup(
       name: input.name, description: input.description ?? null,
     })
     .select("id").single();
-  if (error || !data) return fail(mapDbError(error) ?? "permission_denied");
+  if (error || !data) {
+    const codigo = mapDbError(error);
+    if (codigo === "stakeholder_group_duplicate") {
+      const { data: existente } = await supabase
+        .from("quality_stakeholder_groups")
+        .select("is_active")
+        .eq("organization_id", orgId)
+        .eq("normalized_name", normalizarIdentidad(input.name))
+        .maybeSingle();
+      // El ciclo de vida de los colectivos es `is_active`, no `status`. No se
+      // inventa una columna por simetría con las partes externas.
+      return fail((existente as { is_active?: boolean } | null)?.is_active === false
+        ? "stakeholder_group_duplicate_inactive"
+        : "stakeholder_group_duplicate");
+    }
+    return fail(codigo ?? "permission_denied");
+  }
   return done(data.id as string);
 }
 
@@ -361,6 +378,111 @@ async function mapAssessments(
 }
 
 // ===========================================================================
+// ===========================================================================
+// BUSCAR UNA IDENTIDAD · que no es lo mismo que buscar un análisis
+// ===========================================================================
+//
+// EL DEFECTO QUE ESTO CIERRA
+//
+// `searchAssessments` consulta `quality_stakeholder_assessments`: resuelve los
+// identificadores que casan por nombre y luego filtra la página de ANÁLISIS.
+// Es correcto para lo que es —un listado de análisis—, pero el campo de
+// búsqueda prometía «buscar por nombre de la parte o del colectivo», y una
+// parte recién dada de alta y todavía sin analizar era INVISIBLE. Medido:
+//
+//   q="ABC"       → 1   (la parte que sí tenía análisis)
+//   q="Comunidad" → 0   (el colectivo existe, sin análisis)
+//
+// Así que hay dos superficies, y esta busca IDENTIDADES: las encuentra tengan
+// cero análisis o cincuenta.
+//
+// LA COMPARACIÓN VA CONTRA `normalized_name`, no contra el nombre visible. Es
+// la misma columna sobre la que manda el índice único de 0188, así que lo que
+// la unicidad considera «el mismo nombre» es exactamente lo que la búsqueda
+// encuentra. De ahí salen gratis dos propiedades que con `ilike` sobre el
+// nombre crudo no se tienen: insensible a mayúsculas Y a acentos.
+
+export type IdentityRow = {
+  id: string;
+  kind: SubjectKind;
+  name: string;
+  /** Para partes externas: active | inactive | retired. Para colectivos, el
+   *  ciclo de vida es `is_active`, y se traduce sin inventar una columna. */
+  status: string;
+  taxId: string | null;
+  hasAssessment: boolean;
+};
+
+export async function searchIdentities(
+  orgId: string,
+  params: { q?: string; kind?: SubjectKind; includeRetired?: boolean; limit?: number } = {},
+  client?: Db
+): Promise<IdentityRow[]> {
+  const supabase = await db(client);
+  const limite = Math.min(Math.max(params.limit ?? 50, 1), 200);
+  // `%` y `_` se escapan dentro de `terminoDeBusqueda`: quien busca un nombre no
+  // está escribiendo un patrón, y sin escaparlos «%» devolvería la tabla entera.
+  const termino = terminoDeBusqueda(params.q ?? "");
+
+  const partes = params.kind === "group" ? null : await (async () => {
+    let q = supabase
+      .from("quality_external_parties")
+      .select("id, legal_name, tax_id, status")
+      .eq("organization_id", orgId)
+      .order("legal_name")
+      .limit(limite);
+    if (termino) q = q.like("normalized_name", `%${termino}%`);
+    if (!params.includeRetired) q = q.in("status", ["active", "inactive"]);
+    return q;
+  })();
+
+  const grupos = params.kind === "external_party" ? null : await (async () => {
+    let q = supabase
+      .from("quality_stakeholder_groups")
+      .select("id, name, is_active")
+      .eq("organization_id", orgId)
+      .order("name")
+      .limit(limite);
+    if (termino) q = q.like("normalized_name", `%${termino}%`);
+    if (!params.includeRetired) q = q.eq("is_active", true);
+    return q;
+  })();
+
+  const filas: IdentityRow[] = [
+    ...((partes?.data ?? []) as Record<string, unknown>[]).map((r) => ({
+      id: String(r.id), kind: "external_party" as SubjectKind,
+      name: String(r.legal_name), status: String(r.status),
+      taxId: (r.tax_id as string | null) ?? null, hasAssessment: false,
+    })),
+    ...((grupos?.data ?? []) as Record<string, unknown>[]).map((r) => ({
+      id: String(r.id), kind: "group" as SubjectKind,
+      name: String(r.name), status: r.is_active === false ? "inactive" : "active",
+      taxId: null, hasAssessment: false,
+    })),
+  ];
+  if (filas.length === 0) return [];
+
+  // Y se dice cuáles ya están analizadas, para que quien busque sepa si tiene
+  // que abrir el análisis o crearlo. Una sola consulta, no una por fila.
+  const ids = filas.map((f) => f.id);
+  const { data: conAnalisis } = await supabase
+    .from("quality_stakeholder_assessments")
+    .select("external_party_id, stakeholder_group_id")
+    .eq("organization_id", orgId)
+    .is("effective_to", null)
+    .or(`external_party_id.in.(${ids.map((i) => `"${i}"`).join(",")}),`
+      + `stakeholder_group_id.in.(${ids.map((i) => `"${i}"`).join(",")})`);
+  const analizadas = new Set<string>();
+  for (const r of (conAnalisis ?? []) as Record<string, unknown>[]) {
+    if (r.external_party_id) analizadas.add(String(r.external_party_id));
+    if (r.stakeholder_group_id) analizadas.add(String(r.stakeholder_group_id));
+  }
+
+  return filas
+    .map((f) => ({ ...f, hasAssessment: analizadas.has(f.id) }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
 // LISTADO · inquilino → filtros → búsqueda → conteo → orden → rango
 // ---------------------------------------------------------------------------
 // La búsqueda es por ETIQUETA del sujeto, y la etiqueta vive en otras dos
@@ -1836,8 +1958,52 @@ export async function createExternalParty(
       city: input.city ?? null,
     })
     .select("id").single();
-  if (error || !data) return fail(mapDbError(error) ?? "permission_denied");
+  if (error || !data) {
+    const codigo = mapDbError(error);
+    // STABILIZATION-03 · Un choque de identidad no es «no tienes permiso». Y
+    // hay dos respuestas distintas: si la que existe está retirada, lo útil no
+    // es negarse, es ofrecer recuperarla. Se pregunta DESPUÉS del choque, no
+    // antes: la comprobación previa no protege de dos altas simultáneas, y la
+    // autoridad es el índice único.
+    if (codigo === "external_party_duplicate") {
+      const { data: existente } = await supabase
+        .from("quality_external_parties")
+        .select("status")
+        .eq("organization_id", orgId)
+        .eq("normalized_name", normalizarIdentidad(input.legalName))
+        .maybeSingle();
+      const estado = (existente as { status?: string } | null)?.status;
+      return fail(estado === "retired" || estado === "inactive"
+        ? "external_party_duplicate_retired"
+        : "external_party_duplicate");
+    }
+    return fail(codigo ?? "permission_denied");
+  }
   return done(data.id as string);
+}
+
+/**
+ * Retirar o reactivar una identidad externa.
+ *
+ * La columna `status` existía desde 0149 y nadie la escribía después del alta:
+ * el archivado estaba construido y desconectado, y por eso la única salida
+ * aparente era borrar. Va por la primitiva gobernada de 0188, que comprueba la
+ * organización contra la sesión y es idempotente.
+ *
+ * No borra historia: los análisis, las fichas de proveedor o cliente y los
+ * alcances de auditoría que ya la referencian siguen exactamente igual.
+ */
+export async function setExternalPartyStatus(
+  orgId: string, partyId: string, status: "active" | "inactive" | "retired", client?: Db
+): Promise<DomainResult<"changed" | "unchanged">> {
+  const supabase = await db(client);
+  const { data, error } = await supabase.rpc("quality_set_external_party_status", {
+    p_organization_id: orgId, p_party_id: partyId, p_status: status,
+  });
+  if (error) return fail(mapDbError(error) ?? "permission_denied");
+  const outcome = (data as { outcome?: string } | null)?.outcome;
+  if (outcome === "not_found") return fail("stakeholder_not_found");
+  return done(outcome === "changed" ? "changed" : "unchanged");
 }
 
 /**
