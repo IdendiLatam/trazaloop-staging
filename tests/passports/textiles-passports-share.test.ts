@@ -128,6 +128,18 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
     "0183_billing_operations_alerts.sql",
+    // MP0184 · propiedad de la recurrencia por proveedor: `billing_due_renewals`
+    // deja de reclamar las suscripciones que cobra el proveedor. Todo lo que
+    // crea es `billing_*` —capabilities, `billing_renewal_owner`,
+    // `v_billing_renewal_excluded`—; no nombra ni una vez pasaportes, fibras,
+    // evidencias ni enlaces compartidos, así que la frontera que vigila esta
+    // suite no se mueve.
+    "0184_billing_provider_renewal_ownership.sql",
+    // MP0185 · proyecciones gobernadas de plan del proveedor: la fila que ata
+    // una revisión de plan a un `preapproval_plan` de Mercado Pago, congelando
+    // el importe con el que nació. Igual que la anterior, vive entera en
+    // `billing_*` y no toca la superficie Textiles/DPP.
+    "0185_billing_provider_plans.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
