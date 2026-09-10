@@ -2,6 +2,7 @@ import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tasaCanonicaQA } from "../support/fixture-cleanup";
 import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local", quiet: true });
 
@@ -847,59 +848,35 @@ async function main() {
 
   // ---- Limpieza ----------------------------------------------------------
   //
-  // Va por la conexión del PROPIETARIO y en este orden a propósito. Con
-  // `service_role` no se puede: los ciclos tienen los privilegios revocados
-  // —que es justo lo que la prueba 26 demuestra—, así que un borrado desde la
-  // aplicación fallaba en silencio y dejaba filas que rompían la ejecución
-  // siguiente. El disparador de append-only se baja solo aquí, solo en local, y
-  // se vuelve a subir en la misma transacción.
-  const { rows: conOrg } = await pg.query(
-    `select c.relname as tabla
-       from pg_constraint k
-       join pg_class c on c.oid = k.conrelid
-       join pg_class r on r.oid = k.confrelid
-       join pg_namespace n on n.oid = c.relnamespace
-      where k.contype = 'f' and n.nspname = 'public' and r.relname = 'organizations'
-        and c.relname <> 'organizations'`);
-  const tablas = conOrg.map((r: { tabla: string }) => r.tabla);
+  // TEST-HYGIENE-05 · Aquí había una copia a mano del barrido por claves
+  // ajenas: bajaba el disparador de solo-añadir SIN punto de retorno, se tragaba
+  // los errores de cada borrado con `catch {}` y no comprobaba absolutamente
+  // nada al terminar. Tres copias del mismo algoritmo divergen en cuanto una se
+  // toca, y la que calla no se puede diagnosticar: eso fue exactamente lo que
+  // dejó fixtures en Staging y hubo que barrer a mano.
+  //
+  // El ayudante común aparta el disparador SOLO si este fixture tiene ciclos,
+  // lo hace dentro de un punto de retorno, lo vuelve a poner y COMPRUEBA que
+  // quedó activo. Y devuelve lo que no pudo hacer.
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
 
-  // En UNA transacción y sobre TODAS las organizaciones a la vez, no de una en
-  // una: las pruebas de identidad cruzan a propósito intentos de una empresa
-  // con suscripciones de otra, y borrando por separado la primera se queda
-  // enganchada en la segunda.
-  await pg.query("begin");
-  await pg.query(`alter table public.billing_provider_cycles
-                    disable trigger billing_provider_cycle_is_append_only_trg`);
-  for (const q of [
-    "update public.billing_subscription_periods set settled_payment_id = null where organization_id = any($1::uuid[])",
-    "update public.billing_quotes set subscription_id = null where organization_id = any($1::uuid[])",
-    `update public.billing_checkout_intents set billing_subscription_id = null
-      where billing_subscription_id in (select id from public.billing_subscriptions
-                                         where organization_id = any($1::uuid[]))`,
-  ]) await pg.query(q, [orgs]);
+  await check("28. La suite no deja un solo fixture detrás", async () => {
+    assert(residuo.problemas.length === 0,
+      `la limpieza informó de: ${residuo.problemas.join(" · ")}`);
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && Object.keys(residuo.porTabla).length === 0,
+      `quedaron fixtures: ${describirResiduo(residuo)}`);
+    const { rows: ciclos } = await pg.query(
+      `select count(*)::int n from public.billing_provider_cycles
+        where organization_id = any($1::uuid[])`, [orgs]);
+    assert(ciclos[0].n === 0, `quedaron ${ciclos[0].n} ciclos de proveedor`);
+    const { rows: trg } = await pg.query(
+      `select tgenabled from pg_trigger
+        where tgname = 'billing_provider_cycle_is_append_only_trg'`);
+    assert(trg[0]?.tgenabled !== 'D',
+      "el disparador de solo-añadir de los ciclos quedó deshabilitado");
+  });
 
-  let quedan = [...tablas];
-  for (let vuelta = 0; vuelta < 8 && quedan.length > 0; vuelta += 1) {
-    const fallaron: string[] = [];
-    for (const t of quedan) {
-      await pg.query("savepoint t");
-      try {
-        await pg.query(`delete from public.${t} where organization_id = any($1::uuid[])`, [orgs]);
-        await pg.query("release savepoint t");
-      } catch {
-        await pg.query("rollback to savepoint t");
-        fallaron.push(t);
-      }
-    }
-    if (fallaron.length === quedan.length) break;
-    quedan = fallaron;
-  }
-  await pg.query("delete from public.organizations where id = any($1::uuid[])", [orgs]);
-  await pg.query(`alter table public.billing_provider_cycles
-                    enable trigger billing_provider_cycle_is_append_only_trg`);
-  await pg.query("commit");
-
-  for (const uid of personas) await admin.auth.admin.deleteUser(uid);
   await pg.end();
 
   console.log(`\n0186 · reconciliación: ${passed} en verde, ${failed} en rojo\n`);

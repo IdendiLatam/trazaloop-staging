@@ -1,6 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 import { normalizarIdentidad } from "../../lib/domain/identidad-normalizada";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -289,53 +290,30 @@ async function main() {
   });
 
   // ---- Limpieza, comprobada ------------------------------------------------
-  const { rows: conOrg } = await pg.query(
-    `select c.relname as tabla from pg_constraint k
-       join pg_class c on c.oid = k.conrelid
-       join pg_class r on r.oid = k.confrelid
-       join pg_namespace n on n.oid = c.relnamespace
-      where k.contype='f' and n.nspname='public' and r.relname='organizations'
-        and c.relname <> 'organizations'`);
-  let quedan = conOrg.map((r: { tabla: string }) => r.tabla);
-  await pg.query("begin");
-  // La jerarquía se suelta antes: un cargo referencia a otro de la misma tabla.
-  await pg.query(
-    "update public.quality_positions set parent_position_id=null where organization_id = any($1::uuid[])",
-    [orgs]);
-  for (let vuelta = 0; vuelta < 10 && quedan.length > 0; vuelta += 1) {
-    const fallaron: string[] = [];
-    for (const t of quedan) {
-      await pg.query("savepoint s");
-      try {
-        await pg.query(`delete from public.${t} where organization_id = any($1::uuid[])`, [orgs]);
-        await pg.query("release savepoint s");
-      } catch { await pg.query("rollback to savepoint s"); fallaron.push(t); }
-    }
-    if (fallaron.length === quedan.length) break;
-    quedan = fallaron;
-  }
-  await pg.query("savepoint o");
-  try { await pg.query("delete from public.organizations where id = any($1::uuid[])", [orgs]); await pg.query("release savepoint o"); }
-  catch { await pg.query("rollback to savepoint o"); }
-  await pg.query("commit");
-  for (const uid of personas) await admin.auth.admin.deleteUser(uid);
+  //
+  // TEST-HYGIENE-05 · Era la tercera copia a mano del barrido. Ahora va por el
+  // ayudante común —mismo código en Local y en Staging— que suelta la jerarquía
+  // de cargos antes de borrar, barre por el grafo de claves ajenas y DEVUELVE
+  // lo que no pudo hacer.
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
 
   await check("14. La suite no deja un solo fixture detrás", async () => {
-    const { rows: o } = await pg.query(
-      "select count(*)::int n from public.organizations where name like 'STAB04 %'");
+    assert(residuo.problemas.length === 0,
+      `la limpieza informó de: ${residuo.problemas.join(" · ")}`);
+    // Por IDENTIFICADOR propio: contar «las que se llaman STAB04» mira toda la
+    // base y culpa a la suite de fixtures que no son suyos.
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && Object.keys(residuo.porTabla).length === 0,
+      `quedaron fixtures: ${describirResiduo(residuo)}`);
     const { rows: c } = await pg.query(
       "select count(*)::int n from public.quality_positions where organization_id = any($1::uuid[])", [orgs]);
     const { rows: j } = await pg.query(
       "select count(*)::int n from public.import_jobs where organization_id = any($1::uuid[])", [orgs]);
     const { rows: jr } = await pg.query(
       "select count(*)::int n from public.import_job_rows where organization_id = any($1::uuid[])", [orgs]);
-    const { data: usuarios } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const vivos = usuarios.users.filter((u) => u.email?.startsWith("stab04-")).length;
-    assert(o[0].n === 0, `quedaron ${o[0].n} organizaciones`);
     assert(c[0].n === 0, `quedaron ${c[0].n} cargos`);
     assert(j[0].n === 0, `quedaron ${j[0].n} trabajos de importación`);
     assert(jr[0].n === 0, `quedaron ${jr[0].n} filas de importación`);
-    assert(vivos === 0, `quedaron ${vivos} usuarios de prueba`);
   });
 
   await pg.end();

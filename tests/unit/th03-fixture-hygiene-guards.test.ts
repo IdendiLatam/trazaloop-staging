@@ -219,15 +219,17 @@ console.log("\nD · La limpieza es la MISMA en Local y en remoto");
  * lo que no pudo hacer.
  */
 
-/** Suites que todavía llevan su copia. Se convierten en el tramo que las use
- *  contra Staging; hasta entonces están NOMBRADAS, no toleradas en silencio. */
-const COPIAS_PENDIENTES = [
-  "tests/rls/mp0186-provider-reconciliation.test.ts",
-  "tests/rls/stab01-commercial-state.test.ts",
-  "tests/rls/stab04-positions-apply.test.ts",
-];
+/**
+ * TEST-HYGIENE-05 · La lista de deuda está VACÍA y así se queda.
+ *
+ * Hubo tres suites con su propia copia del barrido —`mp0186`, `stab01` y
+ * `stab04-apply`—, declaradas aquí mientras se convertían. Ya no existen. La
+ * lista se conserva vacía a propósito: si alguien vuelve a necesitar una
+ * excepción tendrá que escribirla, y escribirla es lo que la hace auditable.
+ */
+const COPIAS_PENDIENTES: string[] = [];
 
-check("D1. Ninguna suite NUEVA se escribe su propio barrido por claves ajenas", () => {
+check("D1. Ninguna suite se escribe su propio barrido por claves ajenas", () => {
   const propias: string[] = [];
   for (const { ruta, texto } of ficherosDePrueba()) {
     if (!ruta.startsWith("tests/rls/")) continue;
@@ -244,14 +246,21 @@ check("D1. Ninguna suite NUEVA se escribe su propio barrido por claves ajenas", 
     + " · dos copias del mismo algoritmo divergen, y la de la suite se traga los errores");
 });
 
-check("D2. Y las copias pendientes siguen siendo EXACTAMENTE las declaradas", () => {
-  // Si una se convierte, hay que quitarla de la lista: una excepción que
-  // sobrevive a su motivo es una excepción que ya no se lee.
-  for (const ruta of COPIAS_PENDIENTES) {
+check("D2. Y no queda ninguna deuda declarada", () => {
+  assert(COPIAS_PENDIENTES.length === 0,
+    `siguen declaradas ${COPIAS_PENDIENTES.length} copias sin convertir: `
+    + COPIAS_PENDIENTES.join(", "));
+  // Y las tres que hubo usan de verdad el ayudante, no solo dejaron de barrer.
+  for (const ruta of ["tests/rls/mp0186-provider-reconciliation.test.ts",
+                      "tests/rls/stab01-commercial-state.test.ts",
+                      "tests/rls/stab04-positions-apply.test.ts",
+                      "tests/rls/stab03-stakeholder-identity.test.ts"]) {
     const texto = ficherosDePrueba().find((f) => f.ruta === ruta)?.texto ?? "";
-    assert(texto !== "", `la excepción nombra un fichero que ya no existe: ${ruta}`);
-    assert(/pg_constraint/.test(texto),
-      `${ruta} ya no lleva su propio barrido: quítala de COPIAS_PENDIENTES`);
+    assert(texto !== "", `desapareció ${ruta}`);
+    assert(/limpiarFixtures\(/.test(texto),
+      `${ruta} ya no limpia por el ayudante común`);
+    assert(/residuo\.problemas/.test(texto),
+      `${ruta} no comprueba lo que la limpieza informó`);
   }
 });
 

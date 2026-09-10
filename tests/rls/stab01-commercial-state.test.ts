@@ -1,6 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 import {
   etiquetaComercial, esAccesoDePrueba, aclaracionDePrueba,
@@ -478,38 +479,33 @@ async function main() {
   });
 
   // ---- Limpieza ----------------------------------------------------------
-  const { rows: conOrg } = await pg.query(
-    `select c.relname as tabla from pg_constraint k
-       join pg_class c on c.oid = k.conrelid
-       join pg_class r on r.oid = k.confrelid
-       join pg_namespace n on n.oid = c.relnamespace
-      where k.contype = 'f' and n.nspname = 'public' and r.relname = 'organizations'
-        and c.relname <> 'organizations'`);
-  const tablas = conOrg.map((r: { tabla: string }) => r.tabla);
-  await pg.query("begin");
-  for (const q of [
-    "update public.billing_subscription_periods set settled_payment_id = null where organization_id = any($1::uuid[])",
-    "update public.billing_quotes set subscription_id = null where organization_id = any($1::uuid[])",
-  ]) await pg.query(q, [orgs]);
-  let quedan = [...tablas];
-  for (let vuelta = 0; vuelta < 8 && quedan.length > 0; vuelta += 1) {
-    const fallaron: string[] = [];
-    for (const t of quedan) {
-      await pg.query("savepoint s");
-      try {
-        await pg.query(`delete from public.${t} where organization_id = any($1::uuid[])`, [orgs]);
-        await pg.query("release savepoint s");
-      } catch { await pg.query("rollback to savepoint s"); fallaron.push(t); }
-    }
-    if (fallaron.length === quedan.length) break;
-    quedan = fallaron;
-  }
-  await pg.query("delete from public.organizations where id = any($1::uuid[])", [orgs]);
-  await pg.query("commit");
-  for (const uid of personas) {
-    await admin.from("platform_staff").delete().eq("user_id", uid);
-    await admin.auth.admin.deleteUser(uid);
-  }
+  //
+  // TEST-HYGIENE-05 · Era una copia a mano del barrido, con `catch {}` en cada
+  // borrado y sin comprobar nada al final. Ahora va por el ayudante común, que
+  // es el mismo código en Local y en Staging y DEVUELVE lo que no pudo hacer.
+  // Las personas también: el ayudante borra lo que es suyo —incluido
+  // `platform_staff`, que colgaba de un borrado a mano— y después pregunta si
+  // se fueron de verdad.
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
+
+  await check("21. La suite no deja un solo fixture detrás", async () => {
+    assert(residuo.problemas.length === 0,
+      `la limpieza informó de: ${residuo.problemas.join(" · ")}`);
+    // Por IDENTIFICADOR propio, nunca por parecido de nombre: contar «las que
+    // se llaman STAB01» mira toda la base y acusa a fixtures ajenos.
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && Object.keys(residuo.porTabla).length === 0,
+      `quedaron fixtures: ${describirResiduo(residuo)}`);
+    const { rows: asig } = await pg.query(
+      `select count(*)::int n from public.organization_plan_assignments
+        where organization_id = any($1::uuid[])`, [orgs]);
+    assert(asig[0].n === 0, `quedaron ${asig[0].n} concesiones de plan`);
+    const { rows: mods } = await pg.query(
+      `select count(*)::int n from public.organization_modules
+        where organization_id = any($1::uuid[])`, [orgs]);
+    assert(mods[0].n === 0, `quedaron ${mods[0].n} módulos`);
+  });
+
   await pg.end();
 
   console.log(`\nSTABILIZATION-01 · estado comercial: ${passed} en verde, ${failed} en rojo\n`);
