@@ -188,6 +188,53 @@ export async function recordRenewalPayment(input: {
 }
 
 /**
+ * Reconciliar un CICLO que el proveedor ya cobró.
+ *
+ * No cobra nada. Recibe un hecho ya releído del proveedor —su factura, su
+ * fecha económica y su pago— y deja aquí, exactamente una vez, el periodo, el
+ * pago y el derecho. Si el mismo hecho vuelve, devuelve `already_reconciled` y
+ * no toca nada.
+ *
+ * Ni una palabra sobre `external_reference`: una suscripción nacida del
+ * checkout de un plan no la tiene, y la lectura del proveedor lo confirmó.
+ * Todo lo que hace falta cuelga del identificador de la suscripción.
+ */
+export async function reconcileProviderCycle(input: {
+  provider: string;
+  providerSubscriptionId: string;
+  providerInvoiceId: string;
+  providerCycleAt: string | null;
+  providerPaymentId: string | null;
+  outcome: "approved" | "declined" | "failed";
+  amount: number | null; currency: string | null; liveMode: boolean | null;
+  providerPlanId?: string | null;
+}): Promise<SettleOutcome & { periodId?: string | null; cycleId?: string | null }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("billing_reconcile_provider_cycle", {
+    p_provider: input.provider,
+    p_provider_subscription_id: input.providerSubscriptionId,
+    p_provider_invoice_id: input.providerInvoiceId,
+    p_provider_cycle_at: input.providerCycleAt,
+    p_provider_payment_id: input.providerPaymentId,
+    p_outcome: input.outcome,
+    p_amount: input.amount,
+    p_currency: input.currency,
+    p_live_mode: input.liveMode,
+    p_provider_plan_id: input.providerPlanId ?? null,
+  });
+  if (error || !data) return { outcome: "error" };
+  const r = data as Record<string, unknown>;
+  return {
+    outcome: String(r.outcome),
+    organizationId: (r.organization_id as string) ?? null,
+    paymentId: (r.payment_id as string) ?? null,
+    subscriptionId: (r.subscription_id as string) ?? null,
+    periodId: (r.period_id as string) ?? null,
+    cycleId: (r.cycle_id as string) ?? null,
+  };
+}
+
+/**
  * De una suscripción viva al identificador del proveedor con el que se le
  * cobra. Es una LECTURA: no decide nada, solo traduce.
  *

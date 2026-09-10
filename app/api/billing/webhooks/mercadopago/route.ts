@@ -7,7 +7,7 @@ import { verifyMercadoPagoSignature } from "@/lib/billing/mercadopago/signature"
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
-  recordRenewalPayment, markProviderSubscriptionState,
+  recordRenewalPayment, markProviderSubscriptionState, reconcileProviderCycle,
 } from "@/lib/db/billing-provider";
 
 export const dynamic = "force-dynamic";
@@ -152,6 +152,71 @@ export async function POST(request: Request) {
                                    providerStatus: r.value.providerStatus,
                                    outcome: marca.outcome, ms: Date.now() - inicio });
       return OK();
+    }
+
+    // --- El ciclo de una recurrencia que lleva el proveedor -----------------
+    //
+    // Este aviso NO trae un pago: trae la FACTURA de un mes, y su `resourceId`
+    // es la clave de ese recurso. Leerlo como si fuera un pago era preguntar
+    // por un pago con la clave de otra cosa.
+    //
+    // La fecha económica sale de la factura releída, nunca de la hora del
+    // webhook: los avisos llegan desordenados y esa hora escribiría el orden de
+    // llegada como si fuera el orden del calendario.
+    //
+    // Y si el proveedor NO es de los que llevan su propia recurrencia, la
+    // primitiva lo dice y se sigue por el camino de siempre. La política vive
+    // en el catálogo de 0184, no repetida aquí.
+    if (aviso.topic === "subscription_authorized_payment") {
+      const f = await proveedor.getAuthorizedPaymentDetail(aviso.resourceId);
+      if (!f.ok) {
+        await cerrar(f.failure === "provider_unavailable" ? "pending_resource" : "error",
+                     "resource_unavailable", null, f.failure);
+        log("factura_no_disponible", { topic: aviso.topic, resource: aviso.resourceId,
+                                       failure: f.failure, ms: Date.now() - inicio });
+        return OK();
+      }
+
+      const salidaCiclo = settlementOutcome(f.value.canonicalStatus);
+      if (salidaCiclo === null) {
+        // Todavía no es una noticia financiera: se anota y se espera al aviso
+        // siguiente. No se reconcilia un cobro que aún no ha ocurrido.
+        await cerrar(f.value.canonicalStatus === "manual_review"
+                       ? "manual_review" : "processed",
+                     `cycle_${f.value.canonicalStatus ?? "unknown"}`);
+        return OK();
+      }
+
+      if (!f.value.preapprovalId) {
+        await cerrar("manual_review", "unlinked_cycle", null, "NO_SUBSCRIPTION");
+        log("factura_sin_suscripcion", { resource: aviso.resourceId,
+                                         ms: Date.now() - inicio });
+        return OK();
+      }
+
+      const c = await reconcileProviderCycle({
+        provider: MERCADOPAGO,
+        providerSubscriptionId: f.value.preapprovalId,
+        providerInvoiceId: f.value.providerInvoiceId,
+        providerCycleAt: f.value.debitDate,
+        providerPaymentId: f.value.providerPaymentId,
+        outcome: salidaCiclo,
+        amount: f.value.amount, currency: f.value.currency,
+        liveMode: aviso.liveMode,
+      });
+
+      // Un proveedor cuyo calendario es NUESTRO no se reconcilia por aquí: se
+      // sigue por el camino de la renovación de siempre.
+      if (c.outcome !== "renewal_not_provider_owned") {
+        const estado = c.outcome === "renewed" || c.outcome === "already_reconciled"
+          || c.outcome === "already_settled" || c.outcome === "period_already_settled"
+          || c.outcome === "declined" || c.outcome === "failed"
+          ? "processed" : "manual_review";
+        await cerrar(estado, c.outcome, c.organizationId);
+        log("ciclo_reconciliado", { resource: aviso.resourceId, outcome: c.outcome,
+                                    ms: Date.now() - inicio });
+        return OK();
+      }
     }
 
     // `payment` y `subscription_authorized_payment` traen un pago. Se relee.

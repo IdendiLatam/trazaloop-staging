@@ -140,6 +140,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     // el importe con el que nació. Igual que la anterior, vive entera en
     // `billing_*` y no toca la superficie Textiles/DPP.
     "0185_billing_provider_plans.sql",
+    "0186_billing_provider_reconciliation.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

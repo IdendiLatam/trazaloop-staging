@@ -114,6 +114,32 @@ export type MercadoPagoAdapter = BillingProvider & {
     externalReference: string | null; liveMode: boolean | null;
     preapprovalId: string | null;
   }>>;
+  /**
+   * LA FACTURA DE UN CICLO de una suscripción recurrente.
+   *
+   * Es un recurso DISTINTO del pago, y esa distinción es la que hace falta para
+   * reconciliar: el pago es el intento de cobro, la factura es la obligación
+   * que el proveedor generó para ese mes. Un mes puede tener un cobro fallido y
+   * luego uno bueno; sin la identidad de la factura, el segundo abriría un mes
+   * que no existe.
+   *
+   * El aviso `subscription_authorized_payment` trae en su `resourceId` el
+   * identificador de ESTE recurso, no el de un pago — llevarlo a
+   * `getPaymentDetail` es preguntar por un pago con la clave de otra cosa.
+   *
+   * `debitDate` es la FECHA ECONÓMICA del ciclo: la que ordena la historia.
+   * No la hora del webhook, que solo dice cuándo se enteró Trazaloop.
+   */
+  getAuthorizedPaymentDetail(id: string): Promise<ProviderResult<{
+    providerInvoiceId: string;
+    preapprovalId: string | null;
+    providerStatus: string | null;
+    debitDate: string | null;
+    amount: number | null; currency: string | null;
+    providerPaymentId: string | null;
+    paymentStatus: string | null;
+    canonicalStatus: ReturnType<typeof mapPaymentStatus>;
+  }>>;
 };
 
 /**
@@ -366,6 +392,40 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
           externalReference: str(r.external_reference),
           liveMode: typeof r.live_mode === "boolean" ? r.live_mode : null,
           preapprovalId: str(meta.preapproval_id) ?? str(r.preapproval_id),
+        } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
+
+    async getAuthorizedPaymentDetail(id) {
+      if (!cliente) return sinCredencial();
+      try {
+        // El SDK no expone una clase para este recurso, así que se pide en
+        // crudo. Misma credencial, mismo tiempo máximo, y NADA del token en el
+        // registro ni en el resultado.
+        const r0 = await fetch(
+          `https://api.mercadopago.com/authorized_payments/${encodeURIComponent(id)}`,
+          { headers: { Authorization: `Bearer ${accessToken as string}` },
+            signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS) });
+        const r = (await r0.json()) as Record<string, unknown>;
+        if (!r0.ok) {
+          return fallo({ name: "MercadoPagoError", status: r0.status,
+                         message: str(r.message) ?? "authorized_payment_unavailable" });
+        }
+        const pago = (r.payment ?? {}) as Record<string, unknown>;
+        const estadoPago = str(pago.status) ?? str(r.status);
+        return { ok: true, value: {
+          providerInvoiceId: String(r.id ?? id),
+          preapprovalId: str(r.preapproval_id),
+          providerStatus: str(r.status),
+          debitDate: str(r.debit_date),
+          amount: num(r.transaction_amount),
+          currency: str(r.currency_id),
+          providerPaymentId: pago.id === undefined || pago.id === null
+            ? null : String(pago.id),
+          paymentStatus: estadoPago,
+          canonicalStatus: mapPaymentStatus(estadoPago),
         } };
       } catch (e) {
         return fallo(e);
