@@ -14,7 +14,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { limpiarPersonas } from "../support/fixture-cleanup";
+import { limpiarPersonas, tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -76,6 +76,12 @@ async function main() {
   // Un tipo de cambio comercial para poder cotizar. NO se siembra en la
   // migración a propósito: inventar un tipo sería inventar un precio.
   const TASA_MICROS = 4000_000_000; // 1 USD = 4 000 COP
+  // TEST-HYGIENE-03 · Esta suite no consume el tipo de cambio: lo ADMINISTRA
+  // —lo crea con la llave de un superadministrador, lo retira, lo reabre y
+  // programa una subida—, así que necesita el suyo. Se aparta el canónico de
+  // Local mientras trabaja y se restituye en la limpieza.
+  await admin.from("commercial_fx_rates").update({ status: "retired" })
+    .eq("id", await tasaCanonicaQA(admin));
   const { data: fx, error: eFx } = await sa.cli.from("commercial_fx_rates").insert({
     base_currency: "USD", quote_currency: "COP", rate_micros: TASA_MICROS,
     effective_from: new Date(Date.now() - 3600_000).toISOString(), status: "active",
@@ -592,6 +598,8 @@ async function main() {
     for (const id of reglasCreadas) await admin.from("billing_tax_rules").delete().eq("id", id);
     if (fxId) await admin.from("commercial_fx_rates")
       .update({ status: "retired" }).eq("id", fxId);
+    // Y se restituye el canónico, que esta suite apartó.
+    await tasaCanonicaQA(admin);
     await admin.from("commercial_assignment_events").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organization_plan_assignments").delete().in("organization_id", [org, otraOrg]);
     await admin.from("memberships").delete().in("organization_id", [org, otraOrg]);

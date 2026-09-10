@@ -17,6 +17,7 @@
 import { config as loadEnv } from "dotenv";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { limpiarPersonas } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -344,14 +345,21 @@ async function main() {
     });
 
   } finally {
+    // TEST-HYGIENE-03 · Esta suite no crea empresas: crea PERSONAS y
+    // promociones. Las promociones sí se iban; las personas no. Medido sobre
+    // este HEAD: +3 usuarios de Auth, +3 perfiles y +6 aceptaciones legales por
+    // ejecución. `deleteUser` devolvía 500 porque `user_legal_acceptances`
+    // seguía apuntando al perfil, y nadie leía ese 500.
+    const problemasPromo: string[] = [];
     for (const id of promos) {
       await admin.from("billing_promotion_codes").delete().eq("promotion_id", id);
-      await admin.from("billing_promotions").delete().eq("id", id);
+      const { error } = await admin.from("billing_promotions").delete().eq("id", id);
+      if (error) problemasPromo.push(`promoción ${id}: ${error.message}`);
     }
-    for (const id of personas) {
-      await admin.from("platform_staff").delete().eq("user_id", id);
-      await admin.auth.admin.deleteUser(id);
-    }
+    const problemas = [...problemasPromo, ...await limpiarPersonas(admin, personas)];
+    await check("La suite no deja un solo fixture detrás", async () => {
+      assert(problemas.length === 0, `quedaron: ${problemas.join(" · ")}`);
+    });
   }
 
   console.log(`\nPE-05B6F.1 · administración comercial: ${passed} en verde, ${failed} en rojo\n`);

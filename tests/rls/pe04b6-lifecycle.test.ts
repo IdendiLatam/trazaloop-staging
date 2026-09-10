@@ -10,6 +10,8 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -637,22 +639,28 @@ async function main() {
       }
     });
   } finally {
-    await admin.from("support_ticket_reclassifications").delete().eq("organization_id", org);
-    await admin.from("support_ticket_status_history").delete().eq("organization_id", org);
-    await admin.from("support_ticket_messages").delete().eq("organization_id", org);
-    await admin.from("support_tickets").delete().eq("organization_id", org);
-    await admin.from("ai_credit_ledger").delete().eq("organization_id", org);
-    await admin.from("commercial_assignment_events").delete().eq("organization_id", org);
-    await admin.from("organization_usage_minutes").delete().eq("organization_id", org);
-    await admin.from("organization_usage_leases").delete().eq("organization_id", org);
-    await admin.from("storage_orphan_candidates").delete().eq("organization_id", org);
-    await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
-    await admin.from("memberships").delete().eq("organization_id", org);
-    await admin.from("organizations").delete().eq("id", org);
-    for (const id of personasCreadas) {
-      await admin.from("platform_staff").delete().eq("user_id", id);
-      await admin.auth.admin.deleteUser(id);
-    }
+    // TEST-HYGIENE-03 · Aquí había una lista de borrados escrita a mano y sin
+    // mirar el resultado de ninguno. Medido sobre este mismo HEAD: la suite
+    // dejaba +4 usuarios de Auth, +4 perfiles, +1 organización, +1 suscripción
+    // legada, +1 fila de historial de plan, +4 módulos y +8 aceptaciones
+    // legales en CADA ejecución. La lista no podía funcionar —le faltaba
+    // `user_legal_acceptances`, que guarda dos filas por persona y apunta a
+    // `profiles`— y como nadie leía el error, `deleteUser` devolvía 500 y la
+    // limpieza seguía adelante como si nada.
+    //
+    // Ahora barre por el GRAFO de claves ajenas que declara la propia base, y
+    // —lo que importa— COMPRUEBA. Si sobrevive algo, esta suite se pone roja
+    // por su propia basura en vez de dejársela a la siguiente.
+    const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
+    await pg.connect();
+    const residuo = await limpiarFixtures(pg, admin, { orgs: [org], personas: personasCreadas });
+    await pg.end();
+    await check("La suite no deja un solo fixture detrás", async () => {
+      assert(residuo.organizaciones === 0 && residuo.personas === 0
+        && residuo.fxActivas === 0 && Object.keys(residuo.porTabla).length === 0
+        && residuo.problemas.length === 0,
+        `quedaron: ${describirResiduo(residuo)}`);
+    });
   }
 
   console.log(`\nPE-04B6 · ciclo integrado: ${passed} en verde, ${failed} en rojo\n`);

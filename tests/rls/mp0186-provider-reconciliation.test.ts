@@ -1,5 +1,6 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tasaCanonicaQA } from "../support/fixture-cleanup";
 import { Client as PgClient } from "pg";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -206,12 +207,11 @@ async function main() {
   // esta por solapamiento.
   await admin.from("commercial_fx_rates").update({ status: "retired" })
     .eq("status", "active").like("note", "QA 0186 %");
-  const { data: fx, error: efx } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA 0186 ${sello} · tasa sintetica, NO comercial` }).select("id").single();
-  if (efx) { console.log(`  ✘ no se pudo sembrar la tasa: ${efx.message}`); process.exit(1); }
-  const fxId = (fx as { id: string }).id;
+  // TEST-HYGIENE-03 · Se reutiliza el tipo de cambio canónico de Local en vez de
+  // abrir uno nuevo por vuelta: 0182 no deja borrarlos y solo puede regir uno
+  // por par, así que cada tasa propia era una fila muerta más y un choque en
+  // potencia para la siguiente suite.
+  await tasaCanonicaQA(admin);
 
   // =========================================================================
   console.log("A · La identidad de la suscripción");
@@ -900,7 +900,6 @@ async function main() {
   await pg.query("commit");
 
   for (const uid of personas) await admin.auth.admin.deleteUser(uid);
-  await admin.from("commercial_fx_rates").update({ status: "retired" }).eq("id", fxId);
   await pg.end();
 
   console.log(`\n0186 · reconciliación: ${passed} en verde, ${failed} en rojo\n`);

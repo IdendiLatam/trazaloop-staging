@@ -398,3 +398,89 @@ export async function limpiarPersonas(
     if (propia) await pg.end();
   }
 }
+
+// ===========================================================================
+// TEST-HYGIENE-03 · La tasa de cambio canónica de Local
+// ===========================================================================
+/**
+ * POR QUÉ EXISTE ESTO
+ *
+ * Dieciséis suites necesitaban «que haya un tipo de cambio para poder
+ * presupuestar», y cada una abría el suyo en cada ejecución. Medido: unas diez
+ * filas nuevas por `test:all`, 1412 acumuladas en cinco días. Y no se pueden
+ * borrar: 0182 prohíbe el DELETE sin excepciones —una tasa se cierra por
+ * vigencia o se retira, pero no desaparece— así que la tabla solo crece.
+ *
+ * Peor: 0182 tampoco deja que dos tasas del mismo par rijan a la vez, con toda
+ * la razón —dos tasas activas dejarían el precio a merced de un orden de
+ * lectura—. Así que cada suite tenía que retirar la suya al terminar, y bastaba
+ * que una muriera a medias para que la siguiente reventara con FX_RATE_OVERLAPS
+ * sin explicar por qué. Esa fragilidad ya costó una corrida entera de `test:all`.
+ *
+ * La salida no es limpiar mejor: es no crear. Local tiene UNA tasa sintética,
+ * con nota determinista, abierta desde el año 2000 y sin fin. La primera
+ * ejecución que la necesite la abre; todas las demás la reutilizan. El régimen
+ * es cero filas nuevas, y el par de tasas que quede es un conjunto fijo.
+ *
+ * La búsqueda es una IGUALDAD por nota. No un barrido de la tabla: esa fue
+ * exactamente la trampa que rompió la limpieza anterior cuando la tabla pasó de
+ * mil filas y PostgREST empezó a devolver una página truncada.
+ */
+export const NOTA_TASA_QA = "QA CANÓNICA · tasa sintética local, NO comercial";
+export const TASA_QA_MICROS = 4_000_000_000;   // 1 USD = 4 000 COP
+
+/** Deja la tasa canónica vigente y devuelve su identificador. */
+export async function tasaCanonicaQA(admin: SupabaseClient): Promise<string> {
+  const { data: ya, error: eBuscar } = await admin.from("commercial_fx_rates")
+    .select("id, status").eq("note", NOTA_TASA_QA).maybeSingle();
+  if (eBuscar) throw new Error(`buscar la tasa canónica: ${eBuscar.message}`);
+  const mia = ya as { id: string; status: string } | null;
+
+  // Por diseño solo puede regir una tasa por par. Si queda otra viva es residuo
+  // de una suite que murió a medias: se retira DICIÉNDOLO, no en silencio.
+  const { data: activas, error: eActivas } = await admin.from("commercial_fx_rates")
+    .select("id, note").eq("status", "active")
+    .eq("base_currency", "USD").eq("quote_currency", "COP");
+  if (eActivas) throw new Error(`mirar las tasas vigentes: ${eActivas.message}`);
+  for (const t of (activas ?? []) as { id: string; note: string | null }[]) {
+    if (mia && t.id === mia.id) continue;
+    const { error } = await admin.from("commercial_fx_rates")
+      .update({ status: "retired" }).eq("id", t.id);
+    if (error) throw new Error(`retirar la tasa residual ${t.id}: ${error.message}`);
+    console.log(`  · se retiró una tasa de QA que había quedado viva: ${t.note ?? t.id}`);
+  }
+
+  if (mia) {
+    if (mia.status !== "active") {
+      const { error } = await admin.from("commercial_fx_rates")
+        .update({ status: "active" }).eq("id", mia.id);
+      if (error) throw new Error(`reabrir la tasa canónica: ${error.message}`);
+    }
+    return mia.id;
+  }
+  const { data, error } = await admin.from("commercial_fx_rates").insert({
+    base_currency: "USD", quote_currency: "COP", rate_micros: TASA_QA_MICROS,
+    effective_from: "2000-01-01T00:00:00.000Z", note: NOTA_TASA_QA,
+  }).select("id").single();
+  if (error) throw new Error(`abrir la tasa canónica: ${error.message}`);
+  return (data as { id: string }).id;
+}
+
+/**
+ * Para las suites cuyo ASUNTO es el ciclo de vida de las tasas: aparta la
+ * canónica mientras trabajan y la restituye pase lo que pase. Sin esto, sus
+ * inserciones chocarían con ella; con esto, no necesitan inventarse un barrido.
+ */
+export async function sinTasaCanonicaQA<T>(
+  admin: SupabaseClient, fn: () => Promise<T>
+): Promise<T> {
+  const id = await tasaCanonicaQA(admin);
+  const { error } = await admin.from("commercial_fx_rates")
+    .update({ status: "retired" }).eq("id", id);
+  if (error) throw new Error(`apartar la tasa canónica: ${error.message}`);
+  try {
+    return await fn();
+  } finally {
+    await tasaCanonicaQA(admin);
+  }
+}

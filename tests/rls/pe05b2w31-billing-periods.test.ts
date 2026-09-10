@@ -14,6 +14,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -67,11 +68,13 @@ async function main() {
   await admin.from("memberships").update({ role_code: "admin" })
     .eq("organization_id", org).eq("user_id", ana.id);
 
-  const { error: efx } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA PE-05B2W31 ${sello} · tasa sintetica, NO comercial` });
-  assert(!efx, `tasa: ${efx?.message}`);
+  // TEST-HYGIENE-03 · Antes esta suite abría su PROPIA tasa en cada ejecución y
+  // la retiraba al terminar. 0182 no deja borrar una tasa —es historia
+  // financiera— ni deja que dos del mismo par rijan a la vez, así que cada
+  // vuelta dejaba una fila muerta más y una vuelta interrumpida reventaba la
+  // siguiente con FX_RATE_OVERLAPS. Aquí solo hace falta que EXISTA un tipo de
+  // cambio para poder presupuestar: se reutiliza el canónico de Local.
+  await tasaCanonicaQA(admin);
 
   console.log("\nPE-05B2W3.1 · El periodo que hay que pagar\n");
 
@@ -364,18 +367,6 @@ async function main() {
     }
     const { error } = await admin.from("organizations").delete().eq("id", org);
     if (error) console.error(`  (residuo) empresa: ${error.message}`);
-    // La lectura se acota EN LA BASE a las tasas activas en lugar de traerse la
-    // tabla entera y filtrar aquí: PostgREST devuelve como mucho 1000 filas y
-    // esta tabla ya las pasó, así que la tasa recién sembrada caía fuera de la
-    // página y la limpieza no encontraba nada que retirar —ni lo decía—. Una
-    // tasa ya retirada no es precio para nadie: solo estorban las activas.
-    const { data: tasas } = await admin.from("commercial_fx_rates")
-      .select("id, note").eq("status", "active");
-    for (const t of ((tasas ?? []) as { id: string; note: string | null }[])
-      .filter((x) => (x.note ?? "").includes(`QA PE-05B2W31 ${sello}`))) {
-      await admin.from("commercial_fx_rates")
-        .update({ status: "retired" }).eq("id", t.id);
-    }
     for (const id of personas) {
       await admin.from("platform_staff").delete().eq("user_id", id);
       await admin.from("user_legal_acceptances").delete().eq("user_id", id);

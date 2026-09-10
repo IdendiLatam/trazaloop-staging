@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
-import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
+import { limpiarFixtures, describirResiduo, tasaCanonicaQA } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -172,12 +172,11 @@ async function main() {
   // esta por solapamiento.
   await admin.from("commercial_fx_rates").update({ status: "retired" })
     .eq("status", "active").like("note", "QA 0184 %");
-  const { data: fx, error: efx } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA 0184 ${sello} · tasa sintetica, NO comercial` }).select("id").single();
-  if (efx) { console.log(`  ✘ no se pudo sembrar la tasa: ${efx.message}`); process.exit(1); }
-  const fxId = (fx as { id: string }).id;
+  // TEST-HYGIENE-03 · Se reutiliza el tipo de cambio canónico de Local en vez de
+  // abrir uno nuevo por vuelta: 0182 no deja borrarlos y solo puede regir uno
+  // por par, así que cada tasa propia era una fila muerta más y un choque en
+  // potencia para la siguiente suite.
+  await tasaCanonicaQA(admin);
 
   // ---- El catálogo ------------------------------------------------------
   await check("1. El catálogo declara los dos proveedores que existen", async () => {
@@ -370,7 +369,7 @@ async function main() {
   // por su propia basura en vez de dejársela al siguiente.
   const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
   await pg.connect();
-  const residuo = await limpiarFixtures(pg, admin, { orgs, personas, fxIds: [fxId] });
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
   await pg.end();
 
   await check("12. La suite no deja un solo fixture detrás", async () => {

@@ -21,7 +21,7 @@
 import { config as loadEnv } from "dotenv";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { limpiarPersonas } from "../support/fixture-cleanup";
+import { limpiarPersonas, tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -581,6 +581,10 @@ async function main() {
     for (const id of tasas) {
       await admin.from("commercial_fx_rates").update({ status: "retired" }).eq("id", id);
     }
+    // TEST-HYGIENE-03 · Y se restituye la tasa canónica de Local, que esta suite
+    // apartó para poder montar sus propias vigencias. Sin esto, la siguiente
+    // suite que necesite presupuestar se encuentra sin tipo de cambio.
+    await tasaCanonicaQA(admin);
     // TEST-HYGIENE-02 · Esta suite ya limpiaba su organización; lo que dejaba
     // eran USUARIOS. La causa era una y la misma en las ocho suites medidas:
     // `user_legal_acceptances` guarda dos filas por persona —quien crea una

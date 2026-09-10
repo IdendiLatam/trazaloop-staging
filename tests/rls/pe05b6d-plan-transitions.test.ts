@@ -19,7 +19,7 @@
 import { config as loadEnv } from "dotenv";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { limpiarPersonas } from "../support/fixture-cleanup";
+import { limpiarPersonas, tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -215,6 +215,13 @@ async function main() {
   const precio = (plan: string, intervalo: "monthly" | "annual") =>
     COP(Number(cat[plan][intervalo === "monthly" ? "monthly_price_minor" : "annual_price_minor"]));
 
+  // TEST-HYGIENE-03 · Esta suite APAGA el tipo de cambio para demostrar que sin
+  // él no se puede presupuestar, y después abre un relevo. Por eso no puede
+  // usar la tasa canónica de Local: la cerraría por vigencia y la dejaría
+  // inservible para todas las demás. Se aparta mientras trabaja y se restituye
+  // en la limpieza.
+  await admin.from("commercial_fx_rates").update({ status: "retired" })
+    .eq("id", await tasaCanonicaQA(admin));
   const { data: fx, error: efx } = await admin.from("commercial_fx_rates").insert({
     base_currency: "USD", quote_currency: "COP", rate_micros: TASA_MICROS,
     effective_from: new Date(Date.now() - 86_400_000).toISOString(),
@@ -697,6 +704,10 @@ async function main() {
       await admin.from("commercial_fx_rates")
         .update({ status: "retired" }).eq("id", t);
     }
+    // TEST-HYGIENE-03 · Y se restituye la tasa canónica de Local, que esta suite
+    // apartó para poder montar sus propias vigencias. Sin esto, la siguiente
+    // suite que necesite presupuestar se encuentra sin tipo de cambio.
+    await tasaCanonicaQA(admin);
     // TEST-HYGIENE-02 · Esta suite ya limpiaba su organización; lo que dejaba
     // eran USUARIOS. La causa era una y la misma en las ocho suites medidas:
     // `user_legal_acceptances` guarda dos filas por persona —quien crea una

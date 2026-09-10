@@ -53,6 +53,54 @@ async function persona(prefijo: string, papel?: "superadmin" | "support") {
   return { id: data.user.id, email, cli };
 }
 
+/**
+ * El AUTOR CANÓNICO de las pruebas de publicación.
+ *
+ * `plan_revisions.published_by` es inmutable desde 0162, y hace bien: quien
+ * publicó una revisión del catálogo no se puede reescribir ni borrar sin
+ * falsear la historia comercial. Eso no se toca.
+ *
+ * Lo que sí estaba mal era el diseño de la prueba: creaba un superadministrador
+ * NUEVO en cada ejecución, publicaba con él, y lo dejaba vivo para siempre
+ * porque ya no se podía borrar. Un usuario más en Local por vuelta, sin techo.
+ *
+ * Este autor tiene correo DETERMINISTA —sin sello ni azar—, así que la primera
+ * ejecución lo crea y todas las siguientes lo reutilizan. Las revisiones que
+ * publique quedan como historia válida, firmadas siempre por la misma persona
+ * sintética, y el crecimiento en régimen es cero. No entra en
+ * `personasCreadas`: no se borra a propósito, no porque no se pueda.
+ *
+ * La búsqueda es por `profiles.email`, que es exacta y acotada. Nada de
+ * recorrer `auth.users` entero para encontrar a uno.
+ */
+async function personaEstable(prefijo: string, papel: "superadmin" | "support") {
+  const email = `${prefijo}@test.trazaloop.dev`;
+  const { data: ya } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
+  let id = (ya as { id: string } | null)?.id ?? null;
+  const nuevo = id === null;
+  if (id === null) {
+    const { data, error } = await admin.auth.admin.createUser({
+      email, password, email_confirm: true,
+      user_metadata: { full_name: "QA B5 · autor canónico" } });
+    assert(!error && data.user, `crear el autor canónico: ${error?.message}`);
+    id = data.user!.id;
+  }
+  const cli: SupabaseClient = createClient(URL!, ANON!,
+    { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error: eEntrar } = await cli.auth.signInWithPassword({ email, password });
+  assert(!eEntrar, `entrar como el autor canónico: ${eEntrar?.message}`);
+  // Idempotente por diseño: la función lleva `on conflict do nothing`.
+  await cli.rpc("accept_active_legal_documents", { p_ip_address: null, p_user_agent: "b5" });
+  const { data: yaEsStaff } = await admin.from("platform_staff")
+    .select("user_id").eq("user_id", id).maybeSingle();
+  if (!yaEsStaff) {
+    const { error } = await admin.from("platform_staff")
+      .insert({ user_id: id, role_code: papel, status: "active" });
+    assert(!error, `dar el papel al autor canónico: ${error?.message}`);
+  }
+  return { id, email, cli, nuevo };
+}
+
 type Ent = {
   state: string; effective_plan: string | null;
   technical_reporting_allowed: boolean; functional_guidance_allowed: boolean;
@@ -62,7 +110,7 @@ type Ent = {
 };
 
 async function main() {
-  const sa = await persona("b5-sa", "superadmin");
+  const sa = await personaEstable("b5-sa", "superadmin");
   const soporte = await persona("b5-support", "support");
   const ana = await persona("b5-ana");
   const beto = await persona("b5-beto");
@@ -655,9 +703,13 @@ async function main() {
       // No se silencia: se nombra. Cualquier otro bloqueo pone la suite roja.
       // Cerrarlo de verdad exigiría que la suite no publicara revisiones
       // reales, y eso es rediseñar qué prueba, no limpiar mejor.
-      const problemas = await limpiarPersonas(admin, personasCreadas, {
-        autoriaInmutable: ["plan_revisions.published_by"],
-      });
+      // TEST-HYGIENE-03 · Antes hacía falta declarar aquí la excepción
+      // `plan_revisions.published_by`: el superadministrador de la vuelta había
+      // firmado revisiones y no se podía borrar. Ya no la necesita, porque quien
+      // firma es el autor canónico y ése no se intenta borrar. Si algún día
+      // otra persona efímera vuelve a firmar algo inmutable, esta limpieza lo
+      // dirá en rojo en vez de tragárselo.
+      const problemas = await limpiarPersonas(admin, personasCreadas);
       if (problemas.length > 0) {
         failed += 1;
         console.log(`  ✘ La suite dejó fixtures detrás: ${problemas.join(" · ")}`);

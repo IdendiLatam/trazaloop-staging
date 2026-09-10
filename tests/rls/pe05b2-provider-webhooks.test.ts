@@ -17,6 +17,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -73,18 +74,19 @@ async function main() {
   const otra = orgB as string;
 
   // Hace falta un tipo de cambio para poder presupuestar: B1 no sembró ninguno
-  // a propósito. Se pone uno sintético SOLO EN LOCAL y se retira al terminar.
+  // a propósito.
+  //
+  // TEST-HYGIENE-03 · Antes esta suite abría el suyo en cada ejecución y lo
+  // retiraba al terminar. 0182 no deja borrar una tasa —es historia
+  // financiera— ni deja que dos del mismo par rijan a la vez, así que cada
+  // vuelta dejaba una fila muerta más y una interrumpida reventaba la siguiente
+  // con FX_RATE_OVERLAPS. Se reutiliza el tipo de cambio canónico de Local.
   //
   // Y hay que decirlo claro: el esquema NO sabe distinguir una tasa de QA de
   // una comercial. Solo tiene `note`, que es texto libre, y `billing_resolve_fx`
   // no lo mira: cualquier tasa `active` vigente se convierte en precio. Por eso
-  // esta siembra NO se repite en Staging. Ver PE_05B2_SANDBOX_TESTS.md.
-  const { error: efx } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA PE-05B2 ${sello} · tasa sintetica, NO comercial`,
-  });
-  assert(!efx, `sembrar tipo de cambio de QA: ${efx?.message}`);
+  // esto NO se hace en Staging. Ver PE_05B2_SANDBOX_TESTS.md.
+  await tasaCanonicaQA(admin);
 
   const habilitar = async (o: string) => {
     const { error } = await admin.rpc("commercial_provision_new_module", {
@@ -543,43 +545,6 @@ async function main() {
       if (error) console.error(`  (residuo) empresa ${o}: ${error.message}`);
     }
     await admin.from("billing_provider_events").delete().like("resource_id", `%${sello}`);
-    // El tipo de cambio sintético, AL FINAL: la suscripción lo referencia, así
-    // que borrarlo antes es imposible. No puede quedarse como verdad comercial
-    // de nadie, porque `billing_resolve_fx` no mira la nota y convertiría la
-    // tasa inventada en precio para quien presupueste después.
-    //
-    // Se retira POR IDENTIFICADOR, no por patrón: el comodín de PostgREST no es
-    // el de SQL, y un borrado que no encuentra nada no da error —deja la tasa
-    // viva sin que nadie se entere—. Y después se COMPRUEBA que se fue.
-    //
-    // La lectura se acota EN LA BASE a las activas. Traerse la tabla entera y
-    // filtrar aquí es lo que rompió esta limpieza: PostgREST devuelve como
-    // mucho 1000 filas, la tabla ya las pasó, y la tasa recién sembrada —la
-    // última— caía fuera de la página. La limpieza no encontraba nada, la
-    // comprobación leía la misma página truncada y también decía que todo
-    // estaba bien. Quedaba una tasa sintética ACTIVA, y la siguiente suite que
-    // sembrara la suya moría con FX_RATE_OVERLAPS sin explicar por qué.
-    const { data: tasas } = await admin.from("commercial_fx_rates")
-      .select("id, note").eq("status", "active");
-    const mias = ((tasas ?? []) as { id: string; note: string | null }[])
-      .filter((t) => (t.note ?? "").includes(`QA PE-05B2 ${sello}`));
-    for (const t of mias) {
-      const { error } = await admin.from("commercial_fx_rates")
-        .update({ status: "retired" }).eq("id", t.id);
-      if (error) console.error(`  (residuo) tipo de cambio ${t.id}: ${error.message}`);
-    }
-    // Y la comprobación mira lo MISMO que se acaba de arreglar: si sigue
-    // habiendo una tasa de esta suite ACTIVA, la limpieza falló. Antes contaba
-    // filas por nota sin mirar el estado, así que la retirada que sí había
-    // funcionado seguía contando como residuo y el aviso salía siempre: un
-    // aviso que salta cuando todo está bien es un aviso que nadie lee.
-    const { data: quedan } = await admin.from("commercial_fx_rates")
-      .select("id, note").eq("status", "active");
-    const vivas = ((quedan ?? []) as { note: string | null }[])
-      .filter((t) => (t.note ?? "").includes(`QA PE-05B2 ${sello}`)).length;
-    if (vivas > 0) {
-      console.error(`  (RESIDUO GRAVE) quedan ${vivas} tasas sintéticas: son precio para quien presupueste`);
-    }
     for (const id of personas) {
       await admin.from("platform_staff").delete().eq("user_id", id);
       await admin.from("user_legal_acceptances").delete().eq("user_id", id);

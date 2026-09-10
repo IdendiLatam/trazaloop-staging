@@ -18,7 +18,7 @@ import { config as loadEnv } from "dotenv";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { limpiarPersonas } from "../support/fixture-cleanup";
+import { limpiarPersonas, tasaCanonicaQA } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,7 +41,6 @@ const personas: string[] = [];
 const orgs: string[] = [];
 const avisos: string[] = [];
 const W = "wompi";
-const TASA_MICROS = 4_000_000_000;
 
 async function persona(prefijo: string, papel?: "superadmin" | "support") {
   const email = `${prefijo}-${sello}-${Math.floor(Math.random() * 1e6)}@test.trazaloop.dev`;
@@ -187,12 +186,11 @@ async function main() {
   await admin.from("commercial_fx_rates").update({ status: "retired" })
     .eq("status", "active").like("note", "QA PE-06C2 %");
 
-  const { data: fx, error: efx } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: TASA_MICROS,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA PE-06C2 ${sello} · tasa sintetica, NO comercial` }).select("id").single();
-  assert(!efx, `tasa: ${efx?.message}`);
-  const fxId = (fx as { id: string }).id;
+  // TEST-HYGIENE-03 · Se reutiliza el tipo de cambio canónico de Local en vez de
+  // abrir uno nuevo por vuelta: 0182 no deja borrarlos y solo puede regir uno
+  // por par, así que cada tasa propia era una fila muerta más y un choque en
+  // potencia para la siguiente suite.
+  await tasaCanonicaQA(admin);
 
   console.log("\nPE-06C2 · Avisos de cobro en duda\n");
 
@@ -460,7 +458,6 @@ async function main() {
       await admin.from("billing_operations_alerts").delete().eq("organization_id", org);
       await limpiar(org);
     }
-    await admin.from("commercial_fx_rates").update({ status: "retired" }).eq("id", fxId);
     // TEST-HYGIENE-02 · Esta suite ya limpiaba su organización; lo que dejaba
     // eran USUARIOS. La causa era una y la misma en las ocho suites medidas:
     // `user_legal_acceptances` guarda dos filas por persona —quien crea una

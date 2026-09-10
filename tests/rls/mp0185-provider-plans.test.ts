@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
-import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
+import { limpiarFixtures, describirResiduo, tasaCanonicaQA } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -441,7 +441,6 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------------
-let fxId: string | null = null;
 
 async function conPresupuesto(etiqueta: string, plan: string, interval: string) {
   const p = await persona(`q-${etiqueta}`);
@@ -491,7 +490,7 @@ async function limpiar() {
   const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
   await pg.connect();
   const residuo = await limpiarFixtures(pg, admin, {
-    orgs, personas, fxIds: fxId ? [fxId] : [],
+    orgs, personas,
   });
   await pg.end();
 
@@ -504,14 +503,12 @@ async function limpiar() {
 }
 
 async function sembrarFx() {
-  await admin.from("commercial_fx_rates").update({ status: "retired" })
-    .eq("status", "active").like("note", "QA 0185 %");
-  const { data, error } = await admin.from("commercial_fx_rates").insert({
-    base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
-    effective_from: new Date(Date.now() - 86_400_000).toISOString(),
-    note: `QA 0185 ${sello} · tasa sintetica, NO comercial` }).select("id").single();
-  if (error) { console.log(`no se pudo sembrar la tasa: ${error.message}`); process.exit(1); }
-  fxId = (data as { id: string }).id;
+  // TEST-HYGIENE-03 · Antes abría su propia tasa y, para poder abrirla, retiraba
+  // a ciegas cualquier otra `QA 0185 %` que hubiera quedado viva. Dos parches
+  // sobre el mismo agujero: 0182 no deja borrar tasas y solo deja regir una por
+  // par, así que cada vuelta dejaba una fila muerta más. Se reutiliza la
+  // canónica de Local y no hace falta ni sembrar ni barrer.
+  await tasaCanonicaQA(admin);
 }
 
 void sembrarFx().then(main);

@@ -10,6 +10,8 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -382,22 +384,21 @@ async function main() {
         `al volver: ${(vuelta as J).functional_cases_used}/${(vuelta as J).functional_cases_limit}`);
     });
   } finally {
-    await admin.from("support_ticket_messages").delete().eq("organization_id", org);
-    await admin.from("support_tickets").delete().eq("organization_id", org);
-    await admin.from("ai_credit_ledger").delete().eq("organization_id", org);
-    await admin.from("storage_orphan_candidates").delete().eq("organization_id", org);
-    await admin.from("commercial_assignment_events").delete().eq("organization_id", org);
-    await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
-    await admin.from("memberships").delete().eq("organization_id", org);
-    await admin.from("organization_modules").delete().eq("organization_id", org);
-    await admin.from("subscription_plan_history").delete().eq("organization_id", org);
-    await admin.from("organization_subscriptions").delete().eq("organization_id", org);
-    const { error } = await admin.from("organizations").delete().eq("id", org);
-    if (error) console.error(`  ⚠ no se pudo retirar la empresa de prueba: ${error.message}`);
-    for (const id of personasCreadas) {
-      await admin.from("platform_staff").delete().eq("user_id", id);
-      await admin.auth.admin.deleteUser(id);
-    }
+    // TEST-HYGIENE-03 · Misma historia que en `pe04b6-lifecycle`: lista escrita
+    // a mano, y de los doce borrados solo el de `organizations` miraba su
+    // error. Medido: +2 usuarios de Auth, +2 perfiles y +4 aceptaciones
+    // legales por ejecución. Un aviso por consola que nadie mira tampoco es
+    // mirar; se barre por el grafo y la suite responde de lo suyo.
+    const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
+    await pg.connect();
+    const residuo = await limpiarFixtures(pg, admin, { orgs: [org], personas: personasCreadas });
+    await pg.end();
+    await check("La suite no deja un solo fixture detrás", async () => {
+      assert(residuo.organizaciones === 0 && residuo.personas === 0
+        && residuo.fxActivas === 0 && Object.keys(residuo.porTabla).length === 0
+        && residuo.problemas.length === 0,
+        `quedaron: ${describirResiduo(residuo)}`);
+    });
   }
 
   console.log(`\nPE-04B6 · transiciones: ${passed} en verde, ${failed} en rojo\n`);
