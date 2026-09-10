@@ -106,12 +106,37 @@ export async function limpiarFixtures(
     const tablas: string[] = conOrg.map((r: { tabla: string }) => r.tabla);
 
     await pg.query("begin");
+    // TEST-HYGIENE-04 · El disparador de solo-añadir de 0186 impide borrar un
+    // ciclo de proveedor, y sin borrarlo la organización no se va. Se aparta,
+    // pero con tres cautelas que antes no estaban:
+    //
+    //   · solo SI ESTE FIXTURE tiene ciclos. Una regla productiva no se apaga
+    //     «por si acaso»: si no hay nada que borrar, no se toca nada;
+    //   · dentro de un PUNTO DE RETORNO. Estaba suelto, y un `alter` que
+    //     fallara abortaba la transacción entera: a partir de ahí todo lo demás
+    //     fallaba en cascada y la limpieza no borraba nada sin decir por qué;
+    //   · y se COMPRUEBA al final que volvió a quedar activo.
     const tieneCiclos = await pg.query(
       "select to_regclass('public.billing_provider_cycles') as t");
-    const conCiclos = tieneCiclos.rows[0].t !== null;
+    let conCiclos = false;
+    if (tieneCiclos.rows[0].t !== null) {
+      const { rows: mios } = await pg.query(
+        `select 1 from public.billing_provider_cycles
+          where organization_id = any($1::uuid[]) limit 1`, [orgs]);
+      conCiclos = mios.length > 0;
+    }
     if (conCiclos) {
-      await pg.query(`alter table public.billing_provider_cycles
-                        disable trigger billing_provider_cycle_is_append_only_trg`);
+      await pg.query("savepoint t");
+      try {
+        await pg.query(`alter table public.billing_provider_cycles
+                          disable trigger billing_provider_cycle_is_append_only_trg`);
+        await pg.query("release savepoint t");
+      } catch (e) {
+        await pg.query("rollback to savepoint t");
+        conCiclos = false;
+        problemas.push(`no se pudo apartar el disparador de ciclos: `
+          + `${(e as Error).message.slice(0, 90)}`);
+      }
     }
 
     for (const q of SOLTAR) {
@@ -148,6 +173,16 @@ export async function limpiarFixtures(
                         enable trigger billing_provider_cycle_is_append_only_trg`);
     }
     await pg.query("commit");
+
+    // Y se comprueba DESPUÉS de confirmar, que es cuando la respuesta vale:
+    // dejar una regla productiva apagada sería mucho peor que no limpiar.
+    const { rows: estado } = await pg.query(
+      `select tgenabled from pg_trigger
+        where tgname = 'billing_provider_cycle_is_append_only_trg'`);
+    if (estado.length > 0 && estado[0].tgenabled === 'D') {
+      problemas.push("el disparador de solo-añadir de billing_provider_cycles "
+        + "quedó DESHABILITADO · hay que reactivarlo a mano antes de seguir");
+    }
   }
 
   // --- Las personas, y por qué no basta con `deleteUser` ---------------------

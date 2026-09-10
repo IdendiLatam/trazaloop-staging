@@ -205,5 +205,78 @@ check("C1. `pe04b5` publica con un autor de correo determinista", () => {
     "quien publica las revisiones ya no es el autor canónico");
 });
 
+// ===========================================================================
+console.log("\nD · La limpieza es la MISMA en Local y en remoto");
+// ===========================================================================
+/**
+ * TEST-HYGIENE-04 · `stab03` llevaba una copia a mano del barrido por claves
+ * ajenas, con `catch {}` en cada borrado. Contra Local pasaba; contra Staging
+ * dejó dos organizaciones y dos usuarios y NO dijo por qué. Dos copias del
+ * mismo algoritmo divergen en cuanto una se toca, y la que se traga los errores
+ * no se puede diagnosticar: hubo que barrer a mano un entorno compartido.
+ *
+ * El ayudante común es un solo código, corre igual en los dos sitios y DEVUELVE
+ * lo que no pudo hacer.
+ */
+
+/** Suites que todavía llevan su copia. Se convierten en el tramo que las use
+ *  contra Staging; hasta entonces están NOMBRADAS, no toleradas en silencio. */
+const COPIAS_PENDIENTES = [
+  "tests/rls/mp0186-provider-reconciliation.test.ts",
+  "tests/rls/stab01-commercial-state.test.ts",
+  "tests/rls/stab04-positions-apply.test.ts",
+];
+
+check("D1. Ninguna suite NUEVA se escribe su propio barrido por claves ajenas", () => {
+  const propias: string[] = [];
+  for (const { ruta, texto } of ficherosDePrueba()) {
+    if (!ruta.startsWith("tests/rls/")) continue;
+    if (COPIAS_PENDIENTES.includes(ruta)) continue;
+    // La firma de un barrido propio: consultar el catálogo de claves ajenas
+    // para construir una lista de tablas que borrar.
+    const barre = /pg_constraint/.test(texto)
+      && /relname\s*=\s*'organizations'/.test(texto)
+      && /delete from public\.\$\{/.test(texto);
+    if (barre) propias.push(ruta);
+  }
+  assert(propias.length === 0,
+    `se escriben su propio barrido en vez de usar el ayudante: ${propias.join(", ")}`
+    + " · dos copias del mismo algoritmo divergen, y la de la suite se traga los errores");
+});
+
+check("D2. Y las copias pendientes siguen siendo EXACTAMENTE las declaradas", () => {
+  // Si una se convierte, hay que quitarla de la lista: una excepción que
+  // sobrevive a su motivo es una excepción que ya no se lee.
+  for (const ruta of COPIAS_PENDIENTES) {
+    const texto = ficherosDePrueba().find((f) => f.ruta === ruta)?.texto ?? "";
+    assert(texto !== "", `la excepción nombra un fichero que ya no existe: ${ruta}`);
+    assert(/pg_constraint/.test(texto),
+      `${ruta} ya no lleva su propio barrido: quítala de COPIAS_PENDIENTES`);
+  }
+});
+
+check("D3. Apartar el disparador de ciclos va acotado, protegido y comprobado", () => {
+  const i = AYUDANTE.indexOf("disable trigger billing_provider_cycle_is_append_only_trg");
+  assert(i > 0, "el ayudante ya no aparta el disparador de ciclos");
+  const antes = AYUDANTE.slice(Math.max(0, i - 1200), i);
+  const despues = AYUDANTE.slice(i, i + 2600);
+  assert(/savepoint t/.test(antes),
+    "el `alter table … disable trigger` no va dentro de un punto de retorno: "
+    + "si falla, aborta la transacción entera y la limpieza deja de borrar en silencio");
+  assert(/where organization_id = any\(\$1::uuid\[\]\)[\s\S]{0,120}limit 1/.test(antes),
+    "se aparta el disparador sin comprobar antes que ESTE fixture tenga ciclos");
+  assert(/enable trigger billing_provider_cycle_is_append_only_trg/.test(despues),
+    "no se vuelve a poner");
+  assert(/tgenabled/.test(despues),
+    "no se COMPRUEBA que el disparador quedó activo al terminar");
+});
+
+check("D4. El ayudante no se traga ningún error sin registrarlo", () => {
+  // `catch {}` vacío es la firma exacta del defecto que costó tres tramos.
+  const vacios = AYUDANTE.match(/catch\s*(\([^)]*\))?\s*\{\s*\}/g) ?? [];
+  assert(vacios.length === 0,
+    `el ayudante tiene ${vacios.length} capturas de error vacías`);
+});
+
 console.log(`\nTEST-HYGIENE-03 · guardas: ${passed} en verde, ${failed} en rojo\n`);
 process.exit(failed === 0 ? 0 : 1);

@@ -1,6 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 import { normalizarIdentidad, terminoDeBusqueda } from "../../lib/domain/identidad-normalizada";
 
@@ -533,57 +534,36 @@ async function main() {
   // de fixtures que acabaron rompiendo otra prueba tres tramos después. Aquí
   // cada borrado va con su punto de retorno, y al final se CUENTA lo que queda:
   // si sobrevive algo, esta suite se pone roja por su propia basura.
-  await pg.query("begin");
-  for (const q of [
-    "update public.billing_subscription_periods set settled_payment_id = null where organization_id = any($1::uuid[])",
-    "update public.billing_quotes set subscription_id = null where organization_id = any($1::uuid[])",
-  ]) {
-    await pg.query("savepoint p");
-    try { await pg.query(q, [orgs]); await pg.query("release savepoint p"); }
-    catch { await pg.query("rollback to savepoint p"); }
-  }
-
-  const { rows: conOrg } = await pg.query(
-    `select c.relname as tabla from pg_constraint k
-       join pg_class c on c.oid = k.conrelid
-       join pg_class r on r.oid = k.confrelid
-       join pg_namespace n on n.oid = c.relnamespace
-      where k.contype = 'f' and n.nspname = 'public' and r.relname = 'organizations'
-        and c.relname <> 'organizations'`);
-  let quedan = conOrg.map((r: { tabla: string }) => r.tabla);
-  for (let vuelta = 0; vuelta < 10 && quedan.length > 0; vuelta += 1) {
-    const fallaron: string[] = [];
-    for (const t of quedan) {
-      await pg.query("savepoint s");
-      try {
-        await pg.query(`delete from public.${t} where organization_id = any($1::uuid[])`, [orgs]);
-        await pg.query("release savepoint s");
-      } catch { await pg.query("rollback to savepoint s"); fallaron.push(t); }
-    }
-    if (fallaron.length === quedan.length) break;
-    quedan = fallaron;
-  }
-  await pg.query("savepoint o");
-  try { await pg.query("delete from public.organizations where id = any($1::uuid[])", [orgs]); await pg.query("release savepoint o"); }
-  catch { await pg.query("rollback to savepoint o"); }
-  await pg.query("commit");
-  for (const uid of personas) await admin.auth.admin.deleteUser(uid);
+  // TEST-HYGIENE-04 · Aquí había una COPIA A MANO del barrido por claves
+  // ajenas, con `catch {}` en cada borrado. Contra Local funcionaba; contra
+  // Staging dejó dos organizaciones y dos usuarios, y no dijo por qué: los
+  // errores se tragaban sin registrarlos y la postcondición solo contaba filas.
+  // Una limpieza que falla sin explicarse es la que ya costó tres tramos.
+  //
+  // Ahora usa el ayudante común, que es el mismo código en los dos entornos y
+  // DEVUELVE lo que no pudo hacer. Y las personas van por su primitiva, que
+  // borra lo que es suyo y después comprueba que se fueron.
+  // Una sola llamada: `limpiarFixtures` ya se lleva las organizaciones Y las
+  // personas, en ese orden, que es el único que funciona. Llamar además a
+  // `limpiarPersonas` con la misma lista hacía que la segunda pasada intentara
+  // borrar a quien ya no estaba y lo reportara como problema: la limpieza era
+  // correcta y el informe decía que no.
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
 
   await check("29. La suite no deja un solo fixture detrás", async () => {
-    const { rows: o } = await pg.query(
-      "select count(*)::int n from public.organizations where name like 'STAB03 %'");
     const { rows: p } = await pg.query(
       `select count(*)::int n from public.quality_external_parties
         where organization_id = any($1::uuid[])`, [orgs]);
     const { rows: g } = await pg.query(
       `select count(*)::int n from public.quality_stakeholder_groups
         where organization_id = any($1::uuid[])`, [orgs]);
-    const { data: usuarios } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    const vivos = usuarios.users.filter((u) => u.email?.startsWith("stab03-")).length;
-    assert(o[0].n === 0, `quedaron ${o[0].n} organizaciones`);
+    assert(residuo.problemas.length === 0,
+      `la limpieza informó de: ${residuo.problemas.join(" · ")}`);
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && Object.keys(residuo.porTabla).length === 0,
+      `quedaron fixtures: ${describirResiduo(residuo)}`);
     assert(p[0].n === 0, `quedaron ${p[0].n} partes externas`);
     assert(g[0].n === 0, `quedaron ${g[0].n} colectivos`);
-    assert(vivos === 0, `quedaron ${vivos} usuarios de prueba`);
   });
 
   await pg.end();
