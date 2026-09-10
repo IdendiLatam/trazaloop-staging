@@ -548,10 +548,19 @@ async function main() {
     // de nadie, porque `billing_resolve_fx` no mira la nota y convertiría la
     // tasa inventada en precio para quien presupueste después.
     //
-    // Se borra POR IDENTIFICADOR, no por patrón: el comodín de PostgREST no es
+    // Se retira POR IDENTIFICADOR, no por patrón: el comodín de PostgREST no es
     // el de SQL, y un borrado que no encuentra nada no da error —deja la tasa
     // viva sin que nadie se entere—. Y después se COMPRUEBA que se fue.
-    const { data: tasas } = await admin.from("commercial_fx_rates").select("id, note");
+    //
+    // La lectura se acota EN LA BASE a las activas. Traerse la tabla entera y
+    // filtrar aquí es lo que rompió esta limpieza: PostgREST devuelve como
+    // mucho 1000 filas, la tabla ya las pasó, y la tasa recién sembrada —la
+    // última— caía fuera de la página. La limpieza no encontraba nada, la
+    // comprobación leía la misma página truncada y también decía que todo
+    // estaba bien. Quedaba una tasa sintética ACTIVA, y la siguiente suite que
+    // sembrara la suya moría con FX_RATE_OVERLAPS sin explicar por qué.
+    const { data: tasas } = await admin.from("commercial_fx_rates")
+      .select("id, note").eq("status", "active");
     const mias = ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((t) => (t.note ?? "").includes(`QA PE-05B2 ${sello}`));
     for (const t of mias) {
@@ -559,7 +568,13 @@ async function main() {
         .update({ status: "retired" }).eq("id", t.id);
       if (error) console.error(`  (residuo) tipo de cambio ${t.id}: ${error.message}`);
     }
-    const { data: quedan } = await admin.from("commercial_fx_rates").select("id, note");
+    // Y la comprobación mira lo MISMO que se acaba de arreglar: si sigue
+    // habiendo una tasa de esta suite ACTIVA, la limpieza falló. Antes contaba
+    // filas por nota sin mirar el estado, así que la retirada que sí había
+    // funcionado seguía contando como residuo y el aviso salía siempre: un
+    // aviso que salta cuando todo está bien es un aviso que nadie lee.
+    const { data: quedan } = await admin.from("commercial_fx_rates")
+      .select("id, note").eq("status", "active");
     const vivas = ((quedan ?? []) as { note: string | null }[])
       .filter((t) => (t.note ?? "").includes(`QA PE-05B2 ${sello}`)).length;
     if (vivas > 0) {

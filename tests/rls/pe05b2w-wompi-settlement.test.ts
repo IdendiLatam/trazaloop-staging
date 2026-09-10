@@ -287,7 +287,13 @@ async function main() {
     await admin.from("billing_provider_events").delete().like("resource_id", `%${sello}`);
     const { error } = await admin.from("organizations").delete().eq("id", org);
     if (error) console.error(`  (residuo) empresa: ${error.message}`);
-    const { data: tasas } = await admin.from("commercial_fx_rates").select("id, note");
+    // La lectura se acota EN LA BASE a las tasas activas en lugar de traerse la
+    // tabla entera y filtrar aquí: PostgREST devuelve como mucho 1000 filas y
+    // esta tabla ya las pasó, así que la tasa recién sembrada caía fuera de la
+    // página y la limpieza no encontraba nada que retirar —ni lo decía—. Una
+    // tasa ya retirada no es precio para nadie: solo estorban las activas.
+    const { data: tasas } = await admin.from("commercial_fx_rates")
+      .select("id, note").eq("status", "active");
     for (const t of ((tasas ?? []) as { id: string; note: string | null }[])
       .filter((x) => (x.note ?? "").includes(`QA PE-05B2W ${sello}`))) {
       const { error: e } = await admin.from("commercial_fx_rates")
