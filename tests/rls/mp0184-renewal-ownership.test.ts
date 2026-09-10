@@ -1,5 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -353,23 +355,32 @@ async function main() {
     }
   });
 
-  console.log(`\n0184 · ownership: ${passed} en verde, ${failed} en rojo\n`);
-
   // ---- Limpieza ---------------------------------------------------------
-  for (const org of orgs) {
-    await admin.from("billing_subscription_periods").delete().eq("organization_id", org);
-    await admin.from("billing_subscriptions").delete().eq("organization_id", org);
-    await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
-    await admin.from("memberships").delete().eq("organization_id", org);
-    await admin.from("organization_modules").delete().eq("organization_id", org);
-    await admin.from("organizations").delete().eq("id", org);
-  }
-  for (const id of personas) {
-    await admin.from("platform_staff").delete().eq("user_id", id);
-    await admin.auth.admin.deleteUser(id);
-  }
-  await admin.from("commercial_fx_rates").update({ status: "retired" }).eq("id", fxId);
+  // TEST-HYGIENE-01 · Antes había aquí una lista de borrados escrita a mano, en
+  // un orden que no podía funcionar y sin mirar el resultado de ninguno. Medido:
+  // esta suite dejaba +6 organizaciones, +6 usuarios de Auth y +6 filas en cada
+  // tabla de facturación, en cada ejecución. Y es UNA causa con cuatro
+  // síntomas: las filas de facturación no se borran → la organización tampoco →
+  // el perfil tampoco → `deleteUser` devuelve 500.
+  //
+  // Esa basura acabó rompiendo `PE-05B6D · A3` tres tramos después, porque su
+  // pasada de renovación contaba los vencimientos que esta suite dejaba
+  // envejecidos a propósito. Ahora se limpia por el GRAFO de claves ajenas y
+  // —lo que importa— se COMPRUEBA: si sobrevive algo, esta suite se pone roja
+  // por su propia basura en vez de dejársela al siguiente.
+  const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
+  await pg.connect();
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas, fxIds: [fxId] });
+  await pg.end();
 
+  await check("12. La suite no deja un solo fixture detrás", async () => {
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && residuo.fxActivas === 0 && Object.keys(residuo.porTabla).length === 0
+      && residuo.problemas.length === 0,
+      `quedaron: ${describirResiduo(residuo)}`);
+  });
+
+  console.log(`\n0184 · ownership: ${passed} en verde, ${failed} en rojo\n`);
   process.exit(failed === 0 ? 0 : 1);
 }
 

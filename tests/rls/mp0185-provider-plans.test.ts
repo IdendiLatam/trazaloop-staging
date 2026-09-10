@@ -1,5 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Client as PgClient } from "pg";
+import { limpiarFixtures, describirResiduo } from "../support/fixture-cleanup";
 import { readFileSync } from "node:fs";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -430,9 +432,11 @@ async function main() {
     }
   });
 
-  console.log(`\n0185 · planes del proveedor: ${passed} en verde, ${failed} en rojo\n`);
-
+  // El resumen va DESPUÉS de limpiar: la limpieza tiene su propia comprobación
+  // y contarla antes daría un número que no incluye si la suite se llevó lo
+  // suyo, que es justo lo que este tramo vino a arreglar.
   await limpiar();
+  console.log(`\n0185 · planes del proveedor: ${passed} en verde, ${failed} en rojo\n`);
   process.exit(failed === 0 ? 0 : 1);
 }
 
@@ -477,25 +481,26 @@ async function suscripcionDesde(e: { org: string; cli: SupabaseClient; quoteId: 
 }
 
 async function limpiar() {
-  for (const org of orgs) {
-    await admin.from("billing_subscriptions")
-      .update({ billing_provider_plan_id: null }).eq("organization_id", org);
-    await admin.from("billing_subscription_periods").delete().eq("organization_id", org);
-    await admin.from("billing_payments").delete().eq("organization_id", org);
-    await admin.from("billing_checkout_intents").delete().eq("organization_id", org);
-    await admin.from("billing_payment_methods").delete().eq("organization_id", org);
-    await admin.from("billing_subscriptions").delete().eq("organization_id", org);
-    await admin.from("billing_quotes").delete().eq("organization_id", org);
-    await admin.from("organization_plan_assignments").delete().eq("organization_id", org);
-    await admin.from("memberships").delete().eq("organization_id", org);
-    await admin.from("organization_modules").delete().eq("organization_id", org);
-    await admin.from("organizations").delete().eq("id", org);
-  }
-  for (const id of personas) {
-    await admin.from("platform_staff").delete().eq("user_id", id);
-    await admin.auth.admin.deleteUser(id);
-  }
-  if (fxId) await admin.from("commercial_fx_rates").update({ status: "retired" }).eq("id", fxId);
+  // TEST-HYGIENE-01 · La lista de borrados a mano tenía mejor orden que la de
+  // `mp0184`, y aun así fallaba: borraba las suscripciones ANTES que los
+  // presupuestos, y `billing_quotes.subscription_id` las referencia con
+  // RESTRICT. Nadie miraba el resultado, así que el fallo era invisible y esta
+  // suite dejaba +6 organizaciones y +6 usuarios en cada ejecución.
+  //
+  // Ahora limpia por el GRAFO de claves ajenas y COMPRUEBA lo que sobrevive.
+  const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
+  await pg.connect();
+  const residuo = await limpiarFixtures(pg, admin, {
+    orgs, personas, fxIds: fxId ? [fxId] : [],
+  });
+  await pg.end();
+
+  await check("24. La suite no deja un solo fixture detrás", async () => {
+    assert(residuo.organizaciones === 0 && residuo.personas === 0
+      && residuo.fxActivas === 0 && Object.keys(residuo.porTabla).length === 0
+      && residuo.problemas.length === 0,
+      `quedaron: ${describirResiduo(residuo)}`);
+  });
 }
 
 async function sembrarFx() {
