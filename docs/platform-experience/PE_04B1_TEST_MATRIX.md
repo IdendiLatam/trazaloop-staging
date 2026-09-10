@@ -117,6 +117,12 @@ Ahora comprueba lo que sigue siendo promesa: que **PE-03 cerró en 0161** y que
 ninguna migración posterior lleva su nombre. Y E2 conserva la única cabecera que
 ese cierre puede seguir afirmando — **Producción en 0111**.
 
+> **Nota posterior · 9 de septiembre de 2026.** E2 cayó en la misma trampa que
+> E1: el corte del 7 de septiembre llevó Producción a **0183** y la cifra
+> congelada dejó la suite en rojo permanente. E2 ya no afirma un número; ahora
+> comprueba que la tabla de cabeceras existe, que cada cifra declarada nombra una
+> migración real y que Producción nunca aparece por debajo de 0161.
+
 ---
 
 ## 6 · Dos trampas que este tramo encontró

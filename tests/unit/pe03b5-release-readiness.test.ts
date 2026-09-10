@@ -168,10 +168,40 @@ check("E1. PE-03 no añadió ninguna migración por encima de 0161", () => {
     `hay migraciones de PE-03 por encima de 0161: ${dePe03.join(", ")}`);
 });
 
-check("E2. Y el estado declara Producción en 0111", () => {
-  // Local y Staging avanzan con cada tramo; Producción es la que no se toca, y
-  // es la única cabecera que este cierre puede seguir afirmando.
-  assert(/\| Producción \| \*\*0111\*\* \|/.test(ESTADO), "PE_STATUS no dice Producción 0111");
+check("E2. Y las cabeceras que declara el estado existen de verdad", () => {
+  // ANTES exigía la cifra literal «Producción 0111». Eso era una FOTOGRAFÍA, no
+  // una promesa: el corte del 7 de septiembre de 2026 llevó Producción a 0183 y
+  // esta comprobación se quedó en rojo para siempre defendiendo un número
+  // histórico. Una guarda que solo puede volver a verde retrocediendo el mundo
+  // no protege nada — se ignora, y arrastra consigo a la suite entera.
+  //
+  // Que PE-03 no tocara Producción ya lo comprueba E1, y por el camino correcto:
+  // mirando las migraciones, no una cifra copiada a mano. Lo que aquí queda es
+  // lo que sí sigue siendo verdad mientras el proyecto avanza:
+  //
+  //   · el estado declara las tres cabeceras, y la tabla no desaparece al
+  //     reescribir el documento;
+  //   · cada cifra declarada nombra una migración que EXISTE en el repositorio,
+  //     así que el documento no puede inventarse una cabecera ni escribirla mal;
+  //   · y Producción nunca aparece por debajo de 0161, la cabecera con la que
+  //     cerró PE-03. Una base de datos solo avanza: verla retroceder sería un
+  //     error de verdad, y esta es la única dirección que no caduca.
+  const seccion = /^## Cabeceras de migración$([\s\S]*?)^---$/m.exec(ESTADO)?.[1] ?? "";
+  assert(seccion !== "", "PE_STATUS ya no tiene la tabla «Cabeceras de migración»");
+
+  const migraciones = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"));
+  for (const entorno of ["Local", "Staging", "Producción"]) {
+    const fila = new RegExp(`^\\|\\s*${entorno}\\s*\\|\\s*\\*\\*(\\d{4})\\*\\*\\s*\\|`, "m")
+      .exec(seccion);
+    assert(fila !== null, `la tabla de cabeceras no declara ${entorno}`);
+    const cabecera = fila[1];
+    assert(migraciones.some((f) => f.startsWith(cabecera)),
+      `${entorno} declara la cabecera ${cabecera} y no existe ninguna migración con ese número`);
+    if (entorno === "Producción") {
+      assert(cabecera >= "0161",
+        `Producción declara ${cabecera}, por debajo del 0161 con el que cerró PE-03`);
+    }
+  }
 });
 
 // ===========================================================================
