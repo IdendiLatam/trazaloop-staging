@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { Client as PgClientCtor } from "pg";
 import type { Client as PgClient } from "pg";
 
 /**
@@ -149,12 +150,55 @@ export async function limpiarFixtures(
     await pg.query("commit");
   }
 
-  // Las personas van DESPUÉS: mientras su perfil esté referenciado por una fila
-  // de la organización, `deleteUser` devuelve 500 y el usuario sobrevive.
+  // --- Las personas, y por qué no basta con `deleteUser` ---------------------
+  //
+  // Van DESPUÉS de la organización: mientras su perfil esté referenciado,
+  // `deleteUser` devuelve 500 y el usuario sobrevive.
+  //
+  // Pero hay filas que NO cuelgan de ninguna organización y sí de la persona.
+  // TEST-HYGIENE-02 lo midió: ocho suites dejaban miles de usuarios huérfanos y
+  // la causa era UNA sola en las ocho — `user_legal_acceptances`, dos filas por
+  // persona, porque quien crea una empresa acepta los documentos legales. Nadie
+  // las borraba, así que el 500 era inevitable y nadie miraba el resultado.
+  //
+  // Se resuelve por el CATÁLOGO, no por una lista: se borran las filas de las
+  // tablas cuya clave ajena a `profiles` se llama literalmente `user_id`, que
+  // son las que pertenecen a la persona y no a otra cosa. Las columnas de
+  // autoría —`created_by`, `assigned_by`, `published_by`…— NO se tocan: esas
+  // filas son de una organización, no del usuario, y borrarlas por el autor
+  // destruiría datos ajenos.
+  if (personas.length > 0) {
+    const { rows: propias } = await pg.query(
+      `select c.relname as tabla, a.attname as columna
+         from pg_constraint k
+         join pg_class c on c.oid = k.conrelid
+         join pg_class r on r.oid = k.confrelid
+         join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+         join pg_namespace n on n.oid = c.relnamespace
+        where k.contype = 'f' and n.nspname = 'public'
+          and r.relname = 'profiles' and a.attname = 'user_id'`);
+    // Sin punto de retorno: este bloque corre FUERA de la transacción del
+    // barrido —ya se confirmó— y `savepoint` fuera de una transacción es un
+    // error 25P01 que tumbaba la limpieza entera. En autoconfirmación cada
+    // sentencia va sola, así que una que falle no ensucia a las demás.
+    for (const { tabla, columna } of propias as Array<{ tabla: string; columna: string }>) {
+      try {
+        await pg.query(`delete from public.${tabla} where ${columna} = any($1::uuid[])`, [personas]);
+      } catch (e) {
+        problemas.push(`${tabla}: ${(e as Error).message.slice(0, 90)}`);
+      }
+    }
+  }
+
   for (const uid of personas) {
-    await admin.from("platform_staff").delete().eq("user_id", uid);
     const { error } = await admin.auth.admin.deleteUser(uid);
-    if (error) problemas.push(`auth.users ${uid.slice(0, 8)}: ${error.message || error.status}`);
+    if (!error) continue;
+    // Si aun así no se puede, se dice QUÉ lo impide. Un «500» a secas obliga a
+    // repetir el diagnóstico entero cada vez; el nombre de la tabla lo resuelve
+    // en un vistazo.
+    const bloquean = await quienBloquea(pg, uid);
+    problemas.push(`auth.users ${uid.slice(0, 8)}: ${error.message || error.status}`
+      + (bloquean.length ? ` · lo impiden ${bloquean.join(", ")}` : ""));
   }
 
   for (const id of fxIds) {
@@ -164,6 +208,31 @@ export async function limpiarFixtures(
   }
 
   return { ...(await contarResiduo(pg, admin, fixtures)), problemas };
+}
+
+/**
+ * Qué filas siguen apuntando al perfil de esa persona. Solo se llama cuando
+ * `deleteUser` ya ha fallado: recorrer todas las claves ajenas a `profiles`
+ * cuesta, y no tiene sentido pagarlo cuando todo va bien.
+ */
+async function quienBloquea(pg: PgClient, uid: string): Promise<string[]> {
+  const { rows: refs } = await pg.query(
+    `select c.relname as tabla, a.attname as columna
+       from pg_constraint k
+       join pg_class c on c.oid = k.conrelid
+       join pg_class r on r.oid = k.confrelid
+       join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+       join pg_namespace n on n.oid = c.relnamespace
+      where k.contype = 'f' and n.nspname = 'public' and r.relname = 'profiles'`);
+  const bloquean: string[] = [];
+  for (const { tabla, columna } of refs as Array<{ tabla: string; columna: string }>) {
+    try {
+      const { rows } = await pg.query(
+        `select count(*)::int n from public.${tabla} where ${columna} = $1`, [uid]);
+      if (rows[0].n > 0) bloquean.push(`${tabla}.${columna}=${rows[0].n}`);
+    } catch { /* una tabla sin permiso no es una pista */ }
+  }
+  return bloquean;
 }
 
 /** Qué queda de esos fixtures. Se llama después de limpiar, y también sola. */
@@ -219,4 +288,113 @@ export function describirResiduo(r: Residuo): string {
   for (const [t, n] of Object.entries(r.porTabla)) partes.push(`${n} en ${t}`);
   if (r.problemas.length) partes.push(`· ${r.problemas.join(" · ")}`);
   return partes.join(", ") || "nada";
+}
+
+/**
+ * Borrar SOLO personas, para las suites que ya saben limpiar su organización.
+ *
+ * Es el caso de las ocho que midió TEST-HYGIENE-02: su barrido de la empresa
+ * funcionaba —dejaban cero organizaciones— y aun así acumulaban miles de
+ * usuarios, porque `user_legal_acceptances` guarda dos filas por persona que no
+ * cuelgan de ninguna organización y nadie las borraba.
+ *
+ * Devuelve la lista de problemas: vacía si se llevó a todas. Quien la llama
+ * tiene que ponerse rojo si no lo está, que es lo que faltaba.
+ */
+export async function limpiarPersonas(
+  admin: SupabaseClient, personas: string[],
+  opciones: { cliente?: PgClient; autoriaInmutable?: string[] } = {}
+): Promise<string[]> {
+  const { cliente, autoriaInmutable = [] } = opciones;
+  if (personas.length === 0) return [];
+  const problemas: string[] = [];
+  // La conexión directa se abre aquí si no la traen: obligar a cada suite a
+  // gestionar un cliente de Postgres solo para limpiar sería repartir por siete
+  // ficheros una plomería que no es suya.
+  const propia = cliente === undefined;
+  const pg = cliente ?? new PgClientCtor({ connectionString: process.env.SUPABASE_DB_URL });
+  if (propia) await pg.connect();
+  try {
+
+  await admin.from("platform_staff").delete().in("user_id", personas);
+
+  const { rows: propias } = await pg.query(
+    `select c.relname as tabla, a.attname as columna
+       from pg_constraint k
+       join pg_class c on c.oid = k.conrelid
+       join pg_class r on r.oid = k.confrelid
+       join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+       join pg_namespace n on n.oid = c.relnamespace
+      where k.contype = 'f' and n.nspname = 'public'
+        and r.relname = 'profiles' and a.attname = 'user_id'`);
+  for (const { tabla, columna } of propias as Array<{ tabla: string; columna: string }>) {
+    try {
+      await pg.query(`delete from public.${tabla} where ${columna} = any($1::uuid[])`, [personas]);
+    } catch (e) {
+      problemas.push(`${tabla}: ${(e as Error).message.slice(0, 90)}`);
+    }
+  }
+
+  // --- La AUTORÍA no se borra: se suelta -----------------------------------
+  //
+  // Quedan filas que la persona CREÓ pero que no son suyas y que no deben
+  // desaparecer: una tasa de cambio se retira y se conserva porque 0182 no deja
+  // borrar historia financiera, y una revisión de plan publicada es catálogo.
+  // Sus columnas de autoría apuntan al perfil y bloquean el borrado.
+  //
+  // La única salida correcta es soltar el puntero, no la fila: la columna es
+  // anulable, la fila sobrevive intacta, y lo único que se pierde es «quién lo
+  // creó», que iba a ser un usuario de prueba inexistente de todas formas.
+  // Borrar la fila por su autor destruiría datos que no son del fixture.
+  const { rows: autoria } = await pg.query(
+    `select c.relname as tabla, a.attname as columna
+       from pg_constraint k
+       join pg_class c on c.oid = k.conrelid
+       join pg_class r on r.oid = k.confrelid
+       join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+       join pg_namespace n on n.oid = c.relnamespace
+      where k.contype = 'f' and n.nspname = 'public'
+        and r.relname = 'profiles' and a.attname <> 'user_id'
+        and not a.attnotnull`);
+  for (const { tabla, columna } of autoria as Array<{ tabla: string; columna: string }>) {
+    try {
+      const { rowCount } = await pg.query(
+        `update public.${tabla} set ${columna} = null where ${columna} = any($1::uuid[])`,
+        [personas]);
+      void rowCount;
+    } catch { /* una tabla protegida por disparador se reporta abajo, al fallar */ }
+  }
+
+  for (const uid of personas) {
+    const { error } = await admin.auth.admin.deleteUser(uid);
+    if (!error) continue;
+    const bloquean = await quienBloquea(pg, uid);
+    // Una excepción DECLARADA no es una excepción silenciada. Hay filas que el
+    // producto congela a propósito —una revisión de plan publicada guarda quién
+    // la publicó y 0162 no deja reescribirlo— y ahí no hay salida buena: o se
+    // conserva el usuario, o se falsea la historia del catálogo. La suite que
+    // lo provoca lo declara por su nombre; cualquier OTRO bloqueo sigue
+    // poniéndola roja.
+    const soloDeclarados = bloquean.length > 0 && bloquean.every((b) =>
+      autoriaInmutable.some((permitido) => b.startsWith(permitido)));
+    if (soloDeclarados) continue;
+    problemas.push(`auth.users ${uid.slice(0, 8)}: ${error.message || error.status}`
+      + (bloquean.length ? ` · lo impiden ${bloquean.join(", ")}` : ""));
+  }
+
+  // Y se COMPRUEBA: que `deleteUser` no devuelva error no demuestra que se haya
+  // ido. Lo demuestra preguntarlo.
+  for (const uid of personas) {
+    const { data } = await admin.auth.admin.getUserById(uid);
+    if (!data?.user) continue;
+    const bloquean = await quienBloquea(pg, uid);
+    const soloDeclarados = bloquean.length > 0 && bloquean.every((b) =>
+      autoriaInmutable.some((permitido) => b.startsWith(permitido)));
+    if (!soloDeclarados) problemas.push(`auth.users ${uid.slice(0, 8)}: sigue viva`);
+  }
+
+  return problemas;
+  } finally {
+    if (propia) await pg.end();
+  }
 }

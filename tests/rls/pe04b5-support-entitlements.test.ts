@@ -14,6 +14,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { limpiarPersonas } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -634,9 +635,33 @@ async function main() {
     await admin.from("subscription_plan_history").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organization_subscriptions").delete().in("organization_id", [org, otraOrg]);
     await admin.from("organizations").delete().in("id", [org, otraOrg]);
-    for (const id of personasCreadas) {
-      await admin.from("platform_staff").delete().eq("user_id", id);
-      await admin.auth.admin.deleteUser(id);
+    // TEST-HYGIENE-02 · Esta suite ya limpiaba su organización; lo que dejaba
+    // eran USUARIOS. La causa era una y la misma en las ocho suites medidas:
+    // `user_legal_acceptances` guarda dos filas por persona —quien crea una
+    // empresa acepta los documentos legales— y no cuelgan de ninguna
+    // organización, así que `deleteUser` devolvía 500 y nadie leía el resultado.
+    // El ayudante borra lo que es DE la persona, lo intenta, y si algo lo
+    // impide dice qué. Y la suite se pone roja: no se le deja la basura al
+    // siguiente.
+    {
+      // UNA EXCEPCIÓN DECLARADA, y conviene entender qué se está aceptando.
+      //
+      // Esta suite PUBLICA revisiones de plan para poder ejercitar la consola,
+      // y una revisión publicada es historia del catálogo: 0162 la congela y no
+      // deja ni borrarla ni reescribir quién la publicó. El perfil de esa
+      // persona queda referenciado para siempre, así que su usuario no se puede
+      // borrar sin falsear el catálogo.
+      //
+      // No se silencia: se nombra. Cualquier otro bloqueo pone la suite roja.
+      // Cerrarlo de verdad exigiría que la suite no publicara revisiones
+      // reales, y eso es rediseñar qué prueba, no limpiar mejor.
+      const problemas = await limpiarPersonas(admin, personasCreadas, {
+        autoriaInmutable: ["plan_revisions.published_by"],
+      });
+      if (problemas.length > 0) {
+        failed += 1;
+        console.log(`  ✘ La suite dejó fixtures detrás: ${problemas.join(" · ")}`);
+      }
     }
   }
 

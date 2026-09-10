@@ -19,6 +19,7 @@
 import { config as loadEnv } from "dotenv";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { limpiarPersonas } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -696,7 +697,21 @@ async function main() {
       await admin.from("commercial_fx_rates")
         .update({ status: "retired" }).eq("id", t);
     }
-    for (const id of personas) await admin.auth.admin.deleteUser(id);
+    // TEST-HYGIENE-02 · Esta suite ya limpiaba su organización; lo que dejaba
+    // eran USUARIOS. La causa era una y la misma en las ocho suites medidas:
+    // `user_legal_acceptances` guarda dos filas por persona —quien crea una
+    // empresa acepta los documentos legales— y no cuelgan de ninguna
+    // organización, así que `deleteUser` devolvía 500 y nadie leía el resultado.
+    // El ayudante borra lo que es DE la persona, lo intenta, y si algo lo
+    // impide dice qué. Y la suite se pone roja: no se le deja la basura al
+    // siguiente.
+    {
+      const problemas = await limpiarPersonas(admin, personas);
+      if (problemas.length > 0) {
+        failed += 1;
+        console.log(`  ✘ La suite dejó fixtures detrás: ${problemas.join(" · ")}`);
+      }
+    }
   }
 
   console.log(`\nPE-05B6D · transiciones de plan: ${passed} en verde, ${failed} en rojo\n`);

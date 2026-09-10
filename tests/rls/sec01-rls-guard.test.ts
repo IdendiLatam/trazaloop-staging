@@ -16,6 +16,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { limpiarPersonas } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -152,7 +153,13 @@ async function main() {
         assert((filas?.length ?? 0) === 0, `${v} devolvió ${filas?.length} filas a alguien sin rol`);
       }
     } finally {
-      await admin.auth.admin.deleteUser(uid);
+      // TEST-HYGIENE-02 · `deleteUser` a secas devolvía 500 y el usuario
+      // sobrevivía: `user_legal_acceptances` guarda dos filas por persona que no
+      // cuelgan de ninguna organización. El ayudante las borra y, si algo lo
+      // impide, dice qué; y esta comprobación se pone roja en vez de dejar la
+      // basura para el siguiente.
+      const problemas = await limpiarPersonas(admin, [uid]);
+      assert(problemas.length === 0, `quedó fixture: ${problemas.join(" · ")}`);
     }
   });
 

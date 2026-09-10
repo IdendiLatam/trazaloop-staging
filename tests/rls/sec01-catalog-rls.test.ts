@@ -10,6 +10,7 @@
  */
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { limpiarPersonas } from "../support/fixture-cleanup";
 
 loadEnv({ path: ".env.local" });
 
@@ -228,9 +229,17 @@ async function main() {
     await admin.from("organization_subscriptions").delete().in("organization_id", [org, otraOrg]);
     const { error: eOrg } = await admin.from("organizations").delete().in("id", [org, otraOrg]);
     if (eOrg) console.error(`  ⚠ no se pudieron retirar las empresas de prueba: ${eOrg.message}`);
-    for (const id of personasCreadas) {
-      await admin.from("platform_staff").delete().eq("user_id", id);
-      await admin.auth.admin.deleteUser(id);
+    // TEST-HYGIENE-02 · Los usuarios `sec01-*` que quedaban en Local salían de
+    // AQUÍ, no de `sec01-rls-guard`: dos suites comparten prefijo y atribuirlos
+    // por el nombre del correo llevaba a mirar la suite equivocada. La causa es
+    // la misma que en las otras siete: `user_legal_acceptances` guarda dos filas
+    // por persona, `deleteUser` devolvía 500 y nadie leía el resultado.
+    {
+      const problemas = await limpiarPersonas(admin, personasCreadas);
+      if (problemas.length > 0) {
+        failed += 1;
+        console.log(`  ✘ La suite dejó fixtures detrás: ${problemas.join(" · ")}`);
+      }
     }
   }
 
