@@ -14,7 +14,8 @@ import { RoleBadge, ModuleBadge } from "@/components/ui/badge";
 import { PlanUsageCard } from "@/components/domain/plans/plan-usage-card";
 import { OnboardingProgressCard } from "@/components/domain/onboarding/onboarding-progress-card";
 import { DemoPlanBanner, AccountStatusBanner } from "@/components/domain/onboarding/demo-plan-banner";
-import { getOrganizationEffectivePlanCode } from "@/lib/db/plans";
+import { getOrganizationCommercialState, getDemoAccessSummary } from "@/lib/db/commercial-state";
+import { TrialAccessBanner } from "@/components/domain/onboarding/trial-access-banner";
 
 export default async function DashboardPage() {
   // T9F: el dashboard es el inicio de CPR — su guard consume la regla canónica
@@ -40,9 +41,15 @@ export default async function DashboardPage() {
 
   // PE-04B6 · El aviso del plan gratuito se decide con el nivel comercial
   // CANÓNICO, no con la copia heredada de `organization_subscriptions`.
-  const nivelComercial = await getOrganizationEffectivePlanCode(
-    activeOrg.organizationId
-  );
+  //
+  // STABILIZATION-01 · Y ahora con las DOS caras del estado, no solo el código
+  // efectivo. Con una sola cara, una empresa en prueba de Full leía «Full» y no
+  // había forma de saber que no lo había contratado.
+  const estadoComercial = await getOrganizationCommercialState(activeOrg.organizationId);
+  const resumenDemo = await getDemoAccessSummary(activeOrg.organizationId, estadoComercial);
+  // El aviso de Free sigue siendo para quien está EN Free de verdad: durante la
+  // prueba manda el aviso de Demo, que dice más y dice lo cierto.
+  const nivelComercial = estadoComercial.contractedPlanCode;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -58,7 +65,8 @@ export default async function DashboardPage() {
       </header>
 
       {usage ? <AccountStatusBanner planStatus={usage.planStatus} /> : null}
-      <DemoPlanBanner tier={nivelComercial} />
+      <TrialAccessBanner estado={estadoComercial} resumen={resumenDemo} />
+      <DemoPlanBanner tier={nivelComercial} estado={estadoComercial} />
 
       <dl className="grid gap-4 sm:grid-cols-2">
         {usage ? (

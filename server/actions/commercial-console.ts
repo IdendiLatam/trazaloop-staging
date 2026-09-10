@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { createServerClient } from "@/lib/supabase/server";
+import { finDelDiaEnZona } from "@/lib/domain/zona-horaria";
+import { mensajeDeTransicion, SOLO_ADMINISTRACION } from "@/lib/domain/transicion-comercial";
 import {
   parseUsdToMinor, USD_PARSE_MESSAGE,
 } from "@/lib/domain/commercial-catalog";
@@ -33,9 +35,6 @@ import {
  */
 export type CommercialActionState = { error: string | null; success?: boolean };
 const ok: CommercialActionState = { error: null, success: true };
-
-const SOLO_ADMINISTRACION =
-  "Solo la administración de plataforma puede cambiar condiciones comerciales.";
 
 async function exigirSuperadmin(): Promise<string | null> {
   const { isSuperadmin } = await requirePlatformStaff();
@@ -292,6 +291,24 @@ export async function assignPlanAction(
   }
 
   const supabase = await createServerClient();
+
+  // LA FECHA ELEGIDA ES UN DÍA, NO UN INSTANTE.
+  //
+  // `<input type="date">` entrega `AAAA-MM-DD` y `new Date(...)` lo lee como
+  // medianoche UTC. En Colombia eso convertía «hasta el 15 de septiembre» en
+  // «hasta las 19:00 del 14», y elegir HOY producía un instante ya pasado que
+  // la base rechazaba con `ASSIGNMENT_PERIOD_INVALID`. La intención es el FINAL
+  // de ese día en la zona de la empresa, y así se calcula.
+  let finISO: string | null = null;
+  if (endsAt) {
+    const { data: zonaCruda } = await supabase.rpc("organization_business_timezone", {
+      p_organization_id: organizationId,
+    });
+    const zona = typeof zonaCruda === "string" && zonaCruda ? zonaCruda : "UTC";
+    finISO = finDelDiaEnZona(endsAt, zona);
+    if (finISO === null) return { error: "La fecha de fin no es una fecha válida." };
+  }
+
   const { error } = await supabase.rpc("commercial_assign_plan", {
     p_organization_id: organizationId,
     p_plan_revision_id: revisionId,
@@ -306,20 +323,10 @@ export async function assignPlanAction(
     // seguía siendo el viejo. Una transición que tarda en aplicarse por una
     // diferencia de relojes es una transición que a veces no se aplica.
     p_starts_at: null,
-    p_ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+    p_ends_at: finISO,
     p_reason: reason,
   });
-  if (error) {
-    const m = error.message ?? "";
-    if (m.includes("MODULE_NOT_COMMERCIAL")) {
-      return { error: "Ese módulo no es comercial: solo los módulos funcionales reciben plan." };
-    }
-    if (m.includes("PLAN_REVISION_NOT_PUBLISHED")) {
-      return { error: "Solo se asignan revisiones publicadas: un borrador no se le vende a nadie." };
-    }
-    if (m.includes("NOT_AUTHORIZED")) return { error: SOLO_ADMINISTRACION };
-    return { error: "No fue posible aplicar la transición comercial." };
-  }
+  if (error) return { error: mensajeDeTransicion(error.message ?? "") };
 
   revalidatePath("/platform/plans");
   revalidatePath(`/platform/organizations/${organizationId}`);

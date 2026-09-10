@@ -243,8 +243,13 @@ console.log("\nTrazaloop · lanzamiento: banners de plan (Parte 8/16)\n");
 check("18-19. El aviso del plan gratuito aparece solo en Free, nunca en Full/Extra", () => {
   const source = readSource("../../components/domain/onboarding/demo-plan-banner.tsx");
   const fnStart = source.indexOf("export function DemoPlanBanner");
-  const fnEnd = source.indexOf("\n}", fnStart);
-  const fnBody = source.slice(fnStart, fnEnd);
+  // El cuerpo se acota por la SIGUIENTE función exportada, no por el primer
+  // `\n}` que aparezca. STABILIZATION-01 le dio al componente una firma de
+  // varias líneas —recibe también el estado comercial— y ese primer `}` pasó a
+  // ser el cierre de la desestructuración: la guarda se quedaba mirando un
+  // trozo vacío y fallaba sin que el comportamiento hubiera cambiado.
+  const fnEnd = source.indexOf("export function AccountStatusBanner", fnStart);
+  const fnBody = source.slice(fnStart, fnEnd > 0 ? fnEnd : undefined);
   // PE-04B6 · El aviso se decide con el nivel comercial CANÓNICO y se llama por
   // su nombre: Free. Antes lo decidía `organization_subscriptions.plan_code`, y
   // un cliente Full con la fila heredada en «demo» leía en su propio panel que
@@ -253,6 +258,11 @@ check("18-19. El aviso del plan gratuito aparece solo en Free, nunca en Full/Ext
   // determinar») no pinte nada.
   assert(fnBody.includes('if (tier !== "free") return null;'),
     "el aviso debía devolver null para cualquier nivel que no sea Free");
+  // STABILIZATION-01 · Y tampoco aparece durante una prueba: ahí manda el aviso
+  // de Demo, que dice las dos bolsas de créditos y el tiempo. Los dos a la vez
+  // le contarían a alguien que está en Free justo cuando tiene acceso de Full.
+  assert(fnBody.includes("esAccesoDePrueba(estado)"),
+    "el aviso de Free debía callarse mientras haya una prueba viva");
   assert(!fnBody.toLowerCase().includes("pagar") && !fnBody.toLowerCase().includes("pago"), "el banner Demo nunca debía mencionar pagos");
 });
 

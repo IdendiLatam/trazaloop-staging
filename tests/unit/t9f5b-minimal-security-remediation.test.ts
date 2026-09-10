@@ -593,6 +593,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0184_billing_provider_renewal_ownership.sql",
     "0185_billing_provider_plans.sql",
     "0186_billing_provider_reconciliation.sql",
+    "0187_plan_limits_return_type_fix.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

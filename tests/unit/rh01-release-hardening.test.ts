@@ -258,9 +258,22 @@ check("9. /platform muestra el PLAN EFECTIVO y degrada el legacy a histórico", 
 
 check("10. El detalle de empresa encabeza con el plan efectivo y usa SUS límites", () => {
   const detail = readRepoFile("app/(app)/platform/organizations/[id]/page.tsx");
+  // STABILIZATION-01 · El titular ya no es el CÓDIGO del plan efectivo a secas.
+  // Pintar `PLAN_LABEL[effectivePlanCode]` hacía que una empresa con una prueba
+  // de Full apareciera como «Full» en la consola —y en su propio panel— sin
+  // haber contratado nada. Ahora se resuelve con la misma semántica que ve el
+  // cliente, que distingue lo contratado de lo que está probando.
   assert(
-    detail.includes("PLAN_LABEL[planDetail.effectivePlanCode]"),
-    "el detalle debía mostrar el plan efectivo de forma destacada"
+    detail.includes("etiquetaComercial(estadoComercial)"),
+    "el detalle debía encabezar con el estado comercial resuelto"
+  );
+  assert(
+    detail.includes("getOrganizationCommercialState(id)"),
+    "el estado comercial debía salir de la lectura única, la misma que usa el panel del cliente"
+  );
+  assert(
+    !detail.includes("PLAN_LABEL[planDetail.effectivePlanCode]"),
+    "la consola volvió a pintar el código efectivo sin distinguir la prueba"
   );
   // PE-04B2 · El plan efectivo puede venir como `null` = «no se pudo
   // determinar», y entonces NO se enseñan los límites de un plan cualquiera.
@@ -276,9 +289,18 @@ check("10. El detalle de empresa encabeza con el plan efectivo y usa SUS límite
     !detail.includes("commercialTierToLegacyPlanCode("),
     "la consola seguía traduciendo el plan a su código legacy"
   );
+  // STABILIZATION-01 · La distinción sigue viva, en dos sitios: el titular la
+  // resuelve `etiquetaComercial` —que ante un plan ilegible dice «No se pudo
+  // determinar» en vez de inventarse el más bajo— y la tarjeta de consumo sigue
+  // sin dibujarse cuando no hay plan que enseñar.
   assert(
-    detail.includes('planDetail.effectivePlanCode === null'),
+    detail.includes("planDetail.effectivePlanCode !== null"),
     "un plan indeterminado debía distinguirse, no pintarse como un plan"
+  );
+  const display = readRepoFile("lib/plans/commercial-display.ts");
+  assert(
+    display.includes('if (e.effectivePlanCode === null) return "No se pudo determinar";'),
+    "el resolutor del nombre debía decir que no se pudo determinar, no elegir un plan"
   );
   assert(
     !detail.includes("getPlanLimits(planDetail.usage.planCode)"),
@@ -854,6 +876,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
     "0184_billing_provider_renewal_ownership.sql",
   "0185_billing_provider_plans.sql",
   "0186_billing_provider_reconciliation.sql",
+  "0187_plan_limits_return_type_fix.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

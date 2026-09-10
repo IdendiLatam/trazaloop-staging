@@ -21,11 +21,13 @@ import { notFound } from "next/navigation";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import { getPlatformOrganizationDetailAction } from "@/server/actions/platform";
 import { getOrganizationPlanDetailAction } from "@/server/actions/plans";
-import { PLAN_LABEL, type ResourceCode } from "@/lib/plans/types";
+import type { ResourceCode } from "@/lib/plans/types";
 import { getAiCreditStatus, getOrganizationTimeStatus, listOrganizationPlanLimits } from "@/lib/db/organization-usage";
 import { UsageSummaryCard } from "@/components/domain/usage/usage-summary-card";
 import { OrganizationCommercialPanel } from "@/components/domain/platform/organization-commercial-panel";
 import { getOrganizationCommercialViewAction, getPlanCatalogAction } from "@/server/actions/commercial-console";
+import { getOrganizationCommercialState } from "@/lib/db/commercial-state";
+import { etiquetaComercial, aclaracionDePrueba } from "@/lib/plans/commercial-display";
 import { getSupportEntitlementForOrganizationAction } from "@/server/actions/support";
 import { getOrganizationStorageStatus } from "@/lib/db/organization-storage";
 import { listFunctionalModules } from "@/lib/db/module-catalog-read";
@@ -66,6 +68,7 @@ export default async function PlatformOrganizationDetailPage({
   // que tiene razón.
   // PE-04B5 · Lo comercial de la empresa: configurado, efectivo, soporte e
   // historia. Todo de los resolutores canónicos.
+  const estadoComercial = await getOrganizationCommercialState(id);
   const [comercial, soporte, almacenamiento, catalogo, modulos] = await Promise.all([
     getOrganizationCommercialViewAction(id),
     getSupportEntitlementForOrganizationAction(id),
@@ -118,19 +121,25 @@ export default async function PlatformOrganizationDetailPage({
           pantalla. Esta información no es visible para usuarios normales de la empresa.
         </p>
         {/* RH-01.1: el plan comercial vigente de la empresa, arriba de todo y
-            derivado de organization_modules (0103) — nunca del planCode
-            heredado de organization_subscriptions. */}
+            derivado del modelo canónico — nunca del planCode heredado de
+            organization_subscriptions.
+
+            STABILIZATION-01 · Y con la MISMA semántica que ve el cliente en su
+            panel, resuelta por la misma lectura. Antes las dos consolas
+            pintaban el código efectivo a secas, así que durante una prueba las
+            dos decían «Full» de una empresa que no había contratado nada. */}
         <p className="flex flex-wrap items-center gap-2 pt-2 text-sm">
-          <span className="text-ink-soft">Plan efectivo:</span>
+          <span className="text-ink-soft">Estado comercial:</span>
           <span className="rounded-full border border-loop/30 bg-loop/5 px-2.5 py-0.5 font-semibold text-loop-deep">
-            {planDetail.effectivePlanCode === null
-              ? "No se pudo determinar"
-              : PLAN_LABEL[planDetail.effectivePlanCode]}
+            {etiquetaComercial(estadoComercial)}
           </span>
         </p>
+        {aclaracionDePrueba(estadoComercial) ? (
+          <p className="text-xs text-ink-soft">{aclaracionDePrueba(estadoComercial)}</p>
+        ) : null}
       </header>
 
-      {/* T9F.1: la sección OPERATIVA es "Módulos y planes de la empresa".
+      {/* T9F.1: la sección OPERATIVA es "Acceso a módulos".
           El plan general legacy (organization_subscriptions) se muestra más
           abajo SOLO como información heredada: no gobierna los módulos y ya
           no es editable desde esta consola (el PlanChangeForm se retiró para
@@ -177,7 +186,7 @@ export default async function PlatformOrganizationDetailPage({
             agregado HISTÓRICO a nivel de empresa que reporta la suscripción general
             (organization_subscriptions), conservados solo como referencia administrativa: desde
             T9F.1 <strong>no controlan</strong> el acceso ni el almacenamiento de los módulos, que se
-            gestionan arriba en &ldquo;Módulos y planes de la empresa&rdquo;.
+            gestionan arriba en &ldquo;Acceso a módulos&rdquo;.
           </p>
           <PlanUsageCard
             usage={planDetail.usage}

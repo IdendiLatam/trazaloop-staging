@@ -55,13 +55,13 @@ export function CreateOrganizationForm() {
         {/* T9F.1: SIN selector de plan general. Toda empresa nueva inicia
             con PCR y Textiles en Demo de 48 horas (igual que el registro
             normal); después, el superadministrador asigna el plan POR MÓDULO
-            desde "Módulos y planes de la empresa". El plan legacy
+            desde "Acceso a módulos". El plan legacy
             (organization_subscriptions) se crea como demo por compatibilidad
             y no gobierna los módulos. */}
         <p className="rounded-md border border-hairline bg-paper px-3 py-2 text-xs text-ink-soft">
           La empresa iniciará con Trazaloop PCR y Trazaloop Textiles en modo Demo durante 2 días.
           Después podrás asignar el plan de cada módulo (Demo permanente, Full o Extra) desde
-          &ldquo;Módulos y planes de la empresa&rdquo;.
+          &ldquo;Acceso a módulos&rdquo;.
         </p>
       </fieldset>
 

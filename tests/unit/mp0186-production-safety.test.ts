@@ -55,12 +55,22 @@ console.log("\n0186 · seguridad de Producción\n");
 console.log("A · Está donde tiene que estar");
 // ===========================================================================
 
-check("1. Es la última migración del repositorio", () => {
+check("1. Existe una sola 0186 y nada anterior la pisa", () => {
+  // ANTES exigía que 0186 fuera la ÚLTIMA del repositorio. Eso es una
+  // fotografía, y es exactamente la trampa en la que ya cayó PE-03B5: la
+  // primera migración posterior —0187— la puso en rojo sin que nada de 0186
+  // hubiera cambiado. Lo que sí sigue siendo promesa es que hay una y solo una,
+  // que es la que esta suite audita, y que ninguna posterior la reescribe.
   const todas = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
-  assert(todas[todas.length - 1] === ARCHIVO,
-    `la última es ${todas[todas.length - 1]}, no ${ARCHIVO}`);
   assert(todas.filter((f) => f.startsWith("0186")).length === 1,
     "hay más de una migración 0186");
+  assert(todas.includes(ARCHIVO), `desapareció ${ARCHIVO}`);
+  const posteriores = todas.filter((f) => f.slice(0, 4) > "0186");
+  const pisan = posteriores.filter((f) =>
+    /billing_provider_cycles|billing_reconcile_provider_cycle|billing_provider_cycle_sequence/
+      .test(readFileSync(`supabase/migrations/${f}`, "utf8")));
+  assert(pisan.length === 0,
+    `una migración posterior toca lo que 0186 protege: ${pisan.join(", ")}`);
 });
 
 check("2. Declara qué presupone y aborta si no se cumple", () => {

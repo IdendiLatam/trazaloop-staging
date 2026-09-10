@@ -26,7 +26,7 @@ type TargetState = (typeof TARGET_STATES)[number];
 
 export type ModuleAccessActionState = { error: string | null; ok: boolean };
 
-/** Lectura para la sección "Módulos y planes de la empresa" (solo superadmin). */
+/** Lectura para la sección "Acceso a módulos" (solo superadmin). */
 export async function getPlatformOrganizationModulesAction(
   organizationId: string
 ): Promise<{ modules: PlatformModuleRow[]; canManage: boolean }> {

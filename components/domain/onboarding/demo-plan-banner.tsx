@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { CommercialTier, PlanStatus } from "@/lib/plans/types";
+import type { EstadoComercial } from "@/lib/plans/commercial-display";
+import { esAccesoDePrueba } from "@/lib/plans/commercial-display";
 
 /**
  * Aviso discreto del plan gratuito — solo en Free, nunca en Full ni Extra.
@@ -14,9 +16,20 @@ import type { CommercialTier, PlanStatus } from "@/lib/plans/types";
  * Ahora se decide con el nivel comercial CANÓNICO y se llama por su nombre:
  * Free. Y `null` —«no se pudo determinar»— no pinta nada: afirmar un plan que
  * no se pudo leer es la mitad del defecto original.
+ *
+ * STABILIZATION-01 · `tier` pasa a ser el plan CONTRATADO, y mientras haya una
+ * prueba viva este aviso calla: quien está en Demo ve el suyo, que explica las
+ * dos bolsas de créditos y el tiempo. Enseñar los dos a la vez sería contarle
+ * a alguien que está en Free justo cuando tiene acceso de Full.
  */
-export function DemoPlanBanner({ tier }: { tier: CommercialTier | null }) {
+export function DemoPlanBanner({
+  tier, estado,
+}: {
+  tier: CommercialTier | null;
+  estado?: EstadoComercial;
+}) {
   if (tier !== "free") return null;
+  if (estado && esAccesoDePrueba(estado)) return null;
 
   return (
     <div id="plan" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber/40 bg-amber/10 p-4 text-sm">

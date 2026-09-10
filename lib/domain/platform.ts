@@ -161,7 +161,7 @@ export type PlatformOrgDraftInput = {
    *  @deprecated T9F.1: parámetro LEGACY. El server action lo fuerza SIEMPRE a
    *  'demo' (la suscripción general se crea solo por compatibilidad y NO
    *  gobierna los módulos). El plan real se asigna POR MÓDULO después de la
-   *  creación, desde "Módulos y planes de la empresa". */
+   *  creación, desde "Acceso a módulos". */
   planCode?: PlanCode | null;
 };
 

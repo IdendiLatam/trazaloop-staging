@@ -10,11 +10,25 @@ import type { PlatformModuleRow } from "@/lib/db/module-access";
 import { DERIVED_STATE_LABEL } from "@/lib/modules/messages";
 
 /**
- * Trazaloop · Sprint T9F · "Módulos y planes de la empresa" (consola de
- * superadministrador). Muestra el estado comercial de cada módulo y permite
- * cambiarlo (Deshabilitado / Demo permanente / Full / Extra) con confirmación
- * accesible. Los módulos "Próximamente" se muestran sin controles. La
- * autorización real vive en la Server Action + la RPC SQL.
+ * Trazaloop · Sprint T9F · Acceso a módulos (consola de superadministrador).
+ * Muestra en qué nivel de acceso está cada módulo y permite cambiarlo
+ * (Deshabilitado / Demo permanente / Full / Extra) con confirmación accesible.
+ * Los módulos "Próximamente" se muestran sin controles. La autorización real
+ * vive en la Server Action + la RPC SQL.
+ *
+ * STABILIZATION-01 · SE LLAMABA «Módulos y planes de la empresa», Y ESO ERA UN
+ * PROBLEMA DE VERDAD, no de redacción.
+ *
+ * Esta pantalla escribe `organization_modules.access_mode`, que decide si una
+ * empresa puede abrir un módulo y con qué nivel. NO escribe
+ * `organization_plan_assignments`, que es de donde salen el plan comercial y
+ * todas las cuotas. Como las dos cosas usan las mismas palabras —demo, full,
+ * extra—, poner «Demo → Full» aquí parecía convertir a la empresa en cliente
+ * Full: se demostró que el plan efectivo, el contratado, el almacenamiento y el
+ * número de asignaciones quedaban EXACTAMENTE igual.
+ *
+ * El nombre y los textos ahora dicen qué es. El plan comercial se cambia en
+ * «Transición comercial», que es la única superficie que lo mueve.
  */
 
 type TargetState = "disabled" | "demo_permanent" | "full" | "extra";
@@ -23,21 +37,21 @@ const TARGET_OPTIONS: { value: TargetState; label: string; help: string; confirm
   {
     value: "demo_permanent",
     label: "Demo permanente",
-    help: "Acceso limitado sin fecha de vencimiento.",
+    help: "Acceso limitado al módulo, sin fecha de vencimiento. No cambia el plan.",
     confirm:
       "La empresa conservará acceso al módulo en modo Demo sin fecha de vencimiento. Se mantendrán las limitaciones del plan Demo.",
   },
   {
     value: "full",
     label: "Full",
-    help: "Acceso funcional completo con almacenamiento estándar.",
+    help: "Acceso funcional completo al módulo. No cambia el plan contratado.",
     confirm:
       "La empresa tendrá acceso completo al módulo con la capacidad de almacenamiento del plan Full.",
   },
   {
     value: "extra",
     label: "Extra",
-    help: "Acceso funcional completo con almacenamiento ampliado.",
+    help: "Acceso funcional completo al módulo, nivel ampliado. No cambia el plan contratado.",
     confirm:
       "La empresa tendrá acceso completo al módulo con capacidad ampliada de almacenamiento.",
   },
@@ -99,8 +113,15 @@ export function OrganizationModulesSection({
   return (
     <section className="space-y-3" aria-labelledby="org-modules-heading">
       <h2 id="org-modules-heading" className="text-lg font-semibold">
-        Módulos y planes de la empresa
+        Acceso a módulos
       </h2>
+      <p className="text-sm text-ink-soft">
+        Aquí se decide <strong className="text-ink">a qué módulos entra</strong> esta
+        empresa y con qué nivel de acceso. <strong className="text-ink">No cambia su
+        plan contratado</strong> ni sus cuotas: eso se hace en «Transición comercial»,
+        más abajo. «Demo», «Full» y «Extra» describen aquí el nivel de acceso del
+        módulo, no el plan comercial de la empresa.
+      </p>
 
       {state.error && (
         <p role="alert" className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
@@ -109,7 +130,7 @@ export function OrganizationModulesSection({
       )}
       {state.ok && (
         <p role="status" aria-live="polite" className="rounded-md border border-loop/30 bg-loop/5 px-3 py-2 text-sm text-loop-deep">
-          Estado del módulo actualizado.
+          Acceso al módulo actualizado. El plan comercial de la empresa no ha cambiado.
         </p>
       )}
 
