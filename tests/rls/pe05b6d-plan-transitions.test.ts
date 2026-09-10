@@ -285,7 +285,30 @@ async function main() {
         await esperar(3_500);
         assert(accionDe(await vencimientos(), e.subscriptionId) === "downgrade_due",
           `en el borde toca aplicar el cambio, no ${accionDe(await vencimientos(), e.subscriptionId)}`);
-        const r1 = await runRenewalPass({ provider: doble() });
+        // ACOTADA A SU PROPIA SUSCRIPCIÓN, y no por comodidad.
+        //
+        // `r1.charged` es un contador GLOBAL de la pasada, y la pasada procesa
+        // todo lo que esté vencido en la base. `mp0184` envejece sus fixtures
+        // cuarenta días a propósito y deja tres suscripciones vencidas detrás,
+        // así que ejecutar esta suite después de aquélla hacía que `charged`
+        // contara cobros de empresas que no tienen nada que ver con este caso.
+        // La prueba salía roja diciendo «aplicar el cambio cobró algo» cuando el
+        // cambio no había cobrado nada: había cobrado el vecino.
+        //
+        // Se demostró en dos series de diez con el mismo arnés, una con 0186 y
+        // otra sin él: las veinte en rojo, mismo aserto. No era 0186 y no era el
+        // reloj — era que esta afirmación se medía sobre la base entera.
+        //
+        // `runRenewalPass` ya sabe acotarse; no hace falta tocar nada de
+        // producto. Y de paso esta pasada deja de cobrar a terceros.
+        const r1 = await runRenewalPass({ provider: doble(),
+                                          onlySubscriptions: [e.subscriptionId] });
+        // Y que la acotación SIGUE puesta se comprueba aquí: si alguien la
+        // quita, esto se pone rojo antes de que el contador vuelva a mentir.
+        assert(r1.dueFound === 1,
+          `la pasada miró ${r1.dueFound} suscripciones y solo le tocaba la suya`);
+        assert(r1.decisions.every((x) => x.subscriptionId === e.subscriptionId),
+          "la pasada decidió sobre suscripciones ajenas");
         assert(r1.charged === 0, "aplicar el cambio cobró algo");
 
         const s = await suscripcion(e.subscriptionId);
