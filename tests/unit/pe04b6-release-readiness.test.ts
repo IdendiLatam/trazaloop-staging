@@ -160,9 +160,9 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
 });
 
 /**
- * PE-05B2 · La frontera de la pasarela: cuatro ficheros de servidor, ninguno
+ * PE-05B2 · La frontera de la pasarela: seis ficheros de servidor, ninguno
  * de interfaz. Se declaran uno a uno para que la comprobación de abajo siga
- * teniendo dientes: nombrar la pasarela en un quinto sitio la pone en rojo.
+ * teniendo dientes: nombrar la pasarela en un séptimo sitio la pone en rojo.
  */
 const FRONTERA_PASARELA = [
   "app/api/billing/webhooks/mercadopago/route.ts",
@@ -172,6 +172,11 @@ const FRONTERA_PASARELA = [
   "app/api/billing/qa/mercadopago-smoke/route.ts",
   "lib/billing/mercadopago/mapping.ts",
   "lib/billing/mercadopago/signature.ts",
+  // MP-ENV-01 · La identidad de entorno y aplicación. Es hermana de `mapping`
+  // y `signature`, vive en el mismo directorio y por el mismo motivo: saber de
+  // qué entorno y de qué aplicación viene un objeto es parte de la frontera de
+  // la pasarela, no del modelo comercial de PE-04.
+  "lib/billing/mercadopago/identity.ts",
   "lib/billing/providers/mercadopago.ts",
 ];
 

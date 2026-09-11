@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   MERCADOPAGO, readNotification, isKnownTopic,
-  environmentMatches, mapPaymentStatus, settlementOutcome,
+  mapPaymentStatus, settlementOutcome,
 } from "@/lib/billing/mercadopago/mapping";
+import {
+  environmentMatchesConfigured, applicationMatches,
+} from "@/lib/billing/mercadopago/identity";
 import { verifyMercadoPagoSignature } from "@/lib/billing/mercadopago/signature";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import {
@@ -82,14 +85,15 @@ export async function POST(request: Request) {
     secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
   });
 
-  // El entorno sale de la IDENTIDAD del dueño de las credenciales, no de la
-  // forma del token: un vendedor de prueba recibe credenciales con aspecto de
-  // producción, y mirar el prefijo rechazaría justo el entorno de pruebas.
-  // Falla cerrado: sin poder preguntar, «producción».
+  // MP-ENV-01 · El entorno sale de la CONFIGURACIÓN declarada del despliegue.
+  // Antes se deducía de una etiqueta del titular del token, y eso mezclaba
+  // quién es la persona con en qué entorno estamos: una credencial de prueba de
+  // aplicación pertenece a una cuenta productiva y habría rechazado todos los
+  // avisos legítimos de sandbox. Sin configuración válida no se procesa nada.
   const proveedor = mercadoPagoFromEnv();
+  const identidad = proveedor.identity;
+  const entorno = identidad.ok ? identidad.value.environment : null;
   const duenno = await proveedor.resolveEnvironment();
-  const entorno = duenno.reachable && duenno.isTestUser ? duenno.environment
-    : duenno.reachable ? duenno.environment : null;
 
   const anotado = await recordProviderEvent({
     provider: MERCADOPAGO, topic: aviso.topic, resourceId: aviso.resourceId,
@@ -115,11 +119,25 @@ export async function POST(request: Request) {
                          outcome: resultado, errorClass: clase ?? null,
                          organizationId: org ?? null });
 
-  // ENTORNO. Falla cerrado: sin credenciales configuradas tampoco se procesa.
-  if (!entorno || !environmentMatches(aviso.liveMode, entorno)) {
-    await cerrar("rejected", "environment_mismatch", null, "ENVIRONMENT_MISMATCH");
+  // ENTORNO. Falla cerrado: sin configuración válida tampoco se procesa.
+  if (!entorno || !environmentMatchesConfigured(aviso.liveMode, entorno)) {
+    await cerrar("rejected", "environment_mismatch", null,
+      identidad.ok ? "ENVIRONMENT_MISMATCH" : identidad.reason);
     log("entorno_no_coincide", { topic: aviso.topic, resource: aviso.resourceId,
-                                 liveMode: aviso.liveMode, environment: entorno });
+                                 liveMode: aviso.liveMode, environment: entorno,
+                                 config: identidad.ok ? "ok" : identidad.reason });
+    return OK();
+  }
+
+  // IDENTIDAD DE LA APLICACIÓN. Que la credencial llegue a `/users/me` y que
+  // ese titular sea el esperado es lo que separa «una cuenta de prueba» de «la
+  // NUESTRA». Un ensayo real creó objetos bajo otra aplicación: firma válida,
+  // entorno correcto, cobro real, y ni una notificación. Sin titular esperado
+  // no se reconcilia.
+  if (!duenno.reachable || !duenno.ownerMatchesExpected) {
+    await cerrar("rejected", "owner_mismatch", null, "MP_OWNER_NOT_EXPECTED");
+    log("titular_no_esperado", { topic: aviso.topic, resource: aviso.resourceId,
+                                 reachable: duenno.reachable });
     return OK();
   }
 
@@ -138,6 +156,16 @@ export async function POST(request: Request) {
                      "resource_unavailable", null, r.failure);
         log("recurso_no_disponible", { topic: aviso.topic, resource: aviso.resourceId,
                                        failure: r.failure, ms: Date.now() - inicio });
+        return OK();
+      }
+      // MP-ENV-01 · La relectura trae `application_id`: si el objeto no es de
+      // nuestra aplicación, no es nuestro. Firma válida y entorno correcto NO
+      // bastan.
+      if (!identidad.ok
+          || !applicationMatches(r.value.applicationId, identidad.value.expectedApplicationId)) {
+        await cerrar("rejected", "application_mismatch", null, "MP_APPLICATION_MISMATCH");
+        log("aplicacion_no_coincide", { topic: aviso.topic, resource: aviso.resourceId,
+                                        ms: Date.now() - inicio });
         return OK();
       }
       const marca = await markProviderSubscriptionState({
@@ -191,6 +219,27 @@ export async function POST(request: Request) {
         await cerrar("manual_review", "unlinked_cycle", null, "NO_SUBSCRIPTION");
         log("factura_sin_suscripcion", { resource: aviso.resourceId,
                                          ms: Date.now() - inicio });
+        return OK();
+      }
+
+      // MP-ENV-01 · `authorized_payments` NO devuelve `application_id`, así que
+      // la identidad se comprueba por el objeto que sí la expone: su propia
+      // preaprobación. No se inventa un campo que el proveedor no da.
+      const duennoDelCiclo = await proveedor.getSubscriptionDetail(f.value.preapprovalId);
+      if (!duennoDelCiclo.ok) {
+        await cerrar(duennoDelCiclo.failure === "provider_unavailable"
+                       ? "pending_resource" : "error",
+                     "resource_unavailable", null, duennoDelCiclo.failure);
+        log("suscripcion_del_ciclo_no_disponible", { resource: aviso.resourceId,
+                                                     failure: duennoDelCiclo.failure });
+        return OK();
+      }
+      if (!identidad.ok
+          || !applicationMatches(duennoDelCiclo.value.applicationId,
+                                 identidad.value.expectedApplicationId)) {
+        await cerrar("rejected", "application_mismatch", null, "MP_APPLICATION_MISMATCH");
+        log("aplicacion_no_coincide", { topic: aviso.topic, resource: aviso.resourceId,
+                                        ms: Date.now() - inicio });
         return OK();
       }
 

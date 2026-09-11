@@ -6,9 +6,12 @@ import type {
 } from "@/lib/billing/provider";
 import {
   MERCADOPAGO, recurrenceFor, mapPaymentStatus, mapSubscriptionStatus,
-  classifyProviderError, minorToProviderAmount, environmentFromAccessToken,
+  classifyProviderError, minorToProviderAmount,
   classifyOwnerEnvironment, type MpEnvironment,
 } from "@/lib/billing/mercadopago/mapping";
+import {
+  resolveMercadoPagoIdentity, ownerMatches, type MpIdentityResolution,
+} from "@/lib/billing/mercadopago/identity";
 
 /**
  * Trazaloop · PE-05B2 · El adaptador de Mercado Pago.
@@ -43,20 +46,31 @@ const TIEMPO_MAXIMO_MS = 10_000;
  * quedarse pegado como respuesta.
  */
 const identidadRecordada = new Map<string, {
-  environment: MpEnvironment; siteId: string | null; countryId: string | null;
-  isTestUser: boolean; reachable: boolean;
+  siteId: string | null; countryId: string | null;
+  ownerId: number | null; isTestUser: boolean; reachable: boolean;
 }>();
 
 export type MercadoPagoAdapter = BillingProvider & {
-  /** Pista síncrona: «test» solo cuando se puede afirmar sin preguntar. */
-  readonly environment: MpEnvironment | null;
   /**
-   * La clasificación que manda. Pregunta por la identidad del dueño del token
-   * y falla cerrado: sin evidencia positiva de usuario de prueba, «live».
+   * MP-ENV-01 · El entorno DECLARADO, o `null` si la configuración no es
+   * válida. Ya no se deduce del prefijo del token ni de las etiquetas del
+   * titular: se declara, y sin declaración no se opera.
+   */
+  readonly environment: MpEnvironment | null;
+  /** La identidad esperada, o el motivo por el que la configuración no vale. */
+  readonly identity: MpIdentityResolution;
+  /**
+   * Quién es el titular del token, según el proveedor.
+   *
+   * `environment` sale de la CONFIGURACIÓN, no de aquí. Lo que esta llamada
+   * aporta es la identidad observada —`ownerId`, `siteId`— para contrastarla
+   * con la esperada, y `isTestUser` como DIAGNÓSTICO: una credencial de prueba
+   * de aplicación pertenece a una cuenta productiva y no lleva esa etiqueta.
    */
   resolveEnvironment(): Promise<{
-    environment: MpEnvironment; siteId: string | null; countryId: string | null;
-    isTestUser: boolean; reachable: boolean;
+    environment: MpEnvironment | null; siteId: string | null; countryId: string | null;
+    ownerId: number | null; isTestUser: boolean; reachable: boolean;
+    ownerMatchesExpected: boolean;
   }>;
   createSubscription(input: {
     externalReference: string;
@@ -189,10 +203,14 @@ const num = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-export function mercadoPagoProvider(accessToken: string | undefined): MercadoPagoAdapter {
-  // Pista barata: un `TEST-…` no necesita preguntar. Cualquier otra forma se
-  // resuelve preguntándole al proveedor quién es el dueño.
-  const environment = environmentFromAccessToken(accessToken);
+export function mercadoPagoProvider(
+  accessToken: string | undefined,
+  identity: MpIdentityResolution = { ok: false, reason: "MP_ENVIRONMENT_NOT_CONFIGURED" }
+): MercadoPagoAdapter {
+  // MP-ENV-01 · El entorno sale de la configuración declarada. No del prefijo
+  // del token —`APP_USR-…` aparece en las dos clases de credencial— ni de las
+  // etiquetas del titular, que describen a una persona y no a un entorno.
+  const environment = identity.ok ? identity.value.environment : null;
   const configurado = Boolean(accessToken && accessToken.trim() !== "");
   const cliente = configurado
     ? new MercadoPagoConfig({
@@ -239,6 +257,7 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
       supportsProviderSubscription: true,
     },
     environment,
+    identity,
 
     async createSubscription(input) {
       if (!cliente) return sinCredencial();
@@ -314,36 +333,36 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
     },
 
     async resolveEnvironment() {
+      const esperado = identity.ok ? identity.value.expectedOwnerId : null;
+      const vacio = {
+        environment, siteId: null, countryId: null, ownerId: null,
+        isTestUser: false, reachable: false, ownerMatchesExpected: false,
+      };
       const recordada = accessToken ? identidadRecordada.get(accessToken) : undefined;
-      if (recordada) return recordada;
-      if (environment === "test") {
-        return { environment: "test" as MpEnvironment, siteId: null, countryId: null,
-                 isTestUser: true, reachable: true };
+      if (recordada) {
+        return { environment, ...recordada,
+          ownerMatchesExpected: esperado !== null && ownerMatches(recordada.ownerId, esperado) };
       }
-      if (!accessToken) {
-        return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
-                 isTestUser: false, reachable: false };
-      }
+      if (!accessToken) return vacio;
       try {
         const r = await fetch("https://api.mercadopago.com/users/me", {
           headers: { Authorization: `Bearer ${accessToken}` } });
-        if (!r.ok) {
-          return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
-                   isTestUser: false, reachable: false };
-        }
+        if (!r.ok) return vacio;
         const j = (await r.json()) as Record<string, unknown>;
-        const clasificado = classifyOwnerEnvironment(j);
-        const resuelta = {
-          environment: clasificado,
+        const observada = {
           siteId: str(j.site_id), countryId: str(j.country_id),
-          isTestUser: clasificado === "test", reachable: true,
+          ownerId: num(j.id),
+          // DIAGNÓSTICO, no autoridad: una credencial de prueba de aplicación
+          // pertenece a una cuenta productiva y no trae esta etiqueta.
+          isTestUser: classifyOwnerEnvironment(j) === "test",
+          reachable: true,
         };
-        if (accessToken) identidadRecordada.set(accessToken, resuelta);
-        return resuelta;
+        identidadRecordada.set(accessToken, observada);
+        return { environment, ...observada,
+          ownerMatchesExpected: esperado !== null && ownerMatches(observada.ownerId, esperado) };
       } catch {
-        // No poder preguntar NO es «es de pruebas».
-        return { environment: "live" as MpEnvironment, siteId: null, countryId: null,
-                 isTestUser: false, reachable: false };
+        // No poder preguntar NO es «es de pruebas», y tampoco «es el titular».
+        return vacio;
       }
     },
 
@@ -489,5 +508,10 @@ export function mercadoPagoProvider(accessToken: string | undefined): MercadoPag
 
 /** El adaptador configurado desde el entorno del servidor. */
 export function mercadoPagoFromEnv(): MercadoPagoAdapter {
-  return mercadoPagoProvider(process.env.MERCADOPAGO_ACCESS_TOKEN);
+  return mercadoPagoProvider(process.env.MERCADOPAGO_ACCESS_TOKEN,
+    resolveMercadoPagoIdentity({
+      MERCADOPAGO_ENVIRONMENT: process.env.MERCADOPAGO_ENVIRONMENT,
+      MERCADOPAGO_EXPECTED_APPLICATION_ID: process.env.MERCADOPAGO_EXPECTED_APPLICATION_ID,
+      MERCADOPAGO_EXPECTED_OWNER_ID: process.env.MERCADOPAGO_EXPECTED_OWNER_ID,
+    }));
 }

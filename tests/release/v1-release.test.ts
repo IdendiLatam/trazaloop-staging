@@ -2604,6 +2604,11 @@ const FRONTERA_MERCADOPAGO = [
   "app/api/billing/qa/mercadopago-smoke/route.ts",
   "lib/billing/mercadopago/mapping.ts",
   "lib/billing/mercadopago/signature.ts",
+  // MP-ENV-01 · La identidad de entorno y aplicación. De servidor, hermana de
+  // `mapping` y `signature`, y por el mismo motivo que ellas: comprobar de qué
+  // entorno y de qué aplicación viene un objeto no es presentar la pasarela
+  // como integrada, es negarse a conciliar lo que no es nuestro.
+  "lib/billing/mercadopago/identity.ts",
   "lib/billing/providers/mercadopago.ts",
 ];
 

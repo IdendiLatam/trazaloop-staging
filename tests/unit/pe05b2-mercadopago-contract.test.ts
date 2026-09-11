@@ -345,7 +345,10 @@ check("Z. El entorno lo decide la IDENTIDAD del dueño, no la forma del token", 
   assert(environmentFromAccessToken("") === null, "sin token no hay entorno");
   assert(environmentFromAccessToken(undefined) === null, "sin variable no hay entorno");
 
-  // La autoridad: evidencia POSITIVA de usuario de prueba, o «producción».
+  // MP-ENV-01 · Esta clasificación ya NO es la autoridad del entorno: describe
+  // al TITULAR del token y se conserva como diagnóstico. El entorno lo declara
+  // `MERCADOPAGO_ENVIRONMENT` y lo comprueba `tests/unit/mpenv01-identity`.
+  // Aquí se defiende que la función sigue siendo conservadora si alguien la usa.
   assert(classifyOwnerEnvironment({ tags: ["test_user"], site_id: "MCO" }) === "test",
     "un vendedor de prueba no se reconoce");
   assert(classifyOwnerEnvironment({ tags: ["normal"], site_id: "MCO" }) === "live",
@@ -355,7 +358,16 @@ check("Z. El entorno lo decide la IDENTIDAD del dueño, no la forma del token", 
   assert(classifyOwnerEnvironment(null) === "live", "sin ficha se supuso pruebas");
 
   // Y no hay ningún interruptor para saltárselo.
-  const codigo = sinComentarios(ADAPTADOR) + sinComentarios(RUTA) + sinComentarios(QA);
+  //
+  // MP-ENV-01 · `MERCADOPAGO_ENVIRONMENT` sí existe, y es lo contrario de una
+  // puerta trasera: es la DECLARACIÓN del entorno, obligatoria y validada
+  // contra `test|live`, sin valor por omisión. Lo que se sigue prohibiendo es
+  // un interruptor que permita saltarse la comprobación. Se compara contra la
+  // lista quitando antes la variable declarativa, para que «ENV» dentro de
+  // «ENVIRONMENT» no cuente como coincidencia.
+  const codigo = (sinComentarios(ADAPTADOR) + sinComentarios(RUTA) + sinComentarios(QA))
+    .replace(/MERCADOPAGO_ENVIRONMENT/g, "MERCADOPAGO_DECLARED")
+    .replace(/MERCADOPAGO_EXPECTED_[A-Z_]+/g, "MERCADOPAGO_DECLARED");
   for (const puerta of ["MERCADOPAGO_ENV", "MERCADOPAGO_MODE", "MERCADOPAGO_SANDBOX",
                         "ALLOW_LIVE", "SKIP_SAFETY", "FORCE_TEST"]) {
     assert(!codigo.includes(puerta), `hay una puerta trasera de entorno: ${puerta}`);
@@ -563,7 +575,10 @@ check("AA. Ninguna función privilegiada queda abierta a un cliente", () => {
 
 check("AB. Ningún secreto llega al navegador ni a los registros", () => {
   const todo = ADAPTADOR + RUTA + CAPA + leer("lib/billing/mercadopago/signature.ts")
-    + leer("lib/billing/mercadopago/mapping.ts");
+    + leer("lib/billing/mercadopago/mapping.ts")
+    // MP-ENV-01 · La identidad también entra: maneja configuración del
+    // proveedor y el invariante de «nada al navegador» vale igual para ella.
+    + leer("lib/billing/mercadopago/identity.ts");
   assert(!/NEXT_PUBLIC_MERCADOPAGO/.test(todo),
     "hay una variable de Mercado Pago expuesta al navegador");
   // Los registros llevan clase de operación e identificadores, nunca valores.
@@ -617,10 +632,18 @@ check("El disparador de QA es PROVISIONAL, y tiene sus cuatro candados", () => {
   // 2 · solo superadministrador de plataforma.
   assert(/checkPlatformStatus/.test(codigo) && /NOT_PLATFORM_SUPERADMIN/.test(codigo),
     "no exige superadministrador");
-  // 3 · solo credenciales cuyo DUEÑO es un usuario de prueba, comprobado
-  // contra el proveedor. Y sin poder comprobarlo, tampoco pasa.
-  assert(/MERCADOPAGO_CREDENTIAL_OWNER_IS_NOT_TEST_USER/.test(codigo),
-    "no rechaza un token cuyo dueño no es un usuario de prueba");
+  // 3 · MP-ENV-01 · solo credenciales cuyo entorno DECLARADO es de pruebas y
+  // cuyo titular es el ESPERADO, comprobado contra el proveedor. Antes se
+  // exigía la etiqueta `test_user`, y esa suposición era incorrecta en los dos
+  // sentidos: una credencial de prueba de aplicación no la lleva, y un token de
+  // usuario de prueba la lleva aunque sea de otra aplicación. Sin poder
+  // comprobar la identidad, tampoco pasa.
+  assert(/MERCADOPAGO_ENVIRONMENT_IS_NOT_TEST/.test(codigo),
+    "no rechaza un despliegue cuyo entorno declarado no es de pruebas");
+  assert(/MERCADOPAGO_OWNER_IS_NOT_EXPECTED/.test(codigo),
+    "no rechaza una credencial cuyo titular no es el esperado");
+  assert(/MERCADOPAGO_IDENTITY_UNVERIFIABLE/.test(codigo),
+    "no rechaza cuando la identidad no se puede comprobar");
   assert(/MERCADOPAGO_IDENTITY_UNVERIFIABLE/.test(codigo),
     "deja pasar cuando no se puede comprobar la identidad del dueño");
   assert(/resolveEnvironment\(\)/.test(codigo),

@@ -4,6 +4,7 @@ import {
   resolveConfiguredTestBuyer, isTestBuyerEmail, maskBuyerEmail, TEST_BUYER_PATTERN,
   TEST_PAYER_CUSTOMER_PATTERN,
 } from "@/lib/billing/qa/test-payer";
+import { applicationMatches } from "@/lib/billing/mercadopago/identity";
 import {
   decideQaFxFixture, QA_FX_BASE, QA_FX_QUOTE, QA_FX_MICROS, QA_FX_LEGACY_MARKER,
   type QaFxRow,
@@ -256,8 +257,8 @@ async function manejar(request: Request) {
   const proveedor = mercadoPagoFromEnv();
   const duenno = tokenPuesto
     ? await proveedor.resolveEnvironment()
-    : { environment: "live" as const, siteId: null, countryId: null,
-        isTestUser: false, reachable: false };
+    : { environment: null, siteId: null, countryId: null, ownerId: null,
+        isTestUser: false, reachable: false, ownerMatchesExpected: false };
 
   // Qué versión del disparador responde aquí. No llama a Mercado Pago, no toca
   // la base y no devuelve ningún secreto: solo el marcador, la identidad del
@@ -333,7 +334,15 @@ async function manejar(request: Request) {
             .digest("hex").slice(0, 10)
         : null,
       // Clasificación por identidad. Nunca se dice nada del valor del token.
-      access_token_environment: duenno.environment,
+      // MP-ENV-01 · La CONFIGURACIÓN y lo OBSERVADO, separados. Antes había un
+      // solo campo y mezclaba las dos cosas.
+      configured_environment: proveedor.identity.ok
+        ? proveedor.identity.value.environment : null,
+      configuration_error: proveedor.identity.ok ? null : proveedor.identity.reason,
+      expected_application_configured: proveedor.identity.ok,
+      owner_id_matches_expected: duenno.ownerMatchesExpected,
+      // Diagnóstico, NO autoridad: puede ser `false` con una credencial de
+      // prueba de aplicación perfectamente válida.
       owner_is_test_user: duenno.isTestUser,
       owner_site_id: duenno.siteId,
       owner_country_id: duenno.countryId,
@@ -347,8 +356,18 @@ async function manejar(request: Request) {
 
   if (!tokenPuesto) return no("MERCADOPAGO_ACCESS_TOKEN_NOT_AVAILABLE", 424);
   if (!duenno.reachable) return no("MERCADOPAGO_IDENTITY_UNVERIFIABLE", 424);
-  if (duenno.environment !== "test" || !duenno.isTestUser) {
-    return no("MERCADOPAGO_CREDENTIAL_OWNER_IS_NOT_TEST_USER", 424);
+  // MP-ENV-01 · Ya NO se exige la etiqueta `test_user`. Una credencial de
+  // prueba de aplicación pertenece a una cuenta productiva y no la lleva; y un
+  // token de usuario de prueba la lleva aunque sea de OTRA aplicación, que es
+  // exactamente el fallo que dejó un cobro real sin webhook. Lo que se exige es
+  // la configuración declarada y el titular esperado.
+  const identidadQa = proveedor.identity;
+  if (!identidadQa.ok) return no(identidadQa.reason, 424);
+  if (identidadQa.value.environment !== "test") {
+    return no("MERCADOPAGO_ENVIRONMENT_IS_NOT_TEST", 424);
+  }
+  if (!duenno.ownerMatchesExpected) {
+    return no("MERCADOPAGO_OWNER_IS_NOT_EXPECTED", 424);
   }
   // EL PAGADOR DEL FLUJO PENDIENTE.
   //
@@ -1581,6 +1600,30 @@ async function manejar(request: Request) {
                      transaction_amount: Number(intento.expected_total_amount),
                      currency_id: String(intento.expected_currency) } }, { status: 200 });
     }
+    // MP-ENV-01 · IDENTIDAD DE LA APLICACIÓN, antes del sello.
+    //
+    // El proveedor ya creó el objeto cuando llegamos aquí, así que si no es de
+    // nuestra aplicación hay que DESHACERLO: dejarlo vivo sería exactamente lo
+    // que pasó la vez anterior —una preaprobación autorizada y cobrando bajo
+    // otra aplicación, de la que jamás recibiríamos un aviso—. Se cancela por
+    // la primitiva del adaptador y se informa de si la compensación funcionó.
+    if (!applicationMatches(r.value.applicationId,
+                            identidadQa.value.expectedApplicationId)) {
+      const deshecho = await proveedor.cancelSubscription(r.value.providerSubscriptionId, false);
+      log_seguro("aplicacion_no_coincide", {
+        compensado: deshecho.ok, intent: intentId });
+      return NextResponse.json({
+        ok: false, error: "MP_APPLICATION_MISMATCH",
+        expected_application_id: identidadQa.value.expectedApplicationId,
+        received_application_id: r.value.applicationId,
+        external_object_cancelled: deshecho.ok,
+        // Si la compensación falla hay un objeto externo vivo que NO se selló:
+        // se dice, no se esconde.
+        orphan_external_subscription: deshecho.ok
+          ? null : r.value.providerSubscriptionId,
+      }, { status: 409 });
+    }
+
     await admin.rpc("billing_attach_provider_subscription", {
       p_intent_id: intentId,
       p_provider_subscription_id: r.value.providerSubscriptionId,
