@@ -661,15 +661,52 @@ decisiones que sí se tomaron con esa regla puesta. Lo que rige hoy está en
 
 | Entorno | Cabecera |
 |---|---|
-| Local | **0183** |
-| Staging | **0183** |
+| Local | **0189** |
+| Staging | **0189** |
 | Producción | **0183** |
 
-Los tres entornos comparten por fin la misma cabecera. Producción llegó el 7 de
-septiembre de 2026, en dos tramos y con una parada por el camino: 24 migraciones,
-la **0136 abortando** contra un dato que ni Local ni Staging tienen, la
-reconciliación de 92 guías legadas, y las 48 restantes. El relato está en
+Producción llegó a la suya el 7 de septiembre de 2026, en dos tramos y con una
+parada por el camino: 24 migraciones, la **0136 abortando** contra un dato que ni
+Local ni Staging tienen, la reconciliación de 92 guías legadas, y las 48
+restantes. El relato está en
 [`PE_06D1_MIGRATION_0136_INCIDENT.md`](PE_06D1_MIGRATION_0136_INCIDENT.md).
+Ahí sigue: **este tramo no la tocó**, y la cifra que aparece arriba es la última
+verificada en aquel corte, no una lectura de hoy.
+
+### Staging llegó a 0189, y por el camino apareció un desajuste
+
+Este documento afirmaba que Staging estaba en 0183. **Lo estaba y no lo estaba**,
+y la diferencia importa lo suficiente para dejarla escrita:
+
+- su **libro de migraciones** —`supabase_migrations.schema_migrations`— se
+  detenía en **0180**;
+- su **esquema material** tenía ya aplicadas 0181, 0182 y 0183: tablas,
+  funciones y disparadores, comprobados uno a uno contra el catálogo y no
+  deducidos del libro.
+
+Alguien las aplicó por un camino que no dejó asiento. La consecuencia práctica
+era que un `db push` habría intentado repetirlas. Se resolvió por el mecanismo
+canónico: `migration repair --status applied 0181 0182 0183` para que el libro
+contara la verdad, y después `db push` de las seis que faltaban de verdad,
+**0184 a 0189**, aplicadas sin un solo error.
+
+Antes de escribir se hizo el trabajo que evita las sorpresas: preflight de las
+nueve contra los datos reales de Staging —sin solapes de tasas, sin duplicados
+normalizados, sin cargos equivalentes, sin ciclos, sin pares de proveedor
+repetidos—, ensayo completo sobre base desechable con forma de Supabase, y
+snapshot con sumas de comprobación. Y una cosa que el preflight sacó a la luz:
+**0187 no era cosmética allí**. `organization_plan_limits()` declaraba
+`limit_value integer` mientras Staging tenía dos límites por encima del techo de
+`integer`, así que la función estaba fallando en producción de pruebas para esas
+organizaciones. Hoy devuelve `bigint` y los 5 368 709 120 se leen.
+
+**Y la aplicación se validó contra ese 0189.** Hay una Preview del árbol de
+`45fb954`, con destino Preview y sin alias productivo, cuyo servidor demostró
+hablar con Staging QA por la huella de sus datos —196 organizaciones, 9
+suscripciones, 2 medios de pago— y no por lo que declare un fichero de entorno.
+Sobre ella pasaron los smokes de plataforma y, contra Staging, las suites de
+estado comercial, identidades, importación de cargos y la infraestructura de
+proveedor de 0185 y 0186, todas dejando la base exactamente como la encontraron.
 
 **Y la aplicación ya está desplegada contra él**, desde el 7 de septiembre: una
 construcción nueva con destino Producción, verificada antes de publicar, con
