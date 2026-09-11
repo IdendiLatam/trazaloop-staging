@@ -65,8 +65,19 @@ function ficherosDePrueba(): { ruta: string; texto: string }[] {
   return salida;
 }
 
-/** Las tablas de QA que una suite crea y tiene que volver a encontrar. */
-const TABLAS_VIGILADAS = ["commercial_fx_rates"];
+/**
+ * Las tablas de solo-añadir que una suite crea y tiene que volver a encontrar.
+ *
+ * `commercial_fx_rates` entró en TEST-HYGIENE-03, cuando pasó de mil filas y
+ * rompió diez limpiezas a la vez. `billing_provider_plans` entró en
+ * TEST-HYGIENE-05A por lo mismo, y por eso está aquí: al cruzar las mil filas,
+ * seis comprobaciones de `mp0185` se pusieron rojas diciendo «quedaron 0
+ * vigentes» y «no se encuentra la proyección». Ninguna línea de código había
+ * cambiado: cambió el tamaño de la tabla. Las dos son historia que no se puede
+ * borrar, así que las dos van a cruzar ese umbral tarde o temprano.
+ */
+const TABLAS_VIGILADAS = ["commercial_fx_rates", "billing_provider_plans",
+                          "v_billing_provider_plans"];
 
 /** Métodos que ACOTAN en el servidor. Basta uno para que la página sea suya. */
 const FILTROS = [".eq(", ".neq(", ".in(", ".like(", ".ilike(", ".is(", ".gt(",

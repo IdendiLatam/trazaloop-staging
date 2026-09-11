@@ -258,6 +258,9 @@ async function main() {
 
   let proyeccion = "";
   let proyeccionExterna = "";
+  /** TEST-HYGIENE-05A · Las proyecciones que registra ESTA vuelta, para poder
+   *  retirarlas al terminar por la primitiva gobernada. */
+  const planesProveedor: string[] = [];
 
   await check("4. `billing_checkout_intents` puede guardar la proyección", async () => {
     proyeccionExterna = `plan-0186-${sello}`;
@@ -268,6 +271,7 @@ async function main() {
       p_charge_amount: mp.total, p_created_by: null });
     assert(!error && typeof data === "string", `registrar proyección: ${error?.message}`);
     proyeccion = data as string;
+    planesProveedor.push(proyeccion);
     const { error: eUpd } = await admin.from("billing_checkout_intents")
       .update({ billing_provider_plan_id: proyeccion }).eq("id", mp.intentId);
     assert(!eUpd, `no se pudo guardar la proyección en el intento: ${eUpd?.message}`);
@@ -320,6 +324,7 @@ async function main() {
       p_provider_plan_id: otraExterna, p_charge_currency: "COP",
       p_charge_amount: mp.total, p_created_by: null });
     assert(typeof idB === "string", "no se registró la segunda proyección");
+    planesProveedor.push(idB as string);
     const r = await reconciliarCiclo(mp, 4, "c4-mismatch",
       { providerPlanId: otraExterna });
     assert(r.outcome === "provider_plan_mismatch",
@@ -858,7 +863,12 @@ async function main() {
   // El ayudante común aparta el disparador SOLO si este fixture tiene ciclos,
   // lo hace dentro de un punto de retorno, lo vuelve a poner y COMPRUEBA que
   // quedó activo. Y devuelve lo que no pudo hacer.
-  const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
+  // La segunda proyección —`plan-otro-…`— no la retira ninguna comprobación:
+  // se registra para demostrar que una divergencia PARA la reconciliación, y
+  // ahí termina su papel. Quedaba VIGENTE en cada ejecución. Ahora las dos se
+  // retiran por la primitiva, que es idempotente: la que la prueba 6 ya retiró
+  // no se rompe por intentarlo otra vez.
+  const residuo = await limpiarFixtures(pg, admin, { orgs, personas, planesProveedor });
 
   await check("28. La suite no deja un solo fixture detrás", async () => {
     assert(residuo.problemas.length === 0,
@@ -875,6 +885,15 @@ async function main() {
         where tgname = 'billing_provider_cycle_is_append_only_trg'`);
     assert(trg[0]?.tgenabled !== 'D',
       "el disparador de solo-añadir de los ciclos quedó deshabilitado");
+    // Por IDENTIFICADOR propio. No se exige cero FILAS —0185 no deja borrarlas
+    // y una versión nueva es historia legítima—: se exige cero VIGENTES.
+    assert(residuo.planesActivos === 0,
+      `quedaron ${residuo.planesActivos} proyecciones de esta vuelta VIGENTES`);
+    const { rows: mias } = await pg.query(
+      `select count(*)::int n from public.billing_provider_plans
+        where id = any($1::uuid[])`, [planesProveedor]);
+    assert(mias[0].n === planesProveedor.length,
+      "desapareció alguna proyección: son historia y no se borran");
   });
 
   await pg.end();

@@ -90,9 +90,32 @@ async function registrar(o: {
   return r;
 }
 
-async function verProyecciones() {
+/**
+ * TEST-HYGIENE-05A · La lectura va ACOTADA, y esto no es una precaución
+ * teórica: la traía sin acotar y se rompió sola.
+ *
+ * `billing_provider_plans` es de solo-añadir —0185 no deja borrar— así que cada
+ * ejecución suma filas y la tabla solo crece. Al pasar de MIL, PostgREST empezó
+ * a devolver una página truncada y, sin `order by`, las proyecciones recién
+ * registradas —las últimas— caían fuera. Seis comprobaciones se pusieron rojas
+ * de golpe diciendo cosas absurdas: «quedaron 0 vigentes», «no se encuentra la
+ * proyección». Es exactamente lo que le pasó a `commercial_fx_rates` en
+ * TEST-HYGIENE-03, en otra tabla y con otro nombre.
+ *
+ * Se acota de dos maneras a la vez: por revisión EN LA BASE cuando la
+ * comprobación mira una sola, y siempre por las más recientes primero. Lo que
+ * cada prueba busca es lo que acaba de registrar.
+ */
+async function verProyecciones(revision?: string) {
+  // Una sola expresión encadenada, con el filtro dentro: partirla en dos
+  // esconde el acotado de quien lo audita —y de la guarda que lo vigila—.
+  // `.match({})` no filtra nada, que es justo lo que hace falta cuando la
+  // comprobación mira todas las revisiones.
   const { data } = await staffCli.from("v_billing_provider_plans")
-    .select("id, provider, environment, plan_revision_id, billing_interval, provider_plan_id, charge_amount, status, effective_to, suscripciones_vinculadas");
+    .select("id, provider, environment, plan_revision_id, billing_interval, provider_plan_id, charge_amount, status, effective_to, suscripciones_vinculadas")
+    .match(revision ? { plan_revision_id: revision } : {})
+    .order("created_at", { ascending: false })
+    .limit(300);
   return (data ?? []) as Array<Record<string, unknown>>;
 }
 
@@ -122,7 +145,7 @@ async function main() {
     // Acotado a ESTA revisión: las proyecciones no se borran nunca, así que las
     // de ejecuciones anteriores siguen en la tabla y contarlas todas mezclaría
     // ofertas distintas.
-    const filas = (await verProyecciones()).filter((f) => f.plan_revision_id === FULL);
+    const filas = (await verProyecciones(FULL));
     const vivas = filas.filter((f) => f.status === "active" && !f.effective_to);
     assert(vivas.some((f) => f.billing_interval === "monthly")
       && vivas.some((f) => f.billing_interval === "annual"),
@@ -133,7 +156,7 @@ async function main() {
     const r = await registrar({ environment: "live", revision: FULL,
       interval: "monthly", providerPlanId: `plan-live-${sello}`, amount: 190400 });
     assert(!r.error, `live: ${r.error?.message}`);
-    const filas = (await verProyecciones()).filter((f) => f.plan_revision_id === FULL);
+    const filas = (await verProyecciones(FULL));
     const vivas = filas.filter((f) => f.status === "active" && !f.effective_to
       && f.billing_interval === "monthly");
     assert(vivas.filter((f) => f.environment === "test").length === 1
@@ -142,13 +165,13 @@ async function main() {
   });
 
   await check("3. Solo UNA vigente por combinación · registrar cierra la anterior", async () => {
-    const antes = (await verProyecciones()).find((f) => f.status === "active"
+    const antes = (await verProyecciones(FULL)).find((f) => f.status === "active"
       && !f.effective_to && f.environment === "test" && f.billing_interval === "monthly"
       && f.plan_revision_id === FULL);
     const r = await registrar({ revision: FULL, interval: "monthly",
       providerPlanId: `plan-m2-${sello}`, amount: 200000 });
     assert(!r.error, `segunda: ${r.error?.message}`);
-    const filas = (await verProyecciones()).filter((f) => f.plan_revision_id === FULL);
+    const filas = (await verProyecciones(FULL));
     const vivas = filas.filter((f) => f.status === "active" && !f.effective_to
       && f.environment === "test" && f.billing_interval === "monthly");
     assert(vivas.length === 1, `quedaron ${vivas.length} vigentes`);
@@ -182,8 +205,10 @@ async function main() {
   // ---- Seguridad --------------------------------------------------------
   await check("6. Un inquilino no puede leer ni escribir", async () => {
     const cliente = await persona("inquilino");
+    // GUARDA-FX: lectura global deliberada · aquí se exige que NO devuelva nada
     const { data: leido } = await cliente.cli.from("billing_provider_plans").select("id");
     assert((leido ?? []).length === 0, "un inquilino vio la tabla");
+    // GUARDA-FX: lectura global deliberada · el asunto es justo que salga vacía
     const { data: vista } = await cliente.cli.from("v_billing_provider_plans").select("id");
     assert((vista ?? []).length === 0, "un inquilino vio la vista");
     const { error } = await cliente.cli.rpc("billing_register_provider_plan", {
@@ -489,8 +514,12 @@ async function limpiar() {
   // Ahora limpia por el GRAFO de claves ajenas y COMPRUEBA lo que sobrevive.
   const pg = new PgClient({ connectionString: process.env.SUPABASE_DB_URL });
   await pg.connect();
+  // TEST-HYGIENE-05A · Y las proyecciones que registró esta vuelta. `0185` no
+  // deja borrarlas —son historia del proveedor— así que se RETIRAN por la
+  // primitiva gobernada. Lo que no puede quedar es una VIGENTE: chocaría con el
+  // índice único de vigencia y una proyección de QA se presentaría como oferta.
   const residuo = await limpiarFixtures(pg, admin, {
-    orgs, personas,
+    orgs, personas, planesProveedor: proyecciones,
   });
   await pg.end();
 
@@ -499,6 +528,10 @@ async function limpiar() {
       && residuo.fxActivas === 0 && Object.keys(residuo.porTabla).length === 0
       && residuo.problemas.length === 0,
       `quedaron: ${describirResiduo(residuo)}`);
+    // Por IDENTIFICADOR propio: las proyecciones de otras suites no son asunto
+    // de ésta, y un barrido por nota o por nombre acusaría a quien no debe.
+    assert(residuo.planesActivos === 0,
+      `quedaron ${residuo.planesActivos} proyecciones de esta vuelta VIGENTES`);
   });
 }
 

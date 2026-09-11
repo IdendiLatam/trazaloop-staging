@@ -46,6 +46,11 @@ export type Fixtures = {
   /** Las tasas de cambio sintéticas que abrió. Se RETIRAN, no se borran: 0182
    *  no deja borrar historia financiera, ni siendo de prueba. */
   fxIds?: string[];
+  /** Las proyecciones de plan del proveedor que registró. Igual que las tasas:
+   *  0185 prohíbe borrarlas, así que se RETIRAN por su primitiva gobernada.
+   *  Lo que no puede quedar es una VIGENTE: chocaría con el índice único de
+   *  vigencia y una proyección de QA se presentaría como oferta real. */
+  planesProveedor?: string[];
 };
 
 export type Residuo = {
@@ -53,6 +58,9 @@ export type Residuo = {
   personas: number;
   porTabla: Record<string, number>;
   fxActivas: number;
+  /** Proyecciones de la suite que siguen VIGENTES. Las retiradas no cuentan:
+   *  son historia legítima de una tabla de solo-añadir. */
+  planesActivos: number;
   /** Lo que no se pudo borrar, con su motivo. Vacío = limpieza completa. */
   problemas: string[];
 };
@@ -92,8 +100,20 @@ const SOLTAR = [
 export async function limpiarFixtures(
   pg: PgClient, admin: SupabaseClient, fixtures: Fixtures
 ): Promise<Residuo> {
-  const { orgs, personas, fxIds = [] } = fixtures;
+  const { orgs, personas, fxIds = [], planesProveedor = [] } = fixtures;
   const problemas: string[] = [];
+
+  // Las proyecciones de plan del proveedor, por su PRIMITIVA. Nada de `update`
+  // a mano, nada de `delete` —0185 no lo permite— y nada de bajar su disparador
+  // de solo-añadir: la historia se queda, lo que no se queda es la vigencia.
+  // La primitiva es idempotente por construcción —solo toca las que están
+  // activas— así que retirar una que una prueba ya retiró no es un error.
+  for (const id of planesProveedor) {
+    const { error } = await admin.rpc("billing_retire_provider_plan", { p_id: id });
+    if (error) {
+      problemas.push(`plan de proveedor ${id.slice(0, 8)}: ${error.message.slice(0, 90)}`);
+    }
+  }
 
   if (orgs.length > 0) {
     const { rows: conOrg } = await pg.query(
@@ -274,7 +294,7 @@ async function quienBloquea(pg: PgClient, uid: string): Promise<string[]> {
 export async function contarResiduo(
   pg: PgClient, admin: SupabaseClient, fixtures: Fixtures
 ): Promise<Omit<Residuo, "problemas">> {
-  const { orgs, personas, fxIds = [] } = fixtures;
+  const { orgs, personas, fxIds = [], planesProveedor = [] } = fixtures;
   const porTabla: Record<string, number> = {};
 
   if (orgs.length > 0) {
@@ -311,7 +331,15 @@ export async function contarResiduo(
     fxActivas = rows[0].n;
   }
 
-  return { organizaciones, personas: vivas, porTabla, fxActivas };
+  let planesActivos = 0;
+  if (planesProveedor.length > 0) {
+    const { rows } = await pg.query(
+      `select count(*)::int n from public.billing_provider_plans
+        where id = any($1::uuid[]) and status = 'active'`, [planesProveedor]);
+    planesActivos = rows[0].n;
+  }
+
+  return { organizaciones, personas: vivas, porTabla, fxActivas, planesActivos };
 }
 
 /** El resumen legible que una suite pone en su aserto cuando algo sobrevive. */
@@ -320,6 +348,7 @@ export function describirResiduo(r: Residuo): string {
   if (r.organizaciones) partes.push(`${r.organizaciones} organizaciones`);
   if (r.personas) partes.push(`${r.personas} usuarios`);
   if (r.fxActivas) partes.push(`${r.fxActivas} tasas activas`);
+  if (r.planesActivos) partes.push(`${r.planesActivos} proyecciones de plan VIGENTES`);
   for (const [t, n] of Object.entries(r.porTabla)) partes.push(`${n} en ${t}`);
   if (r.problemas.length) partes.push(`· ${r.problemas.join(" · ")}`);
   return partes.join(", ") || "nada";
