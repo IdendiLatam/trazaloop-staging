@@ -1,6 +1,10 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
+  resolveConfiguredTestBuyer, isTestBuyerEmail, maskBuyerEmail, TEST_BUYER_PATTERN,
+  TEST_PAYER_CUSTOMER_PATTERN,
+} from "@/lib/billing/qa/test-payer";
+import {
   decideQaFxFixture, QA_FX_BASE, QA_FX_QUOTE, QA_FX_MICROS, QA_FX_LEGACY_MARKER,
   type QaFxRow,
 } from "@/lib/billing/qa/fx-fixture";
@@ -348,16 +352,17 @@ async function manejar(request: Request) {
   }
   // EL PAGADOR DEL FLUJO PENDIENTE.
   //
-  // Es el valor que la documentación oficial usa en el ejemplo de «suscripción
-  // sin plan asociado con pago pendiente», y no es la identidad de nadie: ni
-  // contacto de facturación, ni cuenta de Mercado Pago, ni el comprador de
-  // prueba. La persona real entra después, abriendo el enlace de autorización
-  // con sus credenciales.
+  // MP-QA-HARDENING-02 · Aquí había un correo escrito a mano —el del ejemplo de
+  // la documentación— y un comentario que defendía no ponerlo en una variable
+  // «porque invitaría a confundirlo con un dato comercial». Los hechos lo
+  // desmintieron: Mercado Pago lo rechaza con `400 · Payer is associated with a
+  // different site`, y WCS-49142 ya lo tenía catalogado para la variante
+  // `test@testuser.com`.
   //
-  // Vive aquí, dentro del disparador de QA, y no en una variable de entorno:
-  // una variable invitaría a confundirlo con un dato comercial.
-  const PAGADOR_QA_DOCUMENTADO = "test_payer@example.com";
-  const comprador = PAGADOR_QA_DOCUMENTADO;
+  // Un comprador de sandbox NO se puede inventar: es una identidad que crea el
+  // proveedor y que pertenece a un sitio concreto. Por fuerza es configuración
+  // del entorno. Se resuelve y se valida en `lib/billing/qa/test-payer.ts`, que
+  // comparten las tres acciones para que no vuelvan a divergir.
   // -------------------------------------------------------------------------
   // probe_payer_email · MERCADOPAGO-SBX-01 · ticket WCS-49142
   // -------------------------------------------------------------------------
@@ -392,9 +397,12 @@ async function manejar(request: Request) {
     const correo = String(cuerpo.email ?? "");
     // Una lista cerrada de FORMAS, no un campo libre: esto contesta una
     // pregunta concreta, no es un probador de correos ajenos.
+    // Los patrones salen del módulo compartido: tres acciones comprobaban la
+    // misma forma con tres copias de la expresión, y bastaba tocar una para que
+    // dejaran de coincidir.
     const formas: Array<{ nombre: string; patron: RegExp }> = [
-      { nombre: "test_user_<numero>@testuser.com", patron: /^test_user_[0-9]{1,25}@testuser\.com$/ },
-      { nombre: "test_payer_<numero>@testuser.com", patron: /^test_payer_[0-9]{1,25}@testuser\.com$/ },
+      { nombre: "test_user_<numero>@testuser.com", patron: TEST_BUYER_PATTERN },
+      { nombre: "test_payer_<numero>@testuser.com", patron: TEST_PAYER_CUSTOMER_PATTERN },
     ];
     const forma = formas.find((f) => f.patron.test(correo));
     if (!forma) return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
@@ -472,7 +480,7 @@ async function manejar(request: Request) {
   // contesta una pregunta concreta, no es un creador de suscripciones a medida.
   if (accion === "probe_annual") {
     const correo = String(cuerpo.email ?? "");
-    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
+    if (!isTestBuyerEmail(correo)) {
       return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
     }
     const IMPORTE_SONDA = 5000;      // COP. Constante del experimento.
@@ -630,7 +638,7 @@ async function manejar(request: Request) {
   // --- Crear una suscripción diaria aislada --------------------------------
   if (accion === "probe_daily") {
     const correo = String(cuerpo.email ?? "");
-    if (!/^test_user_[0-9]{1,25}@testuser\.com$/.test(correo)) {
+    if (!isTestBuyerEmail(correo)) {
       return no("PAYER_EMAIL_FORM_NOT_ALLOWED", 400);
     }
     const caso = leerCaso(cuerpo.case);
@@ -1489,14 +1497,18 @@ async function manejar(request: Request) {
       if (error) return no(`QA_USER_PASSWORD_FAILED:${error.message}`, 500);
     }
 
+    // El contacto de facturación de la empresa sintética. Es un dato NUESTRO,
+    // no del proveedor: nunca sale hacia Mercado Pago. Lleva el dominio de
+    // pruebas para que nadie lo confunda con el correo de un cliente.
+    const contactoDeFacturacion = "qa-pe05b2-facturacion@test.trazaloop.dev";
     if (!org) {
       const { data: creada, error } = await admin.from("organizations").insert({
         name: "QA-PE05B2-MERCADOPAGO", country: "CO", created_by: uid,
-        contact_email: comprador }).select("id").single();
+        contact_email: contactoDeFacturacion }).select("id").single();
       if (error || !creada) return no(`QA_ORG_FAILED:${error?.message}`, 500);
       org = (creada as { id: string }).id;
     }
-    await admin.from("organizations").update({ contact_email: comprador }).eq("id", org);
+    await admin.from("organizations").update({ contact_email: contactoDeFacturacion }).eq("id", org);
     await admin.from("memberships").upsert(
       { organization_id: org, user_id: uid, role_code: "admin", status: "active" },
       { onConflict: "organization_id,user_id" });
@@ -1543,12 +1555,19 @@ async function manejar(request: Request) {
     const intento = fila as Record<string, unknown>;
     if (intento.environment !== "test") return no("INTENT_IS_NOT_TEST", 424);
 
+    // EL PAGADOR sale de la configuración y se valida ANTES de la red: un
+    // correo mal formado tiene que costar un 400 nuestro, no una llamada que
+    // vuelve con un mensaje ajeno y confuso. Sin respaldo a nada escrito a
+    // mano: si la variable falta, la acción no existe.
+    const pagador = resolveConfiguredTestBuyer(process.env.MERCADOPAGO_TEST_BUYER_EMAIL);
+    if (!pagador.ok) return no(pagador.reason, 424);
+
     // EL IMPORTE SALE DEL INTENTO, que lo congeló del presupuesto de B1.
     // No hay ninguna vía por la que el navegador pueda influir en él.
     const intervalo = accion === "create_annual" ? "annual" : "monthly";
     const r = await proveedor.createSubscription({
       externalReference: String(intento.id),
-      payerEmail: comprador,
+      payerEmail: pagador.email,
       reason: `Trazaloop ${String(intento.plan_code).toUpperCase()} ${intervalo} (QA sandbox)`,
       amountMinor: Number(intento.expected_total_amount),
       currency: String(intento.expected_currency),
@@ -1569,7 +1588,7 @@ async function manejar(request: Request) {
       p_status: "provider_created", p_synced_amount: r.value.amount,
       p_provider_version: r.value.version, p_next_payment_date: r.value.nextPaymentDate });
     return NextResponse.json({ ok: true, intent_id: intentId,
-      payer_fixture: PAGADOR_QA_DOCUMENTADO, subscription: r.value });
+      payer_fixture: maskBuyerEmail(pagador.email), subscription: r.value });
   }
 
   // Crear UNA identidad de prueba del sitio MCO. El contrato oficial admite
