@@ -175,8 +175,13 @@ check("B1. `tasaCanonicaQA` se busca por una IGUALDAD de nota, no barriendo", ()
 });
 
 check("B2. La nota canónica NO lleva sello ni azar · si no, no se reutiliza", () => {
-  const m = /export const NOTA_TASA_QA = "([^"]+)"/.exec(AYUDANTE);
-  assert(m !== null, "desapareció NOTA_TASA_QA");
+  // MP-SBX-02B · La nota vive en el módulo compartido: una sola convención para
+  // el ayudante de las suites y para el arnés QA de la ruta de Mercado Pago.
+  const IDENTIDAD = readFileSync("lib/billing/qa/fx-fixture.ts", "utf8");
+  assert(/export const NOTA_TASA_QA = QA_FX_CANONICAL_NOTE;/.test(AYUDANTE),
+    "el ayudante volvió a declarar su propia nota en vez de compartir la identidad");
+  const m = /export const QA_FX_CANONICAL_NOTE = "([^"]+)"/.exec(IDENTIDAD);
+  assert(m !== null, "desapareció QA_FX_CANONICAL_NOTE");
   assert(!/\$\{|\d{10,}/.test(m[1]),
     `la nota canónica lleva algo variable y dejaría de ser la misma: «${m[1]}»`);
 });

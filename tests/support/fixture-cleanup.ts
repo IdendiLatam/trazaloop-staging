@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClientCtor } from "pg";
 import type { Client as PgClient } from "pg";
+import { QA_FX_CANONICAL_NOTE, QA_FX_MICROS } from "../../lib/billing/qa/fx-fixture";
 
 /**
  * Trazaloop · TEST-HYGIENE-01 · Que una suite se lleve lo que trajo.
@@ -490,8 +491,11 @@ export async function limpiarPersonas(
  * exactamente la trampa que rompió la limpieza anterior cuando la tabla pasó de
  * mil filas y PostgREST empezó a devolver una página truncada.
  */
-export const NOTA_TASA_QA = "QA CANÓNICA · tasa sintética local, NO comercial";
-export const TASA_QA_MICROS = 4_000_000_000;   // 1 USD = 4 000 COP
+// MP-SBX-02B · La identidad vive en un solo sitio y la comparten el ayudante y
+// el arnés QA de la ruta de Mercado Pago. Tener dos convenciones para la misma
+// tasa fue exactamente lo que hizo estallar `prepare` contra Staging.
+export const NOTA_TASA_QA = QA_FX_CANONICAL_NOTE;
+export const TASA_QA_MICROS = QA_FX_MICROS;    // 1 USD = 4 000 COP
 
 /** Deja la tasa canónica vigente y devuelve su identificador. */
 export async function tasaCanonicaQA(admin: SupabaseClient): Promise<string> {

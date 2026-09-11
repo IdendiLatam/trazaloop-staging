@@ -1,5 +1,9 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import {
+  decideQaFxFixture, QA_FX_BASE, QA_FX_QUOTE, QA_FX_MICROS, QA_FX_LEGACY_MARKER,
+  type QaFxRow,
+} from "@/lib/billing/qa/fx-fixture";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkPlatformStatus } from "@/lib/db/platform";
@@ -201,8 +205,13 @@ async function manejar(request: Request) {
     const { data: tasas, error: eLeer } = await admin0.from("commercial_fx_rates")
       .select("id, note, status, effective_from, effective_to, rate_micros");
     if (eLeer) return no(`FX_READ_FAILED:${eLeer.message}`, 500);
+    // A propósito solo la marca HEREDADA, no `isQaSyntheticFxNote`: esta acción
+    // cierra la vigencia además de retirar, y 0182 no deja reabrir una vigencia
+    // que ya terminó. Aplicársela a la tasa canónica la mataría para siempre y
+    // dejaría a las suites sin la suya. La canónica tiene su propio ciclo de
+    // vida en `tasaCanonicaQA`, que retira y reactiva por estado.
     const sinteticas = ((tasas ?? []) as Record<string, unknown>[])
-      .filter((t) => String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION"));
+      .filter((t) => String(t.note ?? "").includes(QA_FX_LEGACY_MARKER));
     const ahora = new Date().toISOString();
     const retiradas: unknown[] = [];
     for (const t of sinteticas) {
@@ -1430,19 +1439,25 @@ async function manejar(request: Request) {
     // --- La tasa sintética -------------------------------------------------
     // Se marca de forma que no se pueda confundir con verdad comercial, y se
     // deja escrito que 4 000 no es una tasa real ni actual.
-    const { data: tasas } = await admin.from("commercial_fx_rates")
-      .select("id, note, status, effective_to")
-      .eq("base_currency", "USD").eq("quote_currency", "COP");
-    // Vigente = activa y sin cerrar. Una retirada NO se reabre reescribiéndola:
-    // se abre una vigencia nueva y la anterior se queda como historia.
-    const yaHay = ((tasas ?? []) as Record<string, unknown>[])
-      .some((t) => String(t.note ?? "").includes("QA-SYNTHETIC-NOT-FOR-PRODUCTION")
-        && t.status === "active" && !t.effective_to);
-    if (!yaHay) {
+    //
+    // MP-SBX-02B · Antes esto solo reconocía su PROPIA marca, así que al
+    // encontrarse la tasa canónica de TEST-HYGIENE-03 —que es igual de
+    // sintética y con la misma economía— intentaba abrir una segunda y 0182 lo
+    // paraba con FX_RATE_OVERLAPS, como debe. La identidad de fixture vive
+    // ahora en un solo sitio y la comparten las dos partes.
+    const { data: tasas, error: eLeer } = await admin.from("commercial_fx_rates")
+      .select("id, note, status, effective_to, rate_micros")
+      .eq("base_currency", QA_FX_BASE).eq("quote_currency", QA_FX_QUOTE);
+    if (eLeer) return no(`FX_READ_FAILED:${eLeer.message}`, 500);
+    const decision = decideQaFxFixture((tasas ?? []) as QaFxRow[]);
+    // Ante la duda no se adopta nada y no se crea nada: adivinar aquí sería
+    // tratar un precio real como si fuera un fixture.
+    if (decision.kind === "abort") return no(decision.reason, 409);
+    if (decision.kind === "seed") {
       const { error } = await admin.from("commercial_fx_rates").insert({
-        base_currency: "USD", quote_currency: "COP", rate_micros: 4_000_000_000,
+        base_currency: QA_FX_BASE, quote_currency: QA_FX_QUOTE, rate_micros: QA_FX_MICROS,
         effective_from: new Date(Date.now() - 3_600_000).toISOString(),
-        note: "QA-SYNTHETIC-NOT-FOR-PRODUCTION · PE-05B2 · 4000 COP/USD no es una "
+        note: `${QA_FX_LEGACY_MARKER} · PE-05B2 · 4000 COP/USD no es una `
             + "tasa real ni actual: existe solo para poder presupuestar en el sandbox.",
       });
       if (error) return no(`FX_SEED_FAILED:${error.message}`, 500);
