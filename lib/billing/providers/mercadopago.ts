@@ -1,5 +1,5 @@
 import "server-only";
-import { MercadoPagoConfig, PreApproval, Payment } from "mercadopago";
+import { MercadoPagoConfig, PreApproval, Payment, Preference } from "mercadopago";
 import type {
   BillingProvider, ProviderCheckout, ProviderPayment, ProviderResult,
   BillingSubscriptionState,
@@ -118,6 +118,49 @@ export type MercadoPagoAdapter = BillingProvider & {
       providerSubscriptionId: string; providerStatus: string | null;
       externalReference: string | null; amount: number | null; currency: string | null;
       frequency: number | null; frequencyType: string | null; dateCreated: string | null;
+    }>;
+  }>>;
+  /**
+   * UN SOLO PAGO, no una suscripción.
+   *
+   * Es el carril del lanzamiento: Full mensual o anual como pago único
+   * renovable, mientras la recurrencia del proveedor sigue bloqueada. Devuelve
+   * la preferencia y su punto de entrada; NO activa nada. Lo que active el
+   * plan será la lectura posterior del pago, nunca la vuelta del navegador.
+   */
+  createOneTimeCheckout(input: {
+    externalReference: string;
+    title: string;
+    amountMinor: number;
+    currency: string;
+    payerEmail?: string | null;
+    successUrl: string;
+    failureUrl: string;
+    pendingUrl: string;
+    notificationUrl?: string | null;
+    expiresAt?: string | null;
+  }): Promise<ProviderResult<{
+    preferenceId: string; initPoint: string | null;
+    externalReference: string | null;
+  }>>;
+  /**
+   * Los pagos de UNA referencia externa.
+   *
+   * Sirve para el botón «ya pagué»: quien cierra la ventana antes de volver no
+   * deja ningún identificador de pago, así que hay que preguntar por lo único
+   * que sí controlamos —la referencia que mandamos—. Sin referencia NO se
+   * pregunta: el filtro vacío devuelve 400 y ese 400 se lee como «no hay
+   * pagos», que es la respuesta más cara posible.
+   */
+  searchPaymentsByReference(externalReference: string): Promise<ProviderResult<{
+    total: number;
+    payments: Array<{
+      providerPaymentId: string; providerStatus: string | null;
+      canonicalStatus: ReturnType<typeof mapPaymentStatus>;
+      statusDetail: string | null;
+      amount: number | null; currency: string | null;
+      externalReference: string | null; liveMode: boolean | null;
+      dateApproved: string | null;
     }>;
   }>>;
   getPaymentDetail(id: string): Promise<ProviderResult<{
@@ -396,6 +439,92 @@ export function mercadoPagoProvider(
       }
     },
 
+    async createOneTimeCheckout(input) {
+      if (!cliente) return sinCredencial();
+      let importe: number;
+      try {
+        importe = minorToProviderAmount(input.amountMinor, input.currency);
+      } catch (e) {
+        return { ok: false, failure: "invalid_request",
+                 message: e instanceof Error ? e.message : "AMOUNT_INVALID" };
+      }
+      if (!input.externalReference) {
+        return { ok: false, failure: "invalid_request", message: "EXTERNAL_REFERENCE_REQUIRED" };
+      }
+      try {
+        const r = await new Preference(cliente).create({
+          body: {
+            items: [{
+              id: input.externalReference,
+              title: input.title,
+              quantity: 1,
+              unit_price: importe,
+              currency_id: input.currency.toUpperCase(),
+            }],
+            external_reference: input.externalReference,
+            back_urls: {
+              success: input.successUrl,
+              failure: input.failureUrl,
+              pending: input.pendingUrl,
+            },
+            // SIN `auto_return`. La vuelta automática ahorra un clic y a cambio
+            // hace creer que la vuelta es la confirmación. Aquí la vuelta solo
+            // lleva a una pantalla que PREGUNTA al proveedor.
+            //
+            // `binary_mode` evita el limbo de «pendiente»: un plan medio
+            // activado no existe, y explicárselo a alguien que ya pagó es peor
+            // que pedirle que use otro medio.
+            binary_mode: true,
+            ...(input.notificationUrl ? { notification_url: input.notificationUrl } : {}),
+            ...(input.payerEmail ? { payer: { email: input.payerEmail } } : {}),
+            ...(input.expiresAt
+              ? { expires: true, expiration_date_to: input.expiresAt }
+              : {}),
+          },
+          requestOptions: { idempotencyKey: input.externalReference },
+        }) as unknown as Record<string, unknown>;
+        const id = str(r.id);
+        if (!id) {
+          return { ok: false, failure: "provider_unavailable",
+                   message: "PREFERENCE_WITHOUT_ID" };
+        }
+        return { ok: true, value: {
+          preferenceId: id,
+          initPoint: str(r.init_point) ?? str(r.sandbox_init_point),
+          externalReference: str(r.external_reference),
+        } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
+    async searchPaymentsByReference(externalReference) {
+      if (!cliente) return sinCredencial();
+      if (!externalReference) {
+        return { ok: false, failure: "invalid_request", message: "EXTERNAL_REFERENCE_REQUIRED" };
+      }
+      try {
+        const r = await new Payment(cliente).search({
+          options: { external_reference: externalReference, sort: "date_created", criteria: "desc" },
+        }) as unknown as Record<string, unknown>;
+        const filas = Array.isArray(r.results) ? (r.results as Record<string, unknown>[]) : [];
+        return { ok: true, value: {
+          total: filas.length,
+          payments: filas.map((p) => ({
+            providerPaymentId: String(p.id ?? ""),
+            providerStatus: str(p.status),
+            canonicalStatus: mapPaymentStatus(str(p.status)),
+            statusDetail: str(p.status_detail),
+            amount: num(p.transaction_amount),
+            currency: str(p.currency_id),
+            externalReference: str(p.external_reference),
+            liveMode: typeof p.live_mode === "boolean" ? p.live_mode : null,
+            dateApproved: str(p.date_approved),
+          })),
+        } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
     async getPaymentDetail(id) {
       if (!cliente) return sinCredencial();
       try {
