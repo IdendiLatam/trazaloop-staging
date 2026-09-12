@@ -311,19 +311,54 @@ async function manejar(request: Request) {
     const plan = cuerpo.plan === "extra" ? "extra" : "full";
     const intervalo = cuerpo.interval === "annual" ? "annual" : "monthly";
 
-    const { createBillingQuote, QUOTE_ERROR_MESSAGE } = await import("@/lib/db/billing");
-    const presupuesto = await createBillingQuote(orgId, plan, intervalo);
-    if (!presupuesto.ok) {
-      return NextResponse.json({ ok: false, error: presupuesto.code,
-        message: QUOTE_ERROR_MESSAGE[presupuesto.code] }, { status: 409 });
-    }
+    // UNA SESIÓN DE VERDAD, PORQUE LA BASE LA EXIGE.
+    //
+    // `billing_create_quote` y `billing_open_one_time_checkout` comprueban
+    // `auth.uid()`: contratar es un acto de alguien, no de un proceso. Esta
+    // ruta se autentica por bypass y no trae sesión, así que hay que abrir una.
+    //
+    // Se abre con un enlace de UN SOLO USO del administrador de la empresa, no
+    // cambiándole la contraseña: cambiar la contraseña de una persona para
+    // poder probar deja a esa persona fuera de su cuenta.
+    const { data: mem } = await adminOt.from("memberships")
+      .select("user_id").eq("organization_id", orgId).eq("role_code", "admin").limit(1);
+    const uid = (mem ?? [])[0]?.user_id as string | undefined;
+    if (!uid) return no("ORGANIZATION_HAS_NO_ADMIN", 409);
+    const { data: persona } = await adminOt.auth.admin.getUserById(uid);
+    const correo = persona.user?.email ?? "";
+    if (!correo) return no("ORGANIZATION_ADMIN_HAS_NO_EMAIL", 409);
 
-    const { createServerClient } = await import("@/lib/supabase/server");
-    const sesion = await createServerClient();
+    const { data: enlace, error: eEnlace } = await adminOt.auth.admin.generateLink({
+      type: "magiclink", email: correo });
+    const otp = enlace?.properties?.hashed_token;
+    if (eEnlace || !otp) return no("QA_SESSION_UNAVAILABLE", 424);
+
+    const sesion = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string,
+      { auth: { persistSession: false } });
+    const { error: eOtp } = await sesion.auth.verifyOtp(
+      { token_hash: otp, type: "magiclink" });
+    if (eOtp) return no(`QA_SESSION_REFUSED:${eOtp.message.slice(0, 60)}`, 424);
+
     const url = new URL(request.url);
+    // El presupuesto, con esa MISMA sesión. `createBillingQuote` abre la suya
+    // por dentro y aquí no vale: se llama a la primitiva directamente, que es
+    // lo que aquella envuelve.
+    const { data: q, error: eQuote } = await sesion.rpc("billing_create_quote", {
+      p_organization_id: orgId, p_plan_code: plan,
+      p_billing_interval: intervalo, p_coupon_code: null });
+    if (eQuote || !q) {
+      return NextResponse.json({ ok: false, error: "QUOTE_REFUSED",
+        detail: eQuote?.message ?? null }, { status: 409 });
+    }
+    const presupuesto = q as Record<string, unknown>;
+    const quoteId = String(presupuesto.quote_id ?? "");
+
     const abierto = await openOneTimeCheckout({
       purpose: "initial",
-      targetId: presupuesto.quoteId,
+      targetId: quoteId,
       supabase: sesion,
       origin: `${url.protocol}//${url.host}`,
       planLabel: `Trazaloop ${plan === "extra" ? "Extra" : "Full"} · `
@@ -338,7 +373,8 @@ async function manejar(request: Request) {
 
     return NextResponse.json({ ok: true,
       organization_id: orgId,
-      quote_id: presupuesto.quoteId,
+      quote_id: quoteId,
+      quote: presupuesto,
       checkout_id: abierto.checkoutId,
       init_point: abierto.initPoint,
       reused: abierto.reused,
