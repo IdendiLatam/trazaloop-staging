@@ -77,7 +77,7 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
-                  "one_time_prepare", "one_time_state"] as const;
+                  "one_time_prepare", "one_time_state", "one_time_observe"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -282,6 +282,63 @@ async function manejar(request: Request) {
   //
   // No cobra, no asienta y no concede nada: deja una preferencia abierta y su
   // enlace. Quien paga sigue siendo una persona.
+  // OBSERVAR SIN DECIDIR.
+  //
+  // Pregunta al proveedor por los pagos de un cobro y dice qué respondería el
+  // verificador, SIN asentar. Existe porque «comprobar antes de actuar» y
+  // «actuar» tienen que poder separarse: si la única forma de saber si hay un
+  // pago fuera activar el plan, no habría manera de mirar.
+  //
+  // Es de solo lectura de punta a punta. No escribe ni una fila.
+  if (accion === "one_time_observe") {
+    const cobroId = String(cuerpo.checkout_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(cobroId)) return no("CHECKOUT_ID_REQUIRED", 400);
+
+    const adminObs = createAdminClient();
+    const { data: fila } = await adminObs.from("billing_one_time_checkouts")
+      .select("id, organization_id, provider, environment, purpose, status, "
+        + "expected_total_amount, expected_currency, provider_preference_id, "
+        + "verified_payment_id, settled_payment_id")
+      .eq("id", cobroId).maybeSingle();
+    if (!fila) return no("CHECKOUT_NOT_FOUND", 404);
+    const c = fila as unknown as Record<string, unknown>;
+
+    const { oneTimeGatewayFor } = await import("@/lib/billing/providers/one-time-registry");
+    const pasarela = oneTimeGatewayFor(String(c.provider));
+    if (!pasarela) return no("PROVIDER_NOT_CONFIGURED", 424);
+
+    const pagos = await pasarela.paymentsFor(cobroId);
+    if (!pagos.ok) {
+      return NextResponse.json({ ok: false, error: "PROVIDER_UNAVAILABLE",
+        failure: pagos.failure }, { status: 424 });
+    }
+
+    const { decideOneTimeSettlement } =
+      await import("@/lib/billing/one-time/verification");
+    const veredicto = decideOneTimeSettlement({
+      checkoutId: String(c.id),
+      expectedTotalMinor: Number(c.expected_total_amount),
+      expectedCurrency: String(c.expected_currency),
+      environment: c.environment as "test" | "live",
+    }, pagos.value);
+
+    return NextResponse.json({ ok: true,
+      checkout: c,
+      // Los pagos, sin nada de la persona que pagó.
+      payments: pagos.value.map((x) => ({
+        provider_payment_id: x.providerPaymentId,
+        canonical_status: x.canonicalStatus,
+        amount_minor: x.amountMinor,
+        currency: x.currency,
+        external_reference: x.externalReference,
+        live_mode: x.liveMode,
+      })),
+      // Lo que el verificador HARÍA. No lo hace.
+      verdict: veredicto,
+      note: "Solo observación: no se asentó nada.",
+    });
+  }
+
   if (accion === "one_time_prepare" || accion === "one_time_state") {
     const orgId = String(cuerpo.organization_id ?? "");
     if (!/^[0-9a-f-]{36}$/i.test(orgId)) return no("ORGANIZATION_ID_REQUIRED", 400);
