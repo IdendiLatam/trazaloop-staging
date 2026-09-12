@@ -343,7 +343,8 @@
     "test:stab04-safety": "tsx tests/unit/stab04-production-safety.test.ts",
     "test:pl01b-tutorials": "tsx tests/unit/pl01b-tutorial-access.test.ts",
     "test:pl01b-checkout-db": "tsx --conditions=react-server tests/rls/pl01b-one-time-checkout.test.ts",
-    "test:pl01b-verification": "tsx tests/unit/pl01b-one-time-verification.test.ts"
+    "test:pl01b-verification": "tsx tests/unit/pl01b-one-time-verification.test.ts",
+    "test:pl01b-free-db": "tsx --conditions=react-server tests/rls/pl01b-free-safe-mode.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
