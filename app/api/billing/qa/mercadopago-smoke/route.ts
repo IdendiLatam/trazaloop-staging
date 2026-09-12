@@ -75,7 +75,9 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
-                  "plan_cancel_raw", "plan_get"] as const;
+                  "plan_cancel_raw", "plan_get",
+                  // PROD-LAUNCH-01B.2 · el disparador del pago único
+                  "one_time_prepare", "one_time_state"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -263,6 +265,86 @@ async function manejar(request: Request) {
   // Qué versión del disparador responde aquí. No llama a Mercado Pago, no toca
   // la base y no devuelve ningún secreto: solo el marcador, la identidad del
   // despliegue que Vercel ya publica, y qué acciones admite.
+  // -------------------------------------------------------------------------
+  // PROD-LAUNCH-01B.2 · Preparar UN Checkout Pro de pago único
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ HACE FALTA UN DISPARADOR
+  //
+  // El flujo de pago único lo inicia una persona pulsando «Contratar» o
+  // «Renovar». Para un ensayo gobernado hace falta llegar al `init_point` sin
+  // esa persona, y sin reimplementar el flujo: reimplementarlo probaría otro
+  // camino que el que usan los clientes, que es exactamente lo que no sirve.
+  //
+  // Así que esto DELEGA. `createBillingQuote` y `openOneTimeCheckout` son las
+  // mismas funciones que llama la acción de servidor de la interfaz. Aquí solo
+  // se eligen la empresa y el plan, y se devuelve lo que salga.
+  //
+  // No cobra, no asienta y no concede nada: deja una preferencia abierta y su
+  // enlace. Quien paga sigue siendo una persona.
+  if (accion === "one_time_prepare" || accion === "one_time_state") {
+    const orgId = String(cuerpo.organization_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(orgId)) return no("ORGANIZATION_ID_REQUIRED", 400);
+
+    const { openOneTimeCheckout, OPEN_ERROR_MESSAGE } =
+      await import("@/lib/db/one-time-checkout");
+    const adminOt = createAdminClient();
+
+    // El estado, para poder mirar sin volver a crear nada.
+    const estadoDe = async () => {
+      const { data } = await adminOt.from("billing_one_time_checkouts")
+        .select("id, provider, environment, purpose, status, expected_total_amount, "
+          + "expected_currency, provider_preference_id, init_point, verified_payment_id, "
+          + "settled_payment_id, created_at")
+        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5);
+      const { data: subs } = await adminOt.from("billing_subscriptions")
+        .select("id, status, plan_code, renewal_mode").eq("organization_id", orgId);
+      const { count: pagos } = await adminOt.from("billing_payments")
+        .select("id", { count: "exact", head: true }).eq("organization_id", orgId);
+      return { checkouts: data ?? [], subscriptions: subs ?? [], payments: pagos ?? 0 };
+    };
+
+    if (accion === "one_time_state") {
+      return NextResponse.json({ ok: true, organization_id: orgId, ...(await estadoDe()) });
+    }
+
+    const plan = cuerpo.plan === "extra" ? "extra" : "full";
+    const intervalo = cuerpo.interval === "annual" ? "annual" : "monthly";
+
+    const { createBillingQuote, QUOTE_ERROR_MESSAGE } = await import("@/lib/db/billing");
+    const presupuesto = await createBillingQuote(orgId, plan, intervalo);
+    if (!presupuesto.ok) {
+      return NextResponse.json({ ok: false, error: presupuesto.code,
+        message: QUOTE_ERROR_MESSAGE[presupuesto.code] }, { status: 409 });
+    }
+
+    const { createServerClient } = await import("@/lib/supabase/server");
+    const sesion = await createServerClient();
+    const url = new URL(request.url);
+    const abierto = await openOneTimeCheckout({
+      purpose: "initial",
+      targetId: presupuesto.quoteId,
+      supabase: sesion,
+      origin: `${url.protocol}//${url.host}`,
+      planLabel: `Trazaloop ${plan === "extra" ? "Extra" : "Full"} · `
+        + `${intervalo === "annual" ? "anual" : "mensual"}`,
+      payerEmail: process.env.MERCADOPAGO_TEST_BUYER_EMAIL ?? null,
+    });
+    if (!abierto.ok) {
+      return NextResponse.json({ ok: false, error: abierto.code,
+        message: OPEN_ERROR_MESSAGE[abierto.code], detail: abierto.detail ?? null },
+        { status: 409 });
+    }
+
+    return NextResponse.json({ ok: true,
+      organization_id: orgId,
+      quote_id: presupuesto.quoteId,
+      checkout_id: abierto.checkoutId,
+      init_point: abierto.initPoint,
+      reused: abierto.reused,
+      ...(await estadoDe()) });
+  }
+
   if (accion === "qa_version") {
     return NextResponse.json({
       ok: true,
