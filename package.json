@@ -340,7 +340,9 @@
     "test:mpqa02-payer": "tsx tests/unit/mpqa02-test-payer.test.ts",
     "test:mpsbx02b-fx": "tsx tests/unit/mpsbx02b-qa-fx-fixture.test.ts",
     "test:th03-guards": "tsx tests/unit/th03-fixture-hygiene-guards.test.ts",
-    "test:stab04-safety": "tsx tests/unit/stab04-production-safety.test.ts"
+    "test:stab04-safety": "tsx tests/unit/stab04-production-safety.test.ts",
+    "test:pl01b-tutorials": "tsx tests/unit/pl01b-tutorial-access.test.ts",
+    "test:pl01b-checkout-db": "tsx --conditions=react-server tests/rls/pl01b-one-time-checkout.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
