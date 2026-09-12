@@ -426,9 +426,16 @@ check("G4. Y la renovación firma la MISMA versión vigente", () => {
 console.log("\nH · Ni un plan por el camino");
 // ===========================================================================
 
-check("H1. Ver un tutorial no consulta ningún plan", () => {
-  for (const [nombre, src] of [["el lector", LECTOR], ["las acciones", ACCIONES],
-    ["el botón", ACCION]]) {
+check("H1. El LECTOR y el BOTÓN siguen sin saber qué es un plan", () => {
+  // PROD-LAUNCH-01B.1 · La regla cambió: los tutoriales guiados de los módulos
+  // son de Full, y el del Dashboard está en todos los planes. Lo que NO cambió
+  // es el porqué de la regla anterior —«la forma de no olvidarse de comprobar
+  // el plan es no comprobarlo»— y por eso la puerta está en UN solo sitio, las
+  // acciones, y estos dos ficheros siguen limpios.
+  //
+  // El botón importa especialmente: si decidiera él, la restricción sería
+  // visual y escribir la URL a mano bastaría para saltársela.
+  for (const [nombre, src] of [["el lector", LECTOR], ["el botón", ACCION]]) {
     const codigo = sinComentarios(src);
     // Sin las clases de estilo: `w-full` y `max-w-full` contienen «full», y
     // buscarlo a secas convierte una clase de Tailwind en una consulta de plan.
@@ -439,6 +446,34 @@ check("H1. Ver un tutorial no consulta ningún plan", () => {
         `${nombre} consulta «${rastro}»`);
     }
   }
+});
+
+check("H1b. La puerta del plan está en las acciones, y ANTES de firmar", () => {
+  const codigo = sinComentarios(ACCIONES);
+  assert(/resolveTutorialAccess\(/.test(codigo),
+    "las acciones no aplican la regla de acceso a tutoriales");
+  // Firmar y luego decidir es entregar: una URL firmada emitida «por si acaso»
+  // es contenido servido, y escribir la dirección a mano bastaría.
+  // Se compara con la LLAMADA, no con la línea de importación: el import está
+  // arriba del todo y haría creer que se firma antes que nada.
+  const iPuerta = codigo.indexOf("await autorizar(pageKey)");
+  const iFirma = codigo.indexOf("signTutorialPlayback({");
+  assert(iPuerta > -1, "no hay puerta que llamar");
+  assert(iFirma > -1, "ya no se firma la reproducción");
+  assert(iPuerta < iFirma, "se firma la reproducción antes de comprobar el plan");
+});
+
+check("H1c. LAS DOS vías de entrega pasan por la puerta", () => {
+  const codigo = sinComentarios(ACCIONES);
+  // Renovar entrega una URL nueva. Sin puerta, quien abriera el diálogo con
+  // Full y bajara a Free seguiría renovando su enlace indefinidamente.
+  const veces = (codigo.match(/autorizar\(pageKey\)/g) ?? []).length;
+  assert(veces >= 2,
+    `la puerta se llama en ${veces} vía(s); entregan contenido dos: abrir y renovar`);
+  const iRenueva = codigo.indexOf("export async function renewTutorialPlaybackAction");
+  const cuerpo = codigo.slice(iRenueva);
+  assert(/autorizar\(pageKey\)/.test(cuerpo.slice(0, cuerpo.indexOf("signTutorialPlayback({"))),
+    "la renovación firma sin comprobar el plan");
 });
 
 check("H2. Solo la versión VIGENTE sale por esta vía", () => {

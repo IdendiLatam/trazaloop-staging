@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -104,7 +106,8 @@ function TutorialDialog({
     <TutorialDialogShell label="Vídeo tutorial de esta pantalla" onClose={onClose}>
       <div className="flex items-start justify-between gap-4">
         <h2 className="text-base font-semibold text-ink">
-          {estado.status === "ready" ? estado.title : "Vídeo tutorial"}
+          {estado.status === "ready" || estado.status === "plan_required"
+            ? estado.title : "Vídeo tutorial"}
         </h2>
         <button
           type="button" onClick={onClose} autoFocus
@@ -123,6 +126,28 @@ function TutorialDialog({
           </p>
         ) : estado.status === "unavailable" ? (
           <p role="status" className="text-sm text-ink">{estado.message}</p>
+        ) : estado.status === "plan_required" ? (
+          /* PROD-LAUNCH-01B.1 · El tutorial existe y no está incluido.
+             Se muestra la oferta AQUÍ, dentro del diálogo que la persona
+             acaba de abrir: el botón de la barra no se esconde nunca, porque
+             quien no sabe que el tutorial existe no lo echa de menos. */
+          <div className="space-y-3">
+            <p role="status" className="text-sm text-ink">{estado.body}</p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/settings/billing"
+                className="inline-flex items-center rounded-md bg-loop px-4 py-2 text-sm font-medium text-paper hover:opacity-90"
+              >
+                {estado.ctaLabel}
+              </Link>
+              <button
+                type="button" onClick={onClose}
+                className="inline-flex items-center rounded-md border border-hairline bg-paper px-4 py-2 text-sm font-medium hover:border-loop"
+              >
+                {estado.dismissLabel}
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-3">
             {/* Controles del navegador, sin librería y SIN reproducción

@@ -382,13 +382,40 @@ check("G4. El cubo sigue sin política de DELETE", () => {
 console.log("\nH · Ni planes, ni cuotas, ni PE-04");
 // ===========================================================================
 
-check("H1. El subsistema no consulta ninguna tabla comercial", () => {
-  const codigo = sinComentarios(TODO);
+/**
+ * PROD-LAUNCH-01B.1 · LA ÚNICA PUERTA COMERCIAL DEL SUBSISTEMA.
+ *
+ * Los tutoriales guiados de los módulos pasaron a ser de Full, así que alguien
+ * tiene que mirar el plan. Ese alguien es UN fichero, declarado aquí, y el
+ * resto del subsistema sigue sin saber qué es un plan — que era el motivo de
+ * la regla original: la forma de no olvidarse de comprobarlo es que solo un
+ * sitio lo comprueba.
+ *
+ * La lista se cierra a propósito. Si mañana aparece un segundo fichero
+ * mirando planes, esta prueba se pone roja y obliga a explicar por qué.
+ */
+const PUERTA_COMERCIAL = "lib/db/tutorial-viewer.ts";
+
+check("H1. El subsistema no consulta ninguna tabla comercial, salvo su puerta", () => {
+  const fuera = FICHEROS.filter((f) => !f.endsWith(PUERTA_COMERCIAL));
+  assert(fuera.length === FICHEROS.length - 1,
+    `la puerta comercial declarada no existe entre los ficheros del subsistema: ${PUERTA_COMERCIAL}`);
+  const codigo = sinComentarios(fuera.map(leer).join("\n"));
   for (const rastro of ["organization_modules", "organization_subscriptions", "plan_code",
     "access_mode", "entitlement", "storage_limit", "quota", "coupon", "payment"]) {
     assert(!new RegExp(`\\b${rastro}\\b`, "i").test(codigo),
-      `el subsistema de tutoriales toca «${rastro}»`);
+      `el subsistema de tutoriales toca «${rastro}» fuera de su única puerta`);
   }
+});
+
+check("H1b. Y la puerta comercial es exactamente UNA", () => {
+  const miran = FICHEROS.filter((f) => {
+    const codigo = sinComentarios(leer(f));
+    return /\b(plan_code|access_mode|organization_subscriptions|organization_modules)\b/i
+      .test(codigo);
+  }).map((f) => f.replace(/^.*?(lib|server|components|app)\//, "$1/")).sort();
+  assert(JSON.stringify(miran) === JSON.stringify([PUERTA_COMERCIAL]),
+    `miran el plan: ${miran.join(", ") || "ninguno"}. Debe ser solo ${PUERTA_COMERCIAL}`);
 });
 
 check("H2. Y los medios de tutorial NO cuentan en la cuota de ninguna empresa", () => {

@@ -1,7 +1,10 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/require-session";
+import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getTutorialForPage, signTutorialPlayback } from "@/lib/db/tutorials";
+import { resolveTutorialViewer } from "@/lib/db/tutorial-viewer";
+import { resolveTutorialAccess } from "@/lib/domain/tutorial-access";
 import { isKnownPageKey } from "@/lib/modules/page-keys";
 import {
   TUTORIAL_UNAVAILABLE_MESSAGE, TUTORIAL_PLAYBACK_TTL_SECONDS,
@@ -14,16 +17,31 @@ import {
  * pregunta por una clave de pantalla y recibe, o un vídeo firmado, o el motivo
  * por el que no lo hay.
  *
- * NO SE CONSULTA NINGÚN PLAN. La decisión congelada dice que si se puede ver la
- * pantalla se puede ver su tutorial, y la forma de garantizar que nadie se
- * olvida de comprobar el plan es que no se comprueba.
+ * PROD-LAUNCH-01B.1 · AQUÍ, Y SOLO AQUÍ, SE MIRA EL PLAN.
+ *
+ * La decisión anterior era que ver una pantalla bastaba para ver su tutorial,
+ * y que la forma de no olvidarse de comprobar el plan era no comprobarlo. El
+ * lanzamiento comercial la cambia: los tutoriales guiados de los módulos son
+ * de Full. El del Dashboard sigue estando en todos los planes.
+ *
+ * Lo que NO cambia es el porqué de aquella regla. El lector
+ * —`lib/db/tutorials.ts`— sigue sin saber qué es un plan, y la puerta está en
+ * un solo sitio: estas acciones. Si mañana aparece otra vía de entrega, lo que
+ * hay que llamar es esto.
+ *
+ * Y LA PUERTA ESTÁ ANTES DE FIRMAR. No se prepara la URL y luego se decide si
+ * enseñarla: una URL firmada emitida «por si acaso» es contenido entregado,
+ * escribir la dirección a mano bastaría. Se decide primero.
  */
 
 export type TutorialForPage =
   | { status: "ready"; title: string; description: string | null;
       url: string; expiresInSeconds: number }
   | { status: "no_video"; message: string }
-  | { status: "unavailable"; message: string };
+  | { status: "unavailable"; message: string }
+  /** El tutorial existe y esta empresa no lo tiene incluido. Se ofrece Full. */
+  | { status: "plan_required"; title: string; body: string;
+      ctaLabel: string; dismissLabel: string };
 
 const NO_DISPONIBLE =
   "No se pudo preparar el vídeo ahora mismo. Vuelve a intentarlo en un momento.";
@@ -48,6 +66,9 @@ export async function getTutorialForPageAction(
   if (!isKnownPageKey(pageKey)) {
     return { status: "no_video", message: TUTORIAL_UNAVAILABLE_MESSAGE };
   }
+
+  const permiso = await autorizar(pageKey);
+  if (permiso !== null) return permiso;
 
   const encontrado = await getTutorialForPage(pageKey);
   if (encontrado.status === "unavailable") {
@@ -91,8 +112,49 @@ export async function renewTutorialPlaybackAction(
 ): Promise<{ url: string | null; expiresInSeconds: number }> {
   await requireSession();
   if (!isKnownPageKey(pageKey)) return { url: null, expiresInSeconds: 0 };
+  // La renovación entrega una URL nueva: es entrega de contenido, y pasa por
+  // la misma puerta. Sin esto, quien abriera el diálogo con Full y bajara a
+  // Free seguiría renovando su enlace indefinidamente.
+  if ((await autorizar(pageKey)) !== null) return { url: null, expiresInSeconds: 0 };
 
   const firmado = await signTutorialPlayback({ tutorialType: "page", pageKey });
   if (firmado.status !== "ok") return { url: null, expiresInSeconds: 0 };
   return { url: firmado.url, expiresInSeconds: TUTORIAL_PLAYBACK_TTL_SECONDS };
+}
+
+/**
+ * La puerta. Devuelve `null` si se puede entregar, o la respuesta que hay que
+ * dar si no.
+ *
+ * Falla CERRADA en los dos sentidos: sin empresa activa no se entrega, y con
+ * un plan que no se pudo leer tampoco —pero eso último se dice como avería, no
+ * como oferta, porque venderle Full a quien ya lo paga es peor que no
+ * responder.
+ */
+async function autorizar(pageKey: string): Promise<TutorialForPage | null> {
+  let org: Awaited<ReturnType<typeof requireActiveOrg>>;
+  try {
+    org = await requireActiveOrg();
+  } catch {
+    return { status: "unavailable", message: NO_DISPONIBLE };
+  }
+
+  // No se pasa `isPlatformStaff`: quien navega el shell de una empresa está
+  // actuando COMO esa empresa, y la consola de plataforma tiene su propia vía
+  // de previsualización que no pasa por aquí.
+  const quien = await resolveTutorialViewer({ organizationId: org.organizationId });
+  if (!quien.ok) return { status: "unavailable", message: NO_DISPONIBLE };
+
+  const acceso = resolveTutorialAccess(quien.viewer, pageKey);
+  if (acceso.allowed) return null;
+  if (acceso.reason === "unavailable") {
+    return { status: "unavailable", message: NO_DISPONIBLE };
+  }
+  return {
+    status: "plan_required",
+    title: acceso.title,
+    body: acceso.body,
+    ctaLabel: acceso.ctaLabel,
+    dismissLabel: acceso.dismissLabel,
+  };
 }
