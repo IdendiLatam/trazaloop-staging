@@ -513,6 +513,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0188_stakeholder_identity_normalization.sql",
     "0189_position_identity_hierarchy_and_import.sql",
     "0190_one_time_checkout_and_manual_settlement.sql",
+    "0191_one_time_payment_identity_evidence.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

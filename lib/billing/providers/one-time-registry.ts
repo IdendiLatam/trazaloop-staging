@@ -57,6 +57,19 @@ export type OneTimeGateway = {
    * a quien decide a saber si esta moneda lleva decimales.
    */
   paymentsFor(externalReference: string): Promise<ProviderResult<ObservedPayment[]>>;
+  /**
+   * Quién es HOY el titular de la credencial desplegada, y si es el esperado.
+   *
+   * 01B.4 · Es lo que sustituye a `live_mode` como frontera en pruebas: la
+   * bandera describe la naturaleza de la credencial, y esto describe SU
+   * IDENTIDAD, que es lo que de verdad separa «nuestro» de «ajeno».
+   */
+  ownerIdentity(): Promise<{
+    expectedOwnerId: number | null;
+    observedOwnerId: number | null;
+    matches: boolean;
+    reachable: boolean;
+  }>;
 };
 
 /** El proveedor con el que se cobra hoy el pago único. */
@@ -85,6 +98,17 @@ export function oneTimeGatewayFor(code: string): OneTimeGateway | null {
       return { ok: true, value: {
         preferenceId: r.value.preferenceId, initPoint: r.value.initPoint } };
     },
+    async ownerIdentity() {
+      const esperado = mp.identity.ok ? mp.identity.value.expectedOwnerId : null;
+      const visto = await mp.resolveEnvironment();
+      return {
+        expectedOwnerId: esperado,
+        observedOwnerId: visto.ownerId,
+        // Sin poder preguntar, NO se afirma que coincide. Falla cerrado.
+        matches: visto.reachable && visto.ownerMatchesExpected,
+        reachable: visto.reachable,
+      };
+    },
     async paymentsFor(externalReference) {
       const r = await mp.searchPaymentsByReference(externalReference);
       if (!r.ok) return r;
@@ -99,6 +123,7 @@ export function oneTimeGatewayFor(code: string): OneTimeGateway | null {
         currency: p.currency,
         externalReference: p.externalReference,
         liveMode: p.liveMode,
+        collectorId: p.collectorId,
       })) };
     },
   };

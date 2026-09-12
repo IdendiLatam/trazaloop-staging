@@ -161,6 +161,8 @@ export type MercadoPagoAdapter = BillingProvider & {
       amount: number | null; currency: string | null;
       externalReference: string | null; liveMode: boolean | null;
       dateApproved: string | null;
+      /** Quién cobró. Es la identidad del pago, distinta de la del token. */
+      collectorId: number | null;
     }>;
   }>>;
   getPaymentDetail(id: string): Promise<ProviderResult<{
@@ -519,6 +521,7 @@ export function mercadoPagoProvider(
             externalReference: str(p.external_reference),
             liveMode: typeof p.live_mode === "boolean" ? p.live_mode : null,
             dateApproved: str(p.date_approved),
+            collectorId: num(p.collector_id),
           })),
         } };
       } catch (e) {

@@ -1,18 +1,29 @@
 /**
- * Trazaloop · PROD-LAUNCH-01B · Qué pago activa un plan.
+ * Trazaloop · PROD-LAUNCH-01B.4 · Qué pago activa un plan.
  *
- * Esta suite existe porque el juicio que decide si alguien recibe Full tiene
- * seis formas de equivocarse y cinco de ellas cuestan dinero:
  *
- *   · activar sin pago                      → se regala el producto
- *   · activar con un pago de otra empresa   → se regala Y se descuadra
- *   · activar con un importe menor          → se cobra de menos, para siempre
- *   · activar con un pago de sandbox        → se activa gratis
- *   · NO activar a quien sí pagó            → la única que cuesta reputación
+ * DE DÓNDE SALE ESTA SUITE, EN SU FORMA ACTUAL
  *
- * La última es la razón de mirar la lista entera de pagos y no el primero:
- * quien paga con una tarjeta rechazada y luego con otra deja dos pagos con la
- * misma referencia, y el bueno es el segundo.
+ * Un pago real de sandbox llegó `approved`, por 190 400 COP, con la referencia
+ * exacta del cobro… y `live_mode: true`. El verificador lo rechazó porque el
+ * cobro se abrió en `test`, y durante un rato pareció un defecto del pago.
+ *
+ * No lo era. `live_mode` describe LA NATURALEZA DE LA CREDENCIAL, no el
+ * entorno de nuestro despliegue: un usuario de prueba operando con sus propias
+ * credenciales produce operaciones que el proveedor marca como productivas —de
+ * una cuenta falsa—. La regla estaba mal, no el pago.
+ *
+ * Así que la bandera dejó de ser autoridad EN PRUEBAS y su sitio lo ocupó la
+ * identidad: la credencial tiene que ser la del titular esperado, y el pago
+ * tiene que haberlo cobrado ese mismo titular.
+ *
+ *
+ * LO QUE ESTA SUITE VIGILA POR ENCIMA DE TODO
+ *
+ * Que aflojar la lectura en PRUEBAS no haya aflojado la de PRODUCCIÓN. Ese era
+ * el riesgo entero de tocar esto: con `live`, `live_mode === true` sigue siendo
+ * obligatorio, y ni `false` ni `null` pasan. Los casos G, H e I existen para
+ * eso y son los que no se pueden perder nunca.
  *
  * Correr: npm run test:pl01b-verification
  */
@@ -29,44 +40,164 @@ function check(n: string, fn: () => void) {
   catch (e) { failed += 1; console.error(`  ✘ ${n}: ${e instanceof Error ? e.message : e}`); }
 }
 
-const COBRO = "11111111-2222-3333-4444-555555555555";
-const ESPERA: OneTimeExpectation = {
-  checkoutId: COBRO,
-  expectedTotalMinor: 190400,
-  expectedCurrency: "COP",
-  environment: "test",
-};
+const COBRO = "792727bb-84b1-4cbb-bec1-6c3b9dfe1fd6";
+const TITULAR = 3663569024;
 
-function pago(p: Partial<ObservedPayment> = {}): ObservedPayment {
+function espera(p: Partial<OneTimeExpectation> = {}): OneTimeExpectation {
   return {
-    providerPaymentId: "177618648793",
-    canonicalStatus: "approved",
-    amountMinor: 190400,
-    currency: "COP",
-    externalReference: COBRO,
-    liveMode: false,
+    checkoutId: COBRO,
+    expectedTotalMinor: 190400,
+    expectedCurrency: "COP",
+    configuredEnvironment: "test",
+    checkoutEnvironment: "test",
+    expectedOwnerId: TITULAR,
+    credentialOwnerMatches: true,
     ...p,
   };
 }
 
-console.log("\nA · Lo que SÍ activa");
+function pago(p: Partial<ObservedPayment> = {}): ObservedPayment {
+  return {
+    providerPaymentId: "178660068608",
+    canonicalStatus: "approved",
+    amountMinor: 190400,
+    currency: "COP",
+    externalReference: COBRO,
+    liveMode: true,
+    collectorId: TITULAR,
+    ...p,
+  };
+}
+
+console.log("\nA · Pruebas: la bandera NO manda, la identidad sí");
 // ===========================================================================
 
-check("Un pago aprobado, del cobro, del entorno, con su importe y su moneda", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago()]);
-  assert(v.settle, `no se aceptó un pago correcto: ${JSON.stringify(v)}`);
-  assert(v.providerPaymentId === "177618648793", "se devolvió otro identificador");
-  assert(v.amountMinor === 190400 && v.currency === "COP", "se devolvió otro importe");
+check("A. TEST · titular correcto y live_mode=true → se asienta", () => {
+  // Este es EXACTAMENTE el pago real que se quedó bloqueado.
+  const v = decideOneTimeSettlement(espera(), [pago({ liveMode: true })]);
+  assert(v.settle, `se rechazó el pago real de sandbox: ${JSON.stringify(v)}`);
+  assert(v.reason === "PAYMENT_VERIFIED", `motivo «${v.reason}»`);
+  assert(v.providerPaymentId === "178660068608", "se eligió otro pago");
+  assert(v.liveMode === true, "la bandera no se conserva como evidencia");
+  assert(v.collectorId === TITULAR, "no se conserva quién cobró");
 });
 
-check("Y en producción, con `liveMode` verdadero", () => {
-  const v = decideOneTimeSettlement(
-    { ...ESPERA, environment: "live" }, [pago({ liveMode: true })]);
-  assert(v.settle, "un pago real de producción no se aceptó");
+check("B. TEST · titular correcto y live_mode=false → también se asienta", () => {
+  const v = decideOneTimeSettlement(espera(), [pago({ liveMode: false })]);
+  assert(v.settle && v.liveMode === false,
+    `las credenciales de prueba de aplicación quedaron fuera: ${JSON.stringify(v)}`);
 });
+
+check("Y con live_mode ausente en pruebas tampoco se bloquea", () => {
+  const v = decideOneTimeSettlement(espera(), [pago({ liveMode: null })]);
+  assert(v.settle && v.liveMode === null, JSON.stringify(v));
+});
+
+check("C. TEST · titular INCORRECTO → no se asienta", () => {
+  const v = decideOneTimeSettlement(
+    espera({ credentialOwnerMatches: false }), [pago()]);
+  assert(!v.settle && v.reason === "CREDENTIAL_OWNER_MISMATCH", JSON.stringify(v));
+});
+
+check("Y sin titular configurado tampoco: falla cerrado", () => {
+  const v = decideOneTimeSettlement(
+    espera({ expectedOwnerId: null, credentialOwnerMatches: true }), [pago()]);
+  assert(!v.settle && v.reason === "CREDENTIAL_OWNER_MISMATCH",
+    `sin titular esperado se asentó igual: ${JSON.stringify(v)}`);
+});
+
+check("Y un pago cobrado por OTRO vendedor tampoco", () => {
+  const v = decideOneTimeSettlement(espera(), [pago({ collectorId: 999999999 })]);
+  assert(!v.settle && v.reason === "PAYMENT_COLLECTOR_MISMATCH", JSON.stringify(v));
+});
+
+check("Pero si el proveedor no dice quién cobró, manda la credencial", () => {
+  // Rechazar por un campo ausente dejaría fuera pagos legítimos; la identidad
+  // ya está comprobada por el lado de la credencial.
+  const v = decideOneTimeSettlement(espera(), [pago({ collectorId: null })]);
+  assert(v.settle, `un pago sin vendedor declarado se rechazó: ${JSON.stringify(v)}`);
+});
+
+check("D. TEST · referencia externa incorrecta → no se asienta", () => {
+  const v = decideOneTimeSettlement(espera(), [pago({ externalReference: "otro" })]);
+  assert(!v.settle && v.reason === "EXTERNAL_REFERENCE_MISMATCH", JSON.stringify(v));
+});
+
+check("E. TEST · importe incorrecto → no se asienta", () => {
+  for (const m of [190399, 190401, null]) {
+    const v = decideOneTimeSettlement(espera(), [pago({ amountMinor: m })]);
+    assert(!v.settle && v.reason === "AMOUNT_MISMATCH", `${m}: ${JSON.stringify(v)}`);
+  }
+});
+
+check("F. TEST · moneda incorrecta → no se asienta", () => {
+  const v = decideOneTimeSettlement(espera(), [pago({ currency: "USD", amountMinor: 40 })]);
+  assert(!v.settle && v.reason === "CURRENCY_MISMATCH",
+    `«40 dólares» se contó como problema de importe: ${JSON.stringify(v)}`);
+});
+
+check("TEST · pago no aprobado → no se asienta", () => {
+  for (const e of ["pending", "declined", "failed", "refunded", null] as const) {
+    const v = decideOneTimeSettlement(espera(), [pago({ canonicalStatus: e })]);
+    assert(!v.settle && v.reason === "PAYMENT_NOT_APPROVED", `${e}: ${JSON.stringify(v)}`);
+  }
+});
+
+check("TEST · cobro abierto en LIVE → no se asienta", () => {
+  const v = decideOneTimeSettlement(
+    espera({ checkoutEnvironment: "live" }), [pago()]);
+  assert(!v.settle && v.reason === "CHECKOUT_ENVIRONMENT_MISMATCH", JSON.stringify(v));
+});
+
+console.log("\nB · Producción: aquí NO se relajó nada");
+// ===========================================================================
+
+const enVivo = (p: Partial<OneTimeExpectation> = {}) =>
+  espera({ configuredEnvironment: "live", checkoutEnvironment: "live", ...p });
+
+check("G. LIVE · live_mode=true y titular correcto → se asienta", () => {
+  const v = decideOneTimeSettlement(enVivo(), [pago({ liveMode: true })]);
+  assert(v.settle && v.reason === "PAYMENT_VERIFIED", JSON.stringify(v));
+});
+
+check("H. LIVE · live_mode=false → NO se asienta", () => {
+  const v = decideOneTimeSettlement(enVivo(), [pago({ liveMode: false })]);
+  assert(!v.settle && v.reason === "LIVE_MODE_REQUIRED",
+    `un pago de sandbox activó un plan productivo: ${JSON.stringify(v)}`);
+});
+
+check("I. LIVE · live_mode ausente → NO se asienta", () => {
+  const v = decideOneTimeSettlement(enVivo(), [pago({ liveMode: null })]);
+  assert(!v.settle && v.reason === "LIVE_MODE_REQUIRED",
+    `un pago de origen desconocido activó un plan productivo: ${JSON.stringify(v)}`);
+});
+
+check("J. LIVE · titular incorrecto → NO se asienta", () => {
+  const v = decideOneTimeSettlement(
+    enVivo({ credentialOwnerMatches: false }), [pago({ liveMode: true })]);
+  assert(!v.settle && v.reason === "CREDENTIAL_OWNER_MISMATCH", JSON.stringify(v));
+});
+
+check("LIVE · cobro abierto en pruebas → NO se asienta", () => {
+  const v = decideOneTimeSettlement(
+    espera({ configuredEnvironment: "live", checkoutEnvironment: "test" }),
+    [pago({ liveMode: true })]);
+  assert(!v.settle && v.reason === "CHECKOUT_ENVIRONMENT_MISMATCH", JSON.stringify(v));
+});
+
+check("La regla de producción está escrita como excepción explícita", () => {
+  // Si alguien la reescribiera «simétrica» —la misma para los dos entornos—
+  // producción quedaría tan blanda como pruebas. Se fija su forma.
+  const src = readFileSync("lib/billing/one-time/verification.ts", "utf8");
+  assert(/configuredEnvironment === "live"[\s\S]{0,120}liveMode === true/.test(src),
+    "la exigencia de `live_mode` en producción dejó de ser explícita");
+});
+
+console.log("\nC · Elegir bien entre varios pagos");
+// ===========================================================================
 
 check("Entre un rechazo y un aprobado del mismo cobro, gana el aprobado", () => {
-  const v = decideOneTimeSettlement(ESPERA, [
+  const v = decideOneTimeSettlement(espera(), [
     pago({ providerPaymentId: "1", canonicalStatus: "declined" }),
     pago({ providerPaymentId: "2", canonicalStatus: "approved" }),
   ]);
@@ -74,93 +205,48 @@ check("Entre un rechazo y un aprobado del mismo cobro, gana el aprobado", () => 
     "quien pagó a la segunda se quedó sin plan");
 });
 
-console.log("\nB · Lo que NO activa, y por qué exactamente");
-// ===========================================================================
+check("K. El mismo pago repetido devuelve SIEMPRE el mismo identificador", () => {
+  // La no duplicación la garantizan el índice único y `already_settled` en la
+  // base; lo que aquí se fija es que el juicio sea determinista, para que dos
+  // llamadas no elijan pagos distintos del mismo cobro.
+  const lista = [pago({ providerPaymentId: "A" }), pago({ providerPaymentId: "B" })];
+  const uno = decideOneTimeSettlement(espera(), lista);
+  const dos = decideOneTimeSettlement(espera(), lista);
+  assert(uno.settle && dos.settle, "no se asentó");
+  assert(uno.providerPaymentId === dos.providerPaymentId,
+    "dos llamadas eligieron pagos distintos: eso duplicaría meses");
+});
 
 check("Sin pagos: NO_PAYMENT_FOUND", () => {
-  const v = decideOneTimeSettlement(ESPERA, []);
+  const v = decideOneTimeSettlement(espera(), []);
   assert(!v.settle && v.reason === "NO_PAYMENT_FOUND", JSON.stringify(v));
 });
 
-check("Pago de OTRA referencia: EXTERNAL_REFERENCE_MISMATCH", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ externalReference: "otro-cobro" })]);
-  assert(!v.settle && v.reason === "EXTERNAL_REFERENCE_MISMATCH", JSON.stringify(v));
-  assert(v.observed === "otro-cobro", "no se dice qué referencia llegó");
-});
-
-check("Referencia ausente tampoco cuenta como propia", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ externalReference: null })]);
-  assert(!v.settle && v.reason === "EXTERNAL_REFERENCE_MISMATCH", JSON.stringify(v));
-});
-
-check("Pago pendiente o rechazado: PAYMENT_NOT_APPROVED", () => {
-  for (const estado of ["pending", "declined", "failed", "refunded", null] as const) {
-    const v = decideOneTimeSettlement(ESPERA, [pago({ canonicalStatus: estado })]);
-    assert(!v.settle && v.reason === "PAYMENT_NOT_APPROVED",
-      `el estado ${estado} dio ${JSON.stringify(v)}`);
-  }
-});
-
-check("Pago de sandbox contra un cobro de producción: ENVIRONMENT_MISMATCH", () => {
-  const v = decideOneTimeSettlement(
-    { ...ESPERA, environment: "live" }, [pago({ liveMode: false })]);
-  assert(!v.settle && v.reason === "ENVIRONMENT_MISMATCH", JSON.stringify(v));
-});
-
-check("Y sin `liveMode` NO se decide a favor", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ liveMode: null })]);
-  assert(!v.settle && v.reason === "ENVIRONMENT_MISMATCH",
-    `un pago de origen desconocido activó el plan: ${JSON.stringify(v)}`);
-});
-
-check("Otra moneda: CURRENCY_MISMATCH, no AMOUNT_MISMATCH", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ currency: "USD", amountMinor: 40 })]);
-  assert(!v.settle && v.reason === "CURRENCY_MISMATCH",
-    `«40 dólares» se contó como problema de importe: ${JSON.stringify(v)}`);
-});
-
-check("Un peso de menos: AMOUNT_MISMATCH", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ amountMinor: 190399 })]);
-  assert(!v.settle && v.reason === "AMOUNT_MISMATCH", JSON.stringify(v));
-  assert(v.observed === "190399", "no se dice qué importe llegó");
-});
-
-check("Un peso de MÁS tampoco activa", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ amountMinor: 190401 })]);
-  assert(!v.settle && v.reason === "AMOUNT_MISMATCH",
-    "pagar de más activó el plan: eso deja una diferencia que nadie devuelve");
-});
-
-check("Importe ausente no se interpreta como el esperado", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({ amountMinor: null })]);
-  assert(!v.settle && v.reason === "AMOUNT_MISMATCH", JSON.stringify(v));
-});
-
-console.log("\nC · El orden de los motivos");
+console.log("\nD · Lo estructural va primero");
 // ===========================================================================
 
-check("Un pago de otra empresa se denuncia como tal aunque además falle todo", () => {
-  const v = decideOneTimeSettlement(ESPERA, [pago({
-    externalReference: "de-otra-empresa", canonicalStatus: "pending",
-    amountMinor: 1, currency: "USD", liveMode: null })]);
-  assert(!v.settle && v.reason === "EXTERNAL_REFERENCE_MISMATCH",
-    `se respondió «${(v as { reason: string }).reason}» a un pago ajeno`);
+check("Un entorno cruzado se denuncia antes que nada", () => {
+  // Si los entornos no cuadran, mirar los pagos es irrelevante: hay algo mal
+  // montado y eso es lo que hay que decir.
+  const v = decideOneTimeSettlement(
+    espera({ checkoutEnvironment: "live", credentialOwnerMatches: false }),
+    [pago({ amountMinor: 1, currency: "USD" })]);
+  assert(!v.settle && v.reason === "CHECKOUT_ENVIRONMENT_MISMATCH", JSON.stringify(v));
 });
 
 check("Cada motivo tiene un texto para la persona, y ninguno es un código", () => {
   const motivos = ["NO_PAYMENT_FOUND", "PAYMENT_NOT_APPROVED",
     "EXTERNAL_REFERENCE_MISMATCH", "AMOUNT_MISMATCH", "CURRENCY_MISMATCH",
-    "ENVIRONMENT_MISMATCH"] as const;
+    "CHECKOUT_ENVIRONMENT_MISMATCH", "CREDENTIAL_OWNER_MISMATCH",
+    "PAYMENT_COLLECTOR_MISMATCH", "LIVE_MODE_REQUIRED"] as const;
   for (const m of motivos) {
     const t = REFUSAL_MESSAGE[m];
     assert(typeof t === "string" && t.length > 30, `«${m}» no tiene mensaje`);
     assert(!/_/.test(t), `el mensaje de «${m}» enseña el código crudo`);
-    assert(!/error|fall(o|ó)|inválid/i.test(t),
-      `el mensaje de «${m}» culpa a quien paga en vez de decirle qué hacer`);
   }
 });
 
-console.log("\nD · La frontera de la pasarela");
+console.log("\nE · La frontera de la pasarela");
 // ===========================================================================
 
 check("Este módulo NO nombra ninguna pasarela", () => {
@@ -169,6 +255,14 @@ check("Este módulo NO nombra ninguna pasarela", () => {
   for (const p of ["mercadopago", "mercado_pago", "wompi", "preapproval", "preference"]) {
     assert(!new RegExp(p, "i").test(fuente),
       `la decisión nombra «${p}»: entonces no vale para el carril manual`);
+  }
+});
+
+check("Y NO toca la semántica de las suscripciones del proveedor", () => {
+  const fuente = readFileSync("lib/billing/one-time/verification.ts", "utf8");
+  for (const p of ["subscription_preapproval", "authorized_payment", "recurrence"]) {
+    assert(!new RegExp(p, "i").test(fuente),
+      `el juicio del pago único habla de «${p}»: ese frente sigue pausado`);
   }
 });
 

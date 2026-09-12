@@ -280,11 +280,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0188_stakeholder_identity_normalization.sql",
     "0189_position_identity_hierarchy_and_import.sql",
     "0190_one_time_checkout_and_manual_settlement.sql",
+    "0191_one_time_payment_identity_evidence.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0190_one_time_checkout_and_manual_settlement.sql",
+  assert(cabecera === "0191_one_time_payment_identity_evidence.sql",
     `la cabecera es ${cabecera}`);
 });
 

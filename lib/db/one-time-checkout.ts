@@ -195,11 +195,21 @@ export async function verifyOneTimeCheckout(checkoutId: string): Promise<VerifyR
              message: ERROR_MESSAGE.PROVIDER_UNAVAILABLE };
   }
 
+  // 01B.4 · La identidad de la credencial, que es lo que en pruebas sustituye a
+  // `live_mode` como frontera. Si no se puede preguntar, NO se afirma que
+  // coincide: `ownerIdentity` falla cerrado.
+  const titular = await pasarela.ownerIdentity();
+
   const veredicto = decideOneTimeSettlement({
     checkoutId: c.id,
     expectedTotalMinor: c.expected_total_amount,
     expectedCurrency: c.expected_currency,
-    environment: c.environment,
+    // El entorno DECLARADO del despliegue, y el del cobro. Son dos hechos, y
+    // que no coincidan es un montaje cruzado, no un pago malo.
+    configuredEnvironment: (pasarela.environment ?? c.environment),
+    checkoutEnvironment: c.environment,
+    expectedOwnerId: titular.expectedOwnerId,
+    credentialOwnerMatches: titular.matches,
   }, pagos.value);
 
   if (!veredicto.settle) {
@@ -214,6 +224,11 @@ export async function verifyOneTimeCheckout(checkoutId: string): Promise<VerifyR
     p_external_reference: c.id,
     p_amount: veredicto.amountMinor,
     p_currency: veredicto.currency,
+    // EVIDENCIA, no autoridad. `live_mode` dejó de decidir en pruebas, pero se
+    // guarda: el día que haya que auditar un cobro, la bandera con la que
+    // llegó tiene que constar.
+    p_live_mode: veredicto.liveMode,
+    p_collector_id: veredicto.collectorId,
   });
   if (error) {
     // El dinero está cobrado y el plan no se activó. Se dice tal cual: pedirle

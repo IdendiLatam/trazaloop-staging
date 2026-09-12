@@ -315,11 +315,18 @@ async function manejar(request: Request) {
 
     const { decideOneTimeSettlement } =
       await import("@/lib/billing/one-time/verification");
+    // 01B.4 · La identidad de la credencial, que es lo que sustituye a
+    // `live_mode` como frontera en pruebas.
+    const titularObs = await pasarela.ownerIdentity();
+
     const veredicto = decideOneTimeSettlement({
       checkoutId: String(c.id),
       expectedTotalMinor: Number(c.expected_total_amount),
       expectedCurrency: String(c.expected_currency),
-      environment: c.environment as "test" | "live",
+      configuredEnvironment: (pasarela.environment ?? c.environment) as "test" | "live",
+      checkoutEnvironment: c.environment as "test" | "live",
+      expectedOwnerId: titularObs.expectedOwnerId,
+      credentialOwnerMatches: titularObs.matches,
     }, pagos.value);
 
     return NextResponse.json({ ok: true,
@@ -333,6 +340,15 @@ async function manejar(request: Request) {
         external_reference: x.externalReference,
         live_mode: x.liveMode,
       })),
+      // La identidad con la que se juzga, para que el veredicto se pueda leer.
+      identity: {
+        configured_environment: pasarela.environment,
+        checkout_environment: c.environment,
+        expected_owner_id: titularObs.expectedOwnerId,
+        observed_owner_id: titularObs.observedOwnerId,
+        owner_matches: titularObs.matches,
+        provider_reachable: titularObs.reachable,
+      },
       // Lo que el verificador HARÍA. No lo hace.
       verdict: veredicto,
       note: "Solo observación: no se asentó nada.",
