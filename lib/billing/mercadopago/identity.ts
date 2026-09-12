@@ -47,7 +47,14 @@ export type MpConfiguredIdentity = {
   environment: MpEnvironment;
   /** La aplicación cuyos webhooks tenemos configurados. */
   expectedApplicationId: number;
-  /** El titular de la credencial que esperamos. */
+  /**
+   * El titular que esperamos, OBSERVADO en `/users/me` con la credencial de
+   * ESTE entorno. MP-ENV-01.3 · No es el «User ID del propietario» que muestra
+   * el panel de la aplicación: en pruebas son distintos, porque las
+   * credenciales de prueba autentican como un usuario de prueba y no como la
+   * cuenta productiva que figura como dueña. Confundirlos bloquea una
+   * credencial legítima, que es exactamente lo que pasó.
+   */
   expectedOwnerId: number;
 };
 

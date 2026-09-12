@@ -340,6 +340,16 @@ async function manejar(request: Request) {
         ? proveedor.identity.value.environment : null,
       configuration_error: proveedor.identity.ok ? null : proveedor.identity.reason,
       expected_application_configured: proveedor.identity.ok,
+      // MP-ENV-01.3 · El titular OBSERVADO de la credencial. No es un secreto
+      // —es el identificador de una cuenta— y hace falta para poder configurar
+      // `MERCADOPAGO_EXPECTED_OWNER_ID` sin adivinar.
+      //
+      // Y ojo con qué significa esa variable: es el titular OBSERVADO de la
+      // credencial de ESE entorno, no el «User ID del propietario» que muestra
+      // el panel de la aplicación. En pruebas son distintos: las credenciales
+      // de prueba de una aplicación autentican como un usuario de prueba, no
+      // como la cuenta productiva que figura como dueña.
+      observed_owner_id: duenno.ownerId,
       owner_id_matches_expected: duenno.ownerMatchesExpected,
       // Diagnóstico, NO autoridad: puede ser `false` con una credencial de
       // prueba de aplicación perfectamente válida.

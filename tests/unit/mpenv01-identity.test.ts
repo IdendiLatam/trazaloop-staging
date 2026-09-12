@@ -198,5 +198,87 @@ check("El adaptador ya no deduce el entorno del prefijo del token", () => {
     "se volvió a mirar el prefijo del token");
 });
 
+// ===========================================================================
+console.log("\nE · El preflight publica el titular OBSERVADO, y nada más");
+// ===========================================================================
+/**
+ * MP-ENV-01.3 · `MERCADOPAGO_EXPECTED_OWNER_ID` es el titular OBSERVADO de la
+ * credencial de ese entorno, no el «User ID del propietario» que muestra el
+ * panel de la aplicación. En pruebas son distintos —las credenciales de prueba
+ * autentican como un usuario de prueba— y confundirlos bloqueó una credencial
+ * legítima. Sin poder leer el observado había que adivinarlo.
+ */
+
+check("O. El preflight publica `observed_owner_id`", () => {
+  assert(/observed_owner_id: duenno\.ownerId/.test(RUTA_QA),
+    "el preflight no publica el titular observado, y sin él hay que adivinarlo");
+});
+
+check("P. Publicarlo NO hace que el candado se autocorrija", () => {
+  // El bloqueo tiene que seguir comparando contra lo ESPERADO. Si alguien
+  // cambiara la comparación por el observado, el candado no comprobaría nada.
+  assert(/if \(!duenno\.ownerMatchesExpected\)/.test(RUTA_QA),
+    "el candado dejó de comparar contra el titular esperado");
+  assert(!/expectedOwnerId\s*=\s*duenno\.ownerId/.test(RUTA_QA),
+    "hay un respaldo automático al titular observado");
+  assert(!/ownerMatchesExpected\s*=\s*true/.test(RUTA_QA),
+    "se fuerza la coincidencia en algún sitio");
+  // Y la resolución de identidad sigue exigiendo el valor configurado.
+  const sinConfig = resolveMercadoPagoIdentity(
+    { ...COMPLETA, MERCADOPAGO_EXPECTED_OWNER_ID: "" });
+  assert(!sinConfig.ok && sinConfig.reason === "MP_EXPECTED_OWNER_NOT_CONFIGURED",
+    "sin titular configurado ya no falla cerrado");
+});
+
+check("Q. Y no se publica ningún secreto en esa respuesta", () => {
+  // El bloque se recorta hasta donde de verdad TERMINA la respuesta, no a una
+  // longitud fija: al añadir comentarios la ventana se quedó corta y la prueba
+  // acusó al preflight de haber quitado un campo que seguía ahí.
+  const i = RUTA_QA.indexOf('accion === "preflight"');
+  const fin = RUTA_QA.indexOf('if (!tokenPuesto) return no(', i);
+  assert(i > -1 && fin > i, "no se pudo delimitar el bloque del preflight");
+  const bloque = RUTA_QA.slice(i, fin);
+  // El token SÍ aparece en el bloque, pero solo dentro del cálculo de la
+  // huella. Lo que importa no es que se mencione: es que ningún campo de la
+  // respuesta lleve su valor. Se comprueban los campos, no las apariciones.
+  const marcas = [...bloque.matchAll(/^ {6}([a-z_]+):/gm)];
+  assert(marcas.length > 8, `no se reconocieron los campos del preflight: ${marcas.length}`);
+  const campos = marcas.map((m, k) => ({
+    campo: m[1],
+    // El valor llega hasta el campo siguiente: un campo puede ocupar varias
+    // líneas, y mirar solo la primera dejaría pasar un ternario que devuelva
+    // el secreto crudo en una de sus ramas.
+    valor: bloque.slice(m.index, marcas[k + 1]?.index ?? bloque.length),
+  }));
+  const SECRETOS = /process\.env\.MERCADOPAGO_(ACCESS_TOKEN|WEBHOOK_SECRET|TEST_BUYER_EMAIL)\b/g;
+  for (const { campo, valor } of campos) {
+    // Se descuentan los usos que NO devuelven el valor: decir que está, y
+    // resumirlo en una huella. Lo que quede es el secreto viajando entero.
+    const resto = valor
+      .replace(/Boolean\(\s*process\.env\.MERCADOPAGO_[A-Z_]+\s*\)/g, "")
+      .replace(/\.update\(\s*process\.env\.MERCADOPAGO_[A-Z_]+ as string\s*\)/g, "");
+    assert(!SECRETOS.test(resto),
+      `el campo «${campo}» publica un secreto en crudo: ${valor.trim().slice(0, 70)}`);
+    SECRETOS.lastIndex = 0;
+  }
+  // Y los tres se publican solo como presencia o como huella recortada.
+  assert(/webhook_secret_present: Boolean\(/.test(bloque),
+    "el secreto del webhook dejó de publicarse como booleano");
+  assert(/test_buyer_email_configured: compradorConfigurado/.test(bloque),
+    "el correo del comprador dejó de publicarse como booleano");
+  assert(/access_token_fingerprint/.test(bloque)
+    && /digest\("hex"\)\s*\.slice\(0, 10\)/.test(RUTA_QA),
+    "la huella del token dejó de ser un recorte no reversible");
+});
+
+check("R. `owner_is_test_user` sigue sin ser autoridad de entorno", () => {
+  assert(/owner_is_test_user: duenno\.isTestUser/.test(RUTA_QA),
+    "se perdió el diagnóstico del titular");
+  assert(!/isTestUser[^\n]{0,40}\?[^\n]{0,40}"test"/.test(RUTA_QA),
+    "la etiqueta volvió a decidir el entorno");
+  assert(/configured_environment: proveedor\.identity\.ok/.test(RUTA_QA),
+    "el entorno publicado ya no sale de la configuración");
+});
+
 console.log(`\nMP-ENV-01 · identidad: ${passed} en verde, ${failed} en rojo\n`);
 process.exit(failed === 0 ? 0 : 1);
