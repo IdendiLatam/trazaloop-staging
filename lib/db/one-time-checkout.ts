@@ -229,6 +229,10 @@ export async function verifyOneTimeCheckout(checkoutId: string): Promise<VerifyR
     // llegó tiene que constar.
     p_live_mode: veredicto.liveMode,
     p_collector_id: veredicto.collectorId,
+    // 01B.7 · El vendedor ESPERADO. Solo se usa si el presupuesto caducó: en
+    // ese caso la base exige que coincida con el observado antes de reconocer
+    // el pago. Un presupuesto vencido pide más pruebas, no menos.
+    p_expected_collector_id: titular.expectedOwnerId,
   });
   if (error) {
     // El dinero está cobrado y el plan no se activó. Se dice tal cual: pedirle

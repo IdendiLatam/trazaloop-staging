@@ -393,6 +393,25 @@ async function manejar(request: Request) {
         owner_matches: titularObs.matches,
         provider_reachable: titularObs.reachable,
       },
+      // Y si el presupuesto caducó, si eso bloquearía o no el reconocimiento.
+      quote: await (async () => {
+        if (!c.quote_id) return null;
+        const { data: q } = await adminObs.from("billing_quotes")
+          .select("id, status, expires_at").eq("id", c.quote_id as string).maybeSingle();
+        if (!q) return null;
+        const fila = q as Record<string, unknown>;
+        const caducado = new Date(String(fila.expires_at)).getTime() <= Date.now();
+        return {
+          id: fila.id, status: fila.status, expires_at: fila.expires_at,
+          quote_expired: caducado,
+          // El reconocimiento de un pago contra un presupuesto caducado exige
+          // que el vendedor observado sea el esperado.
+          expired_quote_recovery_allowed: !caducado
+            || (veredicto.settle
+                && veredicto.collectorId !== null
+                && veredicto.collectorId === titularObs.expectedOwnerId),
+        };
+      })(),
       // Lo que el verificador HARÍA. No lo hace.
       verdict: veredicto,
       note: "Solo observación: no se asentó nada.",

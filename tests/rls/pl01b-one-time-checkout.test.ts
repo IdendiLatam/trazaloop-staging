@@ -428,6 +428,164 @@ async function main() {
       `un pago del futuro pasó: ${futuro.error?.message ?? "sin error"}`);
   });
 
+  console.log("\nG · Un presupuesto caducado no impide reconocer lo cobrado");
+  // =========================================================================
+  //
+  // Un pago real de 190 400 COP se quedó sin asentar porque la persona volvió
+  // dos horas después y el presupuesto vive treinta minutos. Caducar sirve
+  // para no dejar COMPRAR; no para no dejar reconocer lo comprado.
+  //
+  // La excepción es más estricta que el camino normal: además de las cuatro
+  // puertas económicas, exige que el vendedor observado sea el esperado.
+
+  const VENDEDOR = 3663569024;
+
+  /** Un cobro abierto cuyo presupuesto ya venció. */
+  async function cobroCaducado(etiqueta: string) {
+    const e = await empresa(etiqueta);
+    const q = await presupuesto(e, "full", "monthly");
+    const c = await abrir(e, "initial", q.quote_id);
+    await pg.query(
+      `update public.billing_quotes set expires_at = now() - interval '2 hours'
+        where id = $1`, [q.quote_id]);
+    return { e, quoteId: q.quote_id, c };
+  }
+
+  /** Asentar declarando vendedor observado y esperado. */
+  async function asentarConVendedor(o: {
+    checkoutId: string; paymentId: string; amount: number;
+    status?: string; reference?: string; currency?: string;
+    collector?: number | null; expected?: number | null;
+  }) {
+    return await admin.rpc("billing_settle_one_time_checkout", {
+      p_checkout_id: o.checkoutId,
+      p_provider_payment_id: o.paymentId,
+      p_payment_status: o.status ?? "approved",
+      p_external_reference: o.reference ?? o.checkoutId,
+      p_amount: o.amount,
+      p_currency: o.currency ?? "COP",
+      p_live_mode: true,
+      p_collector_id: o.collector === undefined ? VENDEDOR : o.collector,
+      p_expected_collector_id: o.expected === undefined ? VENDEDOR : o.expected,
+    });
+  }
+
+  await check("B. Caducado + aprobado + economía exacta + vendedor correcto → se asienta", async () => {
+    const { e, c } = await cobroCaducado("cadok");
+    const { data, error } = await asentarConVendedor({
+      checkoutId: c.checkout_id, paymentId: `pay-cad-${sello}`,
+      amount: c.expected_total_amount });
+    assert(!error, `un pago aprobado se quedó sin reconocer: ${error?.message}`);
+    assert((data as Record<string, unknown>).outcome === "settled", JSON.stringify(data));
+    assert((data as Record<string, unknown>).quote_expired === true,
+      "no consta que el presupuesto estaba caducado");
+    const s = await suscripcionDe(e.org);
+    assert(s !== null && s.status === "active" && s.plan_code === "full",
+      "no quedó Full activo");
+    const ps = await periodos(s!.id);
+    assert(ps.length === 1 && ps[0].status === "settled", "no hay periodo liquidado");
+  });
+
+  await check("G. Caducado + vendedor DISTINTO del esperado → no se asienta", async () => {
+    const { e, c } = await cobroCaducado("cadvend");
+    const { error } = await asentarConVendedor({
+      checkoutId: c.checkout_id, paymentId: `pay-cadv-${sello}`,
+      amount: c.expected_total_amount, collector: 999999999 });
+    assert(Boolean(error) && /EXPIRED_QUOTE_RECOVERY_REFUSED/.test(error!.message),
+      `un pago de otro vendedor se reconoció: ${error?.message ?? "sin error"}`);
+    assert((await suscripcionDe(e.org)) === null, "nació una suscripción");
+  });
+
+  await check("Y sin saber quién cobró tampoco: la excepción pide MÁS pruebas", async () => {
+    const { e, c } = await cobroCaducado("cadsin");
+    const { error } = await asentarConVendedor({
+      checkoutId: c.checkout_id, paymentId: `pay-cads-${sello}`,
+      amount: c.expected_total_amount, collector: null });
+    assert(Boolean(error) && /EXPIRED_QUOTE_RECOVERY_REFUSED/.test(error!.message),
+      `sin vendedor declarado se reconoció igual: ${error?.message ?? "sin error"}`);
+    assert((await suscripcionDe(e.org)) === null, "nació una suscripción");
+  });
+
+  await check("C. Caducado + pago no aprobado → no se asienta", async () => {
+    const { e, c } = await cobroCaducado("cadpend");
+    const { data, error } = await asentarConVendedor({
+      checkoutId: c.checkout_id, paymentId: `pay-cadp-${sello}`,
+      amount: c.expected_total_amount, status: "pending" });
+    assert(!error, `${error?.message}`);
+    assert((data as Record<string, unknown>).outcome === "not_approved", JSON.stringify(data));
+    assert((await suscripcionDe(e.org)) === null, "un pago pendiente activó el plan");
+  });
+
+  await check("D/E/F. Caducado + importe, moneda o referencia distintos → no se asienta", async () => {
+    for (const [etiqueta, extra, patron] of [
+      ["cadimp", { amountDelta: -1 }, /AMOUNT_MISMATCH/],
+      ["cadmon", { currency: "USD" }, /CURRENCY_MISMATCH/],
+      ["cadref", { reference: "00000000-0000-0000-0000-000000000000" }, /EXTERNAL_REFERENCE_MISMATCH/],
+    ] as Array<[string, Record<string, unknown>, RegExp]>) {
+      const { e, c } = await cobroCaducado(etiqueta);
+      const { error } = await asentarConVendedor({
+        checkoutId: c.checkout_id, paymentId: `pay-${etiqueta}-${sello}`,
+        amount: c.expected_total_amount + Number(extra.amountDelta ?? 0),
+        currency: extra.currency as string | undefined,
+        reference: extra.reference as string | undefined });
+      assert(Boolean(error) && patron.test(error!.message),
+        `${etiqueta}: ${error?.message ?? "sin error"}`);
+      assert((await suscripcionDe(e.org)) === null, `${etiqueta}: nació una suscripción`);
+    }
+  });
+
+  await check("I. Caducado + ya asentado → idempotente, sin duplicar nada", async () => {
+    const { e, c } = await cobroCaducado("cadidem");
+    const uno = await asentarConVendedor({
+      checkoutId: c.checkout_id, paymentId: `pay-cadi-${sello}`,
+      amount: c.expected_total_amount });
+    assert(!uno.error && (uno.data as Record<string, unknown>).outcome === "settled",
+      `primer asentamiento: ${uno.error?.message}`);
+    const s = await suscripcionDe(e.org);
+    const antesPagos = (await pagosDe(e.org)).length;
+    const antesPeriodos = (await periodos(s!.id)).length;
+    for (let i = 0; i < 3; i += 1) {
+      const otra = await asentarConVendedor({
+        checkoutId: c.checkout_id, paymentId: `pay-cadi-${sello}`, amount: 999 });
+      assert(!otra.error, `reintento ${i}: ${otra.error?.message}`);
+      assert((otra.data as Record<string, unknown>).outcome === "already_settled",
+        `reintento ${i}: ${JSON.stringify(otra.data)}`);
+    }
+    assert((await pagosDe(e.org)).length === antesPagos, "se duplicaron los pagos");
+    assert((await periodos(s!.id)).length === antesPeriodos, "se duplicaron los periodos");
+  });
+
+  await check("J. Un presupuesto caducado NO puede abrir una compra nueva", async () => {
+    // La excepción es SOLO para reconocer lo ya cobrado. Iniciar una compra con
+    // un presupuesto vencido sigue prohibido: ahí el precio sí está por decidir.
+    const e = await empresa("cadnuevo");
+    const q = await presupuesto(e, "full", "monthly");
+    await pg.query(
+      `update public.billing_quotes set expires_at = now() - interval '2 hours'
+        where id = $1`, [q.quote_id]);
+    const { error } = await e.cli.rpc("billing_open_one_time_checkout", {
+      p_purpose: "initial", p_target_id: q.quote_id,
+      p_provider: "mercadopago", p_environment: "test" });
+    assert(Boolean(error) && /QUOTE_EXPIRED/.test(error!.message),
+      `se abrió una compra con un presupuesto caducado: ${error?.message ?? "sin error"}`);
+  });
+
+  await check("Y los demás carriles siguen recibiendo QUOTE_EXPIRED", async () => {
+    // `billing_settle_payment` la comparten los avisos del proveedor, la subida
+    // de plan y el pago manual. Sin pedir la excepción, caducar sigue cortando.
+    const e = await empresa("cadotros");
+    const q = await presupuesto(e, "full", "monthly");
+    await pg.query(
+      `update public.billing_quotes set expires_at = now() - interval '2 hours'
+        where id = $1`, [q.quote_id]);
+    const { error } = await admin.rpc("billing_settle_payment", {
+      p_quote_id: q.quote_id, p_provider: "wompi",
+      p_provider_payment_id: `pay-otros-${sello}`, p_outcome: "approved",
+      p_idempotency_key: null, p_failure_reason: null });
+    assert(Boolean(error) && /QUOTE_EXPIRED/.test(error!.message),
+      `otro carril dejó de comprobar la caducidad: ${error?.message ?? "sin error"}`);
+  });
+
   console.log("\nF · Lo que NO se debilitó");
   // =========================================================================
 
@@ -443,6 +601,60 @@ async function main() {
       .insert({ organization_id: mensual.org, provider: "mercadopago", environment: "test",
                 purpose: "initial", expected_total_amount: 1, expected_currency: "COP" });
     assert(Boolean(error), "una administradora insertó un cobro a mano");
+  });
+
+  console.log("\nH · Ninguna primitiva de dinero cuelga de PUBLIC");
+  // =========================================================================
+  //
+  // Esto existe por un fallo propio. Al recrear `billing_settle_payment` se
+  // revocó de `anon, authenticated, service_role`… y NO de `public`. En
+  // PostgreSQL una función nace con EXECUTE para PUBLIC y `authenticated` lo
+  // hereda por ahí, así que durante un rato cualquier persona con sesión pudo
+  // llamar a la primitiva que convierte dinero en derecho.
+  //
+  // El mismo descuido estaba en las cuatro funciones del pago único, escritas
+  // con la misma fórmula incompleta. Un agujero que se repite no se tapa de
+  // uno en uno: se pone una prueba que lo vea la próxima vez.
+
+  await check("Las primitivas de servicio NO tienen EXECUTE para PUBLIC", async () => {
+    const soloServicio = [
+      "billing_settle_payment",
+      "billing_settle_one_time_checkout",
+      "billing_attach_one_time_preference",
+      "billing_settle_period_payment",
+    ];
+    const { rows } = await pg.query(
+      `select p.proname, coalesce(array_to_string(p.proacl,','),'(sin acl)') as acl
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = any($1::text[])`, [soloServicio]);
+    assert(rows.length >= soloServicio.length,
+      `faltan primitivas por auditar: se encontraron ${rows.length}`);
+    for (const r of rows) {
+      // `=X/` sin rol delante es PUBLIC. `(sin acl)` es el valor por omisión,
+      // que TAMBIÉN es PUBLIC: una función sin ACL la puede ejecutar cualquiera.
+      assert(r.acl !== "(sin acl)",
+        `«${r.proname}» no declara permisos: por omisión la ejecuta PUBLIC`);
+      assert(!/(^|,)=X\//.test(String(r.acl)),
+        `«${r.proname}» tiene EXECUTE para PUBLIC: cualquiera con sesión podría llamarla`);
+      assert(!/(^|,)(anon)=/.test(String(r.acl)),
+        `«${r.proname}» se concedió a anon`);
+      assert(!/(^|,)(authenticated)=/.test(String(r.acl)),
+        `«${r.proname}» se concedió a authenticated: esto lo llama el servidor`);
+    }
+  });
+
+  await check("Y las que sí llama quien tiene sesión no admiten anónimos", async () => {
+    const conSesion = ["billing_open_one_time_checkout", "billing_record_manual_payment"];
+    const { rows } = await pg.query(
+      `select p.proname, coalesce(array_to_string(p.proacl,','),'(sin acl)') as acl
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = any($1::text[])`, [conSesion]);
+    for (const r of rows) {
+      assert(!/(^|,)=X\//.test(String(r.acl)),
+        `«${r.proname}» tiene EXECUTE para PUBLIC: eso incluye a los anónimos`);
+      assert(/authenticated=X/.test(String(r.acl)),
+        `«${r.proname}» dejó de estar disponible para quien tiene sesión`);
+    }
   });
 
   // -------------------------------------------------------------------------
