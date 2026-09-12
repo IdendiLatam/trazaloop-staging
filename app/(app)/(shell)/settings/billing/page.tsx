@@ -10,6 +10,7 @@ import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import { describeBillingState } from "@/lib/domain/billing-state";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
+import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
 import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
 import { storageImpactOf } from "@/lib/db/storage-impact";
 import { pendingUpgrade } from "@/lib/db/billing-upgrade";
@@ -128,6 +129,19 @@ export default async function BillingPage({
           </p>
         )}
       </section>
+
+      {/* PROD-LAUNCH-01B.1 · El plan de pago único no se renueva solo, así que
+          aquí se dice cuándo vence y se ofrece renovarlo. Los avisos de siete,
+          tres y un día se derivan de la fecha al pintar: no hay proceso
+          programado detrás, y no hace falta. */}
+      {esAdministrador ? (
+        <RenewalPanel
+          planCode={estado?.planCode ?? null}
+          billingInterval={estado?.billingInterval ?? null}
+          periodEndsAt={estado?.renewsAt ?? null}
+          nowIso={new Date().toISOString()}
+        />
+      ) : null}
 
       {esAdministrador && estado?.hasSubscription && estado.planCode === "full"
         && !estado.cancelAtPeriodEnd && !estado.downgradeScheduled ? (

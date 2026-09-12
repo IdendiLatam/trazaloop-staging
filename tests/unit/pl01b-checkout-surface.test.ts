@@ -39,6 +39,10 @@ const BOTON = "components/domain/billing/verify-payment-button.tsx";
 const SERVICIO = "lib/db/one-time-checkout.ts";
 const ACCIONES = "server/actions/billing.ts";
 const REGISTRO = "lib/billing/providers/one-time-registry.ts";
+const PANEL = "components/domain/billing/renewal-panel.tsx";
+const FACTURACION = "app/(app)/(shell)/settings/billing/page.tsx";
+const PUERTA = "server/actions/tutorials.ts";
+const DIALOGO = "components/domain/tutorials/page-tutorial-action.tsx";
 
 console.log("\nA · La URL no activa nada");
 // ===========================================================================
@@ -167,6 +171,94 @@ check("Y el registro es quien la traduce", () => {
   assert(/mercadopago/i.test(src), "el registro dejó de saber a quién llama");
   assert(/defaultOneTimeProviderCode/.test(src),
     "no hay un único sitio que diga con qué proveedor se cobra");
+});
+
+console.log("\nG · La renovación se ofrece donde se mira el plan");
+// ===========================================================================
+
+check("La página de facturación monta el panel de renovación", () => {
+  const src = sinComentarios(leer(FACTURACION));
+  assert(/<RenewalPanel/.test(src), "no se monta el panel de renovación");
+  assert(/periodEndsAt=\{estado\?\.renewsAt/.test(src),
+    "el panel no recibe el vencimiento real de la suscripción");
+});
+
+check("El instante lo pone el SERVIDOR, no el navegador", () => {
+  const src = sinComentarios(leer(FACTURACION));
+  assert(/nowIso=\{new Date\(\)\.toISOString\(\)\}/.test(src),
+    "el vencimiento se compara contra el reloj del navegador: "
+    + "adelantarlo bastaría para ver otro estado");
+  const panel = sinComentarios(leer(PANEL));
+  assert(!/new Date\(\)/.test(panel.replace(/new Date\(nowIso\)/g, "")),
+    "el panel consulta el reloj del cliente por su cuenta");
+});
+
+check("Los TEXTOS salen de la regla pura; el tono lo elige el componente", () => {
+  const panel = sinComentarios(leer(PANEL));
+  assert(/resolveRenewalView\(/.test(panel), "el panel no usa la regla pura");
+  // Lo que no puede estar aquí son las FRASES: si se escriben a mano, la
+  // prueba que vigila «desactivada» deja de cubrir lo que la gente lee.
+  for (const frase of ["vence en", "terminó", "intacta", "Reactivar", "Renovar Full"]) {
+    assert(!panel.includes(frase),
+      `el panel escribe «${frase}» a mano en vez de tomarlo de la regla`);
+  }
+  for (const campo of ["vista.title", "vista.body", "vista.ctaLabel"]) {
+    assert(panel.includes(campo), `el panel no pinta ${campo}`);
+  }
+  // El umbral SÍ puede mirarse aquí: elegir color no es decidir cuándo avisar,
+  // y esa decisión ya la tomó `noticeFor`.
+  assert(/vista\.notice === 1/.test(panel),
+    "el aviso crítico no se distingue visualmente del resto");
+});
+
+check("Renovar y reactivar NO son el mismo camino", () => {
+  const panel = sinComentarios(leer(PANEL));
+  assert(/startRenewalCheckoutAction\(\)/.test(panel), "renovar no abre el periodo siguiente");
+  assert(/startOneTimeCheckoutAction\(/.test(panel), "reactivar no contrata de nuevo");
+  // Vencido = contratar otra vez; vigente = periodo siguiente anclado al final
+  // del vigente. Mezclarlos daría un periodo que empieza en una fecha que
+  // nadie pactó.
+  // Se comparan las LLAMADAS, no los imports: los dos nombres aparecen arriba
+  // en la línea de importación y ahí no hay ninguna rama.
+  const i = panel.indexOf('vista.kind === "expired"\n        ? await');
+  const j = panel.indexOf("await startOneTimeCheckoutAction(");
+  const k = panel.indexOf("await startRenewalCheckoutAction()");
+  assert(i > -1, "la elección de camino no cuelga de si el periodo venció");
+  assert(j > -1 && k > -1, "falta alguno de los dos caminos");
+  assert(i < j && j < k,
+    "la rama de vencido no es la que contrata de nuevo");
+});
+
+console.log("\nH · El tutorial no se entrega por escribir la URL");
+// ===========================================================================
+
+check("La puerta decide ANTES de firmar, y en las dos vías", () => {
+  const src = sinComentarios(leer(PUERTA));
+  const iPuerta = src.indexOf("await autorizar(pageKey)");
+  const iFirma = src.indexOf("signTutorialPlayback({");
+  assert(iPuerta > -1 && iFirma > -1 && iPuerta < iFirma,
+    "se firma la reproducción antes de comprobar el plan");
+  assert((src.match(/autorizar\(pageKey\)/g) ?? []).length >= 2,
+    "solo una de las dos vías de entrega pasa por la puerta");
+});
+
+check("Y falla CERRADA si no hay empresa activa", () => {
+  const src = sinComentarios(leer(PUERTA));
+  const i = src.indexOf("async function autorizar");
+  const cuerpo = src.slice(i);
+  assert(/catch \{[\s\S]{0,120}status: "unavailable"/.test(cuerpo),
+    "sin empresa activa la puerta no niega la entrega");
+});
+
+check("El diálogo enseña la oferta, y el botón de la barra NO se esconde", () => {
+  const src = sinComentarios(leer(DIALOGO));
+  assert(/plan_required/.test(src), "el diálogo no sabe enseñar la oferta");
+  assert(/estado\.ctaLabel/.test(src) && /estado\.dismissLabel/.test(src),
+    "los botones de la oferta no vienen del servidor");
+  // El botón se pinta con `pageKey`, sin mirar plan: descubrir el tutorial es
+  // la mitad de la oferta.
+  assert(/if \(!pageKey\) return null;/.test(src),
+    "el botón de la barra dejó de depender solo de si la pantalla tiene tutorial");
 });
 
 console.log(`\nPROD-LAUNCH-01B · superficie: ${passed} en verde, ${failed} en rojo\n`);

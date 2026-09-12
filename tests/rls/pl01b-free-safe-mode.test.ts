@@ -250,6 +250,90 @@ async function main() {
       `el periodo pagado dejó de decir «full»: ${JSON.stringify(rows)}`);
   });
 
+  console.log("\nC · De qué plan depende la puerta de los tutoriales");
+  // =========================================================================
+  //
+  // La regla de acceso es pura y ya tiene su suite. Lo que aquí se comprueba
+  // es la CADENA de la que se alimenta: que el plan efectivo diga la verdad
+  // antes y después de pagar, y que «tuvo Full alguna vez» se pueda saber.
+  // Sin esto, la regla podría estar perfecta y decidir con datos falsos.
+
+  await check("Una empresa recién creada está en Demo Full, y por eso VE tutoriales", async () => {
+    // Esto se escribió esperando «free» y salió «full». La expectativa estaba
+    // mal, no el producto: desde 0100 toda empresa nueva recibe Full en prueba
+    // durante 48 horas. Y es justo lo que hace falta — Demo Full conserva los
+    // tutoriales, así que quien está probando el producto ve cómo se usa.
+    const e = await empresa("tutdemo");
+    const { data, error } = await e.cli.rpc("get_organization_effective_plan",
+      { p_organization_id: e.org });
+    assert(!error, `resolver plan: ${error?.message}`);
+    assert(data === "full", `una empresa en prueba resolvió «${data}»`);
+    const { rows } = await pg.query(
+      `select a.grant_kind, a.ends_at from public.organization_plan_assignments a
+         join public.plan_revisions r on r.id = a.plan_revision_id
+        where a.organization_id = $1 and r.plan_code = 'full'
+          and (a.ends_at is null or a.ends_at > now()) limit 1`, [e.org]);
+    assert(rows.length === 1 && rows[0].grant_kind === "trial",
+      `el Full de una empresa nueva no es una prueba: ${JSON.stringify(rows)}`);
+    assert(rows[0].ends_at !== null,
+      "la prueba no tiene fecha de fin: sería Full permanente y gratis");
+  });
+
+  await check("Una empresa YA en Free resuelve «free», que es quien ve la oferta", async () => {
+    // La empresa de la comprobación H bajó a Free por el camino real.
+    const { rows } = await pg.query(
+      `select id from public.organizations where name like $1`,
+      [`PL01BFREE baja ${sello}%`]);
+    assert(rows.length === 1, "no se encontró la empresa que bajó a Free");
+    // Se lee la asignación vigente de ámbito empresa, no la RPC: esa exige
+    // sesión y aquí se está mirando con el propietario de la base.
+    const { rows: plan } = await pg.query(
+      `select r.plan_code, a.grant_kind
+         from public.organization_plan_assignments a
+         join public.plan_revisions r on r.id = a.plan_revision_id
+        where a.organization_id = $1 and a.scope = 'organization'
+          and (a.ends_at is null or a.ends_at > now())
+        order by a.starts_at desc limit 1`, [rows[0].id]);
+    assert(plan.length === 1 && plan[0].plan_code === "free",
+      `la empresa que bajó a Free tiene vigente «${JSON.stringify(plan)}»`);
+  });
+
+  await check("Y no consta que haya pagado nunca", async () => {
+    const { rows } = await pg.query(
+      `select count(*)::int as n from public.billing_subscription_periods p
+        join public.organizations o on o.id = p.organization_id
+       where o.name like $1 and p.status = 'settled'
+         and p.plan_code in ('full','extra')`, [`PL01BFREE tutdemo ${sello}%`]);
+    assert(rows[0].n === 0,
+      "una empresa en prueba figura como antigua clienta: se le diría «Reactivar» sin haber pagado");
+  });
+
+  await check("Tras pagar, el plan efectivo pasa a «full»", async () => {
+    const staff = await empresa("tutstaff");
+    await admin.from("platform_staff").insert({
+      user_id: staff.uid, role_code: "superadmin", status: "active" });
+    const cliente = await empresa("tutpago");
+    const { error } = await staff.cli.rpc("billing_record_manual_payment", {
+      p_organization_id: cliente.org, p_plan_code: "full", p_billing_interval: "monthly",
+      p_reference: `TRF-TUT-${sello}`, p_paid_at: new Date(Date.now() - 3600_000).toISOString(),
+      p_evidence: null, p_reason: "Pago para comprobar la puerta de tutoriales.",
+    });
+    assert(!error, `activar Full: ${error?.message}`);
+    const { data } = await cliente.cli.rpc("get_organization_effective_plan",
+      { p_organization_id: cliente.org });
+    assert(data === "full", `tras pagar Full el plan efectivo dice «${data}»`);
+  });
+
+  await check("Y queda constancia de que fue clienta, para decirle «Reactivar»", async () => {
+    const { rows } = await pg.query(
+      `select count(*)::int as n from public.billing_subscription_periods p
+        join public.organizations o on o.id = p.organization_id
+       where o.name like $1 and p.status = 'settled'
+         and p.plan_code in ('full','extra')`, [`PL01BFREE tutpago ${sello}%`]);
+    assert(rows[0].n === 1,
+      `hay ${rows[0].n} periodos liquidados: sin eso se le ofrecería «Activar» a quien ya pagó`);
+  });
+
   // -------------------------------------------------------------------------
   const residuo = await limpiarFixtures(pg, admin, { orgs, personas });
   const parte = describirResiduo(residuo);
