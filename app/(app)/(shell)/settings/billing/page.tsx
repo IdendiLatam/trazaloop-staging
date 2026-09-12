@@ -11,9 +11,11 @@ import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import { describeBillingState } from "@/lib/domain/billing-state";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
+import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
 import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
 import { storageImpactOf } from "@/lib/db/storage-impact";
 import { pendingUpgrade } from "@/lib/db/billing-upgrade";
+import { findOpenOneTimeCheckout } from "@/lib/db/one-time-checkout";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -57,11 +59,15 @@ export default async function BillingPage({
   const activeModule = activeShellModuleFrom("/settings/billing", await searchParams);
   const org = await requireActiveOrg();
   const esAdministrador = org.roleCode === "admin";
-  const [estado, catalogo, historial, subidaEnCurso] = await Promise.all([
+  const [estado, catalogo, historial, subidaEnCurso, cobroEnCurso] = await Promise.all([
     getOrganizationBillingState(org.organizationId),
     listPublicPlanCatalog(),
     listPaymentHistory(org.organizationId),
     pendingUpgrade(org.organizationId),
+    // 01B.4 · Un pago único abierto y sin confirmar. Es lo que ve quien cerró
+    // la ventana de la pasarela: no tiene a dónde volver, así que el botón de
+    // comprobar tiene que estar en la pantalla a la que sí vuelve.
+    findOpenOneTimeCheckout(org.organizationId),
   ]);
 
   // Bajar de plan puede dejar a la empresa por encima del espacio del plan
@@ -129,6 +135,14 @@ export default async function BillingPage({
           </p>
         )}
       </section>
+
+      {esAdministrador && cobroEnCurso !== null ? (
+        <PendingCheckoutPanel
+          checkoutId={cobroEnCurso.id}
+          amountLabel={money(cobroEnCurso.expectedTotalAmount, cobroEnCurso.expectedCurrency)}
+          initPoint={cobroEnCurso.initPoint}
+        />
+      ) : null}
 
       {/* PROD-LAUNCH-01B.1 · El plan de pago único no se renueva solo, así que
           aquí se dice cuándo vence y se ofrece renovarlo. Los avisos de siete,

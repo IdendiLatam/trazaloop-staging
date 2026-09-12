@@ -77,7 +77,8 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
-                  "one_time_prepare", "one_time_state", "one_time_observe"] as const;
+                  "one_time_prepare", "one_time_state", "one_time_observe",
+                  "one_time_login_link"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -282,6 +283,49 @@ async function manejar(request: Request) {
   //
   // No cobra, no asienta y no concede nada: deja una preferencia abierta y su
   // enlace. Quien paga sigue siendo una persona.
+  // UN ACCESO DE UN SOLO USO PARA QUE LA PERSONA PULSE EL BOTÓN.
+  //
+  // El ensayo de recuperación exige que sea una PERSONA quien pulse «Ya
+  // realicé el pago — Verificar». Para eso tiene que poder entrar, y el
+  // administrador de una empresa de QA suele tener un correo de un dominio
+  // que no existe: la recuperación por correo no puede funcionar.
+  //
+  // Se emite un enlace de un solo uso. NO se cambia ninguna contraseña:
+  // cambiarla para poder probar deja a esa persona fuera de su cuenta.
+  //
+  // Lleva a `/settings/billing`, NUNCA a la pantalla de retorno: esa comprueba
+  // el pago al cargarse, y entonces el plan se activaría por abrir una URL en
+  // vez de por una decisión de alguien.
+  if (accion === "one_time_login_link") {
+    const orgLink = String(cuerpo.organization_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(orgLink)) return no("ORGANIZATION_ID_REQUIRED", 400);
+    const adminLink = createAdminClient();
+    const { data: memLink } = await adminLink.from("memberships")
+      .select("user_id").eq("organization_id", orgLink).eq("role_code", "admin").limit(1);
+    const uidLink = (memLink ?? [])[0]?.user_id as string | undefined;
+    if (!uidLink) return no("ORGANIZATION_HAS_NO_ADMIN", 409);
+    const { data: personaLink } = await adminLink.auth.admin.getUserById(uidLink);
+    const correoLink = personaLink.user?.email ?? "";
+    if (!correoLink) return no("ORGANIZATION_ADMIN_HAS_NO_EMAIL", 409);
+
+    const urlLink = new URL(request.url);
+    const destino = `${urlLink.protocol}//${urlLink.host}/settings/billing`;
+    const { data: enlaceLink, error: eLink } = await adminLink.auth.admin.generateLink({
+      type: "magiclink", email: correoLink,
+      options: { redirectTo: destino } });
+    if (eLink || !enlaceLink?.properties?.action_link) {
+      return no(`QA_LOGIN_LINK_UNAVAILABLE:${eLink?.message.slice(0, 60) ?? ""}`, 424);
+    }
+    return NextResponse.json({ ok: true,
+      organization_id: orgLink,
+      // El correo, enmascarado: identifica la cuenta sin publicarla.
+      account: correoLink.replace(/^(.).*(@.*)$/, "$1…$2"),
+      redirect_to: destino,
+      login_link: enlaceLink.properties.action_link,
+      note: "Un solo uso. Lleva a /settings/billing; el botón lo pulsa una persona.",
+    });
+  }
+
   // OBSERVAR SIN DECIDIR.
   //
   // Pregunta al proveedor por los pagos de un cobro y dice qué respondería el

@@ -240,3 +240,44 @@ export async function verifyOneTimeCheckout(checkoutId: string): Promise<VerifyR
   const r = (data ?? {}) as Record<string, unknown>;
   return { ok: true, settled: true, alreadySettled: r.outcome === "already_settled" };
 }
+
+export type OpenOneTimeCheckout = {
+  id: string;
+  expectedTotalAmount: number;
+  expectedCurrency: string;
+  initPoint: string | null;
+};
+
+/**
+ * El pago único abierto y sin confirmar de una empresa, si lo hay.
+ *
+ * Solo LEE. Existe para que la pantalla de facturación pueda ofrecer
+ * «Ya realicé el pago — Verificar» a quien cerró la ventana de la pasarela: esa
+ * persona no tiene a dónde volver, y sin este dato no habría botón que pulsar.
+ *
+ * Se devuelve el MÁS RECIENTE. Abrir dos cobros del mismo destino no puede
+ * pasar —la base los reutiliza— pero un intento inicial y una renovación sí
+ * conviven, y el que importa es el último.
+ */
+export async function findOpenOneTimeCheckout(
+  organizationId: string
+): Promise<OpenOneTimeCheckout | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("billing_one_time_checkouts")
+    .select("id, expected_total_amount, expected_currency, init_point")
+    .eq("organization_id", organizationId)
+    .in("status", ["created", "provider_created"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+  // Un fallo de lectura NO se presenta como «no hay pago en curso»: se calla el
+  // panel, que es lo mismo que se ve, pero sin afirmar nada que no se sabe.
+  if (error || !data || data.length === 0) return null;
+  const c = data[0] as Record<string, unknown>;
+  return {
+    id: String(c.id),
+    expectedTotalAmount: Number(c.expected_total_amount),
+    expectedCurrency: String(c.expected_currency),
+    initPoint: (c.init_point as string | null) ?? null,
+  };
+}

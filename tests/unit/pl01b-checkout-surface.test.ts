@@ -43,6 +43,7 @@ const PANEL = "components/domain/billing/renewal-panel.tsx";
 const FACTURACION = "app/(app)/(shell)/settings/billing/page.tsx";
 const PUERTA = "server/actions/tutorials.ts";
 const DIALOGO = "components/domain/tutorials/page-tutorial-action.tsx";
+const PENDIENTE = "components/domain/billing/pending-checkout-panel.tsx";
 
 console.log("\nA · La URL no activa nada");
 // ===========================================================================
@@ -227,6 +228,31 @@ check("Renovar y reactivar NO son el mismo camino", () => {
   assert(j > -1 && k > -1, "falta alguno de los dos caminos");
   assert(i < j && j < k,
     "la rama de vencido no es la que contrata de nuevo");
+});
+
+console.log("\nG bis · Quien cerró la ventana tiene dónde volver");
+// ===========================================================================
+
+check("El botón de verificar también está en la pantalla de facturación", () => {
+  // Vivía SOLO en la pantalla de retorno, que comprueba sola al cargarse. Eso
+  // servía para quien vuelve; no para quien NO vuelve, que es justamente el
+  // caso para el que se diseñó el botón.
+  const fact = sinComentarios(leer(FACTURACION));
+  assert(/<PendingCheckoutPanel/.test(fact),
+    "no hay dónde comprobar un pago si se cerró la ventana de la pasarela");
+  assert(/findOpenOneTimeCheckout\(/.test(fact),
+    "la pantalla no busca un pago único abierto");
+  const panel = sinComentarios(leer(PENDIENTE));
+  assert(/<VerifyPaymentButton/.test(panel), "el panel no ofrece el botón");
+});
+
+check("Y esa pantalla NO activa nada al pintarse", () => {
+  const fact = sinComentarios(leer(FACTURACION));
+  assert(!/verifyOneTimeCheckout\(/.test(fact),
+    "abrir facturación activaría el plan: una consulta no puede ser una transacción");
+  const panel = sinComentarios(leer(PENDIENTE));
+  assert(!/verifyOneTimeCheckout\(/.test(panel),
+    "el panel activa por su cuenta en vez de esperar a que alguien pulse");
 });
 
 console.log("\nH · El tutorial no se entrega por escribir la URL");
