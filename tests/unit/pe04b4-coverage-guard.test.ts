@@ -160,6 +160,19 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
     + "firmado del proveedor, después de conciliar el pago.",
   "server/actions/billing.ts:cancelUpgradeAction":
     "Retira una subida que todavía no se cobró. Deja las cosas como estaban.",
+  "server/actions/billing.ts:verifyOneTimeCheckoutAction":
+    "PROD-LAUNCH-01B · Comprueba si un pago único ya consta y, si consta, activa. "
+    + "Ponerle la puerta comercial delante haría imposible COMPRAR: quien todavía "
+    + "no tiene plan es justamente quien está pagando por tenerlo. Y no concede "
+    + "nada por su cuenta: pregunta al proveedor y el derecho lo abre "
+    + "`billing_settle_one_time_checkout`, que vuelve a comprobar importe, moneda, "
+    + "referencia y aprobación.",
+  "server/actions/commercial-console.ts:recordManualPaymentAction":
+    "PROD-LAUNCH-01B · La plataforma registra un pago hecho por transferencia. "
+    + "La puerta comercial mira el plan de la EMPRESA, y aquí quien escribe es la "
+    + "administración de plataforma sobre una empresa que precisamente todavía no "
+    + "tiene ese plan. Exige superadministrador, referencia, motivo y confirmación "
+    + "escrita, y asienta por la misma puerta canónica que el pago en línea.",
   "server/actions/billing.ts:scheduleIntervalChangeAction":
     "Cambiar de periodicidad se programa para el final del periodo pagado y no "
     + "cobra nada hoy. Mismo motivo que bajar de plan: quien agotó su cupo tiene "

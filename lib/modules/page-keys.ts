@@ -1184,6 +1184,14 @@ export const PAGE_KEY_EXCLUSIONS: readonly PageKeyExclusion[] = [
   { route: "/reset-password", reason: "Recuperación de acceso · sin sesión" },
   { route: "/accept-invite", reason: "Enlace de invitación · trámite de una sola vez" },
 
+  // --- Trámite de un solo paso ---------------------------------------------
+  // PROD-LAUNCH-01B · La vuelta de la pasarela. No es una pantalla que se
+  // opere: se entra una vez, se lee si el pago consta y se sale. Un tutorial
+  // encima de alguien que acaba de pagar y quiere saber si tiene plan sería
+  // ruido en el peor momento.
+  { route: "/settings/billing/checkout/return",
+    reason: "Vuelta del pago · trámite de una sola vez, no se opera" },
+
   // --- Legal ---------------------------------------------------------------
   // Un vídeo encima de un texto que hay que aceptar compite con el texto. Y la
   // aceptación es una puerta obligatoria: nada puede taparla.

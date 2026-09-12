@@ -369,3 +369,160 @@ export async function scheduleIntervalChangeAction(
   return { error: null, ok: true,
     detail: typeof r.effective_at === "string" ? r.effective_at : undefined };
 }
+
+// ---------------------------------------------------------------------------
+// PROD-LAUNCH-01B · Pago único
+// ---------------------------------------------------------------------------
+//
+// El carril del lanzamiento, mientras la recurrencia sigue bloqueada: Full
+// mensual y anual como pago único renovable.
+//
+// LA DIFERENCIA CON EL CARRIL DE ARRIBA. Allí el navegador tokeniza y esta
+// capa cobra. Aquí el navegador se VA a la pasarela y vuelve sin nada que
+// valga como prueba. Por eso hay dos acciones y no una: `iniciar` manda a
+// pagar, y `verificar` pregunta al proveedor si se pagó. La vuelta no activa
+// nada por sí sola, y el aviso del proveedor tampoco hace falta.
+
+export type OneTimeStartState = { error: string | null; initPoint?: string };
+
+/**
+ * Empieza el pago único de un plan y devuelve a dónde ir a pagar.
+ *
+ * El importe no viaja en la petición: lo pone la base a partir del
+ * presupuesto que ella misma acaba de congelar.
+ */
+export async function startOneTimeCheckoutAction(
+  planCode: string, billingInterval: string
+): Promise<OneTimeStartState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+
+  const presupuesto = await createBillingQuote(
+    quien.organizationId, planCode, billingInterval);
+  if (!presupuesto.ok) return { error: QUOTE_ERROR_MESSAGE[presupuesto.code] };
+
+  const supabase = await createServerClient();
+  const { openOneTimeCheckout, OPEN_ERROR_MESSAGE } =
+    await import("@/lib/db/one-time-checkout");
+  const r = await openOneTimeCheckout({
+    purpose: "initial",
+    targetId: presupuesto.quoteId,
+    supabase,
+    origin: await origenDePeticion(),
+    planLabel: etiquetaDePlan(planCode, billingInterval),
+    payerEmail: quien.email || null,
+  });
+  if (!r.ok) return { error: OPEN_ERROR_MESSAGE[r.code] };
+  return { error: null, initPoint: r.initPoint };
+}
+
+/**
+ * Renueva: abre el periodo siguiente y manda a pagarlo.
+ *
+ * El periodo siguiente lo abre la base anclado a la ERA de la suscripción, no
+ * a hoy. Renovar el día 5 un plan que vence el 12 sigue dando 12 → 12.
+ */
+export async function startRenewalCheckoutAction(): Promise<OneTimeStartState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+
+  const supabase = await createServerClient();
+  const { data: sub } = await supabase
+    .from("billing_subscriptions")
+    .select("id, plan_code, billing_interval")
+    .eq("organization_id", quien.organizationId)
+    .in("status", ["active", "past_due", "cancel_at_period_end"])
+    .maybeSingle();
+  if (!sub) {
+    return { error: "No hay un plan que renovar. Si quieres contratarlo de nuevo, elige el plan." };
+  }
+  const s = sub as { id: string; plan_code: string; billing_interval: string };
+
+  const { data: apertura, error: eAbrir } = await supabase.rpc(
+    "billing_open_next_period", { p_subscription_id: s.id });
+  if (eAbrir || !apertura) {
+    return { error: "No fue posible preparar la renovación. No se cobró nada." };
+  }
+  const a = apertura as Record<string, unknown>;
+  const periodo = typeof a.period_id === "string" ? a.period_id : "";
+  if (!periodo) {
+    // Se dice QUÉ pasa, no «no se pudo». Una suscripción caducada no se
+    // renueva: se vuelve a contratar, y son dos botones distintos.
+    return { error: a.status === "lapsed"
+      ? "Tu periodo terminó hace tiempo. Vuelve a contratar el plan para reactivarlo."
+      : "No fue posible preparar la renovación. No se cobró nada." };
+  }
+
+  const { openOneTimeCheckout, OPEN_ERROR_MESSAGE } =
+    await import("@/lib/db/one-time-checkout");
+  const r = await openOneTimeCheckout({
+    purpose: "renewal",
+    targetId: periodo,
+    supabase,
+    origin: await origenDePeticion(),
+    planLabel: etiquetaDePlan(s.plan_code, s.billing_interval),
+    payerEmail: quien.email || null,
+  });
+  if (!r.ok) return { error: OPEN_ERROR_MESSAGE[r.code] };
+  return { error: null, initPoint: r.initPoint };
+}
+
+export type OneTimeVerifyState =
+  | { state: "activated" }
+  | { state: "pending"; message: string }
+  | { state: "error"; message: string };
+
+/**
+ * «Ya realicé el pago — Verificar».
+ *
+ * Es el botón que salva los tres casos en los que la vuelta no ocurre: la
+ * ventana cerrada, el retorno perdido y el aviso que no llega. Pregunta al
+ * proveedor y, si hay un pago que cuadre, activa.
+ *
+ * Se puede pulsar todas las veces que haga falta.
+ */
+export async function verifyOneTimeCheckoutAction(
+  checkoutId: string
+): Promise<OneTimeVerifyState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { state: "error", message: quien.error };
+  if (!/^[0-9a-f-]{36}$/i.test(checkoutId)) {
+    return { state: "error", message: "No encontramos esta contratación." };
+  }
+
+  // El cobro tiene que ser DE ESTA EMPRESA. Sin esto, conocer un identificador
+  // ajeno permitiría activar el plan de otra.
+  const supabase = await createServerClient();
+  const { data: mio } = await supabase
+    .from("billing_one_time_checkouts")
+    .select("id").eq("id", checkoutId)
+    .eq("organization_id", quien.organizationId).maybeSingle();
+  if (!mio) return { state: "error", message: "No encontramos esta contratación." };
+
+  const { verifyOneTimeCheckout } = await import("@/lib/db/one-time-checkout");
+  const r = await verifyOneTimeCheckout(checkoutId);
+  if (!r.ok) return { state: "error", message: r.message };
+  if (!r.settled) return { state: "pending", message: r.message };
+
+  revalidatePath("/settings/billing");
+  revalidatePath("/dashboard");
+  return { state: "activated" };
+}
+
+/** El origen real de la petición, para construir la vuelta. */
+async function origenDePeticion(): Promise<string> {
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const declarado = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  if (declarado) return declarado.replace(/\/+$/, "");
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "";
+}
+
+/** Lo que verá quien pague, en su recibo. Sin claves internas. */
+function etiquetaDePlan(planCode: string, interval: string): string {
+  const plan = planCode === "extra" ? "Extra" : "Full";
+  const periodo = interval === "annual" ? "anual" : "mensual";
+  return `Trazaloop ${plan} · ${periodo}`;
+}

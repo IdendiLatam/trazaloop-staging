@@ -30,12 +30,20 @@
  * empresa o simplemente todavía no ha pagado. Son tres conversaciones
  * distintas.
  */
+import type { BillingPaymentState } from "@/lib/billing/provider";
 
 /** El pago tal y como lo devolvió el proveedor, ya normalizado. */
 export type ObservedPayment = {
   providerPaymentId: string;
-  /** Estado canónico del producto, no la palabra cruda del proveedor. */
-  canonicalStatus: "approved" | "pending" | "declined" | "failed" | "refunded" | null;
+  /**
+   * Estado canónico del producto, no la palabra cruda del proveedor.
+   *
+   * Se reutiliza `BillingPaymentState` en vez de escribir aquí la lista.
+   * Escribirla a mano dejó fuera `partially_refunded` y `manual_review`, y un
+   * subconjunto inventado de una lista canónica solo puede envejecer mal:
+   * cuando nazca un estado nuevo, este módulo tiene que dejar de compilar.
+   */
+  canonicalStatus: BillingPaymentState | null;
   /** En unidades MÍNIMAS. La conversión la hace quien habla con la pasarela. */
   amountMinor: number | null;
   currency: string | null;

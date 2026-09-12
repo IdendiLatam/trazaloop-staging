@@ -2611,7 +2611,13 @@ const FRONTERA_MERCADOPAGO = [
   // entorno y de qué aplicación viene un objeto no es presentar la pasarela
   // como integrada, es negarse a conciliar lo que no es nuestro.
   "lib/billing/mercadopago/identity.ts",
-  "lib/billing/providers/mercadopago.ts",
+    // PROD-LAUNCH-01B · El registro del pago único. Existe PARA QUE ESTA LISTA
+  // DEJE DE CRECER: es el único traductor de «código de proveedor» a
+  // adaptador, así que el servicio de cobro, las acciones y las pantallas
+  // quedan agnósticos. Ensanchar la frontera una vez, aquí, en lugar de un
+  // fichero cada vez que algo necesite cobrar.
+  "lib/billing/providers/one-time-registry.ts",
+"lib/billing/providers/mercadopago.ts",
 ];
 
 check("53. Mercado Pago no se presenta como integrado", () => {

@@ -177,6 +177,12 @@ const FRONTERA_PASARELA = [
   // qué entorno y de qué aplicación viene un objeto es parte de la frontera de
   // la pasarela, no del modelo comercial de PE-04.
   "lib/billing/mercadopago/identity.ts",
+  // PROD-LAUNCH-01B · El registro del pago único. Existe PARA QUE ESTA LISTA
+  // DEJE DE CRECER: es el único traductor de «código de proveedor» a
+  // adaptador, así que el servicio de cobro, las acciones y las pantallas
+  // quedan agnósticos. Ensanchar la frontera una vez, aquí, en lugar de un
+  // fichero cada vez que algo necesite cobrar.
+  "lib/billing/providers/one-time-registry.ts",
   "lib/billing/providers/mercadopago.ts",
 ];
 

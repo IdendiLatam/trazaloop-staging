@@ -351,3 +351,130 @@ export async function getRenewalOperationsAction(): Promise<{
   ]);
   return { rows, alerts };
 }
+
+// ---------------------------------------------------------------------------
+// PROD-LAUNCH-01B · Registrar un pago hecho fuera de Trazaloop
+// ---------------------------------------------------------------------------
+//
+// El carril de la transferencia, el PSE y el efectivo, mientras el cobro en
+// línea no está disponible para todo el mundo.
+//
+// LO QUE ESTO NO ES: un botón que ponga «plan = full». Un derecho sin pago ni
+// periodo es un regalo que nadie podrá reconciliar después, y a los tres meses
+// nadie sabe quién pagó qué. Esta acción produce EXACTAMENTE la misma verdad
+// canónica que el pago en línea —pago, suscripción, periodo liquidado y
+// derecho—; lo único distinto es que el proveedor se llama `manual` y que
+// lleva firma: quién lo registró, con qué evidencia y por qué.
+//
+// La base vuelve a comprobarlo todo. Esto no es la barrera, es la pantalla.
+
+/** Los mensajes de la base, traducidos a lo que se lee en la consola. */
+const MANUAL_MESSAGE: Record<string, string> = {
+  NOT_AUTHORIZED: SOLO_ADMINISTRACION,
+  MANUAL_REFERENCE_REQUIRED:
+    "Escribe el número de la transferencia, factura o recibo.",
+  MANUAL_REASON_REQUIRED:
+    "Escribe por qué se registra este pago (al menos diez caracteres).",
+  MANUAL_PAID_AT_REQUIRED: "Falta la fecha en la que se pagó.",
+  MANUAL_PAID_AT_IN_FUTURE:
+    "La fecha de pago está en el futuro. Un pago que aún no ocurrió no se registra.",
+  FX_RATE_UNAVAILABLE:
+    "No hay tasa de cambio vigente, así que no se puede calcular el precio. "
+    + "Cárgala en el catálogo antes de registrar el pago.",
+  PLAN_PRICE_NOT_CONFIGURED:
+    "Ese plan no tiene precio publicado para esa periodicidad.",
+  RENEWAL_PERIOD_UNAVAILABLE:
+    "No se pudo abrir el periodo siguiente de esta empresa. Revisa su suscripción.",
+  SETTLEMENT_REFUSED:
+    "El asentamiento no se completó y no se registró ningún pago.",
+};
+
+function mensajeManual(bruto: string): string {
+  for (const [clave, texto] of Object.entries(MANUAL_MESSAGE)) {
+    if (bruto.includes(clave)) return texto;
+  }
+  return "No fue posible registrar el pago. No se cambió nada.";
+}
+
+export type ManualPaymentState = CommercialActionState & {
+  /** Para que la consola pueda enlazar lo que acaba de crear. */
+  paymentId?: string;
+  alreadyRecorded?: boolean;
+};
+
+/**
+ * Registra un pago externo y activa el plan por la puerta canónica.
+ *
+ * Idempotente por la REFERENCIA: registrar dos veces el mismo comprobante no
+ * cobra dos meses. Eso importa más de lo que parece — quien registra a mano
+ * suele hacerlo desde una lista, y una lista se repasa dos veces.
+ */
+export async function recordManualPaymentAction(
+  _prev: ManualPaymentState,
+  formData: FormData
+): Promise<ManualPaymentState> {
+  const denegado = await exigirSuperadmin();
+  if (denegado) return { error: denegado };
+
+  const organizationId = String(formData.get("organization_id") ?? "");
+  const planCode = String(formData.get("plan_code") ?? "");
+  const interval = String(formData.get("billing_interval") ?? "");
+  const reference = String(formData.get("reference") ?? "").trim();
+  const paidAt = String(formData.get("paid_at") ?? "").trim();
+  const evidence = String(formData.get("evidence") ?? "").trim() || null;
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  if (!organizationId) return { error: "Falta la empresa." };
+  if (planCode !== "full" && planCode !== "extra") {
+    return { error: "Elige un plan de pago: Full o Extra." };
+  }
+  if (interval !== "monthly" && interval !== "annual") {
+    return { error: "Elige la periodicidad: mensual o anual." };
+  }
+  if (reference.length < 3) {
+    return { error: MANUAL_MESSAGE.MANUAL_REFERENCE_REQUIRED };
+  }
+  if (reason.length < 10) return { error: MANUAL_MESSAGE.MANUAL_REASON_REQUIRED };
+  if (!paidAt) return { error: MANUAL_MESSAGE.MANUAL_PAID_AT_REQUIRED };
+  // Confirmación escrita, igual que en la transición comercial: registrar un
+  // cobro es una escritura financiera y no se hace por un clic despistado.
+  if (formData.get("confirm") !== "registrar") {
+    return { error: "Escribe «registrar» para confirmar el pago." };
+  }
+
+  // LA FECHA ELEGIDA ES UN DÍA, NO UN INSTANTE. Se cierra al final de ese día
+  // en la zona de la empresa, como en `assignPlanAction`: interpretarla como
+  // medianoche UTC convertía «pagó hoy» en un instante futuro en Colombia.
+  const supabase = await createServerClient();
+  const { data: zonaCruda } = await supabase.rpc("organization_business_timezone", {
+    p_organization_id: organizationId,
+  });
+  const zona = typeof zonaCruda === "string" && zonaCruda ? zonaCruda : "UTC";
+  const pagadoISO = finDelDiaEnZona(paidAt, zona);
+  if (pagadoISO === null) return { error: "La fecha de pago no es una fecha válida." };
+  // Y si ese final de día todavía no ha llegado, se usa AHORA: la base rechaza
+  // un pago del futuro, y con razón.
+  const ahora = new Date().toISOString();
+  const pagado = pagadoISO > ahora ? ahora : pagadoISO;
+
+  const { data, error } = await supabase.rpc("billing_record_manual_payment", {
+    p_organization_id: organizationId,
+    p_plan_code: planCode,
+    p_billing_interval: interval,
+    p_reference: reference,
+    p_paid_at: pagado,
+    p_evidence: evidence,
+    p_reason: reason,
+  });
+  if (error) return { error: mensajeManual(error.message ?? "") };
+
+  const r = (data ?? {}) as Record<string, unknown>;
+  revalidatePath(`/platform/organizations/${organizationId}`);
+  revalidatePath("/platform/plans");
+  return {
+    error: null,
+    success: true,
+    paymentId: typeof r.payment_id === "string" ? r.payment_id : undefined,
+    alreadyRecorded: r.outcome === "already_recorded",
+  };
+}
