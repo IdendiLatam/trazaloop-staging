@@ -9,6 +9,7 @@ import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
 import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
 import { describeBillingState } from "@/lib/domain/billing-state";
+import { renewalCopyFor } from "@/lib/domain/billing-renewal-copy";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
 import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
@@ -72,6 +73,8 @@ export default async function BillingPage({
 
   // Bajar de plan puede dejar a la empresa por encima del espacio del plan
   // nuevo. Las dos cifras se traen ANTES de que nadie confirme nada.
+  const copiaRenovacion = renewalCopyFor(estado?.renewalMode ?? null);
+
   const revisionDestino = estado?.planCode === "extra"
     ? ((catalogo ?? []).find((p) => p.planCode === "full")?.planRevisionId ?? null)
     : null;
@@ -124,7 +127,11 @@ export default async function BillingPage({
             <dd>{situacion.title}</dd>
             {estado.renewsAt ? (
               <>
-                <dt className="text-ink-soft">Siguiente cobro</dt>
+                {/* 01B.9 · «Siguiente cobro» solo cuando alguien va a cobrar.
+                    Con pago único la fecha es un vencimiento, y prometer un
+                    cargo que no llega hace que la gente se despreocupe justo
+                    antes de quedarse sin plan. */}
+                <dt className="text-ink-soft">{copiaRenovacion.dateLabel}</dt>
                 <dd>{longDate(estado.renewsAt)}</dd>
               </>
             ) : null}
@@ -134,6 +141,9 @@ export default async function BillingPage({
             La empresa está en el plan de entrada. No hay ningún cobro programado.
           </p>
         )}
+        {estado?.hasSubscription && copiaRenovacion.note ? (
+          <p className="pt-2 text-sm text-ink-soft">{copiaRenovacion.note}</p>
+        ) : null}
       </section>
 
       {esAdministrador && cobroEnCurso !== null ? (
@@ -189,6 +199,7 @@ export default async function BillingPage({
             currentPeriodEnd={estado.currentPeriodEnd}
             cancelScheduled={estado.cancelAtPeriodEnd}
             scheduledPlanLabel={estado.downgradeScheduled ? "el plan programado" : null}
+            offersCancellation={copiaRenovacion.offersCancellation}
             storageUsedBytes={espacio?.usedBytes ?? null}
             targetStorageBytes={espacio?.targetQuotaBytes ?? null}
           />

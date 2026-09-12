@@ -131,6 +131,8 @@ export type OrganizationBillingState = {
   chargeCurrency: string | null;
   currentPeriodEnd: string | null;
   renewsAt: string | null;
+  /** 0193 · Quién renueva: manual, platform o provider. `null` = sin leer. */
+  renewalMode: string | null;
   cancelAtPeriodEnd: boolean;
   graceUntil: string | null;
   lastPaymentStatus: string | null;
@@ -179,6 +181,7 @@ export async function getOrganizationBillingState(
     chargeCurrency: str(r.charge_currency),
     currentPeriodEnd: str(r.current_period_end),
     renewsAt: str(r.renews_at),
+    renewalMode: str(r.renewal_mode),
     cancelAtPeriodEnd: r.cancel_at_period_end === true,
     graceUntil: str(r.grace_until),
     manualReview: enDuda,

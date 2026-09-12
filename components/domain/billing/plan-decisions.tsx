@@ -32,7 +32,7 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
  */
 export function PlanDecisions({
   planCode, billingInterval, currentPeriodEnd, cancelScheduled, scheduledPlanLabel,
-  storageUsedBytes, targetStorageBytes,
+  storageUsedBytes, targetStorageBytes, offersCancellation = true,
 }: {
   planCode: string | null;
   billingInterval: string | null;
@@ -41,6 +41,15 @@ export function PlanDecisions({
   scheduledPlanLabel: string | null;
   storageUsedBytes: number | null;
   targetStorageBytes: number | null;
+  /**
+   * 01B.9 · ¿Hay una recurrencia que cancelar?
+   *
+   * Con pago único no la hay: el plan vence solo. Ofrecer «Cancelar el plan»
+   * ahí invita a cancelar algo inexistente, y peor: hace pensar que cancelando
+   * se recupera dinero. Los modos con cobro programado —platform, provider—
+   * lo siguen ofreciendo igual que antes.
+   */
+  offersCancellation?: boolean;
 }) {
   const [pendiente, empezar] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -116,9 +125,11 @@ export function PlanDecisions({
               Pasar a facturación {nombrePeriodicidad}
             </Button>
           ) : null}
-          <Button type="button" onClick={() => setConfirmando("cancelar")}>
-            Cancelar el plan
-          </Button>
+          {offersCancellation ? (
+            <Button type="button" onClick={() => setConfirmando("cancelar")}>
+              Cancelar el plan
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-3 rounded-md border border-hairline bg-canvas p-3">

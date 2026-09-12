@@ -100,6 +100,19 @@ export const SISTEMA_GROUP: ModuleNavGroup = {
   items: [
     { label: "Equipo", href: "/team" },
     { label: "Datos de empresa", href: "/settings/company" },
+    // PROD-LAUNCH-01B.9 · El plan se llega a ver desde aquí, y no solo
+    // escribiendo la URL.
+    //
+    // Faltaba, y la consecuencia era la peor posible: una empresa SIN módulos
+    // activos —Free, o con el Demo vencido, o con el Full caducado— no tenía
+    // ningún camino en la interfaz hasta la pantalla donde se contrata. Es
+    // decir, justo quien necesita comprar era quien no podía llegar.
+    //
+    // Va en el grupo transversal porque el acceso a facturación depende de ser
+    // miembro autorizado de la empresa, no de tener contratado un módulo.
+    // Ponerlo dentro de un módulo lo haría desaparecer para quien no lo tenga,
+    // que es el mismo error que QUALITY-01.1 corrigió con «Onboarding».
+    { label: "Plan y facturación", href: "/settings/billing" },
     { label: "Mi perfil", href: "/settings/profile" },
     // PE-02B3 · La ayuda es TRANSVERSAL: no pertenece a Quality, ni a PCR, ni
     // a Textiles. Ponerla dentro de un módulo la haría desaparecer para quien
