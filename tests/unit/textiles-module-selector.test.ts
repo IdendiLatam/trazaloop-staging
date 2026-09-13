@@ -188,12 +188,34 @@ check("10. Sin 'Próximamente' engañoso para bloqueos reales; solo para módulo
   // quién lo deshabilitó ni si se perdían datos, y «Sin asignar» es vocabulario
   // de administración. La invariante que esta prueba protege —cada bloqueo con
   // su etiqueta PROPIA, y «Próximamente» solo para lo que no existe— no cambia.
-  assert(
-    messages.includes('demo_expired: "Prueba finalizada"') &&
-      messages.includes('disabled: "Acceso suspendido"') &&
-      messages.includes('not_assigned: "No incluido"'),
-    "los bloqueos reales no deben rotularse 'Próximamente'"
+  //
+  // PROD-LAUNCH-01C.4 · La comprobación deja de fijar los literales y pasa a
+  // comprobar la invariante que dice su propio nombre. `demo_expired` se
+  // renombró a «Solo consulta» —desde este tramo se ENTRA a un módulo con la
+  // prueba vencida, y «Prueba finalizada» describía lo que se acabó en vez de
+  // lo que queda—, y clavar la cadena habría obligado a elegir entre el texto
+  // correcto y la prueba verde. Lo que importa es que cada bloqueo tenga
+  // etiqueta PROPIA y que ninguno se disfrace de «Próximamente».
+  // SOLO el bloque de etiquetas. Barrer el fichero entero recogía también
+  // DERIVED_STATE_HINT —que tiene las mismas claves— y `fromEntries` se quedaba
+  // con la última, así que la comprobación leía las pistas creyendo que leía
+  // las etiquetas y no se enteraba de nada.
+  const bloque = /DERIVED_STATE_LABEL: Record<DerivedModuleState, string> = \{([\s\S]*?)^\};/m
+    .exec(messages);
+  assert(bloque !== null, "no se encontró el bloque de etiquetas");
+  const etiquetas = Object.fromEntries(
+    [...bloque![1].matchAll(/^\s{2}(\w+): "([^"]+)",$/gm)].map((m) => [m[1], m[2]])
   );
+  for (const estado of ["demo_expired", "disabled", "not_assigned"]) {
+    const e = etiquetas[estado];
+    assert(Boolean(e), `${estado} se quedó sin etiqueta propia`);
+    assert(e !== "Próximamente",
+      `${estado} se rotula 'Próximamente': eso es un bloqueo real disfrazado de módulo futuro`);
+    assert(e !== etiquetas.coming_soon,
+      `${estado} comparte etiqueta con coming_soon`);
+  }
+  const distintas = new Set(["demo_expired", "disabled", "not_assigned"].map((s) => etiquetas[s]));
+  assert(distintas.size === 3, "dos bloqueos distintos comparten la misma etiqueta");
 });
 
 check("11. La tarjeta del módulo se llama Trazaloop Textiles (catálogo canónico)", () => {

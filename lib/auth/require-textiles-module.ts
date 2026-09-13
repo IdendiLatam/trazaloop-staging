@@ -29,19 +29,27 @@ import { moduleAccessDeniedMessage } from "@/lib/modules/messages";
  * Se aplica en app/(app)/(shell)/textiles/layout.tsx: TODA ruta bajo
  * /textiles queda protegida por defecto.
  */
-export async function requireTextilesModule(): Promise<ActiveOrganization> {
+export async function requireTextilesModule(): Promise<ModuleEntry> {
   // El kill switch se evalúa primero y de forma privada (404 para todos).
   if (!isTextilesModuleEnabled()) notFound();
 
   const org = await requireActiveOrg();
   const access = await resolveModuleAccessForOrg(org.organizationId, TEXTILES_MODULE_CODE);
-  if (!access.allowed) {
-    // Con el flag encendido, un bloqueo comercial (demo vencido, deshabilitado
-    // o sin asignación) se comunica de forma coherente en el selector.
+  if (!access.retainedRead) {
+    // Deshabilitado o sin asignación: se comunica en el selector.
+    //
+    // PROD-LAUNCH-01C.4 · Una prueba VENCIDA ya no cae aquí: entra en modo
+    // consulta. Ver la nota de `ModuleEntry`.
     redirect("/modules");
   }
-  return org;
+  return { ...org, readOnly: !access.allowed };
 }
+
+/**
+ * PROD-LAUNCH-01C.4 · Ver la nota en `require-quality-module.ts`: la
+ * organización activa de siempre, más si se entra a trabajar o a consultar.
+ */
+export type ModuleEntry = ActiveOrganization & { readOnly: boolean };
 
 export const TEXTILES_MODULE_NOT_AVAILABLE_ERROR =
   "El módulo Trazaloop Textiles no está habilitado para esta empresa.";
@@ -50,7 +58,21 @@ export const TEXTILES_MODULE_NOT_AVAILABLE_ERROR =
  * Variante para SERVER ACTIONS (T2/T3): misma regla canónica, error seguro en
  * lugar de 404/redirect (una action no debe responder notFound ni redirect).
  */
-export async function requireTextilesForAction(): Promise<
+/**
+ * PROD-LAUNCH-01C.4 · `intent` distingue la acción que CREA de la que solo
+ * lee, descarga o exporta.
+ *
+ * Hacía falta porque estas guardas resultaron proteger sobre todo descargas y
+ * exportaciones —los PDF y CSV de los documentos, el dossier de cálculo, la
+ * matriz de evidencias—, y con el permiso vencido eso es exactamente lo que
+ * una empresa tiene derecho a hacer con su información: llevársela.
+ *
+ * Por omisión es `"mutate"`: una llamada que no diga nada se comporta como
+ * antes. Solo quien declara `"read"` obtiene el paso con permiso vencido.
+ */
+export async function requireTextilesForAction(
+  options: { intent?: "read" | "mutate" } = {}
+): Promise<
   { org: ActiveOrganization; error: null } | { org: null; error: string }
 > {
   const org = await requireActiveOrg();
@@ -58,6 +80,10 @@ export async function requireTextilesForAction(): Promise<
     return { org: null, error: TEXTILES_MODULE_NOT_AVAILABLE_ERROR };
   }
   const access = await resolveModuleAccessForOrg(org.organizationId, TEXTILES_MODULE_CODE);
+  const soloConsulta = !access.allowed && access.retainedRead;
+  if (options.intent === "read" && soloConsulta) {
+    return { org, error: null };
+  }
   if (!access.allowed) {
     if (access.reason === "not_assigned" || access.reason === "globally_disabled") {
       return { org: null, error: TEXTILES_MODULE_NOT_AVAILABLE_ERROR };

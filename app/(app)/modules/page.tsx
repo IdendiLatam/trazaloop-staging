@@ -42,9 +42,10 @@ import {
 import { resolveModuleEntryHref, type CommercialModule, type CommercialModuleKey }
   from "@/lib/modules/catalog";
 import type { DerivedModuleState } from "@/lib/modules/access";
-import { isEnterableState } from "@/lib/modules/messages";
+import { ACTIVATE_FULL_HREF, ACTIVATE_FULL_LABEL, isReadableState } from "@/lib/modules/messages";
 import {
-  ENTRY_COPY, MODULE_ACCESS_FOOTNOTE, NO_ACTIVE_MODULES_BODY,
+  ENTRY_COPY, FREE_RETAINED_BODY, FREE_RETAINED_TITLE,
+  MODULE_ACCESS_FOOTNOTE, NO_ACTIVE_MODULES_BODY,
   NO_ACTIVE_MODULES_TITLE, PLATFORM_TAGLINE,
   RESOLUTION_FAILED_BODY, RESOLUTION_FAILED_TITLE, enterLabel, heroModule,
   overviewOf, specializedModules,
@@ -87,7 +88,10 @@ export default async function ModulesPortalPage() {
       expiresAt: status?.access.expiresAt ?? null,
       href: resolveModuleEntryHref({
         mod,
-        isEnterable: isEnterableState(state),
+        // PROD-LAUNCH-01C.4 · Se entra a lo que se puede LEER. Preguntar por
+        // `isEnterableState` aquí dejaba sin enlace justo a los módulos donde
+        // la empresa tiene su trabajo guardado.
+        isEnterable: isReadableState(state),
         runtimeHref: runtimeHrefByKey[mod.key],
       }),
       enterLabel: enterLabel(mod),
@@ -138,6 +142,21 @@ export default async function ModulesPortalPage() {
                 mano en esta pantalla y solo en esta: es la que se ve siempre, y
                 es una, no ciento cuarenta y siete. */}
             <PageTutorialAction />
+            {/* PROD-LAUNCH-01C.4 · Facturación, aquí.
+                01B.9 la puso en el grupo transversal de la barra lateral, y esa
+                barra vive DENTRO del shell — al que no se llega sin entrar a un
+                módulo. Justo la empresa que necesita comprar, la que se quedó
+                sin ninguno, era la única que no podía llegar. El acceso a
+                facturación depende de ser miembro autorizado, no de tener un
+                módulo, así que se pinta sin condición. */}
+            {activeOrg ? (
+              <Link
+                href="/settings/billing"
+                className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
+              >
+                Plan y facturación
+              </Link>
+            ) : null}
             <Link
               href="/faq"
               className="text-sm font-medium text-ink-soft hover:text-loop hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loop"
@@ -186,14 +205,29 @@ export default async function ModulesPortalPage() {
           <p className="mt-1 text-sm text-ink-soft">{RESOLUTION_FAILED_BODY}</p>
         </section>
       ) : activeOrg && !resumen.hasEnterable ? (
+        /* PROD-LAUNCH-01C.4 · Dos situaciones que se veían iguales y no lo son.
+           Si queda algo que consultar, lo primero que hay que decir es eso —es
+           lo que quiere saber quien acaba de quedarse sin prueba— y ofrecer la
+           salida. «Esta empresa no tiene módulos activos» solo se queda para
+           quien de verdad no tiene nada. */
         <section
           aria-labelledby="sin-modulos"
           className="rounded-lg border border-hairline bg-surface p-4"
         >
           <h2 id="sin-modulos" className="text-sm font-semibold">
-            {NO_ACTIVE_MODULES_TITLE}
+            {resumen.hasReadable ? FREE_RETAINED_TITLE : NO_ACTIVE_MODULES_TITLE}
           </h2>
-          <p className="mt-1 text-sm text-ink-soft">{NO_ACTIVE_MODULES_BODY}</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {resumen.hasReadable ? FREE_RETAINED_BODY : NO_ACTIVE_MODULES_BODY}
+          </p>
+          {resumen.hasReadable ? (
+            <Link
+              href={ACTIVATE_FULL_HREF}
+              className="mt-3 inline-flex w-fit items-center rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              {ACTIVATE_FULL_LABEL}
+            </Link>
+          ) : null}
         </section>
       ) : null}
 

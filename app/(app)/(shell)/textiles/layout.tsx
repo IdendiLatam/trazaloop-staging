@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { requireTextilesModule } from "@/lib/auth/require-textiles-module";
 import { TEXTILES_SHELL_MODULE } from "@/lib/modules/registry";
+import { ModuleReadOnlyNotice } from "@/components/domain/modules/read-only-notice";
 
 export const metadata: Metadata = {
   title: {
@@ -40,6 +41,7 @@ export default async function TextilesLayout({
         <span className="text-sm font-semibold">{TEXTILES_SHELL_MODULE.name}</span>
         <span className="text-xs text-ink-soft">· {org.organizationName}</span>
       </div>
+      {org.readOnly ? <ModuleReadOnlyNotice moduleName={TEXTILES_SHELL_MODULE.name} /> : null}
       {children}
     </div>
   );

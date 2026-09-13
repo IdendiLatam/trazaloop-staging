@@ -78,7 +78,27 @@ export type ModuleAccessInput = {
 };
 
 export type ModuleAccessDecision = {
+  /**
+   * ¿Puede MUTAR? Es la puerta de siempre, y su significado NO ha cambiado:
+   * todo lo que la consultaba antes sigue recibiendo exactamente la misma
+   * respuesta. Ampliarla habría abierto en silencio ciento y pico de puertas.
+   */
   allowed: boolean;
+  /**
+   * PROD-LAUNCH-01C.4 · ¿Puede CONSULTAR lo que ya creó?
+   *
+   * Una prueba vencida no es lo mismo que un módulo que nunca se tuvo. En el
+   * primer caso hay trabajo dentro —procesos, lotes, evidencias— y quitarle a
+   * una empresa el acceso a su propia información porque se le acabó la prueba
+   * es cobrar por devolver lo que ya era suyo. Vence el permiso de CREAR; no
+   * el de MIRAR.
+   *
+   * Es TRUE solo cuando existe una asignación real cuyo permiso expiró. Nunca
+   * para `not_assigned` —un módulo que la empresa jamás tuvo no se regala—, ni
+   * para `disabled` —eso es una decisión administrativa, no un vencimiento—,
+   * ni ante un fallo de lectura, donde no se sabe nada y se falla cerrado.
+   */
+  retainedRead: boolean;
   reason: ModuleAccessReason;
   derivedState: DerivedModuleState;
   accessMode: ModuleAccessMode | null;
@@ -126,6 +146,7 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   if (mode === "full" || mode === "extra") {
     return {
       allowed: true,
+      retainedRead: true,
       reason: "ok",
       derivedState: mode,
       accessMode: mode,
@@ -140,6 +161,7 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   if (expiresAt === null) {
     return {
       allowed: true,
+      retainedRead: true,
       reason: "ok",
       derivedState: "demo_permanent",
       accessMode: "demo",
@@ -153,6 +175,9 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   if (expired) {
     return {
       allowed: false,
+      // La prueba caducó, pero la empresa entró aquí y trabajó. Lo que hay
+      // dentro es suyo y se sigue consultando.
+      retainedRead: true,
       reason: "demo_expired",
       derivedState: "demo_expired",
       accessMode: "demo",
@@ -163,6 +188,7 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   }
   return {
     allowed: true,
+    retainedRead: true,
     reason: "ok",
     derivedState: "demo_active",
     accessMode: "demo",
@@ -179,6 +205,10 @@ function deny(
 ): ModuleAccessDecision {
   return {
     allowed: false,
+    // Fallar cerrado: solo el vencimiento conserva la consulta, y ese caso no
+    // pasa por aquí. Un motivo nuevo que se añada nacerá sin consulta retenida,
+    // que es el lado correcto en el que equivocarse.
+    retainedRead: false,
     reason,
     derivedState,
     accessMode,

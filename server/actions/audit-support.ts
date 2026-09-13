@@ -141,7 +141,7 @@ export async function getAuditSupportDashboardAction() {
  *  Solo datos de la empresa activa (el dossier ya lo garantiza). */
 export async function exportCalculationDossierJsonAction(calculationId: string) {
   // T9F.1: una exportación CPR también exige acceso comercial vigente.
-  const gate = await requireCprForAction();
+  const gate = await requireCprForAction({ intent: "read" });
   if (gate.error !== null) return { data: null, error: gate.error };
   const { data, error } = await buildDossierBundle(calculationId);
   if (error || !data) return { data: null, error };
@@ -195,7 +195,7 @@ export async function exportEvidenceMatrixCsvAction(
   calculationId?: string
 ) {
   // T9F.1: una exportación CPR también exige acceso comercial vigente.
-  const gate = await requireCprForAction();
+  const gate = await requireCprForAction({ intent: "read" });
   if (gate.error !== null) return { data: null, error: gate.error };
   const { data: rows, error } = await getOutputBatchEvidenceMatrixAction(
     outputBatchId,

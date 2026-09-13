@@ -13,7 +13,7 @@ import {
   getCommercialModuleByCode,
   isFunctionalModuleCode,
 } from "@/lib/modules/catalog";
-import { moduleAccessDeniedMessage } from "@/lib/modules/messages";
+import { moduleAccessDeniedMessage, RETAINED_READ_DENIED_MESSAGE } from "@/lib/modules/messages";
 import {
   hasStorageAvailable,
   buildResourceLimitMessage,
@@ -79,12 +79,27 @@ type ModuleGateOk = {
   organizationId: string;
   accessMode: "demo" | "full" | "extra";
   moduleName: string;
+  /**
+   * PROD-LAUNCH-01C.4 · Se pasó, pero solo a consultar: hay asignación y su
+   * permiso venció. Solo puede ser `true` si el llamador lo pidió
+   * explícitamente con `allowRetainedRead`.
+   */
+  readOnly: boolean;
 };
 
 /** (1)–(4): organización activa + acceso comercial del módulo + estado
- *  administrativo de cuenta. Nunca falla abierto en el ACCESO. */
+ *  administrativo de cuenta. Nunca falla abierto en el ACCESO.
+ *
+ *  PROD-LAUNCH-01C.4 · `allowRetainedRead` deja pasar el vencimiento —y SOLO
+ *  el vencimiento— marcando el paso como consulta. Es opcional y por omisión
+ *  falso a propósito: de los cinco sitios que usan esta puerta, cuatro deciden
+ *  sobre creación (límites de recurso, funciones del plan, cuota de
+ *  almacenamiento, tamaño máximo por archivo) y deben seguir denegando igual
+ *  que antes. Solo `checkModuleCanMutate` sabe distinguir por intención, y es
+ *  el único que lo pide. */
 async function resolveModuleGate(
-  moduleCode: string
+  moduleCode: string,
+  options: { allowRetainedRead?: boolean } = {}
 ): Promise<{ ok: ModuleGateOk | null; error: string | null }> {
   // moduleCode arbitrario o no funcional → rechazo inmediato (nunca se cae
   // al plan general).
@@ -94,7 +109,9 @@ async function resolveModuleGate(
   const org = await requireActiveOrg();
   const mod = getCommercialModuleByCode(moduleCode);
   const access = await resolveModuleAccessForOrg(org.organizationId, moduleCode);
-  if (!access.allowed || access.accessMode === null) {
+  const soloConsulta =
+    options.allowRetainedRead === true && !access.allowed && access.retainedRead;
+  if ((!access.allowed && !soloConsulta) || access.accessMode === null) {
     return {
       ok: null,
       error: moduleAccessDeniedMessage(mod?.name ?? "este módulo", access.reason),
@@ -113,6 +130,7 @@ async function resolveModuleGate(
       organizationId: org.organizationId,
       accessMode: access.accessMode,
       moduleName: mod?.name ?? moduleCode,
+      readOnly: soloConsulta,
     },
     error: null,
   };
@@ -141,12 +159,34 @@ const COMMERCIAL_UNVERIFIABLE_MESSAGE =
   "No se pudo comprobar lo que tu empresa tiene contratado ahora mismo. No se guardó nada; "
   + "vuelve a intentarlo en un momento.";
 
+/**
+ * PROD-LAUNCH-01C.4 · Lo único que se puede hacer con un permiso vencido.
+ *
+ * Mirar, descargar, borrar lo propio, y las operaciones de cuenta que no son
+ * negocio. Nada que CREE o MODIFIQUE información, y tampoco `ai_execution`,
+ * que es consumo premium.
+ *
+ * Es una lista CERRADA y por eso está escrita en positivo: una intención nueva
+ * que alguien añada mañana nacerá bloqueada en modo consulta, que es el lado
+ * correcto en el que equivocarse.
+ */
+const INTENCIONES_PERMITIDAS_EN_CONSULTA: readonly MutationIntent[] = [
+  "read",
+  "delete_or_reduce",
+  "essential_account_operation",
+];
+
 export async function checkModuleCanMutate(
   moduleCode: string,
   intent: MutationIntent = "business_increase_or_modify"
 ): Promise<CheckResult> {
-  const gate = await resolveModuleGate(moduleCode);
+  const gate = await resolveModuleGate(moduleCode, { allowRetainedRead: true });
   if (gate.ok === null) return { allowed: false, error: gate.error };
+
+  // El permiso del módulo venció. Se entra a consultar; crear y editar, no.
+  if (gate.ok.readOnly && !INTENCIONES_PERMITIDAS_EN_CONSULTA.includes(intent)) {
+    return { allowed: false, error: RETAINED_READ_DENIED_MESSAGE };
+  }
 
   // PE-04B4 · EJE COMERCIAL. En modo consulta la empresa no crea ni modifica su
   // sistema de gestión, pero SÍ lee, descarga y BORRA. Por eso la puerta

@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { QUALITY_SHELL_MODULE } from "@/lib/modules/registry";
+import { ModuleReadOnlyNotice } from "@/components/domain/modules/read-only-notice";
 
 export const metadata: Metadata = {
   title: {
@@ -35,6 +36,9 @@ export default async function QualityLayout({
         <span className="text-sm font-semibold">{QUALITY_SHELL_MODULE.name}</span>
         <span className="text-xs text-ink-soft">· {org.organizationName}</span>
       </div>
+      {/* PROD-LAUNCH-01C.4 · En el layout, así que aparece en TODA pantalla del
+          módulo sin que ninguna tenga que acordarse de pintarlo. */}
+      {org.readOnly ? <ModuleReadOnlyNotice moduleName={QUALITY_SHELL_MODULE.name} /> : null}
       {children}
     </div>
   );

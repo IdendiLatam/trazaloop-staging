@@ -299,7 +299,15 @@ console.log("\nTrazaloop · maestro de documentos: aislamiento entre empresas\n"
 check("24. CSV no incluye datos de otra organización", () => {
   // T9F.1: la organización sigue saliendo SOLO de la sesión — ahora vía
   // requireCprForAction(), que internamente ejecuta requireActiveOrg().
-  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireCprForAction()");
+  //
+  // PROD-LAUNCH-01C.4 · El anclaje ya no fija la lista de argumentos. Exportar
+  // es una LECTURA y desde este tramo se declara como tal —para que una empresa
+  // con la prueba vencida pueda llevarse su información—, así que la llamada
+  // pasó a `requireCprForAction({ intent: "read" })`. Lo que esta comprobación
+  // defiende es que la empresa salga de la guarda y no del cliente, y eso lo
+  // hacen las dos formas igual; pinchar el paréntesis vacío solo ataba la
+  // prueba a una firma.
+  assertCallsWithin("../../server/actions/trazadocs-master.ts", "exportDocumentMasterCsvAction", "requireCprForAction(");
   const source = readSource("../../server/actions/trazadocs-master.ts");
   const fnStart = source.indexOf("export async function exportDocumentMasterCsvAction");
   const fnEnd = source.indexOf("\n}", fnStart);

@@ -32,7 +32,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ documentId: string }> }
 ) {
-  const access = await requireQualityForAction();
+  const access = await requireQualityForAction({ intent: "read" });
   if (access.org === null) {
     return NextResponse.json({ error: access.error }, { status: 403 });
   }

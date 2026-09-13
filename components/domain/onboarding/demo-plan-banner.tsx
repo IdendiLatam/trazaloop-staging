@@ -34,8 +34,8 @@ export function DemoPlanBanner({
   return (
     <div id="plan" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber/40 bg-amber/10 p-4 text-sm">
       <p className="text-amber">
-        Estás usando el plan Free. Puedes trabajar con los límites incluidos. Para ampliar
-        el acceso, contacta al equipo de Trazaloop desde el Centro de soporte.
+        Estás usando el plan Free. Puedes trabajar con los límites incluidos y consultar
+        toda la información que ya creaste. Para ampliar el acceso, activa Full.
       </p>
       <div className="flex shrink-0 gap-2">
         <Link
@@ -45,10 +45,10 @@ export function DemoPlanBanner({
           Ver límites del plan
         </Link>
         <Link
-          href="/support/new?category=plan"
+          href="/settings/billing"
           className="rounded-md bg-amber px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
         >
-          Crear ticket sobre plan
+          Activar Full
         </Link>
       </div>
     </div>

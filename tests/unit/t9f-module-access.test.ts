@@ -215,7 +215,16 @@ check("19. Todos los estados derivados tienen etiqueta; enterables correctos", (
   }
   assert(isEnterableState("demo_active") && isEnterableState("demo_permanent") && isEnterableState("full") && isEnterableState("extra"), "estados enterables faltan");
   assert(!isEnterableState("demo_expired") && !isEnterableState("disabled") && !isEnterableState("coming_soon") && !isEnterableState("not_assigned"), "estados NO enterables mal marcados");
-  assert(DERIVED_STATE_LABEL.demo_expired === "Prueba finalizada", "el vencido debe decir 'Prueba finalizada', no 'Deshabilitado'");
+  // PROD-LAUNCH-01C.4 · Lo que este renglón defiende —lo dice su propio
+  // mensaje— es que el vencimiento NO se confunda con una suspensión: son
+  // situaciones distintas y se comunican distinto. Fijaba además el literal
+  // «Prueba finalizada», que este tramo cambió a «Solo consulta» porque desde
+  // ahora SÍ se entra a un módulo con la prueba vencida. La invariante se
+  // conserva; la cadena concreta deja de estar clavada aquí.
+  assert(DERIVED_STATE_LABEL.demo_expired !== DERIVED_STATE_LABEL.disabled,
+    "el vencido y el deshabilitado comparten etiqueta: son cosas distintas");
+  assert(!/deshabilitad/i.test(DERIVED_STATE_LABEL.demo_expired),
+    `el vencido se rotula como deshabilitado: «${DERIVED_STATE_LABEL.demo_expired}»`);
 });
 
 check("20. Tiempo restante informativo (48 h → '2 días'; vencido → null)", () => {

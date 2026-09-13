@@ -7,7 +7,10 @@ import {
   DEMO_ACTIVE_PARTIAL_BODY,
   DEMO_ACTIVE_PARTIAL_TITLE,
   DEMO_BANNER_INTRO,
+  ACTIVATE_FULL_HREF,
+  ACTIVATE_FULL_LABEL,
   DEMO_EXPIRED_BANNER,
+  DEMO_EXPIRED_BANNER_BODY,
   DEMO_PARTIAL_BANNER_BODY,
   DEMO_PARTIAL_BANNER_TITLE,
   type DemoNoticeKind,
@@ -130,9 +133,7 @@ export function DemoTrialBanner({
         )}
 
         {notice === "all_expired" && (
-          <p className={bodyTone}>
-            Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.
-          </p>
+          <p className={bodyTone}>{DEMO_EXPIRED_BANNER_BODY}</p>
         )}
 
         {sharedExpiry && (
@@ -157,6 +158,16 @@ export function DemoTrialBanner({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        {/* PROD-LAUNCH-01C.4 · La salida, donde se lee el problema. NO inicia
+            ningún cobro: abre la pantalla de plan, y ahí se decide. */}
+        {(notice === "all_expired" || notice === "partial") && (
+          <Link
+            href={ACTIVATE_FULL_HREF}
+            className="rounded-md bg-loop px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+          >
+            {ACTIVATE_FULL_LABEL}
+          </Link>
+        )}
         {showModulesLink && (
           <Link
             href="/modules"

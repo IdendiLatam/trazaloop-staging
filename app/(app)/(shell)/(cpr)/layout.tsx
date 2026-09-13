@@ -3,6 +3,8 @@
 export const dynamic = "force-dynamic";
 
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
+import { ModuleReadOnlyNotice } from "@/components/domain/modules/read-only-notice";
+import { CPR_SHELL_MODULE } from "@/lib/modules/registry";
 
 /**
  * Trazaloop · Sprint T9F.1 · FRONTERA ESTRUCTURAL del módulo Trazaloop CPR.
@@ -33,6 +35,15 @@ import { requireCprModule } from "@/lib/auth/require-cpr-module";
 export default async function CprLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  await requireCprModule();
-  return <>{children}</>;
+  const org = await requireCprModule();
+  // PROD-LAUNCH-01C.4 · Este layout no pinta cabecera propia —PCR es el módulo
+  // por omisión del shell—, así que el aviso es lo único que añade, y solo
+  // cuando toca.
+  if (!org.readOnly) return <>{children}</>;
+  return (
+    <div className="space-y-4">
+      <ModuleReadOnlyNotice moduleName={CPR_SHELL_MODULE.name} />
+      {children}
+    </div>
+  );
 }

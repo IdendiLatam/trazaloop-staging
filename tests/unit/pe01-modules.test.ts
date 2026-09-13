@@ -164,10 +164,16 @@ check("B7. Una excepción de la capa de datos se trata igual que un error", () =
 console.log("\nC · La presentación de cada estado");
 // ===========================================================================
 
-check("C1. Cuatro formas de presentar, y «no se sabe» es una de ellas", () => {
+check("C1. Cinco formas de presentar, y «no se sabe» es una de ellas", () => {
   assert(presentationFor("full") === "enterable", "el acceso activo no es entrable");
   assert(presentationFor("demo_active") === "enterable", "una prueba viva no es entrable");
-  assert(presentationFor("demo_expired") === "blocked", "una prueba vencida no está bloqueada");
+  // PROD-LAUNCH-01C.4 · La quinta forma. Una prueba vencida ya NO se presenta
+  // como bloqueada: se entra, a consultar lo que la empresa creó dentro. Es el
+  // cambio deliberado de este tramo, no una etiqueta que se relajó — y por eso
+  // se sigue exigiendo que NO se presente como entrable, que sería darle
+  // permiso de escritura a quien viene a mirar.
+  assert(presentationFor("demo_expired") === "read_only",
+    `una prueba vencida se presenta como «${presentationFor("demo_expired")}»`);
   assert(presentationFor("not_assigned") === "blocked", "«no incluido» no está bloqueado");
   assert(presentationFor("coming_soon") === "future", "el futuro no se presenta como futuro");
   assert(presentationFor("unavailable") === "unavailable",
@@ -177,6 +183,8 @@ check("C1. Cuatro formas de presentar, y «no se sabe» es una de ellas", () => 
 check("C2. Solo es enlace lo que lleva a algún sitio", () => {
   assert(isNavigable("full", "/quality"), "un módulo activo con ruta no es navegable");
   assert(!isNavigable("full", null), "sin ruta no puede haber enlace");
+  assert(isNavigable("demo_expired", "/quality"),
+    "una prueba vencida no ofrece entrada: la información queda dentro sin puerta");
   assert(!isNavigable("not_assigned", "/quality"), "un módulo no incluido ofrece entrada");
   assert(!isNavigable("unavailable", "/quality"), "un módulo sin resolver ofrece entrada");
   assert(!isNavigable("coming_soon", null), "el futuro ofrece entrada");

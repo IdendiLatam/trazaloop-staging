@@ -75,7 +75,7 @@ export async function downloadImportTemplateAction(
   entityType: string
 ): Promise<{ filename: string; csv: string; error: string | null }> {
   // T9F.1: las plantillas de importación son parte del módulo CPR.
-  const gate = await requireCprForAction();
+  const gate = await requireCprForAction({ intent: "read" });
   if (gate.error !== null) return { filename: "", csv: "", error: gate.error };
   if (!isImportEntity(entityType)) {
     return { filename: "", csv: "", error: "Entidad no soportada." };

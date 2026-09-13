@@ -126,7 +126,7 @@ export async function exportDocumentMasterCsvAction(
   filters?: MasterFilters
 ): Promise<{ filename: string; csv: string; error: string | null }> {
   // T9F.1: una exportación CPR también exige acceso comercial vigente.
-  const gateExport = await requireCprForAction();
+  const gateExport = await requireCprForAction({ intent: "read" });
   if (gateExport.error !== null) return { filename: "", csv: "", error: gateExport.error };
   const org = gateExport.org;
   const rows = await listDocumentMaster(org.organizationId);
@@ -168,7 +168,7 @@ export async function listFileDocumentVersionsAction(id: string): Promise<FileDo
  *  miembro de la empresa con acceso a TrazaDocs. T9F.1: la descarga de un
  *  archivo del módulo también exige acceso comercial CPR vigente. */
 export async function downloadFileDocumentAction(id: string): Promise<{ url: string | null; error: string | null }> {
-  const gateDownload = await requireCprForAction();
+  const gateDownload = await requireCprForAction({ intent: "read" });
   if (gateDownload.error !== null) return { url: null, error: gateDownload.error };
   const org = gateDownload.org;
   const doc = await getFileDocument(org.organizationId, id);

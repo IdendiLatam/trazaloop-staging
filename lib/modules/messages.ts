@@ -10,7 +10,10 @@ import type { DerivedModuleState, ModuleAccessReason } from "./access";
 export const DERIVED_STATE_LABEL: Record<DerivedModuleState, string> = {
   demo_active: "Prueba",
   demo_permanent: "Acceso de prueba",
-  demo_expired: "Prueba finalizada",
+  // PROD-LAUNCH-01C.4 · «Prueba finalizada» era exacta y se leía como una
+  // puerta cerrada: describía lo que se acabó en vez de lo que queda. Lo que
+  // queda es la información, y se puede entrar a verla.
+  demo_expired: "Solo consulta",
   full: "Activo",
   extra: "Activo · almacenamiento ampliado",
   disabled: "Acceso suspendido",
@@ -24,7 +27,7 @@ export const DERIVED_STATE_LABEL: Record<DerivedModuleState, string> = {
 export const DERIVED_STATE_HINT: Record<DerivedModuleState, string> = {
   demo_active: "Acceso de prueba.",
   demo_permanent: "Acceso de prueba sin fecha de vencimiento.",
-  demo_expired: "Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.",
+  demo_expired: "Tus datos se conservan: puedes consultarlos y descargarlos. Para volver a crear o editar, activa Full.",
   full: "Acceso funcional completo.",
   extra: "Acceso funcional completo con almacenamiento ampliado.",
   disabled: "La empresa no tiene acceso a este módulo. Los datos se conservan.",
@@ -37,16 +40,55 @@ export const DERIVED_STATE_HINT: Record<DerivedModuleState, string> = {
   unavailable: "No fue posible verificar el acceso a este módulo. Vuelve a intentarlo.",
 };
 
-/** ¿El estado permite entrar al módulo? (espejo de allowed, para la UI). */
+/** ¿El estado permite MUTAR dentro del módulo? (espejo de allowed, para la UI). */
 export function isEnterableState(state: DerivedModuleState): boolean {
   return state === "demo_active" || state === "demo_permanent" || state === "full" || state === "extra";
 }
+
+/**
+ * PROD-LAUNCH-01C.4 · ¿El estado permite ENTRAR, aunque sea a mirar?
+ *
+ * Espejo de `retainedRead`. Se separó de `isEnterableState` en vez de
+ * ampliarlo porque las dos preguntas son distintas y hay ciento y pico de
+ * sitios que preguntan la primera: ampliarla habría dado permiso de escritura
+ * a quien solo viene a consultar.
+ */
+export function isReadableState(state: DerivedModuleState): boolean {
+  return isEnterableState(state) || state === "demo_expired";
+}
+
+/** ¿Se entra, pero SOLO a consultar? */
+export function isReadOnlyState(state: DerivedModuleState): boolean {
+  return isReadableState(state) && !isEnterableState(state);
+}
+
+/**
+ * PROD-LAUNCH-01C.4 · Lo que se dice cuando la acción crea o modifica y la
+ * empresa está en consulta.
+ *
+ * Tres cosas, en este orden: qué hace falta, que los datos siguen ahí, y qué
+ * puede hacer ahora mismo quien lo lee. La versión anterior decía «contacta al
+ * equipo de Trazaloop», que convertía un cambio de plan en un trámite con una
+ * persona — y dejaba a la empresa esperando una respuesta para recuperar algo
+ * que puede activar sola.
+ */
+export const RETAINED_READ_DENIED_MESSAGE =
+  "Esta acción requiere Full. Tu información se conserva y puedes seguir consultándola, "
+  + "descargándola y borrándola. Activa Full desde Plan y facturación para volver a crear y editar.";
+
+/** A dónde lleva «Activar Full». NUNCA inicia un cobro: abre la pantalla. */
+export const ACTIVATE_FULL_HREF = "/settings/billing";
+export const ACTIVATE_FULL_LABEL = "Activar Full";
 
 /** Mensaje de error para una Server Action bloqueada por acceso de módulo. */
 export function moduleAccessDeniedMessage(moduleName: string, reason: ModuleAccessReason): string {
   switch (reason) {
     case "demo_expired":
-      return `Tu periodo Demo de ${moduleName} ha finalizado. Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.`;
+      // Con el nombre del módulo: quien tiene tres y solo uno vencido necesita
+      // saber CUÁL, y el mensaje genérico se lo hacía adivinar.
+      return `Tu acceso a ${moduleName} es de solo consulta porque la prueba finalizó. `
+        + "Tu información se conserva y puedes seguir consultándola, descargándola y "
+        + "borrándola. Activa Full desde Plan y facturación para volver a crear y editar.";
     case "disabled":
       return `El acceso a ${moduleName} está deshabilitado para esta empresa.`;
     case "globally_disabled":
@@ -66,8 +108,23 @@ export function moduleAccessDeniedMessage(moduleName: string, reason: ModuleAcce
 export const DEMO_BANNER_INTRO =
   "Tu empresa está utilizando Trazaloop en modo Demo. El acceso de prueba estará disponible durante 2 días.";
 
+/**
+ * PROD-LAUNCH-01C.4 · El aviso ya no manda a nadie a escribir un correo.
+ *
+ * Decía «contacta al equipo de Trazaloop para reactivar el acceso», y eso
+ * convertía un cambio de plan —que la empresa puede hacer sola, en dos
+ * pantallas— en un trámite con una persona y una espera. Peor: leído junto a
+ * un módulo al que ya no se podía entrar, sonaba a que los datos estaban
+ * retenidos hasta que alguien contestara.
+ */
 export const DEMO_EXPIRED_BANNER =
-  "Tu periodo de prueba ha finalizado. Tus datos se conservarán. Contacta al equipo de Trazaloop para reactivar el acceso.";
+  "Tu periodo de prueba ha finalizado. Tus datos se conservan y puedes seguir "
+  + "consultándolos. Activa Full cuando quieras para volver a crear y editar.";
+
+/** El cuerpo del aviso cuando ya no queda ninguna prueba en pie. */
+export const DEMO_EXPIRED_BANNER_BODY =
+  "Tus datos se conservan y puedes seguir consultándolos. Activa Full cuando quieras "
+  + "para volver a crear y editar.";
 
 export const DEMO_PARTIAL_BANNER_TITLE = "Algunas pruebas de módulos han finalizado.";
 
@@ -78,7 +135,8 @@ export const DEMO_ACTIVE_PARTIAL_BODY =
   "El resto de tu acceso no es una prueba y no vence.";
 
 export const DEMO_PARTIAL_BANNER_BODY =
-  "Los módulos con acceso vigente continúan disponibles.";
+  "Los módulos con acceso vigente continúan disponibles, y los que terminaron se "
+  + "pueden seguir consultando.";
 
 // ---------------------------------------------------------------------------
 // AVISO DE PRUEBA — clasificación por MÓDULO, nunca por cuenta

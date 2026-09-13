@@ -20,7 +20,7 @@
 import {
   COMMERCIAL_MODULES, type CommercialModule, type CommercialModuleKey,
 } from "@/lib/modules/catalog";
-import { isEnterableState } from "@/lib/modules/messages";
+import { isEnterableState, isReadableState, isReadOnlyState } from "@/lib/modules/messages";
 import type { DerivedModuleState } from "@/lib/modules/access";
 
 // ===========================================================================
@@ -102,22 +102,31 @@ export function enterLabel(mod: CommercialModule): string {
  * Cuatro formas de presentar, y la distinción que importa: **un fallo operativo
  * no es un estado comercial**.
  *
- *   enterable    se puede entrar
+ *   enterable    se puede entrar y trabajar
+ *   read_only    se puede entrar, pero solo a consultar lo que ya hay
  *   blocked      no se puede, y se sabe por qué
  *   unavailable  NO SE SABE · no se pudo comprobar
  *   future       todavía no existe
+ *
+ * PROD-LAUNCH-01C.4 añadió `read_only`, y añadirlo era el punto: antes solo
+ * había «entra» y «no entra», así que una prueba vencida caía del lado de «no
+ * entra» junto a un módulo que la empresa nunca contrató. Son cosas distintas
+ * y ahora se ven distintas.
  */
-export type EntryPresentation = "enterable" | "blocked" | "unavailable" | "future";
+export type EntryPresentation =
+  | "enterable" | "read_only" | "blocked" | "unavailable" | "future";
 
 export function presentationFor(state: DerivedModuleState): EntryPresentation {
   if (state === "unavailable") return "unavailable";
   if (state === "coming_soon") return "future";
+  if (isReadOnlyState(state)) return "read_only";
   return isEnterableState(state) ? "enterable" : "blocked";
 }
 
 /** ¿Esta tarjeta debe ser un enlace? Solo si de verdad lleva a algún sitio. */
 export function isNavigable(state: DerivedModuleState, href: string | null): boolean {
-  return presentationFor(state) === "enterable" && href !== null;
+  const p = presentationFor(state);
+  return (p === "enterable" || p === "read_only") && href !== null;
 }
 
 // ===========================================================================
@@ -129,6 +138,20 @@ export const NO_ACTIVE_MODULES_TITLE =
 export const NO_ACTIVE_MODULES_BODY =
   "Tu cuenta funciona y tus datos se conservan. Abajo están los módulos de Trazaloop y el "
   + "estado de cada uno para esta empresa.";
+
+/**
+ * PROD-LAUNCH-01C.4 · Lo que se dice cuando NO hay nada activo pero SÍ hay
+ * historia.
+ *
+ * «Esta empresa no tiene módulos activos» es verdad y, sola, se lee como
+ * «perdiste lo que tenías». Cuando queda algo que consultar hay que decirlo en
+ * la primera frase, no en la letra pequeña: lo primero que quiere saber quien
+ * llega aquí es si su trabajo sigue ahí.
+ */
+export const FREE_RETAINED_TITLE = "Ahora estás en Free.";
+export const FREE_RETAINED_BODY =
+  "Puedes seguir consultando la información que ya creaste. Para crear o editar de nuevo, "
+  + "activa Full.";
 
 /**
  * Cuando NO se pudo resolver el acceso de ninguno.
@@ -168,8 +191,17 @@ export const PLATFORM_TAGLINE = "Una cuenta, varios módulos. Entra al que neces
 // ===========================================================================
 
 export type EntryOverview = {
-  /** ¿Hay al menos uno al que se pueda entrar? */
+  /** ¿Hay al menos uno al que se pueda entrar A TRABAJAR? */
   hasEnterable: boolean;
+  /**
+   * PROD-LAUNCH-01C.4 · ¿Hay al menos uno al que se pueda entrar, aunque sea a
+   * mirar? Es la pregunta que decide si la portada dice «no tienes nada» o
+   * «estás en Free y tu información sigue aquí», y son mensajes muy distintos
+   * para quien acaba de perder una prueba.
+   */
+  hasReadable: boolean;
+  /** ¿Hay al menos uno en modo SOLO CONSULTA? */
+  hasReadOnly: boolean;
   /** ¿De ALGUNO no se pudo saber nada? */
   hasUnavailable: boolean;
   /** ¿No se pudo saber de NINGUNO de los que existen? */
@@ -180,6 +212,8 @@ export function overviewOf(states: DerivedModuleState[]): EntryOverview {
   const reales = states.filter((s) => s !== "coming_soon");
   return {
     hasEnterable: states.some((s) => isEnterableState(s)),
+    hasReadable: states.some((s) => isReadableState(s)),
+    hasReadOnly: states.some((s) => isReadOnlyState(s)),
     hasUnavailable: states.some((s) => s === "unavailable"),
     allUnavailable: reales.length > 0 && reales.every((s) => s === "unavailable"),
   };

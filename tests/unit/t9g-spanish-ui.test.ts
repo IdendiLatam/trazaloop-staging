@@ -241,7 +241,14 @@ check("4. Los códigos internos de error se muestran mapeados a español (nunca 
   );
   // El código interno permanece en inglés; solo su representación es visible.
   const denied = moduleAccessDeniedMessage("Trazaloop CPR", "demo_expired");
-  assert(/Demo de Trazaloop CPR ha finalizado/.test(denied), "el mensaje de Demo vencido debía estar en español");
+  // PROD-LAUNCH-01C.4 · Sigue siendo español y sigue nombrando el módulo; lo
+  // que cambió es lo que dice, porque ahora se puede entrar a consultar y el
+  // texto anterior mandaba a escribir un correo. Se comprueba la propiedad —en
+  // español, con el nombre del módulo, sin código crudo— y no la frase exacta.
+  assert(/Trazaloop CPR/.test(denied), "el mensaje de Demo vencido no nombra el módulo");
+  assert(/prueba finaliz/i.test(denied), "el mensaje de Demo vencido no dice qué pasó");
+  assert(!/demo_expired|MODULE_|[A-Z]{4,}_[A-Z]{4,}/.test(denied),
+    `el mensaje filtra un código interno: «${denied}»`);
 });
 
 console.log("\nTrazaloop · T9G: regresión del superadministrador de módulos (§16)\n");
