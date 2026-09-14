@@ -14,6 +14,11 @@ export const DERIVED_STATE_LABEL: Record<DerivedModuleState, string> = {
   // puerta cerrada: describía lo que se acabó en vez de lo que queda. Lo que
   // queda es la información, y se puede entrar a verla.
   demo_expired: "Solo consulta",
+  // PROD-LAUNCH-01D.4A · Se pagó y el periodo terminó. Misma capacidad que
+  // «Solo consulta» y nombre distinto a propósito: quien pagó no está en una
+  // prueba, y llamarlo igual borraría esa diferencia justo en la pantalla
+  // donde decide si renueva.
+  full_expired: "Periodo finalizado",
   full: "Activo",
   extra: "Activo · almacenamiento ampliado",
   disabled: "Acceso suspendido",
@@ -28,6 +33,7 @@ export const DERIVED_STATE_HINT: Record<DerivedModuleState, string> = {
   demo_active: "Acceso de prueba.",
   demo_permanent: "Acceso de prueba sin fecha de vencimiento.",
   demo_expired: "Tus datos se conservan: puedes consultarlos y descargarlos. Para volver a crear o editar, activa Full.",
+  full_expired: "Tu periodo pagado terminó. Tus datos se conservan: puedes consultarlos y descargarlos. Renueva para volver a crear y editar.",
   full: "Acceso funcional completo.",
   extra: "Acceso funcional completo con almacenamiento ampliado.",
   disabled: "La empresa no tiene acceso a este módulo. Los datos se conservan.",
@@ -54,7 +60,8 @@ export function isEnterableState(state: DerivedModuleState): boolean {
  * a quien solo viene a consultar.
  */
 export function isReadableState(state: DerivedModuleState): boolean {
-  return isEnterableState(state) || state === "demo_expired";
+  return isEnterableState(state)
+    || state === "demo_expired" || state === "full_expired";
 }
 
 /** ¿Se entra, pero SOLO a consultar? */
@@ -89,6 +96,13 @@ export function moduleAccessDeniedMessage(moduleName: string, reason: ModuleAcce
       return `Tu acceso a ${moduleName} es de solo consulta porque la prueba finalizó. `
         + "Tu información se conserva y puedes seguir consultándola, descargándola y "
         + "borrándola. Activa Full desde Plan y facturación para volver a crear y editar.";
+    case "full_expired":
+      // A quien PAGÓ no se le dice «activa»: se le dice «renueva». Tratarlo
+      // como si nunca hubiera contratado es la clase de detalle que hace que
+      // un cliente no renueve.
+      return `Tu periodo pagado de ${moduleName} terminó. Tu información se conserva y `
+        + "puedes seguir consultándola, descargándola y borrándola. Renueva desde Plan "
+        + "y facturación para volver a crear y editar.";
     case "disabled":
       return `El acceso a ${moduleName} está deshabilitado para esta empresa.`;
     case "globally_disabled":

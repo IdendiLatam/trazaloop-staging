@@ -23,6 +23,15 @@ export type DerivedModuleState =
   | "demo_active" // demo con vencimiento futuro
   | "demo_permanent" // demo sin vencimiento
   | "demo_expired" // demo con vencimiento pasado → acceso bloqueado
+  /**
+   * PROD-LAUNCH-01D.4A · Full o Extra PAGADO cuyo periodo ya terminó.
+   *
+   * No es lo mismo que `demo_expired` aunque se comporten igual —se entra a
+   * consultar, no a crear—: una prueba que caduca no se pagó, y esto sí. Se
+   * distinguen porque lo que se le dice a cada uno es distinto: a quien pagó
+   * se le ofrece renovar, no «activar».
+   */
+  | "full_expired"
   | "full"
   | "extra"
   | "disabled" // enabled = false (deshabilitación administrativa)
@@ -48,6 +57,7 @@ export type ModuleAccessReason =
   | "not_assigned"
   | "disabled"
   | "demo_expired"
+  | "full_expired"
   | "unavailable";
 
 /** La asignación empresa-módulo, tal como vive en organization_modules. */
@@ -144,6 +154,38 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
   const mode = assignment.accessMode;
 
   if (mode === "full" || mode === "extra") {
+    /*
+      PROD-LAUNCH-01D.4A · Full y Extra AHORA MIRAN SU VENCIMIENTO.
+
+      Antes no lo miraban: devolvían siempre `allowed: true` y hasta
+      `expiresAt: null`, tuviera la fila la fecha que tuviera. Eso significaba
+      que cualquier forma de marcar «pagado hasta tal día» producía acceso
+      PERPETUO — el primer pago real de Trazaloop lo habría convertido en Full
+      para siempre por 157 080 pesos.
+
+      El vencimiento se deriva por FECHA, igual que en Demo y por el mismo
+      motivo: así no hace falta ningún cron que vaya apagando accesos, y no hay
+      ventana entre que el periodo termina y alguien se entera.
+
+      Sin fecha sigue siendo perpetuo, que es lo correcto para `core` y para un
+      Full concedido a mano por administración. Cuando se escribió esto no
+      había NI UNA fila full/extra con vencimiento en Producción ni en Staging,
+      así que este cambio no le quitó el acceso a nadie.
+    */
+    const vence = assignment.accessExpiresAt;
+    if (vence !== null && new Date(vence).getTime() <= now.getTime()) {
+      return {
+        allowed: false,
+        // Se pagó y hay trabajo dentro: la información es suya.
+        retainedRead: true,
+        reason: "full_expired",
+        derivedState: "full_expired",
+        accessMode: mode,
+        isDemo: false,
+        isExpired: true,
+        expiresAt: vence,
+      };
+    }
     return {
       allowed: true,
       retainedRead: true,
@@ -152,7 +194,8 @@ export function resolveModuleAccess(input: ModuleAccessInput): ModuleAccessDecis
       accessMode: mode,
       isDemo: false,
       isExpired: false,
-      expiresAt: null,
+      // Se dice la verdad: si hay periodo pagado, hasta cuándo llega.
+      expiresAt: vence,
     };
   }
 
