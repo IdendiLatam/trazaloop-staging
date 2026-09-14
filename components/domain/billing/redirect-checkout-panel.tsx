@@ -68,6 +68,20 @@ export function RedirectCheckoutPanel({
       <h2 id="pago-seguro-titulo" className="pt-0.5 text-lg font-semibold">
         {providerName}
       </h2>
+      {/* PROD-LAUNCH-01E · QUIÉN COBRA, DICHO ANTES DE SALIR.
+
+          En el primer pago real la pasarela mostró como comercio «IDENDI
+          Latam», que es lo correcto —Trazaloop es un producto de IDENDI
+          Latam—, pero quien lo ve por primera vez lo ve DESPUÉS de haberse
+          ido de Trazaloop y con la tarjeta en la mano. Ese es el momento en
+          que alguien se pregunta «¿quién es IDENDI?» y abandona, o peor,
+          reclama el cargo semanas después.
+
+          Se dice aquí, antes, en dos líneas y sin tono legal. */}
+      <p className="pt-2 text-sm text-ink-soft">
+        Trazaloop es un producto de IDENDI Latam. El pago será procesado por
+        {" "}{providerName} a nombre de IDENDI Latam.
+      </p>
       <p className="pt-2 text-sm text-ink-soft">
         Al continuar te llevamos a {providerName} para completar el pago. Allí eliges
         cómo pagar. Trazaloop no recibe ni guarda los datos de tu tarjeta.

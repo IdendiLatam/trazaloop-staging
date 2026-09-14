@@ -478,6 +478,30 @@ export const QUALITY_COPILOT_GROUP: ModuleNavGroup = {
   ],
 };
 
+/**
+ * PROD-LAUNCH-01E · Qué grupos se pintan de verdad.
+ *
+ * Trazaloop Intelligence depende de una credencial de proveedor de IA. Sin
+ * ella la pantalla existe y explica que no está configurada — lo cual está
+ * bien para quien administra la plataforma y está mal para quien acaba de
+ * pagar Full: entra por una función que aparece en el menú y se encuentra con
+ * que no funciona. Enseñar en el menú algo apagado es vender lo que no hay.
+ *
+ * Así que el menú deja de ofrecerla cuando no está disponible. NO es una
+ * decisión de interfaz: la disponibilidad se resuelve en servidor y llega como
+ * dato, y la ruta se protege por su cuenta. Ocultar el enlace y dejar la
+ * puerta abierta sería maquillaje.
+ *
+ * Lógica PURA: recibe la disponibilidad, no la consulta.
+ */
+export function visibleNavGroups(
+  mod: Pick<ShellModuleDefinition, "groups">,
+  opts: { aiAvailable: boolean }
+): ModuleNavGroup[] {
+  if (opts.aiAvailable) return mod.groups;
+  return mod.groups.filter((g) => g !== QUALITY_COPILOT_GROUP);
+}
+
 export const QUALITY_AUTOMATIZACION_GROUP: ModuleNavGroup = {
   title: "Automatización",
   items: [

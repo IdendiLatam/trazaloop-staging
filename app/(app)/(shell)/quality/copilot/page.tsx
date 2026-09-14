@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 // Trazaloop Quality · QUALITY-12 · El Copilot.
 
+import { redirect } from "next/navigation";
 import { requireQualityModule } from "@/lib/auth/require-quality-module";
 import { getSettings, getUsage, listRuns, listSuggestions } from "@/lib/db/quality-ai";
 import { copilotConfigured } from "@/lib/ai/copilot";
@@ -19,6 +20,29 @@ export default async function CopilotPage({
   searchParams,
 }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const org = await requireQualityModule();
+
+  /*
+    PROD-LAUNCH-01E · SIN CREDENCIAL DE IA, ESTA RUTA NO SE SIRVE.
+
+    El menú deja de ofrecer Intelligence cuando no está configurada, pero
+    ocultar un enlace no cierra una puerta: quien escriba la dirección —o la
+    tenga en el historial— seguiría entrando a una pantalla que anuncia una
+    función apagada. Se comprueba aquí, en servidor.
+
+    Se DEVUELVE A QUALITY en vez de romper: no es un error, es una función que
+    este despliegue no tiene. Ni 500, ni pantalla en blanco, ni detalles del
+    proveedor.
+
+    Excepción para la administración de plataforma: es quien tiene que poder
+    mirar cómo está la configuración, y la pantalla ya sabe presentarse como no
+    configurada. Para todos los demás, no existe.
+  */
+  if (!copilotConfigured()) {
+    const { checkPlatformStatus } = await import("@/lib/db/platform");
+    const { isStaff } = await checkPlatformStatus();
+    if (!isStaff) redirect("/quality");
+  }
+
   const sp = await searchParams;
 
   const [ajustes, uso, consultas, borradores] = await Promise.all([

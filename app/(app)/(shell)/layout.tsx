@@ -11,6 +11,7 @@ import { getActiveOrganization } from "@/lib/db/organizations";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { signOutAction } from "@/server/actions/auth";
 import { AppNav } from "@/components/layout/nav";
+import { aiCredentialConfigured } from "@/lib/ai/config";
 import { ModuleHeaderBadge, ModuleAwareSettingsLink, ModuleSwitcher } from "@/components/layout/module-badge";
 import { Wordmark, LoopMark } from "@/components/layout/logo";
 import { PageTutorialAction } from "@/components/domain/tutorials/page-tutorial-action";
@@ -42,6 +43,11 @@ export default async function ShellLayout({
     redirect("/select-org");
   }
 
+  // PROD-LAUNCH-01E · Sin credencial de IA, Intelligence no se ofrece en el
+  // menú. Es una lectura de entorno, no una consulta: no cuesta nada y va aquí
+  // porque el menú es de cliente y no puede leerla.
+  const iaDisponible = aiCredentialConfigured();
+
   // PE-01B · §14 · El aviso de pruebas SALE del shell compartido.
   //
   // Vivía aquí, así que se leía en todas las pantallas de todos los módulos:
@@ -58,7 +64,7 @@ export default async function ShellLayout({
     <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
       <aside className="no-print hidden flex-col gap-8 bg-loop-deep p-5 lg:flex">
         <Wordmark inverted />
-        <AppNav showPlatform={platformStatus.isStaff} />
+        <AppNav showPlatform={platformStatus.isStaff} aiAvailable={iaDisponible} />
         <div className="mt-auto space-y-3">
           <div className="text-xs text-emerald-100/60">
             <p>{APP_VERSION_LABEL}</p>
@@ -104,7 +110,7 @@ export default async function ShellLayout({
               <span className="text-sm font-medium text-ink-soft">Menú</span>
             </summary>
             <div className="absolute left-0 top-full z-20 max-h-[80vh] w-72 overflow-y-auto rounded-b-lg bg-loop-deep p-4 shadow-lg">
-              <AppNav showPlatform={platformStatus.isStaff} />
+              <AppNav showPlatform={platformStatus.isStaff} aiAvailable={iaDisponible} />
             </div>
           </details>
           <Link

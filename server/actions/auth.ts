@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { clearActiveOrgCookie } from "@/lib/auth/active-organization";
+import { resolveAppOrigin } from "@/lib/auth/invitation-link";
 import { isSafeAcceptInviteNext, postAuthDestinationPath } from "@/lib/domain/team";
 import { getPostAuthDestinationAction } from "@/server/actions/team";
 import { getMyLegalAcceptanceStatusAction } from "@/server/actions/legal";
@@ -115,10 +116,33 @@ export async function signUpAction(
   }
 
   const supabase = await createServerClient();
+  /*
+    PROD-LAUNCH-01E · A DÓNDE VUELVE EL ENLACE DEL CORREO.
+
+    Sin `emailRedirectTo`, GoTrue usa el Site URL del proyecto, así que quien
+    confirmaba su cuenta aterrizaba en la PORTADA PÚBLICA con un `?code=` que
+    allí no consume nadie: la cuenta quedaba confirmada, pero la persona fuera,
+    teniendo que buscar el acceso y escribir la contraseña otra vez. El único
+    sitio que canjea el código es `/auth/callback`.
+
+    El origen sale de `resolveAppOrigin()`, el mismo que ya construye los
+    enlaces de invitación: prefiere el ORIGEN REAL de la petición —quien se
+    registra está mirando el despliegue correcto, por definición— y deja
+    `NEXT_PUBLIC_SITE_URL` de respaldo. Así Production, Staging y local
+    funcionan sin nombrar ningún dominio aquí.
+
+    Y no abre un redirector: GoTrue solo acepta destinos que estén en la lista
+    de redirecciones del proyecto, así que un `Host` inventado no llega a
+    ninguna parte. La validación está fuera y es la buena.
+  */
+  const origin = await resolveAppOrigin();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: {
+      data: { full_name: fullName },
+      emailRedirectTo: `${origin}/auth/callback`,
+    },
   });
 
   if (error) {

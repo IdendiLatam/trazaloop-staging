@@ -729,9 +729,25 @@ check("25. El grupo visible «Preparación de auditoría» está en la navegaci�
 
 check("26. El nav del shell renderiza los grupos del módulo (el grupo nuevo es visible)", () => {
   const nav = readRepoFile("components/layout/nav.tsx");
+  /*
+    PROD-LAUNCH-01E · Lo que este renglón defiende —lo dice su mensaje— es que
+    los grupos salgan del REGISTRO CENTRAL y no de una lista escrita en el
+    menú. Eso no ha cambiado: siguen saliendo de `activeModule`, ahora a través
+    de `visibleNavGroups`, que vive en el propio registro y solo decide cuáles
+    se pintan según lo que el despliegue tenga configurado.
+
+    Fijar la cadena `activeModule.groups.map(` ataba la prueba a una forma de
+    escribirlo y obligaba a elegir entre ocultar Intelligence sin credencial
+    —que es lo correcto— y esta comprobación en verde.
+  */
   assert(
-    nav.includes("activeModule.groups.map("),
+    /visibleNavGroups\(activeModule[\s\S]{0,60}\)\.map\(/.test(nav)
+      || nav.includes("activeModule.groups.map("),
     "el sidebar debía seguir renderizando los grupos del registro central"
+  );
+  assert(
+    !/const\s+\w*[Gg]roups\s*=\s*\[/.test(nav),
+    "el menú declara su propia lista de grupos en vez de leer el registro"
   );
   // Sin permisos ni capacidades nuevas: el grupo no introduce guards propios.
   const registry = readRepoFile("lib/modules/registry.ts");

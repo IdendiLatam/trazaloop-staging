@@ -17,6 +17,7 @@ import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
 import { storageImpactOf } from "@/lib/db/storage-impact";
 import { pendingUpgrade } from "@/lib/db/billing-upgrade";
 import { findOpenOneTimeCheckout } from "@/lib/db/one-time-checkout";
+import { resolvePurchaseRoutingFromEnv } from "@/lib/billing/purchase-routing";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -59,6 +60,21 @@ export default async function BillingPage({
   // shell al módulo desde el que se entró, no a PCR.
   const activeModule = activeShellModuleFrom("/settings/billing", await searchParams);
   const org = await requireActiveOrg();
+
+  /*
+    PROD-LAUNCH-01E · El nombre de la pasarela llega como DATO.
+
+    Escribirlo aquí a mano metería una marca de pasarela en un fichero de
+    interfaz, y la frontera declarada es de servidor y ninguno de interfaz —hay
+    un guardián de release que lo vigila, con razón—. Sale de la misma
+    autoridad que decide quién cobra, así que si mañana cobra otra, este texto
+    dice la verdad sin que nadie se acuerde de cambiarlo.
+
+    Si no hay pasarela resuelta, la frase se queda sin nombrarla: lo que de
+    verdad hay que declarar es a nombre de QUIÉN se cobra.
+  */
+  const rutaDePago = resolvePurchaseRoutingFromEnv();
+  const pasarela = rutaDePago.available ? rutaDePago.displayName : null;
   const esAdministrador = org.roleCode === "admin";
   const [estado, catalogo, historial, subidaEnCurso, cobroEnCurso] = await Promise.all([
     getOrganizationBillingState(org.organizationId),
@@ -209,6 +225,21 @@ export default async function BillingPage({
       {historial === null || historial.length === 0 ? null : (
         <section className="rounded-md border border-hairline bg-surface p-4">
           <h2 className="text-sm font-semibold">Tus cobros</h2>
+          {/* PROD-LAUNCH-01E · UNA sola vez, y aquí.
+
+              La pantalla previa al pago ya lo dice, pero esa se lee una vez y
+              en el momento de comprar. Esta es la que se abre semanas después,
+              con el extracto delante, para averiguar qué fue un cargo que no
+              se reconoce — y ahí el nombre que aparece en el banco no es
+              «Trazaloop». Por eso no es una repetición: son dos preguntas
+              distintas en dos momentos distintos.
+
+              Va en la cabecera de la sección y no en cada fila: repetirlo por
+              cobro sería ruido. */}
+          <p className="pt-1 text-xs text-ink-soft">
+            Los pagos de Trazaloop son procesados{pasarela ? ` por ${pasarela}` : ""} a
+            nombre de IDENDI Latam.
+          </p>
           <p className="pb-3 pt-1 text-sm text-ink-soft">
             Cada línea es lo que se cobró aquel día, con su descuento y sus
             impuestos de entonces. No es una factura electrónica.

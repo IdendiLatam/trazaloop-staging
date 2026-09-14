@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import {
   SISTEMA_GROUP,
   PLATFORM_GROUP,
+  visibleNavGroups,
   SHELL_MODULE_PARAM,
   moduleAwareHref,
   resolveShellModuleForPath,
@@ -93,7 +94,20 @@ function NavGroupSection({
   );
 }
 
-export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}) {
+export function AppNav({
+  showPlatform = false, aiAvailable = false,
+}: {
+  showPlatform?: boolean;
+  /**
+   * ¿Hay credencial de IA en este despliegue? Lo resuelve el servidor y llega
+   * como dato: esta pieza es de cliente y no puede —ni debe— leer el entorno.
+   *
+   * Por omisión FALSO. Si algún día alguien monta este menú sin pasar el dato,
+   * la función queda oculta en vez de ofrecida: equivocarse hacia no enseñar
+   * algo apagado es el lado bueno.
+   */
+  aiAvailable?: boolean;
+} = {}) {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const activeModule = resolveShellModuleForPath(pathname, searchParams?.get(SHELL_MODULE_PARAM));
@@ -115,7 +129,7 @@ export function AppNav({ showPlatform = false }: { showPlatform?: boolean } = {}
           ))}
         </div>
       </div>
-      {activeModule.groups.map((group) => (
+      {visibleNavGroups(activeModule, { aiAvailable }).map((group) => (
         <NavGroupSection
           key={group.title}
           group={group}
