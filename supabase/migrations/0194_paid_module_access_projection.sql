@@ -113,6 +113,20 @@ begin
    limit 1;
 
   if v_hasta is null then return 0; end if;
+
+  -- FALLA CERRADO SI EL PERIODO NO DICE QUÉ SE COMPRÓ.
+  --
+  -- El `is null` no es defensivo por costumbre: sin él, `v_plan not in
+  -- (...)` con `v_plan` nulo devuelve NULL —no FALSO— así que el `if` no
+  -- entra y la proyección sigue con `access_mode = null`. En Staging hay cinco
+  -- periodos liquidados anteriores a que `plan_code` existiera en la tabla, y
+  -- ahí se rompió: la migración abortó entera por violar el NOT NULL. En local
+  -- no había ninguno, y por eso no salió antes.
+  --
+  -- Y no se recurre al plan de la suscripción de hoy para rellenarlo: la
+  -- identidad comercial se congela en la obligación, no se deduce de lo que la
+  -- empresa tenga ahora. Si el periodo no lo dice, no se concede.
+  if v_plan is null then return 0; end if;
   -- Free no proyecta nada: no compra acceso a módulos.
   if v_plan not in ('full', 'extra') then return 0; end if;
 

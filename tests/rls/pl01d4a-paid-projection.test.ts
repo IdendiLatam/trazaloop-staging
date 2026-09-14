@@ -32,6 +32,10 @@ async function main() {
   await pg.connect();
   const q = async (sql: string, params: unknown[] = []) => (await pg.query(sql, params)).rows;
 
+  // Contra una base remota el usuario del pooler no es `postgres`. En local es
+  // inocuo; sin esto, la misma batería no se puede correr contra Staging.
+  await q("set role postgres");
+
   // ── fixture: una empresa con los tres módulos en demo VENCIDO ───────────
   await q("begin");
   // `created_by` es obligatorio; sirve cualquier perfil existente y todo se
@@ -203,6 +207,44 @@ async function main() {
         where organization_id=$1 and module_code='quality'`, [org2]);
     assert(f.access_mode === "demo",
       `un pago no aprobado promovió el módulo a «${f.access_mode}»`);
+  });
+
+  await check("Un periodo liquidado SIN plan_code no rompe ni concede", async () => {
+    // El dato que reventó la migración en Staging: cinco periodos liquidados
+    // anteriores a que `plan_code` existiera. Con NOT IN sobre un nulo el
+    // resultado es NULL, no FALSO, así que la proyección seguía y violaba el
+    // NOT NULL de access_mode. En local no había ninguno.
+    const [{ id: autor3 }] = await q(`select id from public.profiles limit 1`);
+    const [{ id: org3 }] = await q(
+      `insert into public.organizations (name, country, created_by)
+       values ($1,'CO',$2) returning id`, [`PL01D4A plan nulo ${sello}`, autor3]);
+    await q(`insert into public.organization_modules
+             (organization_id, module_code, enabled, access_mode, access_expires_at, assignment_source)
+             values ($1,'quality', true,'demo', now() - interval '5 days','auto_demo_trial')`, [org3]);
+    await q(`insert into public.organization_plan_assignments
+             (organization_id, plan_revision_id, scope, module_code, grant_kind, source, starts_at)
+             values ($1,$2,'module','quality','sold','checkout', now())`, [org3, rev]);
+    const [{ id: sub3 }] = await q(
+      `insert into public.billing_subscriptions
+         (organization_id, provider, plan_code, plan_revision_id, billing_interval,
+          catalog_amount_minor, catalog_currency, base_charge_amount, charge_currency, status,
+          current_period_start, current_period_end)
+       values ($1,'mercadopago','full',$2,'monthly',4000,'USD',132000,'COP','active',
+               now(), now() + interval '1 month') returning id`, [org3, rev]);
+    // period sin plan_code, como los legacy de Staging.
+    await q(`insert into public.billing_subscription_periods
+             (subscription_id, organization_id, period_sequence, period_start, period_end,
+              base_amount, charge_currency, status, settled_at, billing_interval)
+             values ($1,$2,1, now(), now() + interval '1 month',132000,'COP','settled', now(),'monthly')`,
+            [sub3, org3]);
+    const [f] = await q(
+      `select access_mode from public.organization_modules
+        where organization_id=$1 and module_code='quality'`, [org3]);
+    assert(f.access_mode === "demo",
+      `se proyectó sobre un periodo sin plan: quedó «${f.access_mode}»`);
+    const [{ billing_project_module_access: n }] = await q(
+      `select public.billing_project_module_access($1)`, [org3]);
+    assert(Number(n) === 0, `la proyección tocó ${n} filas sin saber qué se compró`);
   });
 
   await check("H. Y no toca los módulos de ninguna otra empresa", async () => {

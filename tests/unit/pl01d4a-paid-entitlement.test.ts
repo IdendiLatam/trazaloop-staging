@@ -178,6 +178,23 @@ check("Free no proyecta nada", () => {
     "un periodo de plan gratuito proyectaría acceso de pago");
 });
 
+check("Y un periodo que no dice qué se compró tampoco", () => {
+  // Sin el `is null` explícito, `v_plan not in (...)` con nulo devuelve NULL y
+  // el `if` no entra: la proyección seguía con access_mode nulo y reventaba el
+  // NOT NULL. Pasó en Staging, con cinco periodos anteriores a que la columna
+  // existiera; en local no había ninguno.
+  const i = SQL.indexOf("if v_plan is null then return 0; end if;");
+  const j = SQL.indexOf("if v_plan not in ('full', 'extra') then return 0; end if;");
+  assert(i > 0, "no se comprueba el plan nulo: NOT IN con nulo no es FALSO, es NULL");
+  assert(j > i, "la comprobación de nulo va DESPUÉS de la de plan");
+  // Y no se rellena con la suscripción de hoy: la identidad se congela en la
+  // obligación.
+  const cuerpo = SQL.slice(SQL.indexOf("create or replace function public.billing_project_module_access"),
+                           SQL.indexOf("comment on function public.billing_project_module_access"));
+  assert(!/billing_subscriptions/.test(cuerpo),
+    "la proyección lee el plan de la suscripción actual en vez del periodo pagado");
+});
+
 check("Es idempotente por construcción", () => {
   assert(/is distinct from/.test(SQL),
     "vuelve a escribir aunque no cambie nada: cada recálculo movería updated_at");
