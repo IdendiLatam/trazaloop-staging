@@ -2624,6 +2624,13 @@ const FRONTERA_MERCADOPAGO = [
   // fichero cada vez que algo necesite cobrar.
   "lib/billing/providers/one-time-registry.ts",
 "lib/billing/providers/mercadopago.ts",
+  // PROD-LAUNCH-01D.3A · QUIÉN COBRA la contratación self-service. De
+  // servidor, y no es interfaz: la pantalla ramifica por la FORMA del flujo
+  // —`redirect` o `embedded_card`— y recibe el nombre visible como dato, así
+  // que sigue sin nombrar ninguna pasarela. Este fichero la nombra porque es
+  // el que la ELIGE; pedirle que sea agnóstico sería pedirle que no haga su
+  // trabajo.
+  "lib/billing/purchase-routing.ts",
 ];
 
 check("53. Mercado Pago no se presenta como integrado", () => {

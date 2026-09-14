@@ -417,6 +417,54 @@ export async function startOneTimeCheckoutAction(
 }
 
 /**
+ * PROD-LAUNCH-01D.3A · Manda a pagar un presupuesto QUE YA SE ENSEÑÓ.
+ *
+ * Existe por una razón concreta: la pantalla de contratar muestra base, IVA y
+ * total antes del botón. Si el botón volviera a presupuestar, el importe
+ * cobrado y el importe leído serían dos cálculos distintos, y bastaría con que
+ * el tipo de cambio se moviera entre la carga y el clic para cobrar algo que
+ * nadie vio. Se cobra EXACTAMENTE el presupuesto que se enseñó.
+ *
+ * El identificador del presupuesto llega del navegador y eso NO es un agujero:
+ * la base deriva la empresa DEL PROPIO presupuesto y después exige rol de
+ * administración sobre ella, así que un identificador ajeno no autoriza nada.
+ * Tampoco vale uno consumido ni caducado.
+ *
+ * Y pulsar dos veces no cobra dos veces: si ya hay un checkout abierto para
+ * este mismo presupuesto, se devuelve ESE y su mismo punto de pago.
+ */
+export async function startOneTimeCheckoutForQuoteAction(
+  quoteId: string
+): Promise<OneTimeStartState> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+
+  const supabase = await createServerClient();
+  const { data: cot, error: eCot } = await supabase
+    .from("billing_quotes")
+    .select("id, plan_code, billing_interval")
+    .eq("id", quoteId)
+    .maybeSingle();
+  if (eCot || !cot) {
+    return { error: "Ese presupuesto ya no está disponible. No se cobró nada." };
+  }
+  const c = cot as { id: string; plan_code: string; billing_interval: string };
+
+  const { openOneTimeCheckout, OPEN_ERROR_MESSAGE } =
+    await import("@/lib/db/one-time-checkout");
+  const r = await openOneTimeCheckout({
+    purpose: "initial",
+    targetId: c.id,
+    supabase,
+    origin: await origenDePeticion(),
+    planLabel: etiquetaDePlan(c.plan_code, c.billing_interval),
+    payerEmail: quien.email || null,
+  });
+  if (!r.ok) return { error: OPEN_ERROR_MESSAGE[r.code] };
+  return { error: null, initPoint: r.initPoint };
+}
+
+/**
  * Renueva: abre el periodo siguiente y manda a pagarlo.
  *
  * El periodo siguiente lo abre la base anclado a la ERA de la suscripción, no

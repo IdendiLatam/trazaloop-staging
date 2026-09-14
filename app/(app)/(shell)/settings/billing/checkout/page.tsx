@@ -10,6 +10,14 @@ import { findLiveCheckout, getWompiPublicConfig } from "@/lib/db/billing-checkou
 import { WompiCardForm } from "@/components/domain/billing/wompi-card-form";
 import { CheckoutWatcher } from "@/components/domain/billing/checkout-watcher";
 import { WompiTrustPanel } from "@/components/domain/billing/wompi-trust-panel";
+import { RedirectCheckoutPanel }
+  from "@/components/domain/billing/redirect-checkout-panel";
+import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
+import { findOpenOneTimeCheckout } from "@/lib/db/one-time-checkout";
+import {
+  resolvePurchaseRoutingFromEnv, PURCHASE_UNAVAILABLE_MESSAGE,
+} from "@/lib/billing/purchase-routing";
+import type { ActiveOrganization } from "@/lib/db/organizations";
 import { ErrorAlert } from "@/components/ui/alert";
 import {
   activeShellModuleFrom, moduleAwareHref,
@@ -49,6 +57,51 @@ export default async function CheckoutPage({
   const org = await requireActiveOrg();
   if (org.roleCode !== "admin") redirect("/settings/billing");
 
+  /*
+    PROD-LAUNCH-01D.3A · QUIÉN COBRA se pregunta AQUÍ, y una sola vez.
+
+    Antes no se preguntaba: esta pantalla llamaba a la base con
+    `p_provider: 'wompi'` escrito a mano, así que anunciaba una pasarela sin
+    configurar mientras la que sí lo estaba no se llegaba a consultar. Ver
+    `lib/billing/purchase-routing.ts`.
+
+    Si el proveedor elegido no está completo, no hay pago. NO se cae al otro.
+  */
+  const ruta = resolvePurchaseRoutingFromEnv();
+  if (!ruta.available) {
+    return (
+      <Marco volver={volver}>
+        <ErrorAlert message={PURCHASE_UNAVAILABLE_MESSAGE} />
+      </Marco>
+    );
+  }
+  // Se decide por la FORMA del flujo, no por la marca: así esta pantalla no
+  // nombra ninguna pasarela, y añadir otra de redirección no la toca.
+  if (ruta.flow === "redirect") {
+    return (
+      <CheckoutRedirigido org={org} plan={plan} intervalo={intervalo}
+                          cupon={cupon} volver={volver}
+                          providerName={ruta.displayName} />
+    );
+  }
+  return (
+    <CheckoutWompi org={org} plan={plan} intervalo={intervalo}
+                   cupon={cupon} volver={volver} />
+  );
+}
+
+/**
+ * El carril WOMPI, tal cual estaba.
+ *
+ * No se toca ni se retira: sigue entero y con sus pruebas. Lo único que cambia
+ * es que ya no se elige solo — hay que nombrarlo en `BILLING_PURCHASE_PROVIDER`.
+ */
+async function CheckoutWompi({
+  org, plan, intervalo, cupon, volver,
+}: {
+  org: ActiveOrganization; plan: string;
+  intervalo: "monthly" | "annual"; cupon: string | null; volver: string;
+}) {
   // RECARGAR NO VUELVE A COBRAR. Si ya hay una contratación viva para este
   // mismo plan, es esa: si ya salió hacia el proveedor se enseña en qué quedó,
   // y si no, se sigue con ella. Un presupuesto nuevo por cada recarga abriría
@@ -115,6 +168,98 @@ export default async function CheckoutPage({
         descuento={presupuesto.discountAmount}
         promocion={presupuesto.promotionName}
       />
+    </Marco>
+  );
+}
+
+/**
+ * El carril de REDIRECCIÓN · pago único.
+ *
+ * Hoy lo sirve la pasarela aprobada para el lanzamiento; esta pantalla no sabe
+ * cuál es y recibe su nombre como dato. Quién cobra se decide en
+ * `lib/billing/purchase-routing.ts`, que es el único sitio donde se resuelve.
+ *
+ * Reutiliza EXACTAMENTE el modelo que se validó en Staging en
+ * PROD-LAUNCH-01B: `billing_one_time_checkouts`, la Preferences API, la
+ * referencia externa igual al identificador del checkout, la verificación en
+ * servidor y la conciliación canónica. No hay una segunda liquidación aquí, y
+ * no debe haberla nunca: dos formas de dar por pagado lo mismo acaban
+ * discrepando, y la que discrepa es siempre la que cobró.
+ *
+ * DIBUJAR ESTA PANTALLA NO CREA NINGUNA PREFERENCIA. Se presupuesta —para
+ * poder decir cuánto— y ahí se para. La preferencia la crea una persona
+ * pulsando el botón. Cargar una pantalla no es contratar.
+ */
+async function CheckoutRedirigido({
+  org, plan, intervalo, cupon, volver, providerName,
+}: {
+  org: ActiveOrganization; plan: string;
+  intervalo: "monthly" | "annual"; cupon: string | null; volver: string;
+  providerName: string;
+}) {
+  // Si ya hay un pago en curso, es ESE. Presupuestar otra vez abriría un
+  // segundo camino de pago para lo mismo.
+  const enCurso = await findOpenOneTimeCheckout(org.organizationId);
+  if (enCurso) {
+    return (
+      <Marco volver={volver}>
+        <PendingCheckoutPanel
+          checkoutId={enCurso.id}
+          amountLabel={pesos(enCurso.expectedTotalAmount)}
+          initPoint={enCurso.initPoint}
+        />
+      </Marco>
+    );
+  }
+
+  const presupuesto = await createBillingQuote(org.organizationId, plan, intervalo, cupon);
+  if (!presupuesto.ok) {
+    return (
+      <Marco volver={volver}>
+        <ErrorAlert message={QUOTE_ERROR_MESSAGE[presupuesto.code]} />
+      </Marco>
+    );
+  }
+
+  return (
+    <Marco volver={volver}>
+      <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
+        <section className="rounded-md border border-hairline bg-surface p-4
+                            lg:col-start-1 lg:row-start-1">
+          <h2 className="text-sm font-semibold">Lo que vas a pagar</h2>
+          <dl className="grid grid-cols-2 gap-2 pt-2 text-sm">
+            <dt className="text-ink-soft">Plan</dt>
+            <dd className="font-medium">{planLabel(presupuesto.planCode)}</dd>
+            <dt className="text-ink-soft">Facturación</dt>
+            <dd>{presupuesto.billingInterval === "annual" ? "Anual" : "Mensual"}</dd>
+            {presupuesto.discountAmount > 0 ? (
+              <>
+                <dt className="text-ink-soft">Precio</dt>
+                <dd>{pesos(presupuesto.baseAmount + presupuesto.discountAmount)}</dd>
+                <dt className="text-ink-soft">
+                  Descuento{presupuesto.promotionName ? ` · ${presupuesto.promotionName}` : ""}
+                </dt>
+                <dd>−{pesos(presupuesto.discountAmount)}</dd>
+              </>
+            ) : null}
+            <dt className="text-ink-soft">Base</dt>
+            <dd>{pesos(presupuesto.baseAmount)}</dd>
+            <dt className="text-ink-soft">Impuestos</dt>
+            <dd>{pesos(presupuesto.taxAmount)}</dd>
+            <dt className="font-medium">Total</dt>
+            <dd className="font-medium">{pesos(presupuesto.totalAmount)}</dd>
+          </dl>
+          <p className="pt-2 text-xs text-ink-soft">
+            Este importe vale hasta las {timeOfDay(presupuesto.expiresAt)}; después
+            habrá que calcularlo otra vez.
+          </p>
+        </section>
+
+        <div className="lg:col-start-1 lg:row-start-2">
+          <RedirectCheckoutPanel quoteId={presupuesto.quoteId}
+                                 providerName={providerName} />
+        </div>
+      </div>
     </Marco>
   );
 }

@@ -184,6 +184,18 @@ const FRONTERA_PASARELA = [
   // fichero cada vez que algo necesite cobrar.
   "lib/billing/providers/one-time-registry.ts",
   "lib/billing/providers/mercadopago.ts",
+  // PROD-LAUNCH-01D.3A · QUIÉN COBRA la contratación self-service.
+  //
+  // Es el fichero que ELIGE pasarela, así que por definición tiene que
+  // nombrarlas: pedirle que sea agnóstico sería pedirle que no haga su trabajo.
+  //
+  // Y crece la lista en UNO, no en tres. El defecto que cerró este tramo se
+  // arregló primero con una pantalla y un panel que decían «Mercado Pago», y
+  // eso habría metido interfaz en una frontera que se declaró de servidor. En
+  // su lugar la ruta expone la FORMA del flujo —`redirect` o `embedded_card`—
+  // y el nombre visible como DATO, de modo que la pantalla y el panel siguen
+  // sin saber quién cobra.
+  "lib/billing/purchase-routing.ts",
 ];
 
 check("AK. PE-04 no contiene cobro, cupones ni cálculo de impuestos", () => {
