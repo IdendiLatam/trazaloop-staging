@@ -54,7 +54,7 @@ export async function resolvePublicCampaign(slug: string): Promise<PublicCampaig
 }
 
 export type BeginOutcome =
-  | { status: "created"; submissionId: string; token: string;
+  | { status: "created"; submissionId: string; token: string; repeated: boolean;
       /** Cuánto debe durar la cookie de continuidad. Lo decide la BASE: es la
        *  misma regla que gobierna la ventana de escritura (0199). */
       resumeMaxAge: number }
@@ -67,6 +67,13 @@ export type BeginOutcome =
 export async function beginPublicSubmission(input: {
   slug: string; name: string; email: string; phone: string | null;
   company: string; marketing: boolean; ip: string | null; nonce: string | null;
+  /**
+   * PUBLIC-DIAGNOSTICS-01G · El testigo de la participación ANTERIOR, cuando
+   * se viene a repetir. Sale de la cookie en el servidor; el navegador no lo
+   * escribe ni lo puede leer. Sin esto, repetir se pediría con un correo — y
+   * cualquiera que conociera el de una empresa podría dejar la suya superada.
+   */
+  repeatToken: string | null;
 }): Promise<BeginOutcome> {
   const supabase = await createServerClient();
   const { data, error } = await supabase.rpc("public_diagnostic_begin_submission", {
@@ -78,6 +85,7 @@ export async function beginPublicSubmission(input: {
     p_marketing: input.marketing,
     p_ip: input.ip,
     p_nonce: input.nonce,
+    p_repeat_token: input.repeatToken,
   });
   if (error || !data || typeof data !== "object") return { status: "error" };
   const r = data as Json;
@@ -87,6 +95,7 @@ export async function beginPublicSubmission(input: {
       submissionId: String(r.submission_id),
       token: String(r.token),
       resumeMaxAge: Number(r.resume_max_age ?? 0),
+      repeated: r.repeated === true,
     };
   }
   const conocidos = ["existing", "unavailable", "rate_limited", "invalid"] as const;

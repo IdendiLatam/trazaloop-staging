@@ -1,24 +1,37 @@
 // Página PÚBLICA del resultado (sin login). Solo la ve quien tiene el TESTIGO
-// de SU participación: no hay identificador en la URL que se pueda probar.
+// de SU participación: no hay identificador en la URL que se pueda probar, y
+// `anon` no lee ninguna tabla.
 export const dynamic = "force-dynamic";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getPublicAssessment } from "@/lib/db/public-diagnostic-assessment";
+import { getPublicResult } from "@/lib/db/public-diagnostic-assessment";
+import { parsePublicSnapshot, buildPublicReport } from "@/lib/domain/public-diagnostic-report";
+import { isPublicRegistrationEnabled } from "@/lib/auth/public-registration";
 import { INTAKE_COOKIE } from "@/lib/domain/public-intake-cookies";
+import { PublicResultReport } from "@/components/domain/public-diagnostics/result-report";
 import { Wordmark } from "@/components/layout/logo";
 
 /**
- * PUBLIC-DIAGNOSTICS-01F · «Ya está». El informe llega en PD-01G.
+ * PUBLIC-DIAGNOSTICS-01G · El informe.
  *
- * Esta pantalla existe ahora para que el recorrido termine en algún sitio y
- * para dejar puesta la regla de acceso: el resultado lo ve QUIEN TIENE EL
- * TESTIGO de esa participación, y nadie más. Enseñar el informe con lo que ya
- * está calculado habría sido fácil; también habría sido diseñar a medias la
- * experiencia que tiene su propio tramo.
+ *
+ * LA FUENTE ES LA INSTANTÁNEA, Y SOLO ELLA
+ *
+ * Esta página no carga preguntas, no lee la versión del instrumento y no
+ * conoce el motor de puntuación. Pide una cosa —`public_diagnostic_get_result`—
+ * y pinta lo que devuelve. Es lo que garantiza que el resultado de hoy sea el
+ * mismo que se congeló al cerrar, aunque el código cambie diez veces.
+ *
+ *
+ * QUÉ NO SE INDEXA Y POR QUÉ IMPORTA AQUÍ MÁS QUE EN NINGÚN SITIO
+ *
+ * `noindex, nofollow`, y el título es genérico A PROPÓSITO: ni la empresa, ni
+ * el porcentaje, ni el nivel. Un título con «Recicladora X — 42 %» acabaría en
+ * la vista previa de WhatsApp de cualquiera a quien le reenvíen el enlace.
  */
 export const metadata = {
-  title: "Diagnóstico completado · Trazaloop",
+  title: "Resultado del diagnóstico · Trazaloop",
   robots: { index: false, follow: false },
 };
 
@@ -31,34 +44,53 @@ export default async function PublicResultPage({
   const puerta = `/diagnostic/${encodeURIComponent(slug)}`;
   if (!token) redirect(puerta);
 
-  const evaluacion = await getPublicAssessment(token);
-  if (!evaluacion || evaluacion.slug !== slug) redirect(puerta);
+  const lectura = await getPublicResult(token);
+
   // Todavía a medias: se sigue respondiendo, no hay resultado que enseñar.
-  if (evaluacion.submissionStatus !== "completed") redirect(`${puerta}/assessment`);
+  if (lectura.status === "not_completed") {
+    redirect(lectura.slug === slug ? `${puerta}/assessment` : puerta);
+  }
+  // Testigo inválido, de otra campaña o caducado: la MISMA respuesta para
+  // todos, y sin decir cuál de los tres fue.
+  if (lectura.status !== "found" || lectura.result.slug !== slug) redirect(puerta);
+
+  const snapshot = parsePublicSnapshot(lectura.result.snapshot);
+  if (!snapshot) {
+    // Una instantánea ilegible no se completa a ojo: se dice.
+    return (
+      <div className="mx-auto max-w-2xl space-y-4 p-6">
+        <Wordmark />
+        <p role="status" className="rounded-lg border border-hairline bg-surface p-4 text-sm">
+          Tu diagnóstico está completo, pero no pudimos preparar el informe en
+          este momento. Vuelve a intentarlo más tarde desde este mismo navegador.
+        </p>
+      </div>
+    );
+  }
+
+  /*
+    EL DESTINO DEL CTA SIGUE AL RECORRIDO QUE YA EXISTE.
+
+    La portada ofrece «Crear cuenta Demo» cuando el registro público está
+    abierto y «Solicitar acceso» cuando no. Mandar a `/register` con el
+    registro cerrado sería llevar a una puerta que no abre, justo después de
+    haber prometido ayuda.
+
+    Y no es un embudo: pulsar aquí NO crea cuenta, NO marca consentimiento
+    comercial y NO traslada nada de lo que se autorizó para el diagnóstico.
+  */
+  const registroAbierto = isPublicRegistrationEnabled();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <header className="space-y-2">
-        <Wordmark />
-        <p className="eyebrow">
-          {evaluacion.partnerName ? `Con ${evaluacion.partnerName}` : "Diagnóstico"}
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {evaluacion.publicTitle}
-        </h1>
-      </header>
-
-      <section role="status" className="rounded-lg border border-loop/30 bg-loop/5 p-5">
-        <h2 className="text-sm font-semibold">Diagnóstico completado</h2>
-        <p className="pt-1 text-sm text-ink-soft">
-          Recibimos tus {evaluacion.progress.total} respuestas y ya calculamos tu
-          resultado. Muy pronto podrás verlo aquí mismo, desde este navegador.
-        </p>
-      </section>
-
-      <p className="text-xs text-ink-soft">
-        Trazaloop es un producto de IDENDI Latam.
-      </p>
-    </div>
+    <PublicResultReport
+      report={buildPublicReport(snapshot)}
+      publicTitle={lectura.result.publicTitle}
+      partnerName={lectura.result.partnerName}
+      companyName={lectura.result.companyName}
+      completedAt={lectura.result.completedAt}
+      ctaHref={registroAbierto ? "/register" : "mailto:contacto@idendi.org"}
+      ctaLabel={registroAbierto ? "Conocer Trazaloop" : "Solicitar acceso"}
+      repeatHref={lectura.result.allowRepeat ? `${puerta}?repetir=1` : null}
+    />
   );
 }

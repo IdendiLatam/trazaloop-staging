@@ -23,9 +23,15 @@ const campo = "w-full rounded-md border border-hairline bg-surface px-3 py-2 tex
 const etiqueta = "block text-sm font-medium";
 
 export function PublicIntakeForm({
-  slug, nonce, consentTitle, consentVersion,
+  slug, nonce, consentTitle, consentVersion, repitiendo = false,
 }: {
   slug: string;
+  /**
+   * PD-01G · Se viene a repetir un diagnóstico ya cerrado. Solo cambia el
+   * texto y añade la INTENCIÓN al envío: la prueba es el testigo que el
+   * servidor saca de la cookie, y aquí no se toca.
+   */
+  repitiendo?: boolean;
   /**
    * Testigo firmado por la base al pintar esta página. Un robot puede LEERLO
    * —está en el HTML— pero no puede fabricar uno con fecha anterior, así que
@@ -67,6 +73,14 @@ export function PublicIntakeForm({
     <form action={accion} className="space-y-4 rounded-lg border border-hairline bg-surface p-4">
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="nonce" value={nonce ?? ""} />
+      {repitiendo ? <input type="hidden" name="repetir" value="1" /> : null}
+
+      {repitiendo ? (
+        <p role="status" className="rounded-md border border-hairline bg-paper p-3 text-sm">
+          Vas a empezar un diagnóstico nuevo. El resultado anterior se conserva
+          tal cual: no se borra, no se reabre y no se modifica.
+        </p>
+      ) : null}
 
       {/* Trampa. Fuera de pantalla, sin tabulación y anunciada como oculta. */}
       <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">

@@ -31,9 +31,15 @@ const PREGUNTAS = 52;
 const MINUTOS = "15 a 20 minutos";
 
 export default async function PublicDiagnosticPage({
-  params,
-}: { params: Promise<{ slug: string }> }) {
+  params, searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
+  const consulta = await searchParams;
+  /** PD-01G · Intención explícita de repetir. Solo eso: la prueba va aparte. */
+  const quiereRepetir = consulta.repetir === "1";
 
   /*
     PUBLIC-DIAGNOSTICS-01F · QUIEN YA EMPEZÓ NO VUELVE A PRESENTARSE.
@@ -49,12 +55,21 @@ export default async function PublicDiagnosticPage({
   */
   const galletas = await cookies();
   const token = galletas.get(INTAKE_COOKIE)?.value ?? null;
+  let repitiendo = false;
   if (token) {
     const enCurso = await resumePublicSubmission(token);
     if (enCurso.status === "found" && enCurso.slug === slug) {
-      redirect(enCurso.submissionStatus === "completed"
-        ? `/diagnostic/${encodeURIComponent(slug)}/result`
-        : `/diagnostic/${encodeURIComponent(slug)}/assessment`);
+      // A medias siempre se continúa: repetir algo sin terminar no es repetir.
+      if (enCurso.submissionStatus !== "completed") {
+        redirect(`/diagnostic/${encodeURIComponent(slug)}/assessment`);
+      }
+      // Cerrada: se va al resultado, SALVO que se venga explícitamente a
+      // repetir. Aquí solo se decide qué pintar; que la campaña lo permita y
+      // que el testigo sirva lo comprueba la base al crear.
+      if (!quiereRepetir) {
+        redirect(`/diagnostic/${encodeURIComponent(slug)}/result`);
+      }
+      repitiendo = true;
     }
   }
 
@@ -112,6 +127,7 @@ export default async function PublicDiagnosticPage({
           {campaña.hasConsentDocument ? (
             <PublicIntakeForm
               slug={slug}
+              repitiendo={repitiendo && campaña.allowRepeat}
               nonce={campaña.formNonce}
               consentTitle={campaña.consentDocumentTitle}
               consentVersion={campaña.consentDocumentVersion}

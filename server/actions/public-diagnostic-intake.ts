@@ -82,6 +82,23 @@ export async function beginPublicDiagnosticAction(
     };
   }
 
+  /*
+    PUBLIC-DIAGNOSTICS-01G · REPETIR SE DEMUESTRA, NO SE DECLARA.
+
+    Del formulario llega solo la INTENCIÓN. La prueba —el testigo de la
+    participación anterior— se saca de la cookie aquí, en el servidor: el
+    navegador no puede leerla ni fabricarla, y la base comprueba además que
+    señale a una participación CERRADA de esta misma campaña.
+
+    Si la campaña no admite repetir, o el testigo no vale, la respuesta vuelve
+    a ser la neutra de siempre: «ya hay un diagnóstico con ese correo».
+  */
+  const quiereRepetir = formData.get("repetir") === "1";
+  const galletasPrevias = await cookies();
+  const anterior = quiereRepetir
+    ? galletasPrevias.get(INTAKE_COOKIE)?.value ?? null
+    : null;
+
   const r = await beginPublicSubmission({
     slug,
     name: String(formData.get("name") ?? "").trim().slice(0, 160),
@@ -93,6 +110,7 @@ export async function beginPublicDiagnosticAction(
     // 3 · Tiempo mínimo: el testigo lo firmó la base al pintar la página y
     // allí se valida. Aquí solo viaja.
     nonce: String(formData.get("nonce") ?? "").slice(0, 120) || null,
+    repeatToken: anterior,
   });
 
   if (r.status === "created") {

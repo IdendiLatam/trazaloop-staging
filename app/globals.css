@@ -101,4 +101,17 @@ body {
   .print-avoid-break {
     break-inside: avoid;
   }
+
+  /* PUBLIC-DIAGNOSTICS-01G · Lo que solo tiene sentido en papel.
+     El informe público enseña seis brechas y esconde el resto tras «Ver
+     todas»; en una hoja impresa no hay dónde pulsar, así que ese resto se
+     imprime entero desde un bloque propio. Forzar la apertura de un <details>
+     desde CSS no es fiable entre navegadores — esto sí. */
+  .print-only {
+    display: block !important;
+  }
+}
+
+.print-only {
+  display: none;
 }

@@ -302,11 +302,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0198_public_diagnostic_intake.sql",
     "0199_public_diagnostic_assessment.sql",
     "0200_quality_mr_src_privilege_boundary.sql",
+    "0201_public_diagnostic_result_and_repeat.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0200_quality_mr_src_privilege_boundary.sql",
+  assert(cabecera === "0201_public_diagnostic_result_and_repeat.sql",
     `la cabecera es ${cabecera}`);
 });
 

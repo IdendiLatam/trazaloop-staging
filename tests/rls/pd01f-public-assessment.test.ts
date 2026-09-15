@@ -36,7 +36,7 @@ async function main() {
     await import("../../lib/diagnostic/scoring");
   const { parseScoringConfig, isPcrV1Profile } =
     await import("../../lib/diagnostic/scoring-config");
-  const { buildPublicResultSnapshot } =
+  const { buildPublicResultSnapshot, PUBLIC_RESULT_SCHEMA } =
     await import("../../lib/diagnostic/public-result");
   type ScoringQuestion = import("../../lib/diagnostic/scoring").ScoringQuestion;
 
@@ -482,7 +482,9 @@ async function main() {
       assert(!texto.includes(prohibido), `la instantánea contiene «${prohibido}»`);
     }
     const rp = s.rp as Json;
-    assert(rp.schema === "public_pcr_result.v1", `formato «${rp.schema}»`);
+    // Contra la constante, no contra un literal: el formato lo decide el
+    // módulo que lo escribe, y 01G lo subió a v2 al añadir la dimensión.
+    assert(rp.schema === PUBLIC_RESULT_SCHEMA, `formato «${rp.schema}»`);
     assert((rp.sections as unknown[]).length === 6, "la instantánea no trae las 6 secciones");
     assert((rp.gaps as unknown[]).length === cierre.snapshot.criticalGaps
         || (rp.gaps as unknown[]).length > 0, "no se guardó ninguna brecha real");
@@ -699,6 +701,7 @@ async function main() {
     const nombres = fns.map((f) => f.proname as string);
     const esperadas = ["public_diagnostic_begin_submission",
                        "public_diagnostic_get_assessment",
+                       "public_diagnostic_get_result",
                        "public_diagnostic_resolve_campaign",
                        "public_diagnostic_resume_submission",
                        "public_diagnostic_save_progress"];

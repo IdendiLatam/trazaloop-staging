@@ -304,3 +304,58 @@ export async function finalizePublicSubmission(
   }
   return { status: "error" };
 }
+
+/**
+ * PUBLIC-DIAGNOSTICS-01G · El resultado, tal como se congeló.
+ *
+ * Pasa por una función distinta de la del cuestionario, y a propósito: aquella
+ * carga las seis secciones y las 52 preguntas para poder pintarlas, y en la
+ * pantalla de resultado eso sería traer el instrumento entero para enseñar un
+ * porcentaje —y dejar a mano todo lo necesario para recalcular—.
+ *
+ * Aquí no hay motor, ni versión, ni preguntas. Lo que devuelve la base es la
+ * instantánea persistida, y esta capa se limita a nombrarla en castellano.
+ */
+export type PublicResult = {
+  slug: string;
+  publicTitle: string;
+  partnerName: string | null;
+  companyName: string;
+  completedAt: string | null;
+  allowRepeat: boolean;
+  /** La instantánea, sin tocar. La valida `parsePublicSnapshot`. */
+  snapshot: unknown;
+};
+
+export type ResultOutcome =
+  | { status: "found"; result: PublicResult }
+  | { status: "not_completed"; slug: string }
+  | { status: "unavailable" }
+  | { status: "not_found" };
+
+export async function getPublicResult(token: string): Promise<ResultOutcome> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("public_diagnostic_get_result", {
+    p_token: token,
+  });
+  if (error || !data || typeof data !== "object") return { status: "not_found" };
+  const r = data as Json;
+  if (r.status === "not_completed") {
+    return { status: "not_completed", slug: String(r.slug ?? "") };
+  }
+  if (r.status !== "found") {
+    return r.status === "unavailable" ? { status: "unavailable" } : { status: "not_found" };
+  }
+  return {
+    status: "found",
+    result: {
+      slug: String(r.slug ?? ""),
+      publicTitle: String(r.public_title ?? ""),
+      partnerName: (r.partner_name as string) ?? null,
+      companyName: String(r.company_name ?? ""),
+      completedAt: (r.completed_at as string) ?? null,
+      allowRepeat: r.allow_repeat === true,
+      snapshot: r.result ?? null,
+    },
+  };
+}

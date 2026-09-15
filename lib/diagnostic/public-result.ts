@@ -70,14 +70,28 @@ export type PublicResultSnapshot = {
   resultPayload: Record<string, unknown>;
 };
 
-/** El nombre de la versión del formato, para que PD-01G sepa qué está leyendo. */
-export const PUBLIC_RESULT_SCHEMA = "public_pcr_result.v1";
+/**
+ * El nombre del formato, para que quien lo lea sepa qué está leyendo.
+ *
+ * PD-01G lo sube a `v2` por un solo motivo: cada brecha pasa a decir DE QUÉ
+ * DIMENSIÓN es. Sin ese dato la pantalla de resultado no puede agrupar las
+ * recomendaciones ni ordenar las brechas por la dimensión más floja, y
+ * deducirlo del código de la pregunta —«S1Q03» → sección 1— sería una
+ * inferencia que se rompe en cuanto una versión futura numere distinto.
+ *
+ * Se sube la versión en vez de añadir el campo en silencio porque el nombre
+ * del formato es una promesa sobre su contenido. Hoy no cuesta nada: no hay
+ * ni una instantánea persistida en ningún entorno.
+ */
+export const PUBLIC_RESULT_SCHEMA = "public_pcr_result.v2";
 
 export function buildPublicResultSnapshot(
   input: PublicResultInput
 ): PublicResultSnapshot {
   const resultado = computeDiagnosticResult(
     input.questions, input.answers, input.config);
+
+  const seccionDe = new Map(input.questions.map((q) => [q.id, q.sectionCode]));
 
   const sectionScores: Record<string, PublicSectionScore> = {};
   for (const s of resultado.sectionScores) {
@@ -123,6 +137,9 @@ export function buildPublicResultSnapshot(
       // Sin decir cuáles eran críticas: eso es la regla de puntuación.
       gaps: resultado.noAnswers.map((g) => ({
         code: g.code,
+        // De qué dimensión es. Sale del catálogo que ya está en memoria, no de
+        // adivinar nada a partir del código de la pregunta.
+        section: seccionDe.get(g.questionId) ?? null,
         question: g.questionText,
         recommended_action: g.recommendedAction,
       })),

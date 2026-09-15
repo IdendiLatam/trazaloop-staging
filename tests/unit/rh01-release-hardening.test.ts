@@ -906,6 +906,7 @@ check("31. Tras la 0110 solo migraciones de sprints autorizados", () => {
   "0198_public_diagnostic_intake.sql",
   "0199_public_diagnostic_assessment.sql",
   "0200_quality_mr_src_privilege_boundary.sql",
+  "0201_public_diagnostic_result_and_repeat.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

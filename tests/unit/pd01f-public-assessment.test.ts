@@ -403,20 +403,26 @@ check("Y/Z. Cerrar es atómico e idempotente", () => {
 });
 
 check("AG. El resultado exige el testigo propio, y la ruta no lleva identificador", () => {
+  /*
+    PD-01G reescribió esta pantalla: donde había un «ya está» hay un informe.
+    Lo que NO cambia —y es lo que este renglón defiende desde 01F— es la regla
+    de acceso: el testigo manda, y solo el de ESA participación.
+
+    Se comprueba la invariante, no los nombres de las variables de entonces.
+    La parte que decía «aquí no se adelanta el informe» se retira porque ya no
+    describe nada: enseñarlo es justamente el trabajo de 01G, y que no filtre
+    de más lo vigila su propia batería.
+  */
   assert(/galletas\.get\(INTAKE_COOKIE\)/.test(RESULTADO),
     "la página de resultado no exige testigo");
-  assert(/if \(!token\) redirect\(puerta\)/.test(RESULTADO),
-    "sin testigo se ve algo");
-  assert(/evaluacion\.slug !== slug/.test(RESULTADO),
+  assert(/if \(!token\) redirect\(/.test(RESULTADO), "sin testigo se ve algo");
+  assert(/\.slug !== slug\) redirect\(/.test(RESULTADO),
     "un testigo de otra campaña abre este resultado");
-  assert(/submissionStatus !== "completed"/.test(RESULTADO),
+  assert(/"not_completed"|!== "completed"/.test(RESULTADO),
     "se enseña resultado de algo que no está cerrado");
-  // PD-01G hará el informe: aquí no se adelanta.
-  for (const prohibido of ["maturityPercent", "maturity_percent", "readinessLevel",
-                           "criticalGaps", "sectionScores"]) {
-    assert(!new RegExp(prohibido).test(RESULTADO),
-      `la pantalla de resultado ya enseña «${prohibido}»: eso es PD-01G`);
-  }
+  // Y el identificador sigue sin viajar por la dirección.
+  assert(!/searchParams.*submission|\?submission=|\?token=/.test(RESULTADO),
+    "la ruta del resultado admite un identificador por la URL");
 });
 
 check("Q/R. En curso se edita; cerrada, no, y la interfaz lo respeta", () => {

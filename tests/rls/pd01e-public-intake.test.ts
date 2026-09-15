@@ -411,6 +411,7 @@ async function main() {
     // esta lista es parte de lo que se comprueba.
     const esperadas = ["public_diagnostic_begin_submission",
                        "public_diagnostic_get_assessment",
+                       "public_diagnostic_get_result",
                        "public_diagnostic_resolve_campaign",
                        "public_diagnostic_resume_submission",
                        "public_diagnostic_save_progress"];
