@@ -58,7 +58,8 @@ begin
   select sub.id, sub.status, sub.campaign_id, sub.completed_at,
          sub.company_name, sub.result_payload,
          c.slug, coalesce(c.public_title, c.name) as titulo,
-         c.partner_name, c.allow_repeat
+         c.partner_name, c.allow_repeat,
+         c.status as campaign_status, c.opens_at, c.closes_at
     into s
     from public.public_diagnostic_submissions sub
     join public.public_diagnostic_campaigns c on c.id = sub.campaign_id
@@ -96,6 +97,13 @@ begin
     'company_name', s.company_name,
     'completed_at', s.completed_at,
     'allow_repeat', s.allow_repeat,
+    -- Y si HOY se podría empezar otra. Ofrecer «volver a diligenciar» en una
+    -- convocatoria cerrada es un botón que lleva a una puerta tapiada: la
+    -- campaña permite repetir, pero ya no admite participaciones nuevas.
+    -- Se decide con la MISMA regla que usa `begin_submission`, no con otra.
+    'repeat_available', (s.campaign_status = 'open'
+      and (s.opens_at is null or s.opens_at <= now())
+      and (s.closes_at is null or s.closes_at > now())),
     -- Tal cual se congeló. Esta función no compone ni deriva nada.
     'result', s.result_payload);
 end $$;

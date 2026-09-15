@@ -371,7 +371,7 @@ async function main() {
   console.log("\nE · La campaña se cierra, el resultado no\n");
 
   await check("P/Q. Cerrada, vencida y archivada siguen entregando el resultado", async () => {
-    const antes = JSON.stringify((await resultado(token)).result);
+    const antes = canonico((await resultado(token)).result);
     for (const [qué, sql] of [
       ["vencida", `update public.public_diagnostic_campaigns
                       set opens_at = now() - interval '200 days',
@@ -385,8 +385,12 @@ async function main() {
       const r = await resultado(token);
       assert(r.status === "found",
         `con la campaña ${qué} el resultado dejó de verse: «${r.status}»`);
-      assert(JSON.stringify(r.result) === antes,
+      assert(canonico(r.result) === antes,
         `con la campaña ${qué} el resultado cambió`);
+      // Pero repetir ya no se ofrece: la campaña no admite participaciones
+      // nuevas, y un botón que lleva a una puerta tapiada es peor que ninguno.
+      assert(r.repeat_available === false,
+        `con la campaña ${qué} se seguiría ofreciendo repetir`);
     }
     await q(`update public.public_diagnostic_campaigns
                 set status='open', closes_at = now() + interval '10 days' where id=$1`,
@@ -394,6 +398,14 @@ async function main() {
   });
 
   console.log("\nF · Repetir\n");
+
+  await check("Con la campaña abierta, repetir se ofrece si ella lo permite", async () => {
+    const abierta = await resultado(token);
+    assert(abierta.repeat_available === true,
+      "con la campaña abierta no se dice que se podría repetir");
+    assert(abierta.allow_repeat === false,
+      "esta campaña del fixture no debería permitir repetir");
+  });
 
   await check("W. Si la campaña NO admite repetir, no se repite", async () => {
     const r = await empezar(`qa-g-${sello}`, `g${sello}@ejemplo.com`,

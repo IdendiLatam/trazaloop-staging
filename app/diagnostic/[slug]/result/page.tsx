@@ -90,7 +90,8 @@ export default async function PublicResultPage({
       completedAt={lectura.result.completedAt}
       ctaHref={registroAbierto ? "/register" : "mailto:contacto@idendi.org"}
       ctaLabel={registroAbierto ? "Conocer Trazaloop" : "Solicitar acceso"}
-      repeatHref={lectura.result.allowRepeat ? `${puerta}?repetir=1` : null}
+      repeatHref={lectura.result.allowRepeat && lectura.result.repeatAvailable
+        ? `${puerta}?repetir=1` : null}
     />
   );
 }

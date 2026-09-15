@@ -323,6 +323,8 @@ export type PublicResult = {
   companyName: string;
   completedAt: string | null;
   allowRepeat: boolean;
+  /** ¿La campaña admitiría hoy una participación nueva? */
+  repeatAvailable: boolean;
   /** La instantánea, sin tocar. La valida `parsePublicSnapshot`. */
   snapshot: unknown;
 };
@@ -355,6 +357,7 @@ export async function getPublicResult(token: string): Promise<ResultOutcome> {
       companyName: String(r.company_name ?? ""),
       completedAt: (r.completed_at as string) ?? null,
       allowRepeat: r.allow_repeat === true,
+      repeatAvailable: r.repeat_available === true,
       snapshot: r.result ?? null,
     },
   };

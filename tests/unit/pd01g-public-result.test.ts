@@ -85,11 +85,28 @@ check("La lectura de la base devuelve la instantánea y NADA más", () => {
     "la lectura del resultado no está acotada como las demás");
 });
 
-check("P/Q. Y el estado de la campaña NO entra en esa decisión", () => {
+check("P/Q. El estado de la campaña no decide si hay resultado", () => {
   const cuerpo = cuerpoSql("public_diagnostic_get_result");
-  assert(!/c\.status|closes_at|opens_at/.test(cuerpo),
-    "la lectura del resultado mira el estado de la campaña: archivar se "
-    + "convertiría en revocar retroactivamente lo ya entregado");
+  /*
+    Matiz que importa: el estado de la campaña SÍ se mira, pero solo para decir
+    si hoy se podría empezar otra participación —`repeat_available`—. Lo que no
+    puede hacer es condicionar la ENTREGA del resultado: archivar es una acción
+    administrativa sobre el estudio, no una revocación de lo ya entregado.
+  */
+  const lineas = cuerpo.split("\n")
+    .filter((l) => /c\.status|closes_at|opens_at|campaign_status/.test(l));
+  assert(lineas.length > 0, "no se calcula si la campaña admitiría repetir");
+  const dentroDelSelect = /s\.campaign_status = 'open'/;
+  for (const l of lineas) {
+    assert(dentroDelSelect.test(l) || /s\.opens_at is null|s\.closes_at is null/.test(l)
+        || /c\.status as campaign_status, c\.opens_at, c\.closes_at/.test(l),
+      `el estado de la campaña se usa fuera del cálculo de repetición: «${l.trim()}»`);
+  }
+  // Y en ninguna rama se niega el resultado por el estado de la campaña.
+  assert(!/campaign_status[^\n]*then[^\n]*not_found/.test(cuerpo),
+    "se niega el resultado por el estado de la campaña");
+  assert(!/where[^\n]*c\.status/.test(cuerpo),
+    "la búsqueda de la participación filtra por el estado de la campaña");
 });
 
 console.log("\nB · Qué se enseña, y qué no");
@@ -325,12 +342,17 @@ console.log("\nF · Repetir");
 // ===========================================================================
 
 check("W/X. El enlace de repetir depende de la campaña, no del gusto", () => {
-  assert(/repeatHref=\{lectura\.result\.allowRepeat \? /.test(PAGINA),
-    "el enlace de repetir no depende de allow_repeat");
+  assert(/repeatHref=\{lectura\.result\.allowRepeat && lectura\.result\.repeatAvailable/
+    .test(PAGINA),
+    "el enlace de repetir no depende de allow_repeat Y de que la campaña siga "
+    + "admitiendo participaciones: sería un botón hacia una puerta tapiada");
   assert(/repeatHref \? \(/.test(INFORME),
     "el informe pinta el bloque de repetir siempre");
-  assert(/'allow_repeat', s\.allow_repeat/.test(cuerpoSql("public_diagnostic_get_result")),
+  const cuerpo = cuerpoSql("public_diagnostic_get_result");
+  assert(/'allow_repeat', s\.allow_repeat/.test(cuerpo),
     "la base no dice si la campaña admite repetir");
+  assert(/'repeat_available'/.test(cuerpo),
+    "la base no dice si HOY se podría empezar otra");
 });
 
 check("Y la intención se declara, pero la prueba es el testigo de la cookie", () => {
