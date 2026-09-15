@@ -143,6 +143,8 @@ export const PLATFORM_GROUP: ModuleNavGroup = {
     // PE-03B2 · Los vídeos que explican cada pantalla, y el de bienvenida.
     { label: "Tutoriales", href: "/platform/tutorials" },
     { label: "Documentos legales", href: "/platform/legal" },
+    // PD-01D · Convocatorias para diagnosticar empresas sin cuenta.
+    { label: "Diagnósticos públicos", href: "/platform/public-diagnostics" },
     { label: "Tickets de soporte", href: "/platform/support" },
   ],
 };

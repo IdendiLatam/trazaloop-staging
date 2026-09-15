@@ -138,6 +138,21 @@ console.log("\nB · Ninguna mutación de negocio sin puerta comercial");
  * conciencia en vez de descubrirlo pantalla por pantalla.
  */
 const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
+  // PD-01D · Administración de campañas públicas de diagnóstico.
+  //
+  // La puerta comercial mide el consumo de UNA EMPRESA contra su plan, y estas
+  // acciones no tienen empresa: las ejecuta la superadministración de
+  // plataforma sobre convocatorias que Trazaloop organiza. Ponerle esa puerta
+  // delante sería preguntar por el cupo de una empresa que no existe.
+  //
+  // Su puerta es otra y sí la tienen: `requirePlatformStaff` más
+  // `isSuperadmin`, y debajo la RLS de 0196, que solo deja escribir estas
+  // tablas a la superadministración.
+  "server/actions/public-diagnostics-admin.ts:createCampaignAction":
+    "Campaña de plataforma, sin empresa. Su puerta es requirePlatformStaff + "
+    + "isSuperadmin, y la RLS de 0196 la vuelve a exigir en la base.",
+  "server/actions/public-diagnostics-admin.ts:updateCampaignAction":
+    "Idem: no consume nada de ninguna empresa. Guardada por plataforma, no por plan.",
   "server/actions/evidences.ts:finalizeEvidenceUploadAction":
     "CIERRA un flujo que ya pasó la puerta y la reserva en su `begin`. Bloquear el "
     + "final dejaría bytes reservados y un archivo subido sin fila que lo represente.",

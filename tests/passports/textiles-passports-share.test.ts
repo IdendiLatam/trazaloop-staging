@@ -151,6 +151,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0194_paid_module_access_projection.sql",
     "0195_pcr_diagnostic_versioning.sql",
     "0196_public_diagnostic_campaigns.sql",
+    "0197_public_diagnostic_campaign_audit.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
