@@ -198,6 +198,37 @@ comment on column public.diagnostic_questions.code is
 alter table public.diagnostics
   add column if not exists diagnostic_version_id uuid references public.diagnostic_versions (id);
 
+-- Un diagnóstico COMPLETADO está bloqueado por `lock_completed_diagnostic`, y
+-- con razón: nadie puede reescribir un resultado cerrado. Pero anotar CON QUÉ
+-- INSTRUMENTO se hizo no es modificarlo — es registrar un hecho que siempre fue
+-- cierto y que hasta esta migración no tenía dónde vivir.
+--
+-- La excepción es quirúrgica y permanente, no un apagado temporal: solo de NULL
+-- a un valor, solo esa columna, y comparando el RESTO de la fila entera en
+-- JSON para que nada más pueda colarse. Cualquier otro cambio sobre un
+-- diagnóstico completado sigue prohibido, incluido volver a escribir la
+-- versión una vez puesta.
+
+create or replace function public.lock_completed_diagnostic()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.status <> 'completed' then
+    return coalesce(new, old);
+  end if;
+
+  if tg_op = 'UPDATE'
+     and old.diagnostic_version_id is null
+     and new.diagnostic_version_id is not null
+     and (to_jsonb(new) - 'diagnostic_version_id' - 'updated_at')
+       = (to_jsonb(old) - 'diagnostic_version_id' - 'updated_at') then
+    return new;
+  end if;
+
+  raise exception 'Un diagnóstico completado no puede modificarse ni eliminarse';
+end $$;
+
 -- Los históricos se etiquetan con la v1 por la evidencia de arriba. Sus
 -- RESULTADOS no se tocan: versionar el instrumento no es reinterpretar lo ya
 -- respondido.

@@ -191,6 +191,38 @@ async function main() {
       "publicar otra versión cambió un resultado ya guardado");
   });
 
+  await check("Un diagnóstico completado sigue blindado salvo para anotar su versión", async () => {
+    // La excepción que 0195 abrió es quirúrgica; esta comprobación existe para
+    // que no se ensanche sin que nadie se entere.
+    const [org] = await q(`select id from public.organizations limit 1`);
+    const [perfil] = await q(`select id from public.profiles limit 1`);
+    if (!org || !perfil) { console.log("      (base sin datos base; se omite)"); return; }
+    const [d] = await q(
+      `insert into public.diagnostics
+         (organization_id, started_by, status, maturity_percent, readiness_level, critical_gaps)
+       values ($1,$2,'completed', 42.5, 'low', 3) returning id`, [org.id, perfil.id]);
+
+    // Lo permitido: anotar la versión donde no había ninguna.
+    await q(`update public.diagnostics set diagnostic_version_id=$1 where id=$2`, [v1.id, d.id]);
+    const [ok] = await q(
+      `select diagnostic_version_id v from public.diagnostics where id=$1`, [d.id]);
+    assert(ok.v === v1.id, "no se pudo anotar la versión de un diagnóstico completado");
+
+    // Todo lo demás, prohibido.
+    for (const [qué, sql] of [
+      ["cambiar el porcentaje", `update public.diagnostics set maturity_percent=99 where id='${d.id}'`],
+      ["cambiar el nivel", `update public.diagnostics set readiness_level='high' where id='${d.id}'`],
+      ["reabrirlo", `update public.diagnostics set status='in_progress' where id='${d.id}'`],
+      ["borrarlo", `delete from public.diagnostics where id='${d.id}'`],
+      ["reescribir la versión ya puesta",
+       `update public.diagnostics set diagnostic_version_id='${v2.id}' where id='${d.id}'`],
+    ] as const) {
+      const e = await debeFallar(pg, sql);
+      assert(/no puede modificarse ni eliminarse/.test(e),
+        `se permitió ${qué} en un diagnóstico completado (${e || "sin error"})`);
+    }
+  });
+
   console.log("\nE · Nada de esto se abrió al público\n");
 
   await check("anon no ve versiones, secciones, preguntas ni diagnósticos", async () => {
