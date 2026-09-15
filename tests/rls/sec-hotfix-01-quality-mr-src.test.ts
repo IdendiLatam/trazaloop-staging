@@ -277,10 +277,27 @@ async function main() {
         where organization_id=$1 and status='active' limit 1`, [rev.organization_id]);
     assert(!!u, "la revisión existente no tiene ningún miembro con quien probar");
     await conSesion(u.user_id as string, "authenticated", async () => {
-      const [f] = await q(`select public.quality_mr_input_freshness($1) as r`, [rev.id]);
-      assert(f.r !== null, "la frescura de las entradas dejó de calcularse");
       const [d] = await q(`select public.quality_mr_readiness($1) as r`, [rev.id]);
       assert(d.r !== null, "la preparación de la revisión dejó de calcularse");
+
+      // OJO con la firma: `quality_mr_input_freshness` recibe el id de una
+      // ENTRADA, no el de la revisión. Pasarle el de la revisión devuelve
+      // `null` y parece una regresión del hotfix — me pasó, y no lo era.
+      const [entrada] = await q(
+        `select id, catalog_code from public.quality_management_review_inputs
+          where review_id=$1 and input_mode='automatic' limit 1`, [rev.id]);
+      if (!entrada) {
+        console.log("      (la revisión no tiene entradas automáticas; se omite la frescura)");
+        return;
+      }
+      const [f] = await q(`select public.quality_mr_input_freshness($1) as r`, [entrada.id]);
+      assert(f.r !== null,
+        `la frescura de «${entrada.catalog_code}» dejó de calcularse`);
+      // Y su huella se sigue pudiendo calcular: eso significa que el
+      // despachador alcanzó su adaptador a través de la puerta nueva.
+      assert((f.r as Record<string, unknown>).current_fingerprint !== null,
+        `la huella de «${entrada.catalog_code}» dejó de calcularse: el despachador `
+        + `ya no alcanza su adaptador`);
     });
   });
 
