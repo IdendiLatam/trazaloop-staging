@@ -117,7 +117,21 @@ check("6. No se acepta plan_code desde cliente al crear empresa normal", () => {
   const fnStart = orgActionsSource.indexOf("export async function createOrganizationAction");
   const fnEnd = orgActionsSource.indexOf("\n}", fnStart);
   const fnBody = orgActionsSource.slice(fnStart, fnEnd);
-  assert(fnBody.includes('redirect("/onboarding")'), "crear una empresa normal debía llevar a /onboarding, no directo a /dashboard");
+  /*
+    PROD-LAUNCH-01E.1 · Lo que esta aserción defiende —lo dice su propio
+    mensaje— es que crear una empresa NO caiga directa en la portada de PCR.
+    Eso se sigue cumpliendo, y ahora mejor: va al selector de módulos.
+
+    Fijaba `/onboarding` porque en Sprint 10D esa era la respuesta correcta,
+    cuando PCR era el único módulo y su puesta en marcha ERA el producto. Hoy
+    `/onboarding` vive dentro del grupo `(cpr)`, así que mandar allí a una
+    empresa nueva la mete en un módulo que todavía no ha elegido — que es
+    exactamente el defecto que este tramo cierra.
+  */
+  assert(!fnBody.includes('redirect("/dashboard")'),
+    "crear una empresa normal cae directa en la portada de PCR");
+  assert(fnBody.includes("redirect(MODULE_SELECTOR_PATH)"),
+    "crear una empresa normal debía llevar al selector de módulos");
   assert(!fnBody.includes("plan_code") && !fnBody.includes("formData.get(\"plan"), "createOrganizationAction no debía leer ningún campo de plan del formulario");
 });
 

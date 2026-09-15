@@ -88,11 +88,27 @@ export async function createOrganizationAction(
   }
 
   await writeActiveOrgCookie(organizationId);
-  // Sprint 10D (Parte 4/7): una empresa RECIÉN CREADA va a onboarding,
-  // nunca directo al dashboard — nadie empieza confundido sin saber qué
-  // hacer primero. Seleccionar una empresa YA EXISTENTE (abajo) sigue
-  // yendo directo a /dashboard.
-  redirect("/onboarding");
+  /*
+    PROD-LAUNCH-01E.1 · UNA EMPRESA NUEVA ELIGE MÓDULO ANTES QUE NADA.
+
+    Aquí ponía `/onboarding`, y la razón de Sprint 10D era buena: «nadie
+    empieza confundido sin saber qué hacer primero». Lo que cambió debajo es
+    que `/onboarding` vive dentro del grupo de rutas `(cpr)`. Cuando se
+    escribió, PCR era el único módulo y esa ruta ERA el producto; hoy es la
+    puesta en marcha DE PCR. Así que una empresa recién creada aterrizaba
+    dentro de un módulo que todavía no había elegido —con su barra lateral y su
+    distintivo— antes de saber siquiera que Trazaloop tiene tres.
+
+    La regla ya existía y ya tenía nombre: QUALITY-01.2 movió seleccionar
+    empresa a `MODULE_SELECTOR_PATH` porque «elegir empresa es una operación
+    TRANSVERSAL». Crear una lo es todavía más. Esto no inventa una regla nueva:
+    trae la creación a la que ya rige en el resto de entradas transversales
+    —login, selección de empresa y aceptación de invitación—.
+
+    No se pierde la puesta en marcha de PCR: sigue en la navegación del módulo,
+    a un clic de entrar en él.
+  */
+  redirect(MODULE_SELECTOR_PATH);
 }
 
 /**
