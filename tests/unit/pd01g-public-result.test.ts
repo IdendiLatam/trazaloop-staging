@@ -390,13 +390,30 @@ check("Y. Repetir NO reabre ni borra lo anterior", () => {
 console.log("\nG · La puerta que sigue abierta");
 // ===========================================================================
 
-check("AA. PUBLIC-ANON-EXECUTE-AUDIT-01 sigue ABIERTA", () => {
+check("AA. PUBLIC-ANON-EXECUTE-AUDIT-01 sigue gobernada", () => {
+  /*
+    Este renglón nació en 01G exigiendo que la puerta estuviera ABIERTA, porque
+    entonces lo estaba y el riesgo era que alguien la diera por cerrada sin
+    haberla auditado. PD-01H la cerró de verdad: inventario completo, 0202 y
+    una lista blanca cerrada que muerde.
+
+    Así que lo que se defiende aquí ya no es el estado, sino que el estado esté
+    DECLARADO y RESPALDADO: abierta con criterio de salida, o cerrada con la
+    prueba que la sostiene. Declararla cerrada sin esa prueba sigue estando
+    prohibido, y eso lo comprueba además la batería de preparación.
+  */
   const doc = leer("docs/security/PUBLIC-ANON-EXECUTE-AUDIT-01.md");
-  assert(/\*\*Estado:\*\*\s*ABIERTA/.test(doc),
-    "la puerta se declaró cerrada: SECURITY-HOTFIX-01 solo cerró quality_mr_src_*");
-  assert(/no se abre la primera campaña pública real/i.test(doc),
-    "la puerta dejó de bloquear nada");
-  // Y la batería de preparación sigue vigilándola.
+  const abierta = /\*\*Estado:\*\*\s*ABIERTA/.test(doc);
+  const cerrada = /\*\*Estado:\*\*\s*CERRADA/.test(doc);
+  assert(abierta !== cerrada, "la puerta no declara un estado inequívoco");
+  if (abierta) {
+    assert(/no se abre la primera campaña pública real/i.test(doc),
+      "la puerta dejó de bloquear nada");
+  } else {
+    assert(leer("tests/rls/pd01h-admin-export.test.ts")
+      .includes("PUBLIC_ANON_EXECUTE_ALLOWLIST"),
+      "se declara cerrada sin la lista blanca cerrada que la sostiene");
+  }
   assert(/PUBLIC-ANON-EXECUTE-AUDIT-01/.test(
     leer("tests/unit/pe04b6-release-readiness.test.ts")),
     "la lista de preparación dejó de vigilar la puerta");

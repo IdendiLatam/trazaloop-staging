@@ -303,11 +303,13 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0199_public_diagnostic_assessment.sql",
     "0200_quality_mr_src_privilege_boundary.sql",
     "0201_public_diagnostic_result_and_repeat.sql",
+    "0202_public_anon_execute_audit.sql",
+    "0203_public_diagnostic_admin_counts.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0201_public_diagnostic_result_and_repeat.sql",
+  assert(cabecera === "0203_public_diagnostic_admin_counts.sql",
     `la cabecera es ${cabecera}`);
 });
 
@@ -386,10 +388,14 @@ check("AQ. La puerta PUBLIC-ANON-EXECUTE-AUDIT-01 sigue en la lista", () => {
 
   // Declarada cerrada: tiene que existir la lista blanca CERRADA que la
   // sostiene, o volvemos a estar donde estábamos.
-  const pruebas = readdirSync("tests/unit").concat(
-    readdirSync("tests/rls").map((f) => `../rls/${f}`));
-  const hayLista = pruebas.some((f) => f.endsWith(".ts")
-    && leer(`tests/unit/${f}`).includes("PUBLIC_ANON_EXECUTE_ALLOWLIST"));
+  // Se leen las DOS carpetas de verdad. La primera versión concatenaba los
+  // nombres de `tests/rls` con un prefijo y luego los abría bajo `tests/unit`:
+  // habría lanzado al primer fichero, no habría encontrado la lista nunca.
+  const pruebas = [
+    ...readdirSync("tests/unit").map((f) => `tests/unit/${f}`),
+    ...readdirSync("tests/rls").map((f) => `tests/rls/${f}`),
+  ].filter((f) => f.endsWith(".ts"));
+  const hayLista = pruebas.some((f) => leer(f).includes("PUBLIC_ANON_EXECUTE_ALLOWLIST"));
   assert(hayLista,
     "la puerta se declara cerrada y no existe la prueba de lista blanca cerrada "
     + "(ninguna declara PUBLIC_ANON_EXECUTE_ALLOWLIST)");

@@ -11,6 +11,10 @@ import {
   canTransition, evaluateCampaignReadiness, isValidCampaignSlug,
   transitionDeniedMessage, type CampaignStatus,
 } from "@/lib/domain/public-diagnostics";
+import {
+  listSubmissionsPage, type SubmissionRow,
+} from "@/lib/db/public-diagnostic-admin";
+import type { Page } from "@/lib/db/paged-read";
 
 /**
  * Trazaloop · PUBLIC-DIAGNOSTICS-01D · Administración de campañas públicas.
@@ -265,4 +269,29 @@ export async function closeCampaignAction(id: string): Promise<AdminActionState>
 }
 export async function archiveCampaignAction(id: string): Promise<AdminActionState> {
   return transicionar(id, "archived");
+}
+
+// ---------------------------------------------------------------------------
+// PUBLIC-DIAGNOSTICS-01H · Las participaciones
+// ---------------------------------------------------------------------------
+
+/**
+ * Quién puede ver a las personas que participaron.
+ *
+ * Solo superadministración, y se comprueba AQUÍ además de en la RLS. Hasta
+ * 01H la administración necesitaba cuántos; desde aquí necesita quiénes, y eso
+ * son nombres, correos y teléfonos de empresas que confiaron sus datos para un
+ * diagnóstico. Un miembro del equipo de plataforma que no sea superadmin ve la
+ * campaña y sus cifras, no a sus participantes.
+ */
+export async function listSubmissionsAction(
+  campaignId: string, query: { q?: string | null; page?: string | null }
+): Promise<{ page: Page<SubmissionRow> | null; canRead: boolean }> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) return { page: null, canRead: false };
+  try {
+    return { page: await listSubmissionsPage(campaignId, query), canRead: true };
+  } catch {
+    return { page: null, canRead: true };
+  }
 }

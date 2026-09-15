@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { loadCampaignCounts, type CampaignCounts } from "@/lib/db/public-diagnostic-admin";
 import type { CampaignStatus } from "@/lib/domain/public-diagnostics";
 
 /**
@@ -37,6 +38,7 @@ export type CampaignRow = {
   createdAt: string;
   startedCount: number;
   completedCount: number;
+  incompleteCount: number;
 };
 
 type Fila = Record<string, unknown>;
@@ -47,9 +49,9 @@ const SELECT =
   + " consent_content_hash, allow_resume, allow_repeat, created_at,"
   + " diagnostic_versions(version_number, status)";
 
-function mapear(r: Fila, conteos: Map<string, { started: number; completed: number }>): CampaignRow {
+function mapear(r: Fila, conteos: Map<string, CampaignCounts>): CampaignRow {
   const v = r.diagnostic_versions as { version_number: number; status: string } | null;
-  const c = conteos.get(String(r.id)) ?? { started: 0, completed: 0 };
+  const c = conteos.get(String(r.id)) ?? { started: 0, completed: 0, incomplete: 0 };
   return {
     id: String(r.id),
     slug: String(r.slug),
@@ -72,34 +74,23 @@ function mapear(r: Fila, conteos: Map<string, { started: number; completed: numb
     createdAt: String(r.created_at),
     startedCount: c.started,
     completedCount: c.completed,
+    incompleteCount: c.incomplete,
   };
 }
 
 /**
- * Los conteos, en UNA consulta y no una por campaña.
+ * Los conteos, agrupados EN LA BASE.
  *
- * Sin esto, un listado de treinta campañas serían sesenta consultas. Y se
- * traen solo `campaign_id` y `status`: contar no necesita ver a nadie.
+ * PUBLIC-DIAGNOSTICS-01H · Antes se traían `(campaign_id, status)` de todas las
+ * participaciones y se contaban aquí. Con las cifras de entonces —cero—
+ * funcionaba; con una convocatoria de mil empresas, PostgREST corta en mil
+ * filas y devuelve mil SIN error, y la pantalla habría dicho «847
+ * completadas» cuando eran 1 203. Un dato cortado con aspecto de dato
+ * completo, que es la peor clase.
+ *
+ * Ahora agrupa `public_diagnostic_campaign_counts()` (0203) y vuelve una fila
+ * por campaña, cueste lo que cueste el estudio.
  */
-async function contarParticipaciones(
-  ids: string[]
-): Promise<Map<string, { started: number; completed: number }>> {
-  const mapa = new Map<string, { started: number; completed: number }>();
-  if (ids.length === 0) return mapa;
-  const supabase = await createServerClient();
-  const { data } = await supabase
-    .from("public_diagnostic_submissions")
-    .select("campaign_id, status")
-    .in("campaign_id", ids);
-  for (const fila of (data ?? []) as Fila[]) {
-    const id = String(fila.campaign_id);
-    const c = mapa.get(id) ?? { started: 0, completed: 0 };
-    c.started += 1;
-    if (fila.status === "completed") c.completed += 1;
-    mapa.set(id, c);
-  }
-  return mapa;
-}
 
 export async function listCampaigns(filtro?: {
   status?: CampaignStatus | null;
@@ -122,7 +113,7 @@ export async function listCampaigns(filtro?: {
   const { data, error } = await consulta;
   if (error) return null;
   const filas = (data ?? []) as unknown as Fila[];
-  const conteos = await contarParticipaciones(filas.map((f) => String(f.id)));
+  const conteos = await loadCampaignCounts();
   return filas.map((f) => mapear(f, conteos));
 }
 
@@ -134,7 +125,7 @@ export async function getCampaign(id: string): Promise<CampaignRow | null> {
     .eq("id", id)
     .maybeSingle();
   if (error || !data) return null;
-  const conteos = await contarParticipaciones([id]);
+  const conteos = await loadCampaignCounts();
   return mapear(data as unknown as Fila, conteos);
 }
 

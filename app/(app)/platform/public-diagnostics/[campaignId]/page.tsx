@@ -2,7 +2,10 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCampaignAction } from "@/server/actions/public-diagnostics-admin";
+import {
+  getCampaignAction, listSubmissionsAction,
+} from "@/server/actions/public-diagnostics-admin";
+import { SubmissionsTable } from "@/components/domain/public-diagnostics/submissions-table";
 import {
   EditCampaignForm, CampaignLifecycleActions,
 } from "@/components/domain/public-diagnostics/campaign-forms";
@@ -20,12 +23,18 @@ const fecha = (iso: string | null) =>
 const paraInput = (iso: string | null) => (iso ? iso.slice(0, 16) : "");
 
 export default async function CampaignDetailPage({
-  params,
-}: { params: Promise<{ campaignId: string }> }) {
+  params, searchParams,
+}: {
+  params: Promise<{ campaignId: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { campaignId } = await params;
+  const sp = await searchParams;
   const { campaign, versions, consentDocuments, canManage } =
     await getCampaignAction(campaignId);
   if (!campaign) notFound();
+  const participaciones = await listSubmissionsAction(campaignId,
+    { q: sp.q ?? null, page: sp.page ?? null });
 
   const readiness = evaluateCampaignReadiness({
     name: campaign.name, slug: campaign.slug,
@@ -117,6 +126,49 @@ export default async function CampaignDetailPage({
           </ul>
         ) : null}
       </section>
+
+      {participaciones.canRead && participaciones.page ? (
+        <>
+          <SubmissionsTable
+            rows={participaciones.page.rows} total={participaciones.page.total}
+            page={participaciones.page.page} pageSize={participaciones.page.pageSize}
+            campaignId={campaign.id} query={sp.q ?? ""}
+          />
+
+          <section className="rounded-lg border border-hairline bg-surface p-4">
+            <h2 className="text-sm font-semibold">Descargar los datos</h2>
+            <p className="pt-1 text-sm text-ink-soft">
+              Una fila por participación completada. Las respuestas salen de la
+              versión del instrumento con la que se respondió, y el resultado de
+              la instantánea que se congeló al cerrar: el archivo de hoy y el de
+              dentro de un año dicen lo mismo.
+            </p>
+            <p className="pt-2 text-sm text-ink-soft">
+              El archivo lleva datos personales de empresas que participaron.
+              Haber autorizado el diagnóstico NO es haber autorizado
+              comunicaciones comerciales: eso va en su propia columna.
+            </p>
+            <div className="flex flex-wrap gap-3 pt-3">
+              <a href={`/platform/public-diagnostics/${campaign.id}/export/csv`}
+                 className="rounded-md border border-hairline bg-paper px-4 py-2 text-sm font-medium hover:border-loop">
+                Descargar CSV
+              </a>
+              <a href={`/platform/public-diagnostics/${campaign.id}/export/xlsx`}
+                 className="rounded-md border border-hairline bg-paper px-4 py-2 text-sm font-medium hover:border-loop">
+                Descargar Excel
+              </a>
+            </div>
+          </section>
+        </>
+      ) : participaciones.canRead ? (
+        <p className="text-sm text-ink-soft">
+          No se pudieron consultar las participaciones. Vuelve a intentarlo.
+        </p>
+      ) : (
+        <p className="text-sm text-ink-soft">
+          Ver a quienes participaron es de la superadministración de plataforma.
+        </p>
+      )}
 
       {canManage ? (
         <>

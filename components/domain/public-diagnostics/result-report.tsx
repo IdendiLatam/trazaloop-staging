@@ -246,6 +246,20 @@ export function PublicResultReport({
             nuevo, con sus datos y su autorización; el resultado que acabas de
             ver se conserva tal cual.
           </p>
+          {/*
+            PUBLIC-DIAGNOSTICS-01H · Se dice ANTES, no después.
+
+            Al repetir, este navegador pasa a mostrar el diagnóstico nuevo: el
+            testigo de continuidad es uno, y el anterior queda en la base pero
+            sin puerta desde aquí. Mientras no exista reanudación por correo,
+            lo honesto es avisar cuando todavía se puede imprimir, no cuando ya
+            no se puede volver.
+          */}
+          <p className="pt-2 text-sm text-ink-soft">
+            Ten en cuenta que este navegador pasará a mostrar el resultado
+            nuevo. Si quieres conservar una copia del actual, imprímelo o
+            guárdalo antes de continuar.
+          </p>
           <Link href={repeatHref}
                 className="mt-3 inline-block rounded-md border border-hairline bg-surface px-4 py-2 text-sm font-medium hover:border-loop">
             Volver a diligenciar el diagnóstico

@@ -1,12 +1,11 @@
 # PUBLIC-ANON-EXECUTE-AUDIT-01
 
-**Estado:** ABIERTA
+**Estado:** CERRADA
 **Naturaleza:** puerta obligatoria (*gate*) antes de abrir la primera campaña
 pública real.
-**Registrada en:** PUBLIC-DIAGNOSTICS-01F (§23 del encargo).
-**No se cierra en 01F**, y el encargo lo dice expresamente: cerrar esto es
-analizar más de cien funciones una a una, y hacerlo dentro de un tramo de
-producto sería trabajo apresurado sobre superficie de seguridad.
+**Registrada en:** PUBLIC-DIAGNOSTICS-01F (§23). **Cerrada en
+PUBLIC-DIAGNOSTICS-01H**, migración `0202_public_anon_execute_audit.sql`.
+**Batería que la sostiene:** `npm run test:pd01h-db`.
 
 ---
 
@@ -26,6 +25,11 @@ migraciones:
 | `SECURITY DEFINER`, no disparador | 24 | **Aquí está el riesgo**: se ejecutan con los permisos del dueño y no ven la RLS de quien llama |
 | `SECURITY INVOKER`, no disparador | 19 | Se ejecutan como `anon`, así que la RLS sigue protegiendo lo que toquen |
 | **Total con `anon=X`** | **107** | |
+
+*(La cifra volvió a medirse en 01H sobre el esquema completo: **681 funciones,
+94 alcanzables por `anon`**, y **420 relaciones, 125 con SELECT concedido**. La
+diferencia con las 107 de agosto es el crecimiento del propio subsistema
+público más el cierre de SECURITY-HOTFIX-01.)
 
 De las 24 `SECURITY DEFINER`:
 
@@ -90,6 +94,75 @@ Batería: `npm run test:sec-hotfix-01`.
 
 ---
 
+## Cómo quedó · PUBLIC-DIAGNOSTICS-01H
+
+### Lo que se midió, no lo que se dedujo
+
+Se recorrieron las **420 relaciones** del esquema ejecutando un `select` real
+como rol `anon`. Antes de 0202 respondían con filas tres; después, las mismas
+tres. Lo que cambió es todo lo demás: de 125 relaciones con SELECT concedido y
+120 con INSERT se pasó a **tres con SELECT y ninguna con escritura**. La RLS
+seguía sosteniendo el resto, pero eso era una sola capa.
+
+### Las nueve funciones que quedan
+
+| Función | Para qué | Por qué la necesita `anon` | Escribe | Frontera y control de abuso |
+|---|---|---|---|---|
+| `public_diagnostic_resolve_campaign(text)` | Pintar la puerta de una campaña | La página es pública y sin sesión | No | No devuelve ni el id de la campaña; inexistente, borrador y archivada responden igual |
+| `public_diagnostic_begin_submission(…)` | Crear la participación | Es el alta del recorrido público | **Sí** | Señuelo, testigo de formulario firmado con edad mínima, y ventana deslizante: 3/correo/24 h, 30/IP/hora, 500/campaña/hora |
+| `public_diagnostic_get_assessment(text)` | Entregar el instrumento y lo respondido | El cuestionario se responde sin cuenta | No | Atada al testigo; sin peso, criticidad ni umbrales; 600 lecturas/hora |
+| `public_diagnostic_save_progress(text,text,jsonb)` | Guardar una sección | Igual | **Sí** | Atada al testigo, tope de lote por sección, 120 guardados/hora |
+| `public_diagnostic_get_result(text)` | Devolver la instantánea congelada | El informe se ve sin cuenta | No | Atada al testigo; no recalcula nada |
+| `public_diagnostic_resume_submission(text)` | Saber a qué campaña pertenece un testigo | Continuidad en el mismo navegador | No | Sin datos personales en la respuesta |
+| `quality_resolve_survey_token(text)` | Abrir una encuesta de QUALITY-12 | `/survey/[token]` es público | No | Testigo de un solo uso |
+| `quality_submit_survey_response(text,jsonb)` | Responderla | Igual | **Sí** | Consumir el testigo ES la comprobación |
+| `resolve_textile_passport_share(text)` | Pasaporte textil compartido | `/textile-passport-share/[token]` | No | Atada al testigo |
+
+Las tres últimas son anteriores a los diagnósticos públicos y se conservan
+porque tienen consumidor real: se comprobó en el repositorio, función por
+función, no se supuso.
+
+### Las tres relaciones que se leen sin sesión
+
+`legal_documents` (los textos de `/terms` y `/privacy`), `v_faq_public` y
+`v_faq_public_categories` (las preguntas frecuentes de `/faq`). Son públicas
+por diseño y solo con SELECT.
+
+Cerrarlas de más también habría sido un defecto, y estuvo a punto de pasar: al
+retirar `is_platform_staff()` del alcance anónimo, `/terms` dejó de cargar.
+`legal_documents` tenía **dos** políticas permisivas de lectura y PostgreSQL
+las evalúa todas con el rol que consulta, así que una lectura anónima acababa
+llamando a una función de personal. La solución no fue devolverle la función a
+`anon` sino reapuntar la política de personal a `authenticated`, que es quien
+puede serlo.
+
+### Lo que no se pudo prevenir, y cómo se cubre
+
+0202 cambió los privilegios por omisión del rol `postgres`: **una tabla o una
+secuencia nueva ya no nace concedida a `anon`**, y está comprobado creando una
+de verdad en la batería.
+
+Para **funciones no se logró**. Además de la concesión de Supabase —que sí se
+retira— PostgreSQL concede por su cuenta `EXECUTE` a `PUBLIC` sobre toda
+función nueva, y `anon` lo hereda por ahí. Se intentaron las tres formas
+documentadas (`REVOKE … ON FUNCTIONS FROM public`, `ON ROUTINES`, y
+grant-seguido-de-revoke) y ninguna surte efecto en esta instancia.
+
+Tampoco se pudieron tocar los privilegios por omisión de `supabase_admin`: hace
+falta ser miembro de ese rol.
+
+Así que para funciones el control **no es prevención sino detección**, y es un
+control real: `npm run test:pd01h-db` lleva la lista cerrada de las nueve y se
+pone roja en cuanto aparece una décima sin declarar. Cada migración que cree
+una función tiene que revocarla explícitamente —como hacen 0198, 0199, 0201 y
+0203— y si alguien lo olvida, se ve antes de que llegue a ninguna parte.
+
+**Residuo aceptado, dicho por delante:** entre que alguien crea una función y
+que corre la batería, esa función es alcanzable por `anon`. La ventana es el
+tiempo de una revisión, no el de un despliegue, porque `test:all` es previo.
+
+---
+
 ## Alcance de la auditoría, cuando se aborde
 
 1. **Inventariar.** Listar toda función de `public` con `anon=X` en su ACL,
@@ -115,16 +188,16 @@ demás — revocar **y** poner la puerta dentro, no una de las dos.
 
 ---
 
-## Criterio de salida
+## Criterio de salida · CUMPLIDO
 
-La puerta se considera superada cuando:
-
-- [ ] Existe el inventario completo, con su clasificación y su evidencia.
+- [x] Existe el inventario completo, con su clasificación y su evidencia
+      (arriba, y medido recorriendo el esquema como `anon`).
 - [x] `quality_mr_src_*` ya no es alcanzable por `anon` — cerrado en
       SECURITY-HOTFIX-01, migración 0200, comprobado con una llamada real.
-- [ ] Hay una prueba con lista blanca cerrada que falla si nace una función
-      pública sin declarar.
-- [ ] La lista blanca coincide con lo que hay en Producción, verificado contra
+- [x] Hay una prueba con lista blanca cerrada que falla si nace una función
+      pública sin declarar — `tests/rls/pd01h-admin-export.test.ts`.
+- [x] La lista blanca coincide con lo que hay en Producción, verificado contra
       Producción y no solo contra local.
 
-Hasta entonces **no se abre la primera campaña pública real**.
+La puerta queda **superada**. Lo que no se pudo prevenir está arriba, con su
+control de detección y su residuo escrito.

@@ -14,6 +14,11 @@ export const metadata = { title: "Diagnósticos públicos · Plataforma" };
 const fecha = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+/** Sin participaciones no hay tasa: un 0 % diría que nadie terminó, y es que
+ *  nadie ha empezado. */
+const tasaFinalizacion = (iniciadas: number, completadas: number) =>
+  iniciadas === 0 ? "—" : `${Math.round((completadas / iniciadas) * 1000) / 10}%`;
+
 export default async function PublicDiagnosticsPage({
   searchParams,
 }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -83,6 +88,8 @@ export default async function PublicDiagnosticsPage({
                   <th className="py-2 pr-3">Ventana</th>
                   <th className="py-2 pr-3">Iniciadas</th>
                   <th className="py-2 pr-3">Completadas</th>
+                  <th className="py-2 pr-3">Incompletas</th>
+                  <th className="py-2 pr-3">Finalización</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,6 +118,10 @@ export default async function PublicDiagnosticsPage({
                     </td>
                     <td className="py-2 pr-3">{c.startedCount}</td>
                     <td className="py-2 pr-3">{c.completedCount}</td>
+                    <td className="py-2 pr-3">{c.incompleteCount}</td>
+                    <td className="py-2 pr-3 tabular-nums">
+                      {tasaFinalizacion(c.startedCount, c.completedCount)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
