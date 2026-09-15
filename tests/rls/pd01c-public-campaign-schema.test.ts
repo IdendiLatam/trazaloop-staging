@@ -345,13 +345,29 @@ async function main() {
     assert(n.c >= 1, "la administración de plataforma no ve las campañas");
   });
 
-  await check("T. Y no existe ninguna función pública ejecutable todavía", async () => {
+  await check("T. La superficie pública es EXACTAMENTE la declarada", async () => {
+    /*
+      En PD-01C esta comprobación exigía CERO funciones públicas, y era correcta:
+      entonces no había ninguna. PD-01E abrió tres a propósito.
+
+      La invariante que de verdad protege este renglón —y lo que hay que
+      conservar— no es el número, es que la superficie sea la DECLARADA: que no
+      aparezca una cuarta sin que nadie la haya escrito aquí. Las tablas siguen
+      cerradas, y eso se comprueba arriba y aparte.
+    */
+    const esperadas = ["public_diagnostic_begin_submission",
+                       "public_diagnostic_resolve_campaign",
+                       "public_diagnostic_resume_submission"];
     const fns = await q(
       `select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-        where n.nspname='public' and p.proname like '%public_diagnostic%'
-          and array_to_string(p.proacl,',') like '%anon=X%'`);
-    assert(fns.length === 0,
-      `ya hay funciones ejecutables por anon: ${fns.map((f) => f.proname).join(", ")}`);
+        where n.nspname='public'
+          and (p.proname like 'public_diagnostic%' or p.proname like 'public_intake%')
+          and array_to_string(p.proacl,',') like '%anon=X%'
+        order by 1`);
+    const nombres = fns.map((f) => f.proname as string);
+    const sobran = nombres.filter((n) => !esperadas.includes(n));
+    assert(sobran.length === 0,
+      `funciones públicas sin declarar: ${sobran.join(", ")}`);
   });
 
   await q("rollback");

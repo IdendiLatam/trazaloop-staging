@@ -1225,6 +1225,9 @@ export const PAGE_KEY_EXCLUSIONS: readonly PageKeyExclusion[] = [
   // de la consola: la usa el equipo de plataforma, no las empresas, así que no
   // lleva tutorial.
   { route: "/platform/public-diagnostics", reason: "Consola de plataforma · herramienta interna" },
+  // PD-01E · Página PÚBLICA de campaña, sin sesión. No lleva tutorial: quien
+  // llega no tiene cuenta de Trazaloop ni la va a necesitar.
+  { route: "/diagnostic/[slug]", reason: "Página pública sin sesión · no lleva tutorial" },
   { route: "/platform/public-diagnostics/[campaignId]", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/plans", reason: "Consola de plataforma · administración comercial interna" },
   { route: "/platform/organizations/new", reason: "Consola de plataforma · herramienta interna" },
