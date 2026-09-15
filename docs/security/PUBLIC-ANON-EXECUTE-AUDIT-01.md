@@ -40,7 +40,7 @@ De las 24 `SECURITY DEFINER`:
 
 ---
 
-## Hallazgo confirmado · `quality_mr_src_*`
+## Hallazgo confirmado · `quality_mr_src_*` · **CERRADO en SECURITY-HOTFIX-01**
 
 **No es deuda teórica.** Comprobado en Staging el 15 de septiembre de 2026,
 como rol `anon`, sin sesión y sin testigo:
@@ -67,6 +67,27 @@ migración de PUBLIC-DIAGNOSTICS. Pero abrir una campaña real multiplica el
 número de personas que llegan a la aplicación sin sesión, y por eso la puerta
 se registra aquí.
 
+### Cómo se cerró
+
+`0200_quality_mr_src_privilege_boundary.sql` (SECURITY-HOTFIX-01), con las dos
+capas:
+
+- **Frontera de privilegio.** Los quince adaptadores —y los quince cuerpos
+  `_impl`— quedan revocados de `PUBLIC`, `anon`, `authenticated` y
+  `service_role`. Solo los ejecuta su dueño, que es exactamente quien los
+  llama: el despachador `SECURITY DEFINER`.
+- **Autorización interna.** Cada adaptador pasa a ser una puerta que comprueba
+  `is_org_member(p_organization_id)` —las mismas palabras que el despachador— y
+  delega en su cuerpo, renombrado a `_impl`. Ninguna línea de QUALITY-10 se
+  reescribió: la propiedad es cierta por construcción para los quince, y una
+  sola prueba la comprueba en todos.
+
+La causa fue local a 0128: cerró el despachador y las once funciones de
+orquestación, y no revocó sus catorce adaptadores. 0150, al añadir el
+decimoquinto, sí lo hizo — el patrón estaba bien, faltaba aplicarlo.
+
+Batería: `npm run test:sec-hotfix-01`.
+
 ---
 
 ## Alcance de la auditoría, cuando se aborde
@@ -81,15 +102,16 @@ se registra aquí.
    - *innecesaria* — se revoca.
 3. **Demostrar lo inerte.** Con una llamada real como `anon`, no leyendo el
    código. La familia `quality_mr_src_*` es justamente el ejemplo de lo que
-   pasa cuando se supone en vez de comprobar.
+   pasa cuando se supone en vez de comprobar: sus quince mencionaban
+   `is_org_member` y catorce eran legibles sin sesión.
 4. **Revocar** las innecesarias, en una migración, con la lista escrita.
 5. **Guardar la puerta.** Una prueba con una lista blanca CERRADA: cualquier
    función nueva que nazca alcanzable por `anon` sin estar declarada, la pone
    en rojo. Sin eso, el inventario se desactualiza con la migración siguiente.
 
-Para la familia `quality_mr_src_*` la revocación probablemente basta: son
-fuentes de una pantalla autenticada, y el servidor las llama con una sesión.
-Hay que confirmarlo antes.
+La familia `quality_mr_src_*` ya está fuera de este alcance: se cerró en
+SECURITY-HOTFIX-01 y tiene su propia batería. Sirve de plantilla para las
+demás — revocar **y** poner la puerta dentro, no una de las dos.
 
 ---
 
@@ -98,8 +120,8 @@ Hay que confirmarlo antes.
 La puerta se considera superada cuando:
 
 - [ ] Existe el inventario completo, con su clasificación y su evidencia.
-- [ ] `quality_mr_src_*` ya no es alcanzable por `anon`, o se demuestra con una
-      llamada que no devuelve nada de una organización ajena.
+- [x] `quality_mr_src_*` ya no es alcanzable por `anon` — cerrado en
+      SECURITY-HOTFIX-01, migración 0200, comprobado con una llamada real.
 - [ ] Hay una prueba con lista blanca cerrada que falla si nace una función
       pública sin declarar.
 - [ ] La lista blanca coincide con lo que hay en Producción, verificado contra
