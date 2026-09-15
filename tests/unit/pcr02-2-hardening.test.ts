@@ -330,6 +330,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0193_billing_state_exposes_renewal_mode.sql",
     "0194_paid_module_access_projection.sql",
     "0195_pcr_diagnostic_versioning.sql",
+    "0196_public_diagnostic_campaigns.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
