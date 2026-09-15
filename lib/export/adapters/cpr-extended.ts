@@ -14,7 +14,8 @@ import { getAuditDossier, listAuditDossiers } from "@/lib/db/audit-dossier";
 import { getTraceabilityExercise, listTraceabilityExercises } from "@/lib/db/traceability-exercise";
 import { searchEvidences } from "@/lib/db/evidences";
 import {
-  getActiveQuestions, getDiagnosticAnswers, getDiagnosticSections, getLatestDiagnostic,
+  getVersionQuestions, getCurrentDiagnosticVersion,
+  getDiagnosticAnswers, getDiagnosticSections, getLatestDiagnostic,
 } from "@/lib/db/diagnostic";
 import type { DossierSnapshot } from "@/lib/domain/audit-dossier";
 import type { ExerciseSnapshot } from "@/lib/domain/traceability-exercise";
@@ -986,13 +987,21 @@ export const cprDiagnosticDetail: ExportDefinition = {
     "entonces. Presentarlo como histórico sería afirmar algo que la base no " +
     "puede sostener.",
   async load(req): Promise<ExportResult | null> {
-    const [d, sections, questions, org] = await Promise.all([
+    // PUBLIC-DIAGNOSTICS-01B · Se exporta con la versión CON LA QUE SE
+    // RESPONDIÓ. Exportar contra la vigente pondría en el archivo textos de
+    // preguntas que esa empresa nunca vio.
+    const [d, org] = await Promise.all([
       getLatestDiagnostic(req.organizationId),
-      getDiagnosticSections(),
-      getActiveQuestions(),
       organizationIdentity(req.organizationId),
     ]);
     if (!d) return null;
+    const versionId = d.diagnostic_version_id
+      ?? await getCurrentDiagnosticVersion("pcr");
+    if (!versionId) return null;
+    const [sections, questions] = await Promise.all([
+      getDiagnosticSections(versionId),
+      getVersionQuestions(versionId),
+    ]);
     const answers = await getDiagnosticAnswers(d.id);
     const sectionName = new Map(sections.map((s) => [s.code, s.title]));
 

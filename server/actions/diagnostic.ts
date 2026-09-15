@@ -5,7 +5,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { checkCprCanMutate } from "@/server/actions/module-plans";
 import {
-  getActiveQuestions,
+  getVersionQuestions,
+  getCurrentDiagnosticVersion,
   getDiagnosticAnswers,
   getLatestDiagnostic,
 } from "@/lib/db/diagnostic";
@@ -34,9 +35,20 @@ export async function startDiagnosticAction(): Promise<DiagnosticActionState> {
     data: { user },
   } = await supabase.auth.getUser();
 
+  /*
+    PUBLIC-DIAGNOSTICS-01B · El diagnóstico nace ATADO a una versión.
+    A partir de aquí es suya: publicar otra no le cambia las preguntas.
+  */
+  const versionId = await getCurrentDiagnosticVersion("pcr");
+  if (!versionId) {
+    // Falla cerrado: sin instrumento publicado no se empieza a medir nada.
+    return { error: "El diagnóstico no está disponible en este momento." };
+  }
+
   const { error } = await supabase.from("diagnostics").insert({
     organization_id: org.organizationId, // SIEMPRE desde la empresa activa
     started_by: user!.id,
+    diagnostic_version_id: versionId,
   });
 
   if (error) return { error: "No fue posible iniciar el diagnóstico." };
@@ -94,7 +106,24 @@ export async function completeDiagnosticAction(
 
   const supabase = await createServerClient();
 
-  const questions = await getActiveQuestions();
+  /*
+    Se puntúa con la versión CON LA QUE SE RESPONDIÓ, no con la vigente. Es la
+    misma razón que en la pantalla: si se publicara una v2 entre empezar y
+    completar, el resultado saldría de preguntas que esta empresa nunca vio.
+  */
+  const { data: fila } = await supabase
+    .from("diagnostics")
+    .select("diagnostic_version_id")
+    .eq("id", diagnosticId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+  const versionId = (fila as { diagnostic_version_id: string | null } | null)
+    ?.diagnostic_version_id ?? null;
+  if (!versionId) {
+    return { error: "No fue posible identificar la versión del diagnóstico. No se guardó nada." };
+  }
+
+  const questions = await getVersionQuestions(versionId);
   const answersMap = await getDiagnosticAnswers(diagnosticId);
   const answers = new Map<string, boolean>();
   for (const [questionId, a] of answersMap) answers.set(questionId, a.answer);

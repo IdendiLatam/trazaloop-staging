@@ -55,6 +55,48 @@ export type DiagnosticResult = {
   noAnswers: NoAnswer[];
 };
 
+/**
+ * PUBLIC-DIAGNOSTICS-01B · El perfil de puntuación, como DATO.
+ *
+ * Estos umbrales vivían solo aquí, en constantes. Versionar las preguntas y
+ * dejarlos sueltos habría dado una falsa sensación de inmutabilidad: bastaría
+ * con mover el 75 al 80 para que un diagnóstico ya cerrado —o una campaña
+ * cerrada— cambiara de nivel sin que nadie tocara una respuesta.
+ *
+ * Ahora la versión del instrumento los lleva consigo
+ * (`diagnostic_versions.scoring_config`) y el motor los recibe. NO hay un
+ * algoritmo por versión: hay UN motor con entradas versionadas.
+ *
+ * Se evalúan EN ORDEN y gana el primero que se cumple, que es exactamente lo
+ * que hacía la cascada de `if`. `maxCriticalGaps: null` significa sin tope.
+ */
+export type ScoringLevelRule = {
+  code: ReadinessLevel;
+  minPercent: number;
+  maxCriticalGaps: number | null;
+};
+
+export type ScoringConfig = {
+  roundingDecimals: number;
+  levels: ScoringLevelRule[];
+};
+
+/**
+ * El perfil de PCR v1: copia exacta de lo que hacía este archivo antes de
+ * 01B. Es el valor por omisión, así que todo llamador que no pase perfil
+ * obtiene el comportamiento de siempre — que es la razón de que este cambio no
+ * altere ningún resultado.
+ */
+export const PCR_V1_SCORING: ScoringConfig = {
+  roundingDecimals: 4,
+  levels: [
+    { code: "audit_ready_candidate", minPercent: 90, maxCriticalGaps: 0 },
+    { code: "high", minPercent: 75, maxCriticalGaps: 4 },
+    { code: "medium", minPercent: 50, maxCriticalGaps: 8 },
+    { code: "low", minPercent: 0, maxCriticalGaps: null },
+  ],
+};
+
 export const READINESS_LABEL: Record<ReadinessLevel, string> = {
   low: "Nivel de preparación bajo",
   medium: "Nivel de preparación medio",
@@ -62,23 +104,31 @@ export const READINESS_LABEL: Record<ReadinessLevel, string> = {
   audit_ready_candidate: "Candidato a preparación para auditoría",
 };
 
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
+function redondear(n: number, decimales: number): number {
+  const f = 10 ** decimales;
+  return Math.round(n * f) / f;
 }
 
 export function resolveReadinessLevel(
   maturityPercent: number,
-  criticalGaps: number
+  criticalGaps: number,
+  config: ScoringConfig = PCR_V1_SCORING
 ): ReadinessLevel {
-  if (maturityPercent >= 90 && criticalGaps === 0) return "audit_ready_candidate";
-  if (maturityPercent >= 75 && criticalGaps <= 4) return "high";
-  if (maturityPercent >= 50 && criticalGaps <= 8) return "medium";
+  for (const regla of config.levels) {
+    if (maturityPercent >= regla.minPercent
+        && (regla.maxCriticalGaps === null || criticalGaps <= regla.maxCriticalGaps)) {
+      return regla.code;
+    }
+  }
+  // Una configuración sin regla que aplique no puede devolver «sin nivel»: el
+  // último peldaño de todo perfil es el más bajo.
   return "low";
 }
 
 export function computeDiagnosticResult(
   questions: ScoringQuestion[],
-  answers: Map<string, boolean>
+  answers: Map<string, boolean>,
+  config: ScoringConfig = PCR_V1_SCORING
 ): DiagnosticResult {
   const missingQuestionIds = questions
     .filter((q) => !answers.has(q.id))
@@ -125,12 +175,13 @@ export function computeDiagnosticResult(
   }
 
   const maturityPercent =
-    totalWeight > 0 ? round4((yesWeight / totalWeight) * 100) : 0;
+    totalWeight > 0 ? redondear((yesWeight / totalWeight) * 100, config.roundingDecimals) : 0;
 
   const sectionScores: SectionScore[] = [...bySection.entries()].map(
     ([sectionCode, s]) => ({
       sectionCode,
-      percent: s.totalWeight > 0 ? round4((s.yesWeight / s.totalWeight) * 100) : 0,
+      percent: s.totalWeight > 0
+        ? redondear((s.yesWeight / s.totalWeight) * 100, config.roundingDecimals) : 0,
       answeredYes: s.answeredYes,
       total: s.total,
     })
@@ -140,7 +191,7 @@ export function computeDiagnosticResult(
     complete,
     missingQuestionIds,
     maturityPercent,
-    readinessLevel: resolveReadinessLevel(maturityPercent, criticalGaps),
+    readinessLevel: resolveReadinessLevel(maturityPercent, criticalGaps, config),
     criticalGaps,
     sectionScores,
     noAnswers,

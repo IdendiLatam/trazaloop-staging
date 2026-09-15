@@ -6,7 +6,8 @@ import Link from "next/link";
 import { requireCprModule } from "@/lib/auth/require-cpr-module";
 import {
   getDiagnosticSections,
-  getActiveQuestions,
+  getVersionQuestions,
+  getCurrentDiagnosticVersion,
   getLatestDiagnostic,
   getDiagnosticAnswers,
 } from "@/lib/db/diagnostic";
@@ -27,12 +28,30 @@ const LEVEL_TONE: Record<ReadinessLevel, string> = {
 
 export default async function DiagnosticPage() {
   const org = await requireCprModule();
-  const [sections, questions, latest, recommendationsFeature] = await Promise.all([
-    getDiagnosticSections(),
-    getActiveQuestions(),
+  const [latest, versionVigente, recommendationsFeature] = await Promise.all([
     getLatestDiagnostic(org.organizationId),
+    getCurrentDiagnosticVersion("pcr"),
     checkCprFeatureEnabled("diagnostic_recommendations_enabled"),
   ]);
+
+  /*
+    PUBLIC-DIAGNOSTICS-01B · UN DIAGNÓSTICO EMPEZADO NO CAMBIA DE VERSIÓN.
+
+    Se muestra la versión CON LA QUE SE EMPEZÓ, no la vigente. Si se publicara
+    una v2 mientras alguien tiene el diagnóstico a medias, cambiarle las
+    preguntas debajo mezclaría respuestas de dos instrumentos en un mismo
+    resultado — y el porcentaje saldría de una suma que nadie contestó.
+
+    Solo cuando no hay diagnóstico previo se usa la vigente, que es la que
+    tendrá el que se empiece ahora.
+  */
+  const versionEnUso = latest?.diagnostic_version_id ?? versionVigente;
+  const [sections, questions] = versionEnUso
+    ? await Promise.all([
+        getDiagnosticSections(versionEnUso),
+        getVersionQuestions(versionEnUso),
+      ])
+    : [[], []];
   // Bloqueante 1 (Sprint 10A, corrección): Demo SIEMPRE puede tomar y ver
   // el resultado del diagnóstico (respuestas "No", nivel de preparación,
   // % por sección) — lo único que se oculta es el texto de acción

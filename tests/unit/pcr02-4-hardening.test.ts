@@ -306,6 +306,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0192_expired_quote_recovery.sql",
     "0193_billing_state_exposes_renewal_mode.sql",
     "0194_paid_module_access_projection.sql",
+    "0195_pcr_diagnostic_versioning.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

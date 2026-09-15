@@ -20,6 +20,8 @@ export type DiagnosticQuestion = ScoringQuestion & {
 
 export type DiagnosticRow = {
   id: string;
+  /** Con qué versión del instrumento se hizo. Se fija al empezar. */
+  diagnostic_version_id: string | null;
   status: "in_progress" | "completed";
   maturity_percent: number | null;
   readiness_level: string | null;
@@ -29,11 +31,30 @@ export type DiagnosticRow = {
   completed_at: string | null;
 };
 
-export async function getDiagnosticSections(): Promise<DiagnosticSection[]> {
+/**
+ * PUBLIC-DIAGNOSTICS-01B · La versión VIGENTE del instrumento.
+ *
+ * Una sola respuesta y un solo sitio donde se da. Antes no hacía falta porque
+ * el catálogo era uno; con versiones, preguntar por `is_active` devolvería las
+ * preguntas de todas las versiones mezcladas.
+ */
+export async function getCurrentDiagnosticVersion(
+  diagnosticType = "pcr"
+): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.rpc("diagnostic_current_version", {
+    p_type: diagnosticType,
+  });
+  if (error || typeof data !== "string") return null;
+  return data;
+}
+
+export async function getDiagnosticSections(versionId: string): Promise<DiagnosticSection[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("diagnostic_sections")
     .select("id, code, title, description, order_index")
+    .eq("version_id", versionId)
     .order("order_index");
   return (data ?? []).map((s) => ({
     id: s.id,
@@ -44,13 +65,21 @@ export async function getDiagnosticSections(): Promise<DiagnosticSection[]> {
   }));
 }
 
-export async function getActiveQuestions(): Promise<DiagnosticQuestion[]> {
+/**
+ * Las preguntas DE UNA VERSIÓN.
+ *
+ * El `versionId` es obligatorio a propósito: dejarlo opcional habría permitido
+ * que una llamada olvidadiza devolviera las preguntas de todas las versiones
+ * juntas el día que se publique la v2 — y eso no falla, calcula mal.
+ */
+export async function getVersionQuestions(versionId: string): Promise<DiagnosticQuestion[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from("diagnostic_questions")
     .select(
       "id, code, section_id, question_text, help_text, standard_refs, weight, is_critical, order_index, recommended_action, diagnostic_sections(code)"
     )
+    .eq("version_id", versionId)
     .eq("is_active", true)
     .order("order_index");
 
@@ -79,7 +108,7 @@ export async function getLatestDiagnostic(
   const { data } = await supabase
     .from("diagnostics")
     .select(
-      "id, status, maturity_percent, readiness_level, critical_gaps, section_scores, started_at, completed_at"
+      "id, diagnostic_version_id, status, maturity_percent, readiness_level, critical_gaps, section_scores, started_at, completed_at"
     )
     .eq("organization_id", organizationId)
     .order("started_at", { ascending: false })
