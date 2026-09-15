@@ -54,7 +54,10 @@ export async function resolvePublicCampaign(slug: string): Promise<PublicCampaig
 }
 
 export type BeginOutcome =
-  | { status: "created"; submissionId: string; token: string }
+  | { status: "created"; submissionId: string; token: string;
+      /** Cuánto debe durar la cookie de continuidad. Lo decide la BASE: es la
+       *  misma regla que gobierna la ventana de escritura (0199). */
+      resumeMaxAge: number }
   | { status: "existing" }
   | { status: "unavailable" }
   | { status: "rate_limited" }
@@ -83,6 +86,7 @@ export async function beginPublicSubmission(input: {
       status: "created",
       submissionId: String(r.submission_id),
       token: String(r.token),
+      resumeMaxAge: Number(r.resume_max_age ?? 0),
     };
   }
   const conocidos = ["existing", "unavailable", "rate_limited", "invalid"] as const;

@@ -101,15 +101,26 @@ export async function beginPublicDiagnosticAction(
     // participación.
     if (!("token" in r)) return { status: "created", message: null };
     const galletas = await cookies();
-    // Continuidad en ESTE navegador. HttpOnly para que ningún guion la lea,
-    // y de sesión: no se deja un testigo de participación viviendo en el
-    // equipo indefinidamente.
+    /*
+      PUBLIC-DIAGNOSTICS-01F · CERRAR EL NAVEGADOR NO PUEDE COSTAR EL
+      DIAGNÓSTICO.
+
+      Antes era una cookie de ocho horas. Para 52 preguntas que se responden en
+      varios ratos —y sin reanudación por correo— eso significaba abandono:
+      quien la cerraba el lunes ya no podía volver el martes.
+
+      Ahora dura lo que la BASE dice que dura, que es exactamente lo que dura el
+      permiso para escribir: `min(30 días, hasta el cierre de la campaña + 72 h
+      de gracia)`. Calcularlo aquí habría creado una segunda verdad, y el día
+      que las dos divergieran la cookie caducaría antes de que la persona
+      pudiera terminar.
+    */
     galletas.set(INTAKE_COOKIE, r.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/diagnostic",
-      maxAge: 60 * 60 * 8,
+      maxAge: r.resumeMaxAge > 0 ? r.resumeMaxAge : 60 * 60 * 8,
     });
     return { status: "created", message: null };
   }

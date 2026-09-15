@@ -2,8 +2,12 @@
 // acotada `public_diagnostic_resolve_campaign`; `anon` no lee ninguna tabla.
 export const dynamic = "force-dynamic";
 
-import { notFound } from "next/navigation";
-import { resolvePublicCampaign } from "@/lib/db/public-diagnostic-intake";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import {
+  resolvePublicCampaign, resumePublicSubmission,
+} from "@/lib/db/public-diagnostic-intake";
+import { INTAKE_COOKIE } from "@/lib/domain/public-intake-cookies";
 import { PublicIntakeForm } from "@/components/domain/public-diagnostics/intake-form";
 import { Wordmark } from "@/components/layout/logo";
 
@@ -30,6 +34,30 @@ export default async function PublicDiagnosticPage({
   params,
 }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+
+  /*
+    PUBLIC-DIAGNOSTICS-01F · QUIEN YA EMPEZÓ NO VUELVE A PRESENTARSE.
+
+    Si en este navegador hay un testigo de ESTA campaña, la puerta sobra: se
+    va directo a donde se quedó. Pedirle otra vez el nombre y el correo a
+    alguien que ya está a mitad del cuestionario sería, además de molesto,
+    engañoso — el formulario le respondería «ya hay un diagnóstico con ese
+    correo» y parecería que perdió el suyo.
+
+    La autorización es el TESTIGO. Que exista otro intento con el mismo correo
+    no autoriza nada, y no se mira aquí.
+  */
+  const galletas = await cookies();
+  const token = galletas.get(INTAKE_COOKIE)?.value ?? null;
+  if (token) {
+    const enCurso = await resumePublicSubmission(token);
+    if (enCurso.status === "found" && enCurso.slug === slug) {
+      redirect(enCurso.submissionStatus === "completed"
+        ? `/diagnostic/${encodeURIComponent(slug)}/result`
+        : `/diagnostic/${encodeURIComponent(slug)}/assessment`);
+    }
+  }
+
   const campaña = await resolvePublicCampaign(slug);
 
   // Inexistente, borrador y archivada responden IGUAL: distinguirlas dejaría

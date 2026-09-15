@@ -1,7 +1,8 @@
 import "server-only";
 
 import { createServerClient } from "@/lib/supabase/server";
-import type { ScoringQuestion } from "@/lib/diagnostic/scoring";
+import type { ScoringConfig, ScoringQuestion } from "@/lib/diagnostic/scoring";
+import { parseScoringConfig } from "@/lib/diagnostic/scoring-config";
 
 export type DiagnosticSection = {
   id: string;
@@ -47,6 +48,30 @@ export async function getCurrentDiagnosticVersion(
   });
   if (error || typeof data !== "string") return null;
   return data;
+}
+
+/**
+ * PUBLIC-DIAGNOSTICS-01F · El perfil de puntuación DE ESTA VERSIÓN.
+ *
+ * 0195 congeló los umbrales en la versión precisamente para que mover un 75 a
+ * un 80 no cambiara el nivel de un diagnóstico ya cerrado. Hasta aquí el motor
+ * seguía usando las constantes del código, así que el dato estaba congelado
+ * pero nadie lo leía: la mitad de la garantía.
+ *
+ * Devuelve `null` si el perfil no se puede leer, y quien llama NO puntúa.
+ * Caer en los valores del código «por si acaso» sería reabrir el defecto.
+ */
+export async function getVersionScoringConfig(
+  versionId: string
+): Promise<ScoringConfig | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("diagnostic_versions")
+    .select("scoring_config")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (!data) return null;
+  return parseScoringConfig(data.scoring_config);
 }
 
 export async function getDiagnosticSections(versionId: string): Promise<DiagnosticSection[]> {

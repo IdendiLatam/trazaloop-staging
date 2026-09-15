@@ -300,11 +300,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0196_public_diagnostic_campaigns.sql",
     "0197_public_diagnostic_campaign_audit.sql",
     "0198_public_diagnostic_intake.sql",
+    "0199_public_diagnostic_assessment.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0198_public_diagnostic_intake.sql",
+  assert(cabecera === "0199_public_diagnostic_assessment.sql",
     `la cabecera es ${cabecera}`);
 });
 
@@ -348,6 +349,48 @@ check("AP3. Toda tabla de la cadena comercial nace con RLS y política", () => {
         `${m}: la tabla ${t} tiene RLS y ninguna política`);
     }
   }
+});
+
+check("AQ. La puerta PUBLIC-ANON-EXECUTE-AUDIT-01 sigue en la lista", () => {
+  /*
+    PUBLIC-DIAGNOSTICS-01F §23 · Esta deuda NO puede desaparecer de la lista de
+    preparación sin haberse cerrado.
+
+    Supabase concede EXECUTE a `anon` sobre todo lo que nace en `public`, y en
+    Staging se comprobó que al menos `quality_mr_src_audits` devuelve
+    auditorías reales de una organización a quien no tiene sesión. Es anterior
+    a las campañas públicas, pero abrirlas multiplica quién llega sin sesión.
+
+    La guarda muerde en las dos direcciones: mientras la puerta esté ABIERTA
+    exige que el documento diga qué falta; y el día que alguien la declare
+    CERRADA, exige que exista de verdad la prueba de lista blanca cerrada. Sin
+    eso, «cerrada» sería una palabra.
+  */
+  const doc = leer("docs/security/PUBLIC-ANON-EXECUTE-AUDIT-01.md");
+  assert(/PUBLIC-ANON-EXECUTE-AUDIT-01/.test(doc), "el documento no se identifica");
+  const abierta = /\*\*Estado:\*\*\s*ABIERTA/.test(doc);
+  const cerrada = /\*\*Estado:\*\*\s*CERRADA/.test(doc);
+  assert(abierta !== cerrada, "la puerta no declara un estado inequívoco");
+
+  if (abierta) {
+    assert(/no se abre la primera campaña pública real/i.test(doc),
+      "la puerta no dice qué bloquea: entonces no es una puerta");
+    assert(/quality_mr_src/.test(doc),
+      "no se nombra la familia de funciones donde se confirmó el hallazgo");
+    assert((doc.match(/- \[ \]/g) ?? []).length >= 3,
+      "la puerta no enumera su criterio de salida");
+    return;
+  }
+
+  // Declarada cerrada: tiene que existir la lista blanca CERRADA que la
+  // sostiene, o volvemos a estar donde estábamos.
+  const pruebas = readdirSync("tests/unit").concat(
+    readdirSync("tests/rls").map((f) => `../rls/${f}`));
+  const hayLista = pruebas.some((f) => f.endsWith(".ts")
+    && leer(`tests/unit/${f}`).includes("PUBLIC_ANON_EXECUTE_ALLOWLIST"));
+  assert(hayLista,
+    "la puerta se declara cerrada y no existe la prueba de lista blanca cerrada "
+    + "(ninguna declara PUBLIC_ANON_EXECUTE_ALLOWLIST)");
 });
 
 console.log(`\nPE-04B6 · preparación: ${passed} en verde, ${failed} en rojo\n`);

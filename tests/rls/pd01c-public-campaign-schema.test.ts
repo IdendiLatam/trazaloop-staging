@@ -352,12 +352,18 @@ async function main() {
 
       La invariante que de verdad protege este renglón —y lo que hay que
       conservar— no es el número, es que la superficie sea la DECLARADA: que no
-      aparezca una cuarta sin que nadie la haya escrito aquí. Las tablas siguen
+      aparezca una más sin que nadie la haya escrito aquí. Las tablas siguen
       cerradas, y eso se comprueba arriba y aparte.
+
+      PD-01F añadió dos: leer el instrumento y guardar una sección. La que
+      ESCRIBE el resultado —`public_diagnostic_finalize_submission`— no está en
+      esta lista a propósito: solo la ejecuta `service_role`.
     */
     const esperadas = ["public_diagnostic_begin_submission",
+                       "public_diagnostic_get_assessment",
                        "public_diagnostic_resolve_campaign",
-                       "public_diagnostic_resume_submission"];
+                       "public_diagnostic_resume_submission",
+                       "public_diagnostic_save_progress"];
     const fns = await q(
       `select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
         where n.nspname='public'

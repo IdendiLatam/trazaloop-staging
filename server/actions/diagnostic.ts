@@ -9,6 +9,7 @@ import {
   getCurrentDiagnosticVersion,
   getDiagnosticAnswers,
   getLatestDiagnostic,
+  getVersionScoringConfig,
 } from "@/lib/db/diagnostic";
 import { computeDiagnosticResult } from "@/lib/diagnostic/scoring";
 
@@ -123,12 +124,29 @@ export async function completeDiagnosticAction(
     return { error: "No fue posible identificar la versión del diagnóstico. No se guardó nada." };
   }
 
+  /*
+    PUBLIC-DIAGNOSTICS-01F · Y con el PERFIL de esa versión.
+
+    Se puntuaba con los umbrales escritos en `lib/diagnostic/scoring.ts`. Para
+    PCR v1 son exactamente los mismos que guardó 0195 —hay una prueba que lo
+    comprueba contra la base—, así que ningún resultado cambia hoy. Lo que
+    cambia es el día que exista una v2 con otros umbrales: entonces un
+    diagnóstico de la v1 se seguirá puntuando con los suyos.
+
+    Es además lo que permite afirmar que el diagnóstico público y el
+    autenticado comparten motor Y entradas, no solo la función.
+  */
+  const scoringConfig = await getVersionScoringConfig(versionId);
+  if (!scoringConfig) {
+    return { error: "No fue posible leer la configuración del diagnóstico. No se guardó nada." };
+  }
+
   const questions = await getVersionQuestions(versionId);
   const answersMap = await getDiagnosticAnswers(diagnosticId);
   const answers = new Map<string, boolean>();
   for (const [questionId, a] of answersMap) answers.set(questionId, a.answer);
 
-  const result = computeDiagnosticResult(questions, answers);
+  const result = computeDiagnosticResult(questions, answers, scoringConfig);
 
   if (!result.complete) {
     return {

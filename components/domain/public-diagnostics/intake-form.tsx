@@ -38,15 +38,27 @@ export function PublicIntakeForm({
 }) {
   const [estado, accion, pendiente] = useActionState(beginPublicDiagnosticAction, inicial);
 
+  /*
+    PUBLIC-DIAGNOSTICS-01F · El mismo panel para todos, y un enlace.
+
+    Se podría saltar directamente al cuestionario, pero entonces un envío
+    correcto y uno detectado por el señuelo dejarían de responder igual, y esa
+    indistinguibilidad es justo lo que 01E construyó. Aquí se responde lo mismo
+    y quien de verdad tiene el testigo continúa con un clic; quien no lo tiene
+    vuelve solo a esta puerta.
+  */
   if (estado.status === "created") {
     return (
       <section role="status" className="rounded-lg border border-loop/30 bg-loop/5 p-4">
         <h2 className="text-sm font-semibold">Listo, ya puedes empezar</h2>
         <p className="pt-1 text-sm text-ink-soft">
-          Guardamos tus datos y tu autorización. El cuestionario se habilitará en este
-          mismo navegador; si lo cierras, podrás continuar desde aquí mientras dure tu
-          sesión.
+          Guardamos tus datos y tu autorización. Puedes responder en varios ratos:
+          tu avance se guarda y podrás volver desde este mismo navegador.
         </p>
+        <a href={`/diagnostic/${slug}/assessment`}
+           className="mt-3 inline-block rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+          Comenzar el diagnóstico
+        </a>
       </section>
     );
   }
