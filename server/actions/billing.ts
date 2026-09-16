@@ -467,7 +467,11 @@ export async function startRecurringCheckoutForQuoteAction(
   const r = await openRecurringCheckout({
     quoteId: c.id,
     supabase,
-    origin: await origenDePeticion(),
+    // MP-REC-01B.11 · La vuelta va al despliegue que atiende ESTA petición.
+    // `origenDePeticion` prefiere el origen declarado, que en Preview lleva la
+    // URL inmutable de un despliegue viejo: el primer cobro real aterrizó por
+    // eso en un 404. El carril manual conserva su resolución de siempre.
+    origin: await origenDeVueltaRecurrente(),
     planLabel: etiquetaDePlan(c.plan_code, c.billing_interval),
     // SIN `payerEmail`. El pagador de una recurrencia lo resuelve el servidor
     // desde el entorno, no la sesión de quien contrata: la firma del servicio
@@ -599,6 +603,25 @@ export async function verifyOneTimeCheckoutAction(
   revalidatePath("/settings/billing");
   revalidatePath("/dashboard");
   return { state: "activated" };
+}
+
+/**
+ * MP-REC-01B.11 · El origen de vuelta del carril RECURRENTE.
+ *
+ * Prefiere el host que atiende la petición. La decisión vive en
+ * `lib/billing/recurring/return-origin.ts`, que explica por qué, y es pura para
+ * poder comprobarla sin desplegar.
+ */
+async function origenDeVueltaRecurrente(): Promise<string> {
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const { resolveRecurringReturnOrigin } =
+    await import("@/lib/billing/recurring/return-origin");
+  return resolveRecurringReturnOrigin({
+    forwardedHost: h.get("x-forwarded-host"),
+    forwardedProto: h.get("x-forwarded-proto"),
+    host: h.get("host"),
+  });
 }
 
 /** El origen real de la petición, para construir la vuelta. */

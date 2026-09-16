@@ -174,7 +174,10 @@ check("5B. Y la acción lo deriva de la petición", () => {
   const a = leer(ACCIONES);
   const i = a.indexOf("startRecurringCheckoutForQuoteAction");
   const trozo = a.slice(i, i + 1600);
-  assert(/origin: await origenDePeticion\(\)/.test(trozo),
+  // MP-REC-01B.11 · Ahora el carril recurrente usa SU resolutor, que prefiere
+  // el host que atiende la petición. El anterior prefería el origen declarado,
+  // y eso mandó el primer cobro real a un despliegue de hace semanas.
+  assert(/origin: await origenDeVueltaRecurrente\(\)/.test(trozo),
     "la acción recurrente no deriva el origen de la petición");
 });
 
