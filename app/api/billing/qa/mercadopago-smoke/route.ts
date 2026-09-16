@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "QASBX-2026-09-16-provider-fix-probes-retired";
+const QA_MARCADOR = "MPREC01B6-2026-09-16-close-recurring-attempt";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -74,6 +74,9 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "retire_qa_fx", "customer_forensics", "update_amount", "cancel",
                   "probe_payer_email", "probe_annual", "probe_daily", "probe_state",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
+                  // MP-REC-01B.6 · TEMPORAL · cerrar un intento de recurrencia
+                  // rechazado por el proveedor. Se retira con el disparador.
+                  "close_recurring_attempt", "recurring_state",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
@@ -1114,6 +1117,61 @@ async function manejar(request: Request) {
       return NextResponse.json({ ok: false,
         message: e instanceof Error ? e.name : "UnknownError" });
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // MP-REC-01B.6 · TEMPORAL · leer y cerrar un intento de recurrencia
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ EXISTEN ESTAS DOS ACCIONES
+  //
+  // El primer clic humano real dejó en Staging una suscripción `pending` y su
+  // autorización, porque el rechazo de la pasarela llegó DESPUÉS de abrirlas.
+  // El producto ya sabe cerrar eso —`billing_close_recurring_attempt`, que el
+  // servicio invoca en cada rechazo definitivo— pero ese camino solo se
+  // recorre durante un intento nuevo, y un intento nuevo es justamente lo que
+  // no se quiere hacer.
+  //
+  // Así que aquí hay un disparador para el MISMO mecanismo gobernado. No es
+  // una vía alternativa: llama a la misma función, con las mismas defensas
+  // —no cierra nada que tenga recurso en la pasarela ni periodo pagado—.
+  //
+  // `recurring_state` solo LEE. Existe para poder comprobar antes y después
+  // sin tener que fiarse de lo que diga una pantalla.
+  //
+  // Las dos se retiran con el resto del disparador.
+  if (accion === "recurring_state") {
+    const org = String(cuerpo.organization_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(org)) return no("ORGANIZATION_ID_REQUIRED", 400);
+    const a = createAdminClient();
+    const subs = await a.from("billing_subscriptions")
+      .select("id, status, renewal_mode, plan_code, billing_interval, created_at")
+      .eq("organization_id", org).order("created_at", { ascending: false });
+    const auts = await a.from("billing_recurring_authorizations")
+      .select("id, status, environment, provider_subscription_id, "
+            + "last_provider_failure, last_provider_diagnostic, created_at")
+      .eq("organization_id", org).order("created_at", { ascending: false });
+    const pagos = await a.from("billing_payments")
+      .select("id", { count: "exact", head: true }).eq("organization_id", org);
+    const periodos = await a.from("billing_subscription_periods")
+      .select("id", { count: "exact", head: true }).eq("organization_id", org);
+    return NextResponse.json({ ok: true,
+      subscriptions: subs.data ?? [], authorizations: auts.data ?? [],
+      payment_count: pagos.count ?? 0, period_count: periodos.count ?? 0 });
+  }
+
+  if (accion === "close_recurring_attempt") {
+    const id = String(cuerpo.authorization_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return no("AUTHORIZATION_ID_REQUIRED", 400);
+    const modo = cuerpo.outcome === "uncertain" ? "uncertain" : "refused";
+    const a = createAdminClient();
+    const { data, error } = await a.rpc("billing_close_recurring_attempt", {
+      p_authorization_id: id, p_outcome: modo,
+      p_failure: String(cuerpo.failure ?? "invalid_request"),
+      p_diagnostic: String(cuerpo.diagnostic ?? "").slice(0, 700) || null });
+    if (error) return no(`CLOSE_FAILED:${error.message}`, 500);
+    log_seguro("cierre_recurrente", { modo, resultado: (data as { outcome?: string })?.outcome });
+    return NextResponse.json({ ok: true, result: data });
   }
 
   // -------------------------------------------------------------------------
