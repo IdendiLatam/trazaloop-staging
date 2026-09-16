@@ -20,6 +20,9 @@ import {
 import { buildXlsx, columnName, sheetName } from "../../lib/xlsx";
 import { toCsv, parseCsv } from "../../lib/csv";
 import { formatLegalVersion } from "../../lib/domain/public-diagnostics";
+import {
+  snapshotRecommendations, parsePublicSnapshot,
+} from "../../lib/domain/public-diagnostic-report";
 
 let passed = 0, failed = 0;
 function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m); }
@@ -39,6 +42,8 @@ const DATOS = sinTs(leer("lib/db/public-diagnostic-admin.ts"));
 const TABLA = sinTs(leer("components/domain/public-diagnostics/submissions-table.tsx"));
 const SQL0202 = sinSql(leer("supabase/migrations/0202_public_anon_execute_audit.sql"));
 const INFORME = sinTs(leer("components/domain/public-diagnostics/result-report.tsx"));
+const VISTA_ADMIN = sinTs(leer(
+  "app/(app)/platform/public-diagnostics/[campaignId]/submissions/[submissionId]/result/page.tsx"));
 
 /** Un conjunto pequeño pero con todos los casos incómodos dentro. */
 function datos(nPreguntas = 3): ExportDataset {
@@ -66,6 +71,10 @@ function datos(nPreguntas = 3): ExportDataset {
       { code: "s2", title: "Sección dos", percent: 40 },
     ],
     answers: Object.fromEntries(questions.map((q, i) => [q.code, i % 2 === 0])),
+    recommendations: [
+      { dimension: "s1", dimensionTitle: "Sección uno", order: 1, text: "Registra los lotes" },
+      { dimension: "s2", dimensionTitle: "Sección dos", order: 2, text: "Forma al equipo" },
+    ],
   };
   const conMarketing: ExportSubmission = {
     ...base, submissionId: "sub-2", companyName: "=SUMA(A1:A9)",
@@ -205,10 +214,13 @@ check("Ni testigos, ni hashes, ni metadato de seguridad", () => {
 console.log("\nE · El libro de Excel");
 // ===========================================================================
 
-check("Cuatro hojas, en su orden, y ninguna comparativa", () => {
+check("Las hojas declaradas, en su orden, y ninguna comparativa", () => {
+  // PD-01J añadió «Recomendaciones» como quinta. La lista sigue siendo cerrada:
+  // una hoja nueva sin declarar aquí pone esto en rojo.
   const hojas = workbookSheets(datos());
   assert(JSON.stringify(hojas.map((h) => h.name))
-      === JSON.stringify(["Resumen", "Participantes", "Respuestas", "Dimensiones"]),
+      === JSON.stringify(["Resumen", "Participantes", "Respuestas", "Dimensiones",
+                          "Recomendaciones"]),
     `hojas: ${hojas.map((h) => h.name).join(", ")}`);
   const texto = JSON.stringify(hojas).toLowerCase();
   for (const prohibido of ["ranking", "percentil", "promedio", "benchmark",
@@ -323,7 +335,8 @@ print(json.dumps({'hojas': hojas,
     primera_respuesta: string[];
   };
   assert(JSON.stringify(leido.hojas)
-      === JSON.stringify(["Resumen", "Participantes", "Respuestas", "Dimensiones"]),
+      === JSON.stringify(["Resumen", "Participantes", "Respuestas", "Dimensiones",
+                          "Recomendaciones"]),
     `otra implementación ve las hojas: ${leido.hojas.join(", ")}`);
   assert(leido.resumen[1][1] === "Convocatoria QA",
     `el nombre de la campaña llegó como «${leido.resumen[1][1]}»`);
@@ -438,6 +451,157 @@ check("La versión del consentimiento no se escribe «vv2»", () => {
     assert(!/`v\$\{|· v\{/.test(sinTs(leer(f))),
       `${f} vuelve a anteponer la «v» a mano`);
   }
+});
+
+
+console.log("\nI · El resultado visto desde la administración (01J)");
+// ===========================================================================
+
+check("La vista administrativa NO recalcula ni toca el catálogo", () => {
+  for (const prohibido of ["computeDiagnosticResult", "diagnostic_questions",
+                           "diagnostic_versions", "scoring_config", "getVersionQuestions",
+                           "PCR_V1_SCORING", "recommended_action"]) {
+    assert(!new RegExp(prohibido).test(VISTA_ADMIN),
+      `la vista administrativa usa «${prohibido}»: el resultado dejaría de ser el congelado`);
+  }
+  assert(/parsePublicSnapshot\(result\.snapshot\)/.test(VISTA_ADMIN),
+    "la vista no lee la instantánea persistida");
+  // Y la consulta tampoco.
+  const i = DATOS.indexOf("export async function loadSubmissionResult");
+  const cuerpo = DATOS.slice(i, i + 1400);
+  for (const prohibido of ["diagnostic_questions", "diagnostic_versions", "scoring_config"]) {
+    assert(!new RegExp(prohibido).test(cuerpo),
+      `la consulta administrativa toca «${prohibido}»`);
+  }
+  assert(/result_payload/.test(cuerpo), "la consulta no trae la instantánea");
+});
+
+check("No necesita el testigo del participante, ni lo enseña", () => {
+  const i = DATOS.indexOf("export async function loadSubmissionResult");
+  const cuerpo = DATOS.slice(i, i + 1400);
+  assert(!/p_token|resume_token|public_diagnostic_get_result/.test(cuerpo),
+    "la consulta administrativa pasa por el testigo del participante");
+  assert(/\.eq\("id", submissionId\)/.test(cuerpo) && /\.eq\("campaign_id", campaignId\)/.test(cuerpo),
+    "no se acota por campaña y participación");
+  for (const prohibido of ["token", "hash", "prefix", "ip", "user_agent", "cookie"]) {
+    assert(!new RegExp(`\\b${prohibido}\\b`, "i").test(VISTA_ADMIN),
+      `la vista administrativa enseña «${prohibido}»`);
+  }
+});
+
+check("Exige superadministración, y en el servidor", () => {
+  const i = ACCIONES.indexOf("export async function getSubmissionResultAction");
+  assert(i > -1, "no existe la acción del resultado administrativo");
+  const cuerpo = ACCIONES.slice(i, i + 600);
+  assert(/requirePlatformStaff\(\)/.test(cuerpo), "no se exige equipo de plataforma");
+  assert(/if \(!isSuperadmin\) return \{ result: null, canRead: false \}/.test(cuerpo),
+    "no se exige superadministración");
+  // Y la vista no se fía de ocultar el enlace.
+  assert(/canRead/.test(VISTA_ADMIN), "la vista no comprueba la autorización");
+});
+
+check("Es de SOLO LECTURA: no hay un control que escriba", () => {
+  for (const prohibido of ["<form", "useActionState", "formAction", "action=\\{",
+                           "onSubmit", "update", "insert", "delete"]) {
+    assert(!new RegExp(prohibido, "i").test(VISTA_ADMIN),
+      `la vista administrativa tiene «${prohibido}»: la instantánea es historia`);
+  }
+});
+
+check("Y el enlace solo aparece cuando hay resultado que ver", () => {
+  assert(/s\.status === "completed" && s\.maturityPercent !== null \?/.test(TABLA),
+    "se ofrece «Ver resultado» sobre participaciones sin instantánea");
+  assert(/submissions\/\$\{s\.id\}\/result/.test(TABLA),
+    "el enlace no apunta a la participación de esa fila");
+});
+
+console.log("\nJ · Las recomendaciones, congeladas");
+// ===========================================================================
+
+function instantanea(gaps: { code: string; section: string | null; question: string;
+                            recommended_action: string | null }[]) {
+  return parsePublicSnapshot({
+    schema: "public_pcr_result.v2", instrument: { type: "pcr", version: 1 },
+    answered: 52, questions: 52, maturity_percent: 60, readiness_level: "low",
+    readiness_label: "Nivel de preparación bajo", critical_gaps: 2,
+    sections: [{ code: "s1", title: "Sección uno", percent: 40, answered_yes: 4, total: 10 },
+               { code: "s2", title: "Sección dos", percent: 70, answered_yes: 7, total: 10 }],
+    gaps,
+  })!;
+}
+
+check("Conservan el ORDEN del snapshot, no uno nuevo", () => {
+  // La dimensión s1 va peor que s2: la pantalla pública pondría s1 primero.
+  // Aquí manda el orden en que quedaron escritas.
+  const snap = instantanea([
+    { code: "Q1", section: "s2", question: "a", recommended_action: "Acción de s2" },
+    { code: "Q2", section: "s1", question: "b", recommended_action: "Acción de s1" },
+  ]);
+  const r = snapshotRecommendations(snap);
+  assert(r.map((x) => x.text).join(" | ") === "Acción de s2 | Acción de s1",
+    `se reordenaron: ${r.map((x) => x.text).join(" | ")}`);
+  assert(r[0].order === 1 && r[1].order === 2, "la numeración no sigue el orden");
+});
+
+check("Conservan su DIMENSIÓN, y la que no tiene se deja vacía", () => {
+  const snap = instantanea([
+    { code: "Q1", section: "s1", question: "a", recommended_action: "Con dimensión" },
+    { code: "Q2", section: null, question: "b", recommended_action: "Sin dimensión" },
+  ]);
+  const r = snapshotRecommendations(snap);
+  assert(r[0].dimension === "s1" && r[0].dimensionTitle === "Sección uno",
+    "se pierde la dimensión");
+  assert(r[1].dimension === null && r[1].dimensionTitle === null,
+    "se inventa una dimensión donde no la había");
+});
+
+check("Y el TEXTO exacto, sin retocar", () => {
+  const original = "  Registre en cada orden los lotes consumidos.  ";
+  const snap = instantanea([
+    { code: "Q1", section: "s1", question: "a", recommended_action: original }]);
+  const r = snapshotRecommendations(snap);
+  assert(r[0].text === original.trim(), `salió «${r[0].text}»`);
+});
+
+check("Una acción repetida en la misma dimensión es UNA fila; en otra, dos", () => {
+  const snap = instantanea([
+    { code: "Q1", section: "s1", question: "a", recommended_action: "Misma acción" },
+    { code: "Q2", section: "s1", question: "b", recommended_action: "Misma acción" },
+    { code: "Q3", section: "s2", question: "c", recommended_action: "Misma acción" },
+    { code: "Q4", section: "s1", question: "d", recommended_action: null },
+  ]);
+  const r = snapshotRecommendations(snap);
+  assert(r.length === 2, `salieron ${r.length} filas`);
+  assert(r[0].dimension === "s1" && r[1].dimension === "s2",
+    "la deduplicación cruzó dimensiones");
+});
+
+check("La quinta hoja existe, en formato largo y con sus columnas", () => {
+  const hojas = workbookSheets(datos());
+  assert(hojas.length === 5, `el libro tiene ${hojas.length} hojas`);
+  const r = hojas[4];
+  assert(r.name === "Recomendaciones", `la quinta hoja se llama «${r.name}»`);
+  const cab = r.rows[0].map(String);
+  for (const c of ["campaign_name", "submission_id", "company_name", "participant_name",
+                   "completed_at", "global_score", "readiness_level",
+                   "dimension", "recommendation_order", "recommendation_text"]) {
+    assert(cab.includes(c), `falta la columna «${c}»`);
+  }
+  // Dos completadas × dos recomendaciones cada una.
+  assert(r.rows.length === 2 * 2 + 1, `la hoja tiene ${r.rows.length - 1} filas`);
+  const fila = r.rows[1];
+  assert(fila[cab.indexOf("recommendation_text")] === "Registra los lotes",
+    "el texto no viaja");
+  assert(fila[cab.indexOf("recommendation_order")] === 1, "el orden no viaja");
+});
+
+check("Y las de a medias no aportan filas de recomendación", () => {
+  const d = datos();
+  const conMedias = d.submissions.filter((s) => s.status !== "completed").length;
+  assert(conMedias === 1, "el conjunto de prueba perdió la participación a medias");
+  const r = workbookSheets(d)[4];
+  assert(r.rows.length === 2 * 2 + 1,
+    "una participación sin cerrar aportó recomendaciones");
 });
 
 console.log("\nH · Y el aviso de 01G");

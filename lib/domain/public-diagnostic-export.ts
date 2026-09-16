@@ -45,6 +45,13 @@ export type ExportQuestion = {
 
 export type ExportDimension = { code: string; title: string; percent: number };
 
+export type ExportRecommendation = {
+  dimension: string | null;
+  dimensionTitle: string | null;
+  order: number;
+  text: string;
+};
+
 export type ExportSubmission = {
   submissionId: string;
   startedAt: string | null;
@@ -66,6 +73,13 @@ export type ExportSubmission = {
   supersedesId: string | null;
   supersededById: string | null;
   dimensions: ExportDimension[];
+  /**
+   * PUBLIC-DIAGNOSTICS-01J · Las recomendaciones CONGELADAS, en el orden en
+   * que quedaron escritas. No se derivan del catálogo de hoy: si mañana se
+   * publica una PCR v2 con otras acciones, este archivo sigue diciendo lo que
+   * se le entregó a esa empresa aquel día.
+   */
+  recommendations: ExportRecommendation[];
   /** Por clave estable de pregunta. Lo que nadie respondió no está. */
   answers: Record<string, boolean>;
 };
@@ -240,7 +254,36 @@ export function workbookSheets(dataset: ExportDataset): XlsxSheet[] {
     ],
   };
 
-  return [resumen, participantes, respuestas, dimensiones];
+  /*
+    PUBLIC-DIAGNOSTICS-01J · La quinta hoja, que es la que se usa.
+
+    El resto del libro describe lo que pasó; esta dice qué hacer. Va en formato
+    largo —una fila por acción— porque así se filtra por dimensión, se reparte
+    entre responsables y se convierte en un plan sin pelearse con celdas que
+    contienen párrafos.
+
+    La alternativa era meter todas las recomendaciones de una empresa en una
+    sola celda gigante. Cabría, y sería inservible: nadie ordena ni cuenta por
+    una celda con quince frases dentro.
+  */
+  const recomendaciones: XlsxSheet = {
+    name: "Recomendaciones",
+    rows: [
+      ["campaign_name", "submission_id", "company_name", "participant_name",
+       "completed_at", "global_score", "readiness_level",
+       "dimension", "dimension_nombre", "recommendation_order", "recommendation_text"],
+      ...dataset.submissions
+        .filter((s) => s.status === "completed")
+        .flatMap((s) => s.recommendations.map((r) => [
+          dataset.campaign.name, s.submissionId, s.companyName, s.participantName,
+          s.completedAt, s.maturityPercent, s.readinessLevel,
+          // Sin dimensión se deja vacío. No se inventa.
+          r.dimension, r.dimensionTitle, r.order, r.text,
+        ])),
+    ],
+  };
+
+  return [resumen, participantes, respuestas, dimensiones, recomendaciones];
 }
 
 /** El nombre del fichero, sin nada que sorprenda a un sistema de archivos. */

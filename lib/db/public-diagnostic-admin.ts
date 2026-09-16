@@ -5,7 +5,11 @@ import { createServerClient } from "@/lib/supabase/server";
 import { readAllStrict, readPage, type Page } from "@/lib/db/paged-read";
 import type {
   ExportDataset, ExportQuestion, ExportSubmission, ExportDimension,
+  ExportRecommendation,
 } from "@/lib/domain/public-diagnostic-export";
+import {
+  parsePublicSnapshot, snapshotRecommendations,
+} from "@/lib/domain/public-diagnostic-report";
 
 /**
  * Trazaloop · PUBLIC-DIAGNOSTICS-01H · Las participaciones, para administrar.
@@ -253,6 +257,18 @@ export async function loadExportDataset(
       title: String(d.title ?? ""),
       percent: Number(d.percent ?? 0),
     }));
+    /*
+      PUBLIC-DIAGNOSTICS-01J · Las recomendaciones salen de la INSTANTÁNEA.
+
+      Ni una consulta a `diagnostic_questions` para esto: si se leyera el
+      catálogo de hoy, una acción retirada desaparecería de un archivo
+      histórico y una nueva aparecería en diagnósticos que nunca la
+      recibieron. Lo que se exporta es lo que se le entregó a esa empresa.
+    */
+    const instantanea = parsePublicSnapshot(payload);
+    const recommendations: ExportRecommendation[] = instantanea
+      ? snapshotRecommendations(instantanea)
+      : [];
     return {
       submissionId: m.id,
       startedAt: m.startedAt,
@@ -272,6 +288,7 @@ export async function loadExportDataset(
       supersedesId: m.supersedesId,
       supersededById: m.supersededById,
       dimensions,
+      recommendations,
       answers: porParticipacion.get(m.id) ?? {},
     };
   });
@@ -289,5 +306,59 @@ export async function loadExportDataset(
     questions,
     sections: secciones.map((s) => ({ code: String(s.code), title: String(s.title) })),
     submissions,
+  };
+}
+
+export type AdminSubmissionResult = {
+  campaignName: string;
+  campaignSlug: string;
+  partnerName: string | null;
+  submission: SubmissionRow;
+  /** La instantánea tal cual, sin tocar. La valida `parsePublicSnapshot`. */
+  snapshot: unknown;
+};
+
+/**
+ * PUBLIC-DIAGNOSTICS-01J · El resultado de UNA participación, para administrar.
+ *
+ *
+ * NO PASA POR EL TESTIGO DEL PARTICIPANTE
+ *
+ * Habría sido corto reutilizar `public_diagnostic_get_result`, y habría
+ * obligado a que la administración conociera —o manejara— el testigo de acceso
+ * de una empresa. Un testigo es de quien respondió; que exista una pantalla
+ * interna donde aparezca es la forma de que acabe copiado en un correo.
+ *
+ * Así que se lee por identificador, con la RLS de 0196 como puerta: solo la
+ * superadministración de plataforma ve estas filas. Si esta consulta se llamara
+ * desde otro sitio, devolvería nada.
+ *
+ *
+ * Y NO RECALCULA
+ *
+ * Devuelve `result_payload` tal como quedó. No lee preguntas, ni versiones, ni
+ * perfiles de puntuación: el resultado que vio la empresa y el que ve la
+ * administración son literalmente el mismo dato.
+ */
+export async function loadSubmissionResult(
+  campaignId: string, submissionId: string
+): Promise<AdminSubmissionResult | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("public_diagnostic_submissions")
+    .select(`${CAMPOS_PARTICIPACION}, campaign_id,`
+      + " public_diagnostic_campaigns(name, slug, partner_name)")
+    .eq("id", submissionId)
+    .eq("campaign_id", campaignId)
+    .maybeSingle();
+  if (!data) return null;
+  const fila = data as unknown as Fila;
+  const c = fila.public_diagnostic_campaigns as Fila | null;
+  return {
+    campaignName: String(c?.name ?? ""),
+    campaignSlug: String(c?.slug ?? ""),
+    partnerName: (c?.partner_name as string) ?? null,
+    submission: mapearParticipacion(fila),
+    snapshot: fila.result_payload ?? null,
   };
 }

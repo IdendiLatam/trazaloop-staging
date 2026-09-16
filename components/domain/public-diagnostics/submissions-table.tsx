@@ -86,6 +86,7 @@ export function SubmissionsTable({
                 <th className="px-3 py-2">Puntaje</th>
                 <th className="px-3 py-2">Nivel</th>
                 <th className="px-3 py-2">Repetición</th>
+                <th className="px-3 py-2">Resultado</th>
               </tr>
             </thead>
             <tbody>
@@ -118,6 +119,27 @@ export function SubmissionsTable({
                     {s.supersedesId ? "Repite una anterior" : null}
                     {s.supersededById ? "Superada por otra" : null}
                     {!s.supersedesId && !s.supersededById ? "—" : null}
+                  </td>
+                  {/*
+                    PUBLIC-DIAGNOSTICS-01J · Solo si hay algo que ver.
+
+                    Una participación a medias no tiene instantánea, y ofrecer
+                    «Ver resultado» sobre ella sería un enlace que lleva a una
+                    explicación de por qué no hay resultado. Cada fila apunta a
+                    SU propia participación: si una empresa repitió, cada
+                    intento conserva su enlace y el suyo.
+                  */}
+                  <td className="px-3 py-2">
+                    {s.status === "completed" && s.maturityPercent !== null ? (
+                      <Link
+                        href={`/platform/public-diagnostics/${campaignId}/submissions/${s.id}/result`}
+                        className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-xs font-medium hover:border-loop"
+                      >
+                        Ver resultado
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-ink-soft">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

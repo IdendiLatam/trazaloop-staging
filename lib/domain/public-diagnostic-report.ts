@@ -280,3 +280,59 @@ export function buildPublicReport(snapshot: PublicSnapshot): PublicReport {
     totalGaps: snapshot.gaps.length,
   };
 }
+
+
+/**
+ * PUBLIC-DIAGNOSTICS-01J · Las recomendaciones tal como quedaron congeladas.
+ *
+ *
+ * POR QUÉ NO SIRVE `agruparRecomendaciones`
+ *
+ * Aquella ordena las brechas por la dimensión más floja, porque en la pantalla
+ * pública eso ayuda a quien tiene que decidir por dónde empezar. Para la
+ * administración y para el archivo que se entrega, reordenar es justamente lo
+ * que no se quiere: el orden del snapshot ES un dato, y dos exportaciones de
+ * la misma participación tienen que salir idénticas aunque mañana se cambie el
+ * criterio de presentación.
+ *
+ * Así que aquí se respeta el orden en que las brechas quedaron escritas -que
+ * es el orden del instrumento- y no se toca el texto.
+ *
+ *
+ * QUÉ SE DEDUPLICA Y QUÉ NO
+ *
+ * Varias brechas de la misma dimensión suelen apuntar a la misma acción. Se
+ * conserva la PRIMERA aparición y se descartan las repeticiones EXACTAS dentro
+ * de la misma dimensión: una fila por acción a realizar, que es lo que se pidió
+ * y lo que se puede convertir en un plan de trabajo. La misma acción en dos
+ * dimensiones distintas sí son dos filas, porque son dos trabajos distintos.
+ */
+export type SnapshotRecommendation = {
+  /** `null` si la brecha venía sin dimensión (instantáneas v1). */
+  dimension: string | null;
+  dimensionTitle: string | null;
+  order: number;
+  text: string;
+};
+
+export function snapshotRecommendations(
+  snapshot: PublicSnapshot
+): SnapshotRecommendation[] {
+  const titulo = new Map(snapshot.sections.map((s) => [s.code, s.title]));
+  const vistas = new Set<string>();
+  const salida: SnapshotRecommendation[] = [];
+  for (const g of snapshot.gaps) {
+    const texto = g.recommended_action?.trim();
+    if (!texto) continue;
+    const clave = `${g.section ?? ""} ${texto}`;
+    if (vistas.has(clave)) continue;
+    vistas.add(clave);
+    salida.push({
+      dimension: g.section,
+      dimensionTitle: g.section !== null ? titulo.get(g.section) ?? null : null,
+      order: salida.length + 1,
+      text: texto,
+    });
+  }
+  return salida;
+}

@@ -1231,6 +1231,7 @@ export const PAGE_KEY_EXCLUSIONS: readonly PageKeyExclusion[] = [
   { route: "/diagnostic/[slug]/assessment", reason: "Página pública sin sesión · no lleva tutorial" },
   { route: "/diagnostic/[slug]/result", reason: "Página pública sin sesión · no lleva tutorial" },
   { route: "/platform/public-diagnostics/[campaignId]", reason: "Consola de plataforma · herramienta interna" },
+  { route: "/platform/public-diagnostics/[campaignId]/submissions/[submissionId]/result", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/plans", reason: "Consola de plataforma · administración comercial interna" },
   { route: "/platform/organizations/new", reason: "Consola de plataforma · herramienta interna" },
   { route: "/platform/organizations/[id]", reason: "Consola de plataforma · herramienta interna" },

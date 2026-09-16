@@ -12,7 +12,8 @@ import {
   transitionDeniedMessage, type CampaignStatus,
 } from "@/lib/domain/public-diagnostics";
 import {
-  listSubmissionsPage, type SubmissionRow,
+  listSubmissionsPage, loadSubmissionResult,
+  type SubmissionRow, type AdminSubmissionResult,
 } from "@/lib/db/public-diagnostic-admin";
 import type { Page } from "@/lib/db/paged-read";
 
@@ -293,5 +294,23 @@ export async function listSubmissionsAction(
     return { page: await listSubmissionsPage(campaignId, query), canRead: true };
   } catch {
     return { page: null, canRead: true };
+  }
+}
+
+/**
+ * PUBLIC-DIAGNOSTICS-01J · El resultado de una participación, para la consola.
+ *
+ * Misma puerta que la lista: superadministración y nada más. Ver a quién
+ * pertenece un resultado es ver a una empresa identificada.
+ */
+export async function getSubmissionResultAction(
+  campaignId: string, submissionId: string
+): Promise<{ result: AdminSubmissionResult | null; canRead: boolean }> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) return { result: null, canRead: false };
+  try {
+    return { result: await loadSubmissionResult(campaignId, submissionId), canRead: true };
+  } catch {
+    return { result: null, canRead: true };
   }
 }
