@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01B6-2026-09-16-close-recurring-attempt";
+const QA_MARCADOR = "MPREC01B11-2026-09-16-read-back-url";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -879,6 +879,11 @@ async function manejar(request: Request) {
       start_date: ar.start_date ?? null, end_date: ar.end_date ?? null,
       next_payment_date: j.next_payment_date ?? null,
       external_reference: j.external_reference ?? null,
+      // MP-REC-01B.11 · La vuelta se escribía y nunca se releía, así que
+      // cuando el navegador aterrizó en un 404 no había forma de saber a dónde
+      // había mandado el proveedor. Un campo que se manda y no se puede
+      // comprobar es un campo que nadie vigila.
+      back_url: j.back_url ?? null,
       payer_id: j.payer_id ?? null,
       date_created: j.date_created ?? null,
       last_modified: j.last_modified ?? null,
