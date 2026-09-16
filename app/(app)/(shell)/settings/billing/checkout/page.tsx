@@ -10,6 +10,9 @@ import { findLiveCheckout, getWompiPublicConfig } from "@/lib/db/billing-checkou
 import { WompiCardForm } from "@/components/domain/billing/wompi-card-form";
 import { CheckoutWatcher } from "@/components/domain/billing/checkout-watcher";
 import { WompiTrustPanel } from "@/components/domain/billing/wompi-trust-panel";
+import { RecurringCheckoutPanel }
+  from "@/components/domain/billing/recurring-checkout-panel";
+import { isRecurringLaneOpen } from "@/lib/billing/recurring/policy";
 import { RedirectCheckoutPanel }
   from "@/components/domain/billing/redirect-checkout-panel";
 import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
@@ -255,9 +258,23 @@ async function CheckoutRedirigido({
           </p>
         </section>
 
-        <div className="lg:col-start-1 lg:row-start-2">
+        <div className="lg:col-start-1 lg:row-start-2 space-y-4">
           <RedirectCheckoutPanel quoteId={presupuesto.quoteId}
                                  providerName={providerName} />
+          {/*
+            MP-REC-01B · El carril recurrente, al lado del manual y nunca en su
+            lugar. Se enseña SOLO si la política lo abre —fuera de Producción,
+            con la bandera encendida y con credenciales de pruebas— y solo para
+            el mensual, que es el único intervalo que este tramo cubre.
+
+            La decisión NO se toma aquí. Esta pantalla pregunta; quien decide es
+            `resolveRecurringLane`, y lo mismo hace el servicio del servidor. Si
+            alguien enseñara este panel por error, la acción seguiría negándose.
+          */}
+          {isRecurringLaneOpen() && presupuesto.billingInterval === "monthly" ? (
+            <RecurringCheckoutPanel quoteId={presupuesto.quoteId}
+                                    providerName={providerName} />
+          ) : null}
         </div>
       </div>
     </Marco>
