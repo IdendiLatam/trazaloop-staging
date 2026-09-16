@@ -380,6 +380,31 @@ await check("O6. Y la preapproval releída tiene que ser la nuestra", async () =
   assert(db.periodos.length === 0, "saldó sobre una suscripción ajena");
 });
 
+console.log("\nR · LA CORRELACIÓN NO SE ADIVINA, SE VERIFICA");
+
+await check("R1. El veredicto se ata a la referencia, no al orden de creación", async () => {
+  // El primer cobro real falló por esto: el servicio buscaba «el intento más
+  // reciente de la suscripción». Una empresa que presupuesta dos veces tiene
+  // dos intentos, y el más nuevo NO es aquel con el que se creó la preapproval.
+  // La decisión pura ya lo hacía bien —compara contra la referencia esperada—
+  // y esta prueba fija esa propiedad para que nadie la afloje.
+  const otro = { ...BASE, externalReference: "intent-mas-nuevo" };
+  const r = decideRecurringSettlements([pago()], otro);
+  assert(r.settle.length === 0, "saldó un cobro de otra referencia");
+  assert(r.rejected[0]?.reason === "EXTERNAL_REFERENCE_MISMATCH",
+    `motivo inesperado: ${r.rejected[0]?.reason}`);
+});
+
+await check("R2. Y la suscripción releída manda sobre lo que creamos saber", async () => {
+  const { deps: d, db } = deps({
+    sub: suscripcion({ externalReference: "intent-de-otra-contratacion" }),
+    pagos: [pago()] });
+  const r = await reconcileRecurringSubscription(BASE, d);
+  assert(!r.ok && r.blocked === "SUBSCRIPTION_REFERENCE_MISMATCH",
+    `no se bloqueó por referencia: ${r.blocked}`);
+  assert(db.periodos.length === 0, "saldó sobre una suscripción ajena");
+});
+
 console.log("\nX · LO QUE NO SE PUEDE RECORDAR NO SE RECONOCE");
 
 await check("X1. Un cobro sin identificador se rechaza", async () => {

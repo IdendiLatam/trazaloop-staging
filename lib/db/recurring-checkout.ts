@@ -352,15 +352,40 @@ export async function reconcileRecurringAuthorization(
              alreadyReconciled: 0, rejected: [], alreadySeen: 0, outcomes: [] };
   }
 
-  // La correlación y el importe salen del INTENTO, que los congeló del
-  // presupuesto. No del navegador y no de la autorización.
-  const { data: intento } = await admin.from("billing_checkout_intents")
-    .select("id, expected_total_amount, expected_currency")
-    .eq("billing_subscription_id", fila.subscription_id)
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  // Se pregunta al proveedor ANTES de decidir qué intento mirar: la referencia
+  // es suya, no nuestra. Si no responde, no se concluye nada.
+  const cabeza = await proveedor.getSubscriptionDetail(fila.provider_subscription_id);
+  if (!cabeza.ok) {
+    return { ok: false, blocked: "PROVIDER_UNREACHABLE", providerStatus: null,
+             canonicalStatus: null, authorized: false, settledNow: 0,
+             alreadyReconciled: 0, rejected: [], alreadySeen: 0, outcomes: [] };
+  }
+  const subRef = cabeza.value.externalReference;
+
+  // LA CORRELACIÓN SE RESUELVE POR LA REFERENCIA QUE DICE EL PROVEEDOR.
+  //
+  // Antes esto buscaba «el intento más reciente de esta suscripción», y el
+  // primer cobro real lo desmintió: una empresa puede haber presupuestado
+  // varias veces —cada visita a la pantalla de contratación crea un
+  // presupuesto, y cada presupuesto su intento— así que «el más reciente» no
+  // tiene por qué ser aquel con el que se creó ESTA preapproval. El resultado
+  // fue un `SUBSCRIPTION_REFERENCE_MISMATCH` sobre un cobro perfectamente
+  // legítimo.
+  //
+  // El orden correcto es el inverso: se lee la referencia que el proveedor
+  // guarda en la preapproval, se busca ESE intento, y se comprueba que
+  // pertenece a esta misma suscripción. Así la referencia no se adivina, se
+  // verifica; y un objeto de otra contratación se cae por la comprobación de
+  // pertenencia en vez de colarse por ser el más nuevo.
+  const refProveedor = (subRef ?? "").trim();
+  const { data: intento } = refProveedor === "" ? { data: null } : await admin
+    .from("billing_checkout_intents")
+    .select("id, expected_total_amount, expected_currency, billing_subscription_id")
+    .eq("id", refProveedor).maybeSingle();
   const i = intento as { id: string; expected_total_amount: number;
-                         expected_currency: string } | null;
-  if (!i) {
+                         expected_currency: string;
+                         billing_subscription_id: string | null } | null;
+  if (!i || i.billing_subscription_id !== fila.subscription_id) {
     return { ok: false, blocked: "SUBSCRIPTION_REFERENCE_MISMATCH", providerStatus: null,
              canonicalStatus: null, authorized: false, settledNow: 0,
              alreadyReconciled: 0, rejected: [], alreadySeen: 0, outcomes: [] };
