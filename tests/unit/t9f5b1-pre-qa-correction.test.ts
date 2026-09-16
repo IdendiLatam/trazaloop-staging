@@ -527,6 +527,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0202_public_anon_execute_audit.sql",
     "0203_public_diagnostic_admin_counts.sql",
     "0204_billing_recurring_authorization.sql",
+    "0205_billing_recurring_open_and_attach.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

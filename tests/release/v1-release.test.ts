@@ -155,6 +155,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0202_public_anon_execute_audit.sql",
   "0203_public_diagnostic_admin_counts.sql",
   "0204_billing_recurring_authorization.sql",
+  "0205_billing_recurring_open_and_attach.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -1329,6 +1330,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
   "0202_public_anon_execute_audit.sql",
   "0203_public_diagnostic_admin_counts.sql",
   "0204_billing_recurring_authorization.sql",
+  "0205_billing_recurring_open_and_attach.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -2627,6 +2629,11 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
  * eso debajo se comprueba que ninguna pantalla las importa.
  */
 const FRONTERA_MERCADOPAGO = [
+  // MP-REC-01B · El camino de PRODUCTO de la recurrencia. Nombra la pasarela
+  // porque es quien la elige y quien comprueba que la preapproval creada es de
+  // NUESTRA aplicación —si no lo es, la deshace—. Es de servidor (`server-only`),
+  // ninguna pantalla lo importa, y `policy.ts` lo cierra en Producción.
+  "lib/db/recurring-checkout.ts",
   // MP-REC-01 · El carril recurrente, de servidor. `reconcile` nombra la
   // pasarela porque documenta POR QUÉ la conciliación es la fuente de verdad y
   // el aviso no —la aplicación de pruebas del proveedor no tiene webhook— y

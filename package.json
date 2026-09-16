@@ -371,7 +371,8 @@
     "test:pd01h": "tsx tests/unit/pd01h-admin-export.test.ts",
     "test:pd01j-db": "tsx --conditions=react-server tests/rls/pd01j-admin-result.test.ts",
     "test:mprec01": "tsx tests/unit/mprec01-recurring-lane.test.ts",
-    "test:mprec01b": "tsx tests/unit/mprec01b-reconciliation.test.ts"
+    "test:mprec01b": "tsx tests/unit/mprec01b-reconciliation.test.ts",
+    "test:mprec01b-db": "tsx tests/rls/mprec01b-recurring-open.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

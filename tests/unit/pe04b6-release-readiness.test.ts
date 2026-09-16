@@ -165,6 +165,11 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
  * teniendo dientes: nombrar la pasarela en un séptimo sitio la pone en rojo.
  */
 const FRONTERA_PASARELA = [
+  // MP-REC-01B · El camino de PRODUCTO de la recurrencia. Nombra la pasarela
+  // porque es quien la elige y quien comprueba que la preapproval creada es de
+  // NUESTRA aplicación —si no lo es, la deshace—. Es de servidor (`server-only`),
+  // ninguna pantalla lo importa, y `policy.ts` lo cierra en Producción.
+  "lib/db/recurring-checkout.ts",
   // MP-REC-01 · El carril recurrente, de servidor. `reconcile` nombra la
   // pasarela porque documenta POR QUÉ la conciliación es la fuente de verdad y
   // el aviso no —la aplicación de pruebas del proveedor no tiene webhook— y
@@ -316,11 +321,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0202_public_anon_execute_audit.sql",
     "0203_public_diagnostic_admin_counts.sql",
     "0204_billing_recurring_authorization.sql",
+    "0205_billing_recurring_open_and_attach.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0204_billing_recurring_authorization.sql",
+  assert(cabecera === "0205_billing_recurring_open_and_attach.sql",
     `la cabecera es ${cabecera}`);
 });
 
