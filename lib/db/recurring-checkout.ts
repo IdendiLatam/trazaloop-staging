@@ -5,6 +5,7 @@ import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import { applicationMatches } from "@/lib/billing/mercadopago/identity";
 import { providerAmountToMinor } from "@/lib/billing/mercadopago/mapping";
 import { resolveRecurringLane } from "@/lib/billing/recurring/policy";
+import { resolveRecurringPayer } from "@/lib/billing/recurring/payer";
 import {
   reconcileRecurringSubscription,
   type RecurringReconcileDeps, type RecurringReconcileResult,
@@ -41,6 +42,14 @@ import type { RecurringExpectation } from "@/lib/billing/recurring/verification"
  *   5. ¿Es de NUESTRA aplicación? Si no, se deshace en el proveedor.
  *   6. Atar. Y solo entonces existe un enlace que dar.
  */
+
+/**
+ * Registro de servidor. Lleva la CLASE del fallo y el diagnóstico ya saneado
+ * por el adaptador; jamás una credencial, una cabecera ni un dato de tarjeta.
+ */
+function log_recurrente(evento: string, campos: Record<string, unknown>) {
+  console.log(`[billing:recurring] ${evento}`, JSON.stringify(campos));
+}
 
 export type OpenRecurringResult =
   | { ok: true; authorizationId: string; subscriptionId: string;
@@ -99,7 +108,6 @@ export async function openRecurringCheckout(input: {
   supabase: SupabaseClient;
   origin: string;
   planLabel: string;
-  payerEmail?: string | null;
 }): Promise<OpenRecurringResult> {
   // --- 1 · El carril ---------------------------------------------------------
   const carril = resolveRecurringLane();
@@ -123,17 +131,19 @@ export async function openRecurringCheckout(input: {
   if (intento.error || !intento.data) {
     return { ok: false, code: "INTENT_NOT_OPENED", detail: intento.error?.message };
   }
-  const d = intento.data as { intent_id: string; billing_email: string | null;
-                              billing_email_missing: boolean };
+  const d = intento.data as { intent_id: string };
   const intentId = String(d.intent_id);
 
-  // EL PAGADOR SALE DE LA EMPRESA, no del navegador. Mercado Pago exige un
-  // correo para crear la preapproval, y el que vale es el de facturación que la
-  // empresa ya declaró. Sin él no se contrata: inventarlo pondría la
-  // suscripción a nombre de una dirección que nadie vigila.
-  const correoPagador = (input.payerEmail ?? d.billing_email ?? "").trim();
-  if (correoPagador === "") {
-    return { ok: false, code: "INTENT_NOT_OPENED", detail: "BILLING_EMAIL_MISSING" };
+  // EL PAGADOR NO SALE DE LA SESIÓN, Y ESTO SE APRENDIÓ PAGÁNDOLO.
+  //
+  // El primer clic humano real mandó el correo del administrador que estaba
+  // contratando y Mercado Pago lo rechazó. En el sandbox el pagador es una
+  // IDENTIDAD del proveedor, no una dirección cualquiera. Lo decide
+  // `resolveRecurringPayer`, que ni siquiera admite un correo por parámetro:
+  // no se puede pasar por error algo que la firma no acepta.
+  const pagador = resolveRecurringPayer(proveedor.identity.value.environment);
+  if (!pagador.ok) {
+    return { ok: false, code: "RECURRING_NOT_AVAILABLE", detail: pagador.reason };
   }
 
   // --- 3 · Suscripción pendiente y autorización a la espera ------------------
@@ -164,20 +174,52 @@ export async function openRecurringCheckout(input: {
     + `/settings/billing/recurring/return?a=${a.authorization_id}`;
   const creada = await proveedor.createSubscription({
     externalReference: intentId,
-    payerEmail: correoPagador,
+    payerEmail: pagador.email,
     reason: input.planLabel,
     amountMinor: a.expected_total_amount,
     currency: a.expected_currency,
     interval: "monthly",
     returnUrl: vuelta,
   });
-  if (!creada.ok) {
-    return { ok: false,
-             code: creada.failure === "provider_unavailable"
-               ? "PROVIDER_UNAVAILABLE" : "PROVIDER_REFUSED" };
-  }
-
+  // EL CLIENTE ADMINISTRATIVO, antes del rechazo: hace falta para poder CERRAR
+  // el intento, y cerrarlo es parte de responder bien a un fallo.
   const admin = createAdminClient();
+
+  if (!creada.ok) {
+    // EL DIAGNÓSTICO NO SE TIRA. Antes esta rama devolvía solo un código, y por
+    // eso el primer rechazo real de la pasarela se perdió: se vio una vez en
+    // una pantalla y no quedó en ninguna parte. `detail` lo produce el
+    // adaptador ya saneado —nombre, http, mensaje y causas, recortado, sin
+    // nada que lleve arroba— así que se puede registrar y persistir.
+    const diagnostico = (creada as { detail?: string | null }).detail ?? null;
+    log_recurrente("preapproval_rechazada", {
+      authorization_id: a.authorization_id,
+      failure: creada.failure,
+      diagnostic: diagnostico,
+    });
+
+    // LOS DOS FINALES QUE NO SON EL MISMO.
+    //
+    // `provider_unavailable` es un timeout o un 5xx: la petición SALIÓ y no
+    // sabemos si creó la preapproval. Dar eso por fallido y dejar reintentar
+    // es cómo se acaba con dos suscripciones cobrando. Se marca INCIERTO, que
+    // deja la autorización viva y bloquea el segundo intento.
+    //
+    // Cualquier otro rechazo es la pasarela diciendo que no a la petición: no
+    // hay recurso, y el intento se CIERRA para no dejar ocupado el carril
+    // manual por una contratación que nunca existió.
+    const incierto = creada.failure === "provider_unavailable";
+    await admin.rpc("billing_close_recurring_attempt", {
+      p_authorization_id: a.authorization_id,
+      p_outcome: incierto ? "uncertain" : "refused",
+      p_failure: creada.failure,
+      p_diagnostic: diagnostico,
+    });
+
+    return { ok: false,
+             code: incierto ? "PROVIDER_UNAVAILABLE" : "PROVIDER_REFUSED",
+             detail: diagnostico ?? undefined };
+  }
 
   // --- 5 · ¿Es de nuestra aplicación? ---------------------------------------
   //

@@ -165,6 +165,11 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
  * teniendo dientes: nombrar la pasarela en un séptimo sitio la pone en rojo.
  */
 const FRONTERA_PASARELA = [
+  // MP-REC-01B.6 · Quién figura como pagador de una recurrencia. Nombra la
+  // variable de entorno de la pasarela porque el sandbox exige una identidad
+  // de comprador suya; en producción se NIEGA en vez de improvisar. De
+  // servidor, sin interfaz, y cerrado en Producción por `policy.ts`.
+  "lib/billing/recurring/payer.ts",
   // MP-REC-01B · El camino de PRODUCTO de la recurrencia. Nombra la pasarela
   // porque es quien la elige y quien comprueba que la preapproval creada es de
   // NUESTRA aplicación —si no lo es, la deshace—. Es de servidor (`server-only`),
@@ -322,11 +327,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0203_public_diagnostic_admin_counts.sql",
     "0204_billing_recurring_authorization.sql",
     "0205_billing_recurring_open_and_attach.sql",
+    "0206_recurring_attempt_truth.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0205_billing_recurring_open_and_attach.sql",
+  assert(cabecera === "0206_recurring_attempt_truth.sql",
     `la cabecera es ${cabecera}`);
 });
 

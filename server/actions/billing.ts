@@ -469,7 +469,9 @@ export async function startRecurringCheckoutForQuoteAction(
     supabase,
     origin: await origenDePeticion(),
     planLabel: etiquetaDePlan(c.plan_code, c.billing_interval),
-    payerEmail: quien.email || null,
+    // SIN `payerEmail`. El pagador de una recurrencia lo resuelve el servidor
+    // desde el entorno, no la sesión de quien contrata: la firma del servicio
+    // ya no admite otra cosa, y ese es el punto.
   });
   if (!r.ok) return { error: OPEN_RECURRING_MESSAGE[r.code] };
   return { error: null, initPoint: r.initPoint };
