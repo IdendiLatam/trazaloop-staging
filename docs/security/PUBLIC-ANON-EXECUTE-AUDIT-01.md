@@ -136,32 +136,60 @@ llamando a una función de personal. La solución no fue devolverle la función 
 `anon` sino reapuntar la política de personal a `authenticated`, que es quien
 puede serlo.
 
-### Lo que no se pudo prevenir, y cómo se cubre
+### Los privilegios por omisión, con la precisión que merece
 
-0202 cambió los privilegios por omisión del rol `postgres`: **una tabla o una
-secuencia nueva ya no nace concedida a `anon`**, y está comprobado creando una
-de verdad en la batería.
+Hay que separar dos cosas que es muy fácil confundir, y que en la primera
+redacción de este documento estaban confundidas:
 
-Para **funciones no se logró**. Además de la concesión de Supabase —que sí se
-retira— PostgreSQL concede por su cuenta `EXECUTE` a `PUBLIC` sobre toda
-función nueva, y `anon` lo hereda por ahí. Se intentaron las tres formas
-documentadas (`REVOKE … ON FUNCTIONS FROM public`, `ON ROUTINES`, y
-grant-seguido-de-revoke) y ninguna surte efecto en esta instancia.
+**Sobre funciones que YA existen**, `REVOKE EXECUTE ON FUNCTION f() FROM PUBLIC`
+funciona perfectamente. Es lo que hace 0202 con las 673, y se puede comprobar:
+no queda ni una con la entrada `=X/` que representa a `PUBLIC`.
 
-Tampoco se pudieron tocar los privilegios por omisión de `supabase_admin`: hace
-falta ser miembro de ese rol.
+**Sobre funciones FUTURAS**, `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON
+FUNCTIONS FROM PUBLIC` es un **no-op en este servidor**. Medido en PostgreSQL
+17.6, en un esquema recién creado y sin filas previas:
 
-Así que para funciones el control **no es prevención sino detección**, y es un
-control real: `npm run test:pd01h-db` lleva la lista cerrada de las nueve y se
-pone roja en cuanto aparece una décima sin declarar. Cada migración que cree
-una función tiene que revocarla explícitamente —como hacen 0198, 0199, 0201 y
-0203— y si alguien lo olvida, se ve antes de que llegue a ninguna parte.
+| Paso | Resultado |
+|---|---|
+| `ALTER DEFAULT PRIVILEGES … GRANT EXECUTE … TO service_role` | Deja fila y la siguiente función la hereda — el mecanismo funciona |
+| `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE … FROM PUBLIC` | **No deja fila**, y la siguiente función nace con `proacl = NULL` |
+| Función creada después | `anon` puede ejecutarla |
 
-**Residuo aceptado, dicho por delante:** entre que alguien crea una función y
-que corre la batería, esa función es alcanzable por `anon`. La ventana es el
-tiempo de una revisión, no el de un despliegue, porque `test:all` es previo.
+`proacl = NULL` no significa «sin permisos»: significa «los de por omisión», y
+los de por omisión para una función incluyen `EXECUTE` para `PUBLIC`. Se probó
+también con `FOR ROLE`, con `ON ROUTINES` y dentro y fuera de transacción.
+
+Para **tablas y secuencias** sí funciona: una tabla creada después de 0202 ya no
+nace concedida a `anon`, y la batería lo comprueba creando una.
+
+### Cómo se cierra entonces lo que nazca mañana
+
+Con un **disparador de evento** sobre `CREATE FUNCTION`
+(`trazaloop_deny_public_execute`): cada función que nace en `public` pierde
+`PUBLIC` y `anon` en el mismo comando que la crea. No es una lista documental
+ni una promesa de revisión: es una revocación que ocurre.
+
+Tres decisiones dentro:
+
+- **Las nueve declaradas se saltan el disparador.** Varias migraciones harán
+  `create or replace` sobre ellas —0201 ya lo hizo— y si perdieran la
+  concesión, la página pública se caería en cuanto alguien tocara una coma.
+  La lista va escrita a mano en el disparador: añadir una décima obliga a
+  editarlo, que es justo el punto de revisión que se quiere.
+- **Es tolerante.** Si no puede revocar sobre una función concreta —otro rol,
+  una extensión— avisa y sigue, en vez de tumbar el DDL. Bloquear la creación
+  de funciones de la plataforma por defender una frontera nuestra sería cambiar
+  un riesgo por una avería.
+- **Se comprueba creando una función de verdad**, tanto en la migración como en
+  la batería. Declarar un disparador no demuestra que dispare.
+
+Lo que queda fuera de su alcance: lo que cree `supabase_admin` —no somos
+miembros de ese rol y su juego de privilegios por omisión sigue concediendo a
+`anon`— y el hueco que deja la tolerancia. Para los dos sigue la batería de
+lista cerrada, que es obligatoria y corre en `test:all`.
 
 ---
+
 
 ## Alcance de la auditoría, cuando se aborde
 
@@ -196,8 +224,12 @@ demás — revocar **y** poner la puerta dentro, no una de las dos.
       SECURITY-HOTFIX-01, migración 0200, comprobado con una llamada real.
 - [x] Hay una prueba con lista blanca cerrada que falla si nace una función
       pública sin declarar — `tests/rls/pd01h-admin-export.test.ts`.
+- [x] Y, mejor que detectarlo, se previene: un disparador de evento cierra al
+      público toda función nueva de `public`, comprobado creando una.
 - [x] La lista blanca coincide con lo que hay en Producción, verificado contra
       Producción y no solo contra local.
 
-La puerta queda **superada**. Lo que no se pudo prevenir está arriba, con su
-control de detección y su residuo escrito.
+La puerta queda **superada**, con evidencia de privilegios efectiva —el
+esquema recorrido como `anon`— y no solo con una lista. Los dos huecos que
+quedan (`supabase_admin` y la tolerancia del disparador) están arriba, con el
+control que los cubre.

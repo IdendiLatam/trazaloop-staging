@@ -337,13 +337,35 @@ print(json.dumps({'hojas': hojas,
 console.log("\nF · La puerta de la administración");
 // ===========================================================================
 
-check("Las dos rutas de exportación comprueban en SERVIDOR", () => {
-  for (const [nombre, src] of [["CSV", RUTA_CSV], ["Excel", RUTA_XLSX]] as const) {
+check("Las dos rutas de exportación comprueban en SERVIDOR, y antes de leer nada", () => {
+  /*
+    La primera versión de este renglón exigía que la ruta no contuviera
+    `redirect(`. Pasaba, y no defendía nada: sin sesión la ruta SÍ redirige a
+    `/login`, porque lo hace `requireSession()` por dentro. Se vio abriendo la
+    dirección en el despliegue real, no leyendo el fichero.
+
+    Y esa redirección está bien: el navegador enseña el acceso, no descarga un
+    `.csv` con HTML dentro. Lo que de verdad hay que defender es que NINGÚN
+    cuerpo de fichero se componga antes de haber comprobado quién pide, y eso
+    es una propiedad de ORDEN que sí se puede medir.
+  */
+  for (const [nombre, completo] of [["CSV", RUTA_CSV], ["Excel", RUTA_XLSX]] as const) {
+    // Solo el CUERPO del manejador: los `import` de arriba mencionan la lectura
+    // y harían que la comprobación de orden diera un rojo que no es.
+    const src = completo.slice(completo.indexOf("export async function GET"));
     assert(/requireSession\(\)/.test(src), `la ruta ${nombre} no exige sesión`);
-    assert(/isSuperadmin/.test(src) && /status: 403/.test(src),
-      `la ruta ${nombre} no exige superadministración`);
-    assert(!/redirect\(/.test(src),
-      `la ruta ${nombre} redirige: quien pide un fichero se descargaría el HTML de otra página`);
+    const puerta = src.indexOf("if (!isSuperadmin)");
+    assert(puerta > -1, `la ruta ${nombre} no exige superadministración`);
+    assert(/status: 403/.test(src.slice(puerta, puerta + 300)),
+      `la ruta ${nombre} no responde 403 a quien tiene sesión y no es superadmin`);
+    const lectura = src.indexOf("loadExportDataset");
+    assert(lectura > puerta,
+      `la ruta ${nombre} lee la campaña antes de comprobar quién la pide`);
+    const adjunto = src.indexOf("content-disposition");
+    assert(adjunto > puerta,
+      `la ruta ${nombre} compone el fichero antes de la comprobación`);
+    assert(src.indexOf("requireSession()") < puerta,
+      `la ruta ${nombre} comprueba el rol antes que la sesión`);
   }
 });
 

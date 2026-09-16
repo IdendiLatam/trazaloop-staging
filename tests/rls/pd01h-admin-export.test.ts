@@ -64,8 +64,19 @@ async function main() {
   */
   const URL_SB = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const CLAVE = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const clienteHttp = URL_SB && CLAVE
-    ? createClient(URL_SB, CLAVE, { auth: { autoRefreshToken: false, persistSession: false } })
+  /*
+    Y solo si apuntan AL MISMO SITIO.
+
+    `SUPABASE_DB_URL` puede llevar a Staging mientras las variables HTTP siguen
+    mirando al stack local: entonces la exportación consultaría una base donde
+    la campaña no existe y devolvería `null`. Eso no es un fallo del producto,
+    así que no se cuenta como tal — se dice y se omite.
+  */
+  const anfitrion = (u: string) => { try { return new URL(u).hostname; } catch { return ""; } };
+  const mismoStack = !!URL_SB && !!CLAVE
+    && anfitrion(URL_SB) === anfitrion(String(DB_URL).replace(/^postgresql:/, "http:"));
+  const clienteHttp = mismoStack
+    ? createClient(URL_SB!, CLAVE!, { auth: { autoRefreshToken: false, persistSession: false } })
     : null;
 
   await q("set role postgres");
@@ -162,25 +173,48 @@ async function main() {
       0202 cerró los privilegios por omisión para tablas y secuencias, y esto
       lo comprueba creando una de verdad.
 
-      Para FUNCIONES no se pudo: PostgreSQL concede EXECUTE a `PUBLIC` sobre
-      toda función nueva por su cuenta, y las tres formas documentadas de
-      quitarlo no surten efecto en esta instancia. El control ahí no es
-      prevención sino detección — la lista cerrada de más arriba— y por eso
-      esta comprobación no afirma lo contrario.
+      Para FUNCIONES esa vía no sirve —`ALTER DEFAULT PRIVILEGES … REVOKE
+      EXECUTE FROM PUBLIC` es un no-op en este servidor— y se cierran con un
+      disparador de evento, que se comprueba justo debajo.
     */
     await q(`create table _prueba_defecto(id int)`);
     const [t] = await q(
       `select has_table_privilege('anon','_prueba_defecto','SELECT') as p`);
     assert(t.p === false,
       "una tabla nueva nace legible por anon: el grifo por omisión se reabrió");
-    await q(`create function _prueba_defecto_fn() returns int
+  });
+
+  await check("Y una función nueva se cierra SOLA al crearse", async () => {
+    /*
+      `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` es un
+      no-op en este servidor —se midió—, así que el cierre de las futuras lo
+      hace un disparador de evento sobre `CREATE FUNCTION`. Esto lo comprueba
+      creando una de verdad: declarar el disparador no basta, podría no
+      dispararse y nadie se enteraría.
+    */
+    await q(`create function _cierre_automatico_probe() returns int
              language sql immutable as 'select 1'`);
     const [f] = await q(
-      `select has_function_privilege('anon','_prueba_defecto_fn()','EXECUTE') as p`);
-    if (f.p === true) {
-      console.log("      (residual conocido: una función nueva sí nace alcanzable; "
-        + "lo caza la lista cerrada)");
-    }
+      `select has_function_privilege('anon','_cierre_automatico_probe()','EXECUTE') as p,
+              coalesce(array_to_string(proacl,','),'NULL') as acl
+         from pg_proc where proname='_cierre_automatico_probe'`);
+    assert(f.p === false,
+      `una función nueva nació alcanzable por anon (acl=${f.acl}): el disparador no cerró`);
+
+    // Y las nueve declaradas NO las toca: varias migraciones futuras harán
+    // `create or replace` sobre ellas y no pueden perder su concesión.
+    await q(`create or replace function public.public_diagnostic_get_result(p_token text)
+             returns jsonb language plpgsql security definer set search_path to 'public'
+             as $f$ begin return jsonb_build_object('status','not_found'); end $f$`);
+    const [g] = await q(
+      `select has_function_privilege('anon','public.public_diagnostic_get_result(text)','EXECUTE') as p`);
+    assert(g.p === true,
+      "reemplazar una de las nueve le quitó la concesión: la página pública se caería");
+
+    // El propio disparador tampoco es alcanzable.
+    const [d] = await q(
+      `select has_function_privilege('anon','public.trazaloop_deny_public_execute()','EXECUTE') as p`);
+    assert(d.p === false, "el disparador quedó alcanzable por anon");
   });
 
   await q("rollback");
@@ -386,7 +420,10 @@ async function main() {
     });
 
     await check("La exportación REAL lee las 52 000 respuestas, sin perder ni repetir", async () => {
-      assert(clienteHttp !== null, "faltan NEXT_PUBLIC_SUPABASE_URL o la clave de servicio");
+      if (!clienteHttp) {
+        console.log("      (las variables HTTP miran a otro stack; se omite)");
+        return;
+      }
       const { loadExportDataset } = await import("../../lib/db/public-diagnostic-admin");
       const t0 = Date.now();
       const datos = await loadExportDataset(campEscala, clienteHttp!);
@@ -407,6 +444,10 @@ async function main() {
     });
 
     await check("Y el CSV y el libro salen completos, con la empresa peligrosa neutralizada", async () => {
+      if (!clienteHttp) {
+        console.log("      (las variables HTTP miran a otro stack; se omite)");
+        return;
+      }
       const { loadExportDataset } = await import("../../lib/db/public-diagnostic-admin");
       const { csvTable, workbookSheets } = await import("../../lib/domain/public-diagnostic-export");
       const { buildXlsx } = await import("../../lib/xlsx");
@@ -429,6 +470,10 @@ async function main() {
     });
 
     await check("Marcar lo comercial no cambia quién aparece en el estudio", async () => {
+      if (!clienteHttp) {
+        console.log("      (las variables HTTP miran a otro stack; se omite)");
+        return;
+      }
       const { loadExportDataset } = await import("../../lib/db/public-diagnostic-admin");
       const { csvTable, csvHeaders } = await import("../../lib/domain/public-diagnostic-export");
       const datos = (await loadExportDataset(campEscala, clienteHttp!))!;

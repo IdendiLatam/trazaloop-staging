@@ -13,9 +13,16 @@ import { toCsv } from "@/lib/csv";
  *
  * Un manejador de ruta no pasa por el layout de la consola: se alcanza
  * escribiendo la dirección. Así que comprueba sesión y superadministración por
- * su cuenta, y responde 403 en JSON — no redirige, porque quien pide esto
- * espera un fichero y una redirección a la portada se descargaría como un
- * `.csv` lleno de HTML.
+ * su cuenta, en ese orden y antes de tocar la base.
+ *
+ * QUÉ PASA EN CADA CASO, comprobado contra el despliegue real:
+ *
+ *   · sin sesión → `requireSession()` redirige a `/login`. Es lo correcto
+ *     aquí: el navegador sigue la redirección y enseña el acceso, no descarga
+ *     nada. Se entra, se vuelve a pulsar y ya está.
+ *   · con sesión pero sin superadministración → 403 en JSON. No se redirige
+ *     para no acabar guardando un `.csv` lleno de HTML.
+ *   · superadministración → el fichero.
  *
  * Y por debajo sigue la RLS de 0196: si esta comprobación se cayera, la
  * consulta devolvería cero filas en vez de la campaña entera.

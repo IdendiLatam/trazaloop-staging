@@ -14,7 +14,8 @@ import { buildXlsx } from "@/lib/xlsx";
  * codificaciones cada vez.
  *
  * Misma puerta que el CSV, y por el mismo motivo: esto se alcanza escribiendo
- * la dirección.
+ * la dirección. Sin sesión se redirige a `/login`; con sesión y sin
+ * superadministración, 403 en JSON.
  */
 export const dynamic = "force-dynamic";
 
