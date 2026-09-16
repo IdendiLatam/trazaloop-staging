@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01B11-2026-09-16-read-back-url";
+const QA_MARCADOR = "MPREC01B12-2026-09-16-reconcile-without-browser";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -76,7 +76,7 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "probe_amount_change", "cancel_min", "cancel_raw", "authprobe",
                   // MP-REC-01B.6 · TEMPORAL · cerrar un intento de recurrencia
                   // rechazado por el proveedor. Se retira con el disparador.
-                  "close_recurring_attempt", "recurring_state",
+                  "close_recurring_attempt", "recurring_state", "reconcile_recurring",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
@@ -1157,12 +1157,52 @@ async function manejar(request: Request) {
             + "last_provider_failure, last_provider_diagnostic, created_at")
       .eq("organization_id", org).order("created_at", { ascending: false });
     const pagos = await a.from("billing_payments")
-      .select("id", { count: "exact", head: true }).eq("organization_id", org);
+      .select("id, provider, provider_payment_id, status, amount, currency, paid_at")
+      .eq("organization_id", org).order("created_at", { ascending: false });
     const periodos = await a.from("billing_subscription_periods")
-      .select("id", { count: "exact", head: true }).eq("organization_id", org);
+      .select("id, subscription_id, period_sequence, period_start, period_end, "
+            + "status, base_amount, charge_currency, settled_at")
+      .eq("organization_id", org).order("period_sequence", { ascending: true });
+    // La PROYECCIÓN de 0194: lo que de verdad abre la puerta de los módulos.
+    const modulos = await a.from("organization_modules")
+      .select("module_code, enabled, access_mode, access_expires_at, assignment_source")
+      .eq("organization_id", org).order("module_code");
+    const ciclos = await a.from("billing_provider_cycles")
+      .select("provider_invoice_id, provider_cycle_at, period_sequence, outcome")
+      .eq("organization_id", org).order("provider_cycle_at", { ascending: true });
     return NextResponse.json({ ok: true,
       subscriptions: subs.data ?? [], authorizations: auts.data ?? [],
-      payment_count: pagos.count ?? 0, period_count: periodos.count ?? 0 });
+      payments: pagos.data ?? [], periods: periodos.data ?? [],
+      modules: modulos.data ?? [], provider_cycles: ciclos.data ?? [],
+      payment_count: (pagos.data ?? []).length,
+      period_count: (periodos.data ?? []).length });
+  }
+
+  // -------------------------------------------------------------------------
+  // MP-REC-01B.12 · TEMPORAL · conciliar SIN navegador
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ HACE FALTA UN DISPARADOR
+  //
+  // El primer cobro recurrente real se aprobó y el comprador aterrizó en un
+  // 404, así que la vuelta del navegador nunca llegó. Recuperar ese cobro por
+  // esa misma vuelta sería demostrar lo contrario de lo que hay que demostrar:
+  // que el dinero se reconoce SIN que nadie esté mirando.
+  //
+  // Esto no es una vía alternativa de liquidación. Llama a la MISMA función
+  // canónica que usarán el retorno, el aviso del proveedor y el barrido
+  // programado, con sus mismas comprobaciones de entorno, cobrador, correlación,
+  // importe y moneda. Se retira con el resto del disparador.
+  if (accion === "reconcile_recurring") {
+    const id = String(cuerpo.authorization_id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return no("AUTHORIZATION_ID_REQUIRED", 400);
+    const { reconcileRecurringAuthorization } =
+      await import("@/lib/db/recurring-checkout");
+    const r = await reconcileRecurringAuthorization(id);
+    log_seguro("conciliacion_recurrente", { blocked: r.blocked,
+      saldados: r.settledNow, ya_estaban: r.alreadyReconciled,
+      rechazados: r.rejected.length });
+    return NextResponse.json({ ok: r.ok, result: r });
   }
 
   if (accion === "close_recurring_attempt") {
