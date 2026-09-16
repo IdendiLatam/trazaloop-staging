@@ -8,7 +8,7 @@ import {
   type AdminActionState,
 } from "@/server/actions/public-diagnostics-admin";
 import type { ConsentDocumentOption, VersionOption } from "@/lib/db/public-diagnostics";
-import { suggestCampaignSlug } from "@/lib/domain/public-diagnostics";
+import { suggestCampaignSlug , formatLegalVersion } from "@/lib/domain/public-diagnostics";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
 
@@ -87,7 +87,7 @@ function Campos({
           <option value="">Sin documento…</option>
           {consentDocuments.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.title} · v{d.version} · vigente
+              {d.title} · {formatLegalVersion(d.version)} · vigente
             </option>
           ))}
         </select>

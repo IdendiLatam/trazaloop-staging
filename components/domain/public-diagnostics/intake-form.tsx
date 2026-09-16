@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import {
   beginPublicDiagnosticAction, type IntakeState,
 } from "@/server/actions/public-diagnostic-intake";
+import { formatLegalVersion } from "@/lib/domain/public-diagnostics";
 
 /**
  * Trazaloop · PUBLIC-DIAGNOSTICS-01E · Identificarse para empezar.
@@ -121,7 +122,7 @@ export function PublicIntakeForm({
             este diagnóstico
             {consentTitle
               ? <>, de acuerdo con <strong className="font-medium">{consentTitle}</strong>
-                  {consentVersion ? ` (v${consentVersion})` : ""}</>
+                  {consentVersion ? ` (${formatLegalVersion(consentVersion)})` : ""}</>
               : null}.
           </span>
         </label>

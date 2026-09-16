@@ -19,6 +19,7 @@ import {
 } from "../../lib/domain/public-diagnostic-export";
 import { buildXlsx, columnName, sheetName } from "../../lib/xlsx";
 import { toCsv, parseCsv } from "../../lib/csv";
+import { formatLegalVersion } from "../../lib/domain/public-diagnostics";
 
 let passed = 0, failed = 0;
 function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m); }
@@ -417,6 +418,26 @@ check("Y corta el grifo para lo que nazca mañana", () => {
   // Y una política de PERSONAL deja de dirigirse a todo el mundo.
   assert(/create policy legal_documents_staff_select on public\.legal_documents\s+for select to authenticated/
     .test(SQL0202), "la política de personal sigue apuntando a `public`");
+});
+
+check("La versión del consentimiento no se escribe «vv2»", () => {
+  /*
+    Salió en la primera campaña real: en Producción las versiones legales ya
+    vienen escritas como `v2`, y la página anteponía otra `v`. En Staging la
+    versión era `1.2` y por eso nunca se vio.
+  */
+  assert(formatLegalVersion("v2") === "v2", "una versión que ya trae la «v» se duplica");
+  assert(formatLegalVersion("V2") === "V2", "no se respeta la mayúscula");
+  assert(formatLegalVersion("1.2") === "v1.2", "una versión sin «v» no la recibe");
+  assert(formatLegalVersion("") === "" && formatLegalVersion(null) === "",
+    "una versión vacía produce una «v» suelta");
+  // Y nadie vuelve a componerla a mano.
+  for (const f of ["components/domain/public-diagnostics/intake-form.tsx",
+                   "components/domain/public-diagnostics/submissions-table.tsx",
+                   "components/domain/public-diagnostics/campaign-forms.tsx"]) {
+    assert(!/`v\$\{|· v\{/.test(sinTs(leer(f))),
+      `${f} vuelve a anteponer la «v» a mano`);
+  }
 });
 
 console.log("\nH · Y el aviso de 01G");

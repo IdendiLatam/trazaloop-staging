@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { SubmissionRow } from "@/lib/db/public-diagnostic-admin";
+import { formatLegalVersion } from "@/lib/domain/public-diagnostics";
 
 /**
  * Trazaloop · PUBLIC-DIAGNOSTICS-01H · Quiénes participaron.
@@ -100,7 +101,7 @@ export function SubmissionsTable({
                   <td className="px-3 py-2 text-xs text-ink-soft">{fecha(s.completedAt)}</td>
                   <td className="px-3 py-2">{ESTADO[s.status] ?? s.status}</td>
                   <td className="px-3 py-2 text-xs">
-                    {s.consentVersion ? `v${s.consentVersion}` : "—"}
+                    {s.consentVersion ? formatLegalVersion(s.consentVersion) : "—"}
                     <span className="block text-ink-soft">{fecha(s.consentAt)}</span>
                   </td>
                   <td className="px-3 py-2 text-xs">

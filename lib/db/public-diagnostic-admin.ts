@@ -132,7 +132,10 @@ export async function listSubmissionsPage(
 }
 
 /**
- * Todo lo que hace falta para exportar una campaña, en cinco consultas.
+ * Todo lo que hace falta para exportar una campaña, con un número ACOTADO de
+ * consultas: la campaña, sus secciones, sus preguntas, sus participaciones y
+ * las respuestas por tandas de cincuenta participaciones. Para mil empresas
+ * son unas veinticinco consultas, no mil.
  *
  * Lanza si alguna lectura queda corta. Ver la nota de cabecera: para un
  * fichero que se entrega a una cámara, no generarlo es mejor que generarlo
@@ -190,21 +193,36 @@ export async function loadExportDataset(
     "participaciones");
 
   /*
-    Las respuestas de TODA la campaña en un solo recorrido.
+    Las respuestas, POR LOTES DE PARTICIPACIONES.
 
-    El filtro va sobre la participación embebida (`!inner`) en vez de una lista
-    de mil identificadores: esa lista serían treinta y seis mil caracteres en
-    la URL, y PostgREST —o cualquier proxy por el camino— la corta.
+    El primer diseño pedía todas las de la campaña con un filtro sobre la
+    participación embebida y las recorría por páginas. Funcionó dos veces y a
+    la tercera se cortó en 18 000 de 52 000: paginar por DESPLAZAMIENTO sobre
+    una consulta con dos uniones se vuelve más lenta cuanto más avanza, y al
+    llegar a cierto punto el servidor corta. `readAllStrict` hizo lo que debía
+    —negarse a entregar un conjunto parcial— pero un exportador que a veces no
+    exporta no sirve.
+
+    Ahora se piden por tandas de identificadores: cada consulta usa el índice
+    por participación, no depende de cuántas van leídas y la dirección no crece
+    —cincuenta uuid caben de sobra—. Para mil participaciones son veinte
+    consultas en vez de ciento cuatro, y ninguna se degrada.
   */
-  const respuestas = await readAllStrict<Fila>(
-    () => supabase
-      .from("public_diagnostic_answers")
-      .select("submission_id, answer, diagnostic_questions!inner(code),"
-        + " public_diagnostic_submissions!inner(campaign_id)")
-      .eq("public_diagnostic_submissions.campaign_id", campaignId)
-      .order("submission_id")
-      .order("question_id") as never,
-    "respuestas de la campaña");
+  const LOTE = 50;
+  const respuestas: Fila[] = [];
+  const idsParticipacion = participaciones.map((p) => String(p.id));
+  for (let i = 0; i < idsParticipacion.length; i += LOTE) {
+    const tanda = idsParticipacion.slice(i, i + LOTE);
+    const filas = await readAllStrict<Fila>(
+      () => supabase
+        .from("public_diagnostic_answers")
+        .select("submission_id, answer, diagnostic_questions!inner(code)")
+        .in("submission_id", tanda)
+        .order("submission_id")
+        .order("question_id") as never,
+      `respuestas de ${tanda.length} participaciones`);
+    respuestas.push(...filas);
+  }
 
   const porParticipacion = new Map<string, Record<string, boolean>>();
   for (const r of respuestas) {

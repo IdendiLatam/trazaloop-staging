@@ -205,3 +205,20 @@ export const AVAILABILITY_LABEL: Record<CampaignAvailability, string> = {
   window_closed: "Abierta · la ventana ya terminó",
   closed: "Cerrada",
 };
+
+/**
+ * PUBLIC-DIAGNOSTICS-01I · Cómo se escribe la versión de un documento legal.
+ *
+ * Salió en la primera campaña REAL, en la página que lleva el nombre de la
+ * Cámara de Comercio de Bogotá: el consentimiento decía «(vv2)». El texto se
+ * componía con `v${version}`, y en Producción la versión ya viene escrita como
+ * `v2` — en Staging era `1.2`, así que allí nunca se vio.
+ *
+ * Un detalle tonto, pero estaba en la línea que le pide a una empresa que
+ * autorice el tratamiento de sus datos, y ahí la pulcritud no es estética.
+ */
+export function formatLegalVersion(version: string | null | undefined): string {
+  const v = (version ?? "").trim();
+  if (v === "") return "";
+  return /^v/i.test(v) ? v : `v${v}`;
+}
