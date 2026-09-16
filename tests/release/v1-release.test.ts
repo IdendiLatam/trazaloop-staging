@@ -2627,6 +2627,13 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
  * eso debajo se comprueba que ninguna pantalla las importa.
  */
 const FRONTERA_MERCADOPAGO = [
+  // MP-REC-01 · El carril recurrente, de servidor. `reconcile` nombra la
+  // pasarela porque documenta POR QUÉ la conciliación es la fuente de verdad y
+  // el aviso no —la aplicación de pruebas del proveedor no tiene webhook— y
+  // No es interfaz, no promete nada, y está cerrado en Producción por
+  // `policy.ts`. `verification.ts` no entra: solo la nombra en un comentario,
+  // y estas guardas miran el código.
+  "lib/billing/recurring/reconcile.ts",
   // MP-REC-01 · La autoridad del carril recurrente. De servidor, hermana de
   // `identity.ts` y por el mismo motivo: nombra la variable de entorno del
   // proveedor para NEGARSE a abrir el carril fuera de pruebas. Decidir que algo

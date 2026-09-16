@@ -165,6 +165,13 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
  * teniendo dientes: nombrar la pasarela en un séptimo sitio la pone en rojo.
  */
 const FRONTERA_PASARELA = [
+  // MP-REC-01 · El carril recurrente, de servidor. `reconcile` nombra la
+  // pasarela porque documenta POR QUÉ la conciliación es la fuente de verdad y
+  // el aviso no —la aplicación de pruebas del proveedor no tiene webhook— y
+  // No es interfaz, no promete nada, y está cerrado en Producción por
+  // `policy.ts`. `verification.ts` no entra: solo la nombra en un comentario,
+  // y estas guardas miran el código.
+  "lib/billing/recurring/reconcile.ts",
   // MP-REC-01 · La autoridad del carril recurrente: nombra la pasarela para
   // cerrarse, no para cobrar. Vive fuera de PE-04 igual que el resto de PE-05.
   "lib/billing/recurring/policy.ts",
