@@ -154,6 +154,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0201_public_diagnostic_result_and_repeat.sql",
   "0202_public_anon_execute_audit.sql",
   "0203_public_diagnostic_admin_counts.sql",
+  "0204_billing_recurring_authorization.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -1327,6 +1328,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
   "0201_public_diagnostic_result_and_repeat.sql",
   "0202_public_anon_execute_audit.sql",
   "0203_public_diagnostic_admin_counts.sql",
+  "0204_billing_recurring_authorization.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -2625,6 +2627,12 @@ check("52. CPR y Textiles siguen funcionales; Quality y Construcción Próximame
  * eso debajo se comprueba que ninguna pantalla las importa.
  */
 const FRONTERA_MERCADOPAGO = [
+  // MP-REC-01 · La autoridad del carril recurrente. De servidor, hermana de
+  // `identity.ts` y por el mismo motivo: nombra la variable de entorno del
+  // proveedor para NEGARSE a abrir el carril fuera de pruebas. Decidir que algo
+  // está cerrado no es presentarlo como integrado. No es interfaz, no promete
+  // nada, y en Producción devuelve siempre cerrado.
+  "lib/billing/recurring/policy.ts",
   "app/api/billing/webhooks/mercadopago/route.ts",
   // PROVISIONAL · el disparador de la prueba de sandbox. Se retira al cerrar
   // PE-05B2; mientras tanto es de servidor, exige superadministrador y se

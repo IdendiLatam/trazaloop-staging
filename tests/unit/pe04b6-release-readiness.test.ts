@@ -165,6 +165,9 @@ check("AJ. Advisor NO es un plan y no hay motor de horas", () => {
  * teniendo dientes: nombrar la pasarela en un séptimo sitio la pone en rojo.
  */
 const FRONTERA_PASARELA = [
+  // MP-REC-01 · La autoridad del carril recurrente: nombra la pasarela para
+  // cerrarse, no para cobrar. Vive fuera de PE-04 igual que el resto de PE-05.
+  "lib/billing/recurring/policy.ts",
   "app/api/billing/webhooks/mercadopago/route.ts",
   // PROVISIONAL · el disparador de la prueba de sandbox. Se retira al cerrar
   // PE-05B2; mientras tanto es de servidor, exige superadministrador y se
@@ -305,11 +308,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0201_public_diagnostic_result_and_repeat.sql",
     "0202_public_anon_execute_audit.sql",
     "0203_public_diagnostic_admin_counts.sql",
+    "0204_billing_recurring_authorization.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0203_public_diagnostic_admin_counts.sql",
+  assert(cabecera === "0204_billing_recurring_authorization.sql",
     `la cabecera es ${cabecera}`);
 });
 
