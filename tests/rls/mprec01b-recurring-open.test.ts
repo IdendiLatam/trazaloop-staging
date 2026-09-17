@@ -542,6 +542,227 @@ await check("7G. Una `ended` no revive al cancelar otra vez", async () => {
   assert(d.status === "ended", `la segunda la movió a «${d.status}»`);
 });
 
+console.log("\n8 · CICLOS FUTUROS · MP-REC-01C.3");
+
+/*
+  DETERMINISTIC_SECOND_CYCLE_TEST.
+
+  Mercado Pago NO cobra aquí. El «segundo ciclo» se fabrica llamando a la MISMA
+  primitiva canónica que usa la conciliación —`billing_reconcile_provider_cycle`—
+  con la identidad y la fecha económica que el proveedor produciría un mes
+  después. Lo que se comprueba es la máquina de estados, no al proveedor.
+
+  Fixture PROPIO: las secciones anteriores ya movieron la suscripción principal,
+  y una prueba de contigüidad sobre periodos que otro test insertó a mano no
+  comprobaría nada.
+*/
+const iso = (v: unknown) => new Date(v as string).toISOString();
+
+const cicloDeProveedor = async (o: { preapproval: string; invoice: string;
+                                     cycleAt: string; amount: number; outcome: string }) => {
+  const [r] = await q(
+    `select public.billing_reconcile_provider_cycle(
+       'mercadopago', $1, $2, $3::timestamptz, $2, $4, $5, 'COP', false) as r`,
+    [o.preapproval, o.invoice, o.cycleAt, o.outcome, o.amount]);
+  return r.r as Record<string, unknown>;
+};
+
+/** Una recurrencia lista para recibir ciclos del proveedor. */
+let nCiclos = 0;
+const recurrenciaParaCiclos = async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  // Identidad ÚNICA por fixture: el objeto del proveedor pertenece a una sola
+  // suscripción, y la base lo impone con `billing_subscriptions_provider_uniq`.
+  const pre = `pre-ciclos-${sello}-${++nCiclos}`;
+
+  // 0186 exige una FUENTE GOBERNADA del entorno —el intento o la proyección del
+  // proveedor— y se niega con `environment_unverifiable` si no la hay. Es
+  // correcto: sin ella, «test» y «live» los decidiría quien llama. El fixture
+  // crea el presupuesto y el intento, como el camino de producto.
+  const [qt] = await q(
+    `insert into billing_quotes (
+       organization_id, plan_code, plan_revision_id, billing_interval,
+       catalog_amount_minor, catalog_currency, charge_currency,
+       discount_amount, base_amount, service_class, tax_rule_id,
+       tax_rate_basis_points, tax_amount, total_amount, status, expires_at)
+     values ($1, $2, $3, 'monthly', 4000000, 'USD', 'COP',
+             0, 160000, $4, $5, $6, 30400, 190400, 'open', now() + interval '1 day')
+     returning id`,
+    [f.orgId, rev.plan_code, rev.id, regla.service_class, regla.id,
+     regla.rate_basis_points]);
+  await q(
+    `insert into billing_checkout_intents (
+       organization_id, quote_id, provider, environment, expected_total_amount,
+       expected_currency, billing_interval, plan_code, created_by,
+       billing_subscription_id, provider_subscription_id, status)
+     values ($1, $2, 'mercadopago', 'test', 190400, 'COP', 'monthly', $3, $4,
+             $5, $6, 'provider_created')`,
+    [f.orgId, qt.id, rev.plan_code, usuario, f.subId, pre]);
+  // 0186 resuelve la suscripción POR el objeto del proveedor. El fixture se lo
+  // ata, igual que hace el camino de producto al crear la preapproval.
+  // El periodo 1 tiene que durar un MES canónico. 0186 calcula el ciclo
+  // siguiente desde el ancla con la periodicidad contratada —y hace bien—, así
+  // que un fixture de 21 días produciría un hueco que no dice nada del
+  // producto: diría que mi fixture no era mensual.
+  await q(`update billing_subscription_periods
+              set period_end = period_start + interval '1 month'
+            where subscription_id = $1 and period_sequence = 1`, [f.subId]);
+
+  // La BASE de la suscripción y la del periodo tienen que ser la misma: el
+  // importe esperado lo deriva la base de ahí, y una fixture incoherente
+  // produce un `reconciliation_mismatch` que no dice nada del producto.
+  await q(`update billing_subscriptions set base_charge_amount = 160000,
+             charge_currency = 'COP' where id = $1`, [f.subId]);
+  await q(`update billing_subscriptions set provider_subscription_id = $2,
+             period_anchor_at = (select period_start from billing_subscription_periods
+                                  where subscription_id = $1 order by period_sequence limit 1),
+             period_anchor_sequence = 1
+           where id = $1`, [f.subId, pre]);
+  await q(`update billing_recurring_authorizations set provider_subscription_id = $2
+           where id = $1`, [f.autId, pre]);
+  const [p1] = await q(
+    `select period_sequence, period_start, period_end from billing_subscription_periods
+      where subscription_id = $1 order by period_sequence limit 1`, [f.subId]);
+  return { ...f, preapproval: pre, p1 };
+};
+
+await check("8A. El segundo cobro crea el periodo siguiente, contiguo", async () => {
+  const f = await recurrenciaParaCiclos();
+  const r = await cicloDeProveedor({ preapproval: f.preapproval,
+    invoice: `inv-b-${sello}`, cycleAt: iso(f.p1.period_end),
+    amount: 190400, outcome: "approved" });
+  assert(r.outcome === "renewed", `outcome=${r.outcome} ${JSON.stringify(r)}`);
+
+  const per = await q(
+    `select period_sequence, period_start, period_end, status
+       from billing_subscription_periods where subscription_id = $1
+      order by period_sequence`, [f.subId]);
+  assert(per.length === 2, `quedaron ${per.length} periodos`);
+  // CONTIGÜIDAD: ni un día perdido, ni un solapamiento.
+  assert(iso(per[0].period_end) === iso(per[1].period_start),
+    `el 2 no empieza donde acaba el 1: ${iso(per[0].period_end)} vs ${iso(per[1].period_start)}`);
+  assert(per[1].status === "settled", `el periodo 2 quedó «${per[1].status}»`);
+
+  // Y el acceso llega hasta el final del NUEVO periodo.
+  const mods = await q(
+    `select module_code, access_expires_at from organization_modules
+      where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  for (const m of mods) {
+    assert(iso(m.access_expires_at) === iso(per[1].period_end),
+      `${m.module_code} vence en ${iso(m.access_expires_at)}, el periodo en ${iso(per[1].period_end)}`);
+  }
+});
+
+await check("8B. El MISMO cobro dos veces no crea nada nuevo", async () => {
+  const f = await recurrenciaParaCiclos();
+  const inv = `inv-idem-${sello}`;
+  await cicloDeProveedor({ preapproval: f.preapproval, invoice: inv,
+    cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "approved" });
+  const antes = await q(
+    `select count(*)::int n from billing_subscription_periods where subscription_id = $1`,
+    [f.subId]);
+  const r = await cicloDeProveedor({ preapproval: f.preapproval, invoice: inv,
+    cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "approved" });
+  assert(r.outcome === "already_reconciled", `outcome=${r.outcome}`);
+  const despues = await q(
+    `select count(*)::int n from billing_subscription_periods where subscription_id = $1`,
+    [f.subId]);
+  assert(antes[0].n === despues[0].n, "repetir el mismo ciclo creó un periodo");
+});
+
+await check("8C. Un cobro RECHAZADO no salda ni extiende", async () => {
+  const f = await recurrenciaParaCiclos();
+  const [antesMod] = await q(
+    `select max(access_expires_at) v from organization_modules
+      where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  const r = await cicloDeProveedor({ preapproval: f.preapproval,
+    invoice: `inv-rej-${sello}`, cycleAt: iso(f.p1.period_end),
+    amount: 190400, outcome: "declined" });
+  assert(r.outcome !== "renewed", `un rechazo devolvió «${r.outcome}»`);
+
+  const saldados = await q(
+    `select count(*)::int n from billing_subscription_periods
+      where subscription_id = $1 and status = 'settled'`, [f.subId]);
+  assert(saldados[0].n === 1, `quedaron ${saldados[0].n} periodos saldados`);
+  const [despuesMod] = await q(
+    `select max(access_expires_at) v from organization_modules
+      where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  assert(String(despuesMod.v) === String(antesMod.v),
+    "un cobro rechazado extendió el acceso");
+});
+
+await check("8D. Y el mes ya pagado sigue intacto tras el rechazo", async () => {
+  // La regla que más importa: que falle el cobro de octubre no borra septiembre.
+  const f = await recurrenciaParaCiclos();
+  await cicloDeProveedor({ preapproval: f.preapproval, invoice: `inv-rej2-${sello}`,
+    cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "declined" });
+  const per = await q(
+    `select status, period_end from billing_subscription_periods
+      where subscription_id = $1 and period_sequence = 1`, [f.subId]);
+  assert(per.length === 1 && per[0].status === "settled",
+    "el rechazo tocó el periodo ya pagado");
+  assert(iso(per[0].period_end) === iso(f.p1.period_end),
+    "el rechazo movió la fecha del periodo pagado");
+});
+
+console.log("\n9 · PONER AL DÍA SIN DECIDIR ACCESO · 0210");
+
+await check("9A. Cancelada con tiempo por delante NO se termina", async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled')`, [f.autId]);
+  const [r] = await q(
+    `select public.billing_refresh_recurring_lifecycle($1) as r`, [f.subId]);
+  assert(r.r.outcome === "unchanged", `outcome=${r.r.outcome}`);
+  const [s2] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(s2.status === "cancel_at_period_end", `quedó «${s2.status}»`);
+});
+
+await check("9B. Cancelada y vencida converge a ended, sin borrar nada", async () => {
+  const f = await recurrenciaConPeriodo("now() - interval '1 hour'");
+  await q(`update billing_subscriptions set status = 'cancel_at_period_end',
+             cancel_at_period_end = true where id = $1`, [f.subId]);
+  await q(`update billing_recurring_authorizations set status = 'cancelled',
+             cancelled_at = now() where id = $1`, [f.autId]);
+  const [r] = await q(
+    `select public.billing_refresh_recurring_lifecycle($1) as r`, [f.subId]);
+  assert(r.r.outcome === "ended", `outcome=${r.r.outcome}`);
+  const [s2] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(s2.status === "ended", `quedó «${s2.status}»`);
+  // Y la historia sigue entera.
+  const per = await q(`select id from billing_subscription_periods
+                        where subscription_id = $1`, [f.subId]);
+  assert(per.length === 1, "terminar borró el periodo");
+});
+
+await check("9C. Activa vencida con recurrencia viva pasa a past_due", async () => {
+  const f = await recurrenciaConPeriodo("now() - interval '2 hours'");
+  const [r] = await q(
+    `select public.billing_refresh_recurring_lifecycle($1) as r`, [f.subId]);
+  assert(r.r.outcome === "past_due", `outcome=${r.r.outcome}`);
+  // past_due NO retira nada: el acceso ya se acabó solo, por la fecha.
+  const per = await q(`select status from billing_subscription_periods
+                        where subscription_id = $1`, [f.subId]);
+  assert(per.length === 1 && per[0].status === "settled",
+    "past_due tocó el periodo pagado");
+});
+
+await check("9D. El carril manual no lo refresca nadie", async () => {
+  const [man] = await q(
+    `insert into billing_subscriptions
+       (organization_id, provider, plan_code, plan_revision_id, billing_interval,
+        catalog_amount_minor, catalog_currency, base_charge_amount, charge_currency,
+        status, renewal_mode)
+     select $1, 'mercadopago', plan_code, plan_revision_id, billing_interval,
+            catalog_amount_minor, catalog_currency, base_amount, charge_currency,
+            'ended', 'manual'
+       from billing_quotes where organization_id = $1 limit 1
+     returning id`, [orgId]);
+  const [r] = await q(
+    `select public.billing_refresh_recurring_lifecycle($1) as r`, [man.id]);
+  assert(r.r.outcome === "not_provider_renewal", `outcome=${r.r.outcome}`);
+  await q(`delete from billing_subscriptions where id = $1`, [man.id]);
+});
+
   // ── limpieza ───────────────────────────────────────────────────────────────
   // Best-effort y en orden de dependencia. Un fallo limpiando NO puede tumbar
   // la batería: lo que se estaba comprobando ya se comprobó, y un fixture que
