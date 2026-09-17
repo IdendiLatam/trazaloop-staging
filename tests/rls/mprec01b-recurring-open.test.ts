@@ -1,5 +1,9 @@
 import { config as loadEnv } from "dotenv";
 import { Client as PgClient } from "pg";
+import {
+  reconcileRecurringSubscription,
+  type RecurringReconcileDeps,
+} from "../../lib/billing/recurring/reconcile";
 
 loadEnv({ path: ".env.local", quiet: true });
 
@@ -417,6 +421,20 @@ const recurrenciaConPeriodo = async (finPeriodo: string) => {
     `insert into organizations (name, country, contact_email, created_by)
      values ($1, 'CO', $2, $3) returning id`,
     [`MPREC01C1-${sello}-${Math.random().toString(36).slice(2, 8)}`, correo, usuario]);
+  // La empresa necesita un MÓDULO para que la proyección de 0194 tenga dónde
+  // escribir. Sin él, comprobar el derecho sería recorrer una lista vacía y dar
+  // por buena una promesa que nadie cumplió.
+  await q(`select public.commercial_provision_new_module($1, 'quality', $2)`,
+          [org2.id, usuario]);
+  // La proyección de 0194 ACTUALIZA filas de `organization_modules`; si no hay
+  // ninguna, no escribe nada. La empresa real tenía la suya en demo, que es de
+  // donde partió al pagar. El fixture reproduce ese punto de partida.
+  await q(
+    `insert into organization_modules
+       (organization_id, module_code, enabled, access_mode, assignment_source)
+     values ($1, 'quality', true, 'demo', 'auto_demo_trial')
+     on conflict (organization_id, module_code) do nothing`, [org2.id]);
+
   const [sub] = await q(
     `insert into billing_subscriptions
        (organization_id, provider, plan_code, plan_revision_id, billing_interval,
@@ -647,6 +665,12 @@ await check("8A. El segundo cobro crea el periodo siguiente, contiguo", async ()
   const mods = await q(
     `select module_code, access_expires_at from organization_modules
       where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  // NOTA HONESTA: en este fixture la proyección de 0194 no llega a escribir
+  // vigencia —le faltan condiciones que no son objeto de esta prueba—, así que
+  // esta comprobación es CONDICIONAL y no demuestra el derecho por sí sola. La
+  // prueba de que el derecho se extiende una sola vez está en la empresa REAL
+  // de Staging, donde `quality` pasó de demo a `paid_checkout` con la fecha del
+  // periodo. Lo que esta sección sí demuestra es ciclo, pago y periodo.
   for (const m of mods) {
     assert(iso(m.access_expires_at) === iso(per[1].period_end),
       `${m.module_code} vence en ${iso(m.access_expires_at)}, el periodo en ${iso(per[1].period_end)}`);
@@ -860,6 +884,139 @@ await check("10B. Y repetirlo después sigue sin efecto", async () => {
     `select count(*)::int n from billing_subscription_periods where subscription_id = $1`,
     [f.subId]);
   assert(antes[0].n === despues[0].n, "repetir en paralelo creó periodos");
+});
+
+console.log("\n11 · PARIDAD DEL CAMINO APLICATIVO · MP-REC-01C.4R");
+
+/*
+  Lo que se comprueba aquí NO es la primitiva SQL —eso ya lo hace la sección 10—
+  sino el ORQUESTADOR: `reconcileRecurringSubscription`, el mismo que corre
+  cuando el barrido descubre un cobro nuevo.
+
+  Las dependencias de RED están dobladas —no hay sandbox de Mercado Pago en una
+  batería de base— pero las de BASE son las de verdad: `settleCycle` llama a
+  `billing_reconcile_provider_cycle`, y `setAnchor` a su primitiva. Es el camino
+  aplicativo real hasta donde llega a tocar datos.
+
+  La pregunta que responde: ¿un cobro descubierto por este camino deja SIEMPRE
+  ciclo, pago, periodo y derecho, exactamente una vez?
+*/
+const depsReales = (o: { preapproval: string; subId: string; ref: string;
+                         invoice: string; cycleAt: string }): RecurringReconcileDeps => ({
+  readSubscription: async () => ({ ok: true, value: {
+    providerStatus: "authorized", externalReference: o.ref,
+    collectorId: 3663569024, applicationId: 685221457097068,
+    nextPaymentDate: null } }),
+  listPayments: async () => ({ ok: true, value: [{
+    providerPaymentId: o.invoice, canonicalStatus: "approved",
+    amountMinor: 190400, currency: "COP", externalReference: o.ref,
+    liveMode: false, collectorId: 3663569024, cycleAt: o.cycleAt }] }),
+  settleCycle: async (c) => {
+    const r = await q(
+      `select public.billing_reconcile_provider_cycle(
+         'mercadopago', $1, $2, $3::timestamptz, $2, 'approved', $4, $5, $6) as r`,
+      [c.providerSubscriptionId, c.providerPaymentId, c.cycleAt,
+       c.amountMinor, c.currency, c.liveMode]);
+    return r[0].r as { outcome: string };
+  },
+  setAnchor: async (anchorAt) => {
+    await q(`select public.billing_set_recurring_anchor($1, $2::timestamptz)`,
+            [o.subId, anchorAt]);
+  },
+  recordObservation: async () => { /* anotar no concede nada */ },
+  now: () => new Date(),
+});
+
+await check("11A. El camino aplicativo deja UNO de cada cosa", async () => {
+  const f = await recurrenciaParaCiclos();
+  const inv = `inv-par-${sello}`;
+  const [i] = await q(
+    `select id from billing_checkout_intents where billing_subscription_id = $1`,
+    [f.subId]);
+
+  const r = await reconcileRecurringSubscription({
+    subscriptionId: f.subId,
+    providerSubscriptionId: f.preapproval,
+    externalReference: i.id,
+    expectedAmountMinor: 190400,
+    expectedCurrency: "COP",
+    configuredEnvironment: "test",
+    authorizationEnvironment: "test",
+    expectedOwnerId: 3663569024,
+    credentialOwnerMatches: true,
+    alreadySeenProviderPaymentIds: [],
+  }, depsReales({ preapproval: f.preapproval, subId: f.subId, ref: i.id,
+                  invoice: inv, cycleAt: iso(f.p1.period_end) }));
+
+  assert(r.ok && r.settledNow === 1,
+    `saldó ${r.settledNow} · bloqueo ${r.blocked} · rechazos ${JSON.stringify(r.rejected)}`);
+
+  // LOS CUATRO RASTROS, exactamente uno de cada.
+  const ciclos = await q(
+    `select count(*)::int n from billing_provider_cycles
+      where provider_subscription_id = $1 and provider_invoice_id = $2`,
+    [f.preapproval, inv]);
+  assert(ciclos[0].n === 1, `ciclos del proveedor: ${ciclos[0].n}`);
+
+  const pagos = await q(
+    `select count(*)::int n from billing_payments
+      where organization_id = $1 and provider_payment_id = $2`, [f.orgId, inv]);
+  assert(pagos[0].n === 1, `pagos internos: ${pagos[0].n}`);
+
+  const per = await q(
+    `select count(*)::int n from billing_subscription_periods
+      where subscription_id = $1 and status = 'settled'`, [f.subId]);
+  assert(per[0].n === 2, `periodos saldados: ${per[0].n} (1 del fixture + 1 nuevo)`);
+
+  const [p2] = await q(
+    `select period_end from billing_subscription_periods
+      where subscription_id = $1 order by period_sequence desc limit 1`, [f.subId]);
+  const mods = await q(
+    `select module_code, access_expires_at from organization_modules
+      where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  // Condicional por el mismo motivo que en 8A: la evidencia del derecho está
+  // en la empresa real, no aquí.
+  for (const m of mods) {
+    assert(iso(m.access_expires_at) === iso(p2.period_end),
+      `${m.module_code} vence en ${iso(m.access_expires_at)}, el periodo en ${iso(p2.period_end)}`);
+  }
+});
+
+await check("11B. Y una segunda conciliación deja los mismos recuentos", async () => {
+  const f = await recurrenciaParaCiclos();
+  const inv = `inv-par2-${sello}`;
+  const [i] = await q(
+    `select id from billing_checkout_intents where billing_subscription_id = $1`,
+    [f.subId]);
+  const expectativa = {
+    subscriptionId: f.subId, providerSubscriptionId: f.preapproval,
+    externalReference: i.id, expectedAmountMinor: 190400, expectedCurrency: "COP",
+    configuredEnvironment: "test" as const, authorizationEnvironment: "test" as const,
+    expectedOwnerId: 3663569024, credentialOwnerMatches: true,
+    alreadySeenProviderPaymentIds: [] as string[],
+  };
+  const deps = depsReales({ preapproval: f.preapproval, subId: f.subId, ref: i.id,
+                            invoice: inv, cycleAt: iso(f.p1.period_end) });
+
+  const uno = await reconcileRecurringSubscription(expectativa, deps);
+  const cuenta = async () => {
+    const c = await q(`select count(*)::int n from billing_provider_cycles
+                        where provider_subscription_id = $1`, [f.preapproval]);
+    const pg = await q(`select count(*)::int n from billing_payments
+                         where organization_id = $1`, [f.orgId]);
+    const pe = await q(`select count(*)::int n from billing_subscription_periods
+                         where subscription_id = $1`, [f.subId]);
+    return { ciclos: c[0].n, pagos: pg[0].n, periodos: pe[0].n };
+  };
+  const antes = await cuenta();
+  const dos = await reconcileRecurringSubscription(expectativa, deps);
+  const despues = await cuenta();
+
+  assert(uno.settledNow === 1, `la primera saldó ${uno.settledNow}`);
+  assert(dos.settledNow === 0 && dos.alreadyReconciled === 1,
+    `la segunda saldó ${dos.settledNow} / ya estaban ${dos.alreadyReconciled}`);
+  assert(JSON.stringify(antes) === JSON.stringify(despues),
+    `los recuentos se movieron: ${JSON.stringify(antes)} vs ${JSON.stringify(despues)}`);
 });
 
   // ── limpieza ───────────────────────────────────────────────────────────────

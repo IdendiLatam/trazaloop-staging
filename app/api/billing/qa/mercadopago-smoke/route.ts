@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C4-2026-09-17-runner-smoke-b";
+const QA_MARCADOR = "MPREC01C4R-2026-09-17-http-and-forensic";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1170,12 +1170,34 @@ async function manejar(request: Request) {
       .select("module_code, enabled, access_mode, access_expires_at, assignment_source")
       .eq("organization_id", org).order("module_code");
     const ciclos = await a.from("billing_provider_cycles")
-      .select("provider_invoice_id, provider_cycle_at, period_sequence, outcome")
+      .select("provider_invoice_id, provider_cycle_at, period_sequence, outcome, "
+            + "environment, organization_id, subscription_id, period_id, payment_id")
       .eq("organization_id", org).order("provider_cycle_at", { ascending: true });
+    // MP-REC-01C.4R · FORENSE. El mismo recuento SIN filtrar por empresa y
+    // buscando por el objeto del proveedor: si la fila existiera con otra
+    // empresa o con otro entorno, aquí aparecería. Un cero en las dos lecturas
+    // significa que la fila no está, no que se esté mirando mal.
+    const preapprovals = (auts.data ?? [])
+      .map((x) => (x as unknown as { provider_subscription_id: string }).provider_subscription_id)
+      .filter((x) => x && !x.startsWith("pending:"));
+    const ciclosPorObjeto = preapprovals.length > 0
+      ? await a.from("billing_provider_cycles")
+          .select("provider_invoice_id, environment, outcome, organization_id, period_id")
+          .in("provider_subscription_id", preapprovals)
+      : { data: [], error: null };
+    const errores = {
+      ciclos: ciclos.error?.message ?? null,
+      ciclos_por_objeto: (ciclosPorObjeto as { error?: { message: string } | null })
+        .error?.message ?? null,
+      pagos: pagos.error?.message ?? null,
+      periodos: periodos.error?.message ?? null,
+    };
     return NextResponse.json({ ok: true,
       subscriptions: subs.data ?? [], authorizations: auts.data ?? [],
       payments: pagos.data ?? [], periods: periodos.data ?? [],
       modules: modulos.data ?? [], provider_cycles: ciclos.data ?? [],
+      provider_cycles_by_object: (ciclosPorObjeto as { data?: unknown[] }).data ?? [],
+      read_errors: errores,
       payment_count: (pagos.data ?? []).length,
       period_count: (periodos.data ?? []).length });
   }
@@ -1224,22 +1246,35 @@ async function manejar(request: Request) {
     }
     // `none` no manda cabecera ninguna.
     //
-    // SE INVOCA EL MANEJADOR, NO LA URL. Una petición HTTP a nuestro propio
-    // origen la intercepta la protección de despliegue de Vercel y devuelve
-    // 401 antes de llegar a la función: se estaría comprobando esa puerta, no
-    // la del barrido. Importando el manejador se ejercitan sus tres candados
-    // —secreto, Producción y carril— que es lo que aquí importa.
+    // ES UNA PETICIÓN HTTP DE VERDAD, contra la URL del despliegue.
+    //
+    // La primera versión invocaba el manejador dentro del proceso, y eso NO
+    // demuestra lo que hay que demostrar: que un llamante operacional atraviesa
+    // la capa de Vercel y llega a la ruta. La versión anterior a esa sí salía
+    // por HTTP y devolvía 401 — la protección de despliegue interceptándola
+    // antes de la función, que es exactamente la prueba de que el trayecto
+    // existe.
+    //
+    // Así que se atraviesa como lo haría un planificador externo: con la
+    // cabecera de bypass de Vercel ADEMÁS del secreto del barrido. Las dos
+    // salen del entorno del servidor y ninguna aparece en la respuesta, en el
+    // registro ni en ningún sitio.
+    const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    if (bypass) cabeceras["x-vercel-protection-bypass"] = bypass;
     const origen = new URL(request.url).origin;
     try {
-      const { POST: correrBarrido } = await import(
-        "@/app/api/billing/recurring/run/route");
-      const r = await correrBarrido(new Request(`${origen}/api/billing/recurring/run`, {
+      const r = await fetch(`${origen}/api/billing/recurring/run`, {
         method: "POST", headers: cabeceras,
-        body: JSON.stringify({ limit: Number(cuerpo.limit ?? 50) }) }));
+        body: JSON.stringify({ limit: Number(cuerpo.limit ?? 50) }) });
       let j: unknown = null;
       try { j = await r.json(); } catch { j = null; }
-      log_seguro("barrido_recurrente", { modo, http: r.status });
-      return NextResponse.json({ ok: true, mode: modo, http: r.status, result: j });
+      log_seguro("barrido_recurrente", { modo, http: r.status,
+        via: "http", bypass_disponible: Boolean(bypass) });
+      return NextResponse.json({ ok: true, mode: modo, via: "http",
+        url_path: "/api/billing/recurring/run",
+        deployment_host: new URL(origen).host,
+        bypass_present: Boolean(bypass),
+        http: r.status, result: j });
     } catch (e) {
       return NextResponse.json({ ok: false, mode: modo,
         message: e instanceof Error ? e.name : "UnknownError" });
