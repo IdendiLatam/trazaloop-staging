@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C4R-2026-09-17-http-and-forensic";
+const QA_MARCADOR = "MPREC01C4R-2026-09-17-cycles-via-view";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1169,7 +1169,16 @@ async function manejar(request: Request) {
     const modulos = await a.from("organization_modules")
       .select("module_code, enabled, access_mode, access_expires_at, assignment_source")
       .eq("organization_id", org).order("module_code");
-    const ciclos = await a.from("billing_provider_cycles")
+    // MP-REC-01C.4R · SE LEE LA VISTA, NO LA TABLA.
+    //
+    // 0186 revoca `billing_provider_cycles` a `anon`, `authenticated` Y
+    // `service_role` a propósito: solo la toca su función `security definer`.
+    // La lectura gobernada es `v_billing_provider_cycles`. Preguntarle a la
+    // tabla devolvía «permission denied», y este disparador lo presentaba como
+    // una lista vacía — que se leyó como «no hay ciclos» cuando significaba «no
+    // pude mirar». Son noticias distintas, y confundirlas ya costó un informe
+    // equivocado.
+    const ciclos = await a.from("v_billing_provider_cycles")
       .select("provider_invoice_id, provider_cycle_at, period_sequence, outcome, "
             + "environment, organization_id, subscription_id, period_id, payment_id")
       .eq("organization_id", org).order("provider_cycle_at", { ascending: true });
@@ -1181,7 +1190,7 @@ async function manejar(request: Request) {
       .map((x) => (x as unknown as { provider_subscription_id: string }).provider_subscription_id)
       .filter((x) => x && !x.startsWith("pending:"));
     const ciclosPorObjeto = preapprovals.length > 0
-      ? await a.from("billing_provider_cycles")
+      ? await a.from("v_billing_provider_cycles")
           .select("provider_invoice_id, environment, outcome, organization_id, period_id")
           .in("provider_subscription_id", preapprovals)
       : { data: [], error: null };
