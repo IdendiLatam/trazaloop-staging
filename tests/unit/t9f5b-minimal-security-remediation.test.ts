@@ -589,6 +589,7 @@ check("0101 conserva la remediación y 0102 es el único cierre QA posterior aut
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0212_paid_plans_have_no_clock.sql",
     "0183_billing_operations_alerts.sql",
     "0184_billing_provider_renewal_ownership.sql",
     "0185_billing_provider_plans.sql",

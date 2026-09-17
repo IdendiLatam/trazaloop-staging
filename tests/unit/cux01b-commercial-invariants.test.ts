@@ -7,9 +7,9 @@
  * De la auditoría COMMERCIAL-UX-01A, que encontró tres cosas antes de que
  * existiera ninguna página nueva:
  *
- *   1. La autoridad decía que Full no medía minutos; la decisión comercial dice
- *      600 al mes. Una página de precios construida encima habría prometido algo
- *      que el producto no aplicaba.
+ *   1. La autoridad y la decisión comercial no decían lo mismo sobre los
+ *      minutos de Full. Una página de precios construida encima habría
+ *      prometido algo que el producto no aplicaba.
  *
  *   2. «Subir a Extra» se ofrecía siempre, y lo cobra un carril que con Mercado
  *      Pago no puede cobrar. Un botón muerto en una pantalla de dinero.
@@ -32,48 +32,90 @@ const leer = (p: string) => readFileSync(p, "utf8");
 
 const PAGINA = "app/(app)/(shell)/settings/billing/page.tsx";
 const M0211 = "supabase/migrations/0211_full_monthly_minutes_authority.sql";
+const M0212 = "supabase/migrations/0212_paid_plans_have_no_clock.sql";
 const DISPONIBILIDAD = "lib/billing/upgrade-availability.ts";
 const ACCIONES = "server/actions/billing.ts";
 
-console.log("\nA · LOS 600 MINUTOS VIVEN EN LA AUTORIDAD, NO EN UNA PANTALLA");
+console.log("\nA · LOS MINUTOS VIVEN EN LA AUTORIDAD, NO EN UNA PANTALLA");
 
-check("A1. La corrección publica una revisión nueva, no reescribe la vigente", () => {
+check("A1. Las dos correcciones publican revisión nueva, no reescriben la vigente", () => {
   // Una revisión publicada es el precio y las condiciones con las que alguien
-  // contrató. Cambiarla por debajo reescribiría lo que se le vendió.
-  const m = leer(M0211);
-  assert(!/update public\.plan_revision_limits/i.test(m),
-    "0211 reescribe los límites de una revisión ya publicada");
-  assert(/insert into public\.plan_revisions/i.test(m),
-    "0211 no publica una revisión nueva");
-  assert(/set effective_to = v_ahora, status = 'retired'/.test(m),
-    "0211 no retira la revisión anterior: quedarían dos vigentes");
+  // contrató. Cambiarla por debajo reescribiría lo que se le vendió, y
+  // `t_plan_revision_limits_immutable` está ahí precisamente para impedirlo.
+  for (const [nombre, m] of [["0211", leer(M0211)], ["0212", leer(M0212)]] as const) {
+    assert(!/update public\.plan_revision_limits/i.test(m),
+      `${nombre} reescribe los límites de una revisión ya publicada`);
+    assert(/insert into public\.plan_revisions/i.test(m),
+      `${nombre} no publica una revisión nueva`);
+    assert(/set effective_to = v_ahora, status = 'retired'/.test(m),
+      `${nombre} no retira la anterior: quedarían dos vigentes`);
+  }
 });
 
-check("A2. Y no toca el precio ni inventa un tope diario", () => {
-  const m = leer(M0211);
-  assert(/0211_EL_PRECIO_DE_FULL_CAMBIO/.test(m),
-    "0211 no comprueba que el precio siga intacto");
-  assert(/0211_APARECIO_UN_TOPE_DIARIO_EN_FULL/.test(m),
-    "0211 no comprueba que el diario siga sin tope");
-  assert(/v_vieja\.monthly_price_minor, v_vieja\.annual_price_minor/.test(m),
-    "el precio no se copia de la revisión anterior");
+check("A2. 0212 NO borra ni corrige 0211: la sucede", () => {
+  // La decisión comercial cambió, y eso es historia, no un error que tapar.
+  // Quien lea el repositorio dentro de un año tiene que poder ver que Full
+  // tuvo 600 minutos durante unas horas y por qué dejó de tenerlos.
+  const m = leer(M0212);
+  assert(/0211/.test(m), "0212 no explica a qué migración sucede");
+  assert(/el historial no se reescribe|no se reescribe/.test(m),
+    "0212 no deja escrito por qué 0211 se queda donde está");
 });
 
-check("A3. Es idempotente: aplicarla dos veces no encadena revisiones", () => {
-  const m = leer(M0211);
-  assert(/ya declara 600 min\/mes; nada que hacer/.test(m),
-    "0211 no se detiene si la corrección ya está aplicada");
+check("A3. El tiempo deja de limitar a quien paga, y solo eso cambia", () => {
+  const m = leer(M0212);
+  // Los DOS límites, no solo el mensual: dejar el diario con tope habría
+  // mantenido el reloj encendido por la otra puerta.
+  assert(/'active_minutes_daily',\s*\n?\s*'active_minutes_monthly'/.test(m)
+      || /'active_minutes_daily', 'active_minutes_monthly'/.test(m),
+    "0212 no libera los dos límites de minutos");
+  assert(/then 'unlimited' else l\.limit_state end/.test(m),
+    "0212 no pone los minutos en ilimitado");
+  assert(/then null else l\.limit_value end/.test(m),
+    "0212 deja un valor con estado ilimitado, que la tabla no admite");
+  // Y lo que SÍ es la economía del plan se comprueba intacto.
+  for (const guardia of ["0212_EL_PRECIO_DE_FULL_CAMBIO",
+                         "0212_EL_ALMACENAMIENTO_DE_FULL_CAMBIO",
+                         "0212_LOS_CREDITOS_DE_FULL_CAMBIARON",
+                         "0212_FREE_SE_MOVIO",
+                         "0212_EXTRA_TIENE_RELOJ",
+                         "0212_MAS_DE_UNA_REVISION_FULL_VIGENTE"]) {
+    assert(new RegExp(guardia).test(m), `0212 no comprueba ${guardia}`);
+  }
 });
 
-check("A4. Ningún componente escribe 600 a mano", () => {
-  // La autoridad es `plan_revision_limits`. Un 600 en un componente sería una
-  // segunda verdad, y las segundas verdades se desincronizan sin avisar.
+check("A4. Es idempotente: aplicarla dos veces no encadena revisiones", () => {
+  assert(/ya declara 600 min\/mes; nada que hacer/.test(leer(M0211)),
+    "0211 no se detiene si ya está aplicada");
+  assert(/ya es ilimitada en tiempo; nada que hacer/.test(leer(M0212)),
+    "0212 no se detiene si ya está aplicada");
+});
+
+check("A5. Ningún componente escribe un límite de minutos a mano", () => {
+  // La autoridad es `plan_revision_limits`. Un número aquí sería una segunda
+  // verdad, y las segundas verdades se desincronizan sin avisar. Se vigilan los
+  // tres: el que Full tuvo, y los dos que Free sigue teniendo.
   for (const f of [PAGINA,
                    "components/domain/billing/plan-decisions.tsx",
                    "lib/domain/commercial-catalog.ts"]) {
     const src = leer(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-    assert(!/\b600\b/.test(src), `${f} escribe 600 a mano`);
+    for (const n of ["600", "300", "30"]) {
+      assert(!new RegExp(`\\b${n}\\b`).test(src),
+        `${f} escribe ${n} a mano: la pantalla no decide límites`);
+    }
   }
+});
+
+check("A6. Y la política de planes pagos no vive en una constante", () => {
+  // La invariante «quien paga no tiene reloj» se comprueba INTERROGANDO la
+  // autoridad en `cux01b-minutes-authority`, no declarando los valores en un
+  // fichero. Una constante con la política sería justo la segunda fuente de
+  // verdad que este tramo vino a eliminar.
+  const db = leer("tests/rls/cux01b-minutes-authority.test.ts");
+  assert(/coalesce\(r\.monthly_price_minor, 0\) > 0/.test(db),
+    "la invariante usa una lista de planes en vez de deducir cuáles se pagan");
+  assert(/limit_state <> 'unlimited'/.test(db),
+    "la invariante no interroga el estado real del límite");
 });
 
 console.log("\nC · NINGÚN BOTÓN PROMETE UN COBRO QUE NO PUEDE HACERSE");

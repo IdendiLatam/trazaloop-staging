@@ -479,40 +479,47 @@ async function main() {
       assert((count ?? 0) === 0, `extra escribió ${count} minutos para demostrar que es ilimitado`);
     });
 
-    await check("AB.2. Full SÍ tiene reloj desde 0211 · 600 al mes y sin tope diario", async () => {
-      // Hasta 0211 esta comprobación decía lo contrario, y decirlo era el
-      // defecto: la autoridad ponía `unlimited` en los DOS límites de minutos,
-      // la función tomaba la rama de «plan sin reloj» y Full no se medía. La
-      // decisión comercial dice 600 al mes, así que ahora se mide y se escribe.
+    await check("AB.2. Full tampoco · y esta vez es la decisión, no un olvido", async () => {
+      // Esta comprobación ha dicho las dos cosas, y merece la pena explicar por
+      // qué, porque si no se lee como un bandazo.
+      //
+      // La autoridad ponía `unlimited` en los DOS límites de minutos sin que
+      // nadie lo hubiera decidido: era un hueco, y 0211 lo cerró con los 600
+      // al mes que el catálogo comercial prometía. Después se decidió de
+      // verdad: el tiempo de uso NO es el límite económico de los planes
+      // pagos —lo son el almacenamiento, los créditos y las capacidades— y
+      // 0212 devolvió Full a ilimitado.
+      //
+      // El resultado se parece al de antes de 0211. La diferencia es que ahora
+      // está decidido, escrito y defendido por una invariante.
       await ponerPlan("full"); await limpiarReloj();
       const t = await tiempo();
-      assert(t.metered === true, `Full sigue sin medirse: ${t.metered}`);
-      assert(t.monthly_limit === 600, `tope mensual de Full ${t.monthly_limit}`);
-      assert(t.daily_limit === null, `apareció un tope diario en Full: ${t.daily_limit}`);
-      assert(t.state === "NORMAL", `Full empezó el mes cortado: ${t.state}`);
-      // Y un latido de un plan CON reloj sí marca su minuto.
-      await latir(ana, "b4-limite-full");
+      assert(t.metered === false, `Full volvió a medirse: ${t.metered}`);
+      assert(t.monthly_limit === null && t.daily_limit === null,
+        `Full conserva topes: ${t.daily_limit}/${t.monthly_limit}`);
+      // Y un latido de un plan sin reloj no gasta ni una fila.
+      await latir(ana, "b4-sinlimite-full");
       const { count } = await admin.from("organization_usage_minutes")
         .select("minute_start", { count: "exact", head: true }).eq("organization_id", org);
-      assert((count ?? 0) >= 1, "Full no anotó el minuto que acaba de consumir");
-      await limpiarReloj();
+      assert((count ?? 0) === 0,
+        `Full escribió ${count} minutos para demostrar que es ilimitado`);
     });
 
-    await check("AC. Durante la prueba manda el reloj de FULL, no el de Free", async () => {
-      // Lo que esta comprobación siempre defendió —y sigue defendiendo— es que
-      // la prueba no se mide con la vara de Free: 30 minutos al día habrían
-      // dejado la prueba de Full en nada. Lo que cambia con 0211 es que la vara
-      // de Full ya no es «ninguna», son 600 al mes sin tope diario. Una prueba
-      // DE Full que midiera otra cosa no sería una prueba de Full.
+    await check("AC. Durante la prueba manda la vara de FULL, no la de Free", async () => {
+      // Lo que esta comprobación siempre defendió: la prueba no se mide con la
+      // vara de Free. 30 minutos al día habrían dejado una prueba de 48 horas
+      // en nada. Con 0212 la vara de Full es «sin reloj», así que la prueba
+      // tampoco lo tiene: su único límite es la propia duración.
       await limpiarReloj();
       await ponerPlan("free", true);
       const t = await tiempo();
-      assert(t.metered === true, "la prueba de Full dejó de medir");
-      assert(t.daily_limit === null,
-        `a la prueba se le aplicó un tope diario: ${t.daily_limit}`);
-      assert(t.monthly_limit === 600,
-        `la prueba promete ${t.monthly_limit} minutos y Full da 600`);
-      await limpiarReloj();
+      assert(t.metered === false, "la prueba de Full mide tiempo y Full no");
+      assert(t.daily_limit === null && t.monthly_limit === null,
+        `a la prueba se le aplicaron topes: ${t.daily_limit}/${t.monthly_limit}`);
+      await latir(ana, `b4-prueba-${sello}`);
+      const { count } = await admin.from("organization_usage_minutes")
+        .select("minute_start", { count: "exact", head: true }).eq("organization_id", org);
+      assert((count ?? 0) === 0, `la prueba consumió ${count} minutos`);
     });
 
     await check("AD/AE. El reloj no depende de que nadie toque nada", async () => {
@@ -704,13 +711,13 @@ async function main() {
       // Minutos previos que en Free habrían agotado el mes entero:
       await gastarMinutos(300, -1);
       const t = await tiempo();
-      // 300 minutos gastados en Free habrían agotado el mes de Free entero. Bajo
-      // el tope de Full son la mitad del mes, así que la prueba sigue operando:
-      // es exactamente lo que esta comprobación defiende.
+      // 300 minutos gastados en Free habrían agotado el mes de Free entero. La
+      // prueba es de Full, que no mide tiempo, así que ese consumo previo no la
+      // alcanza: es exactamente lo que esta comprobación defiende.
       assert(t.state === "NORMAL",
         `la prueba quedó en ${t.state} por consumo previo de Free`);
-      assert(t.monthly_limit === 600 && (t.monthly_remaining ?? 0) > 0,
-        `a la prueba le quedan ${t.monthly_remaining} de ${t.monthly_limit}`);
+      assert(t.metered === false && t.monthly_limit === null,
+        `la prueba arrastró un tope de tiempo: ${t.monthly_limit}`);
       assert((await puerta("business_increase_or_modify")).allowed, "la prueba no podía operar");
       const r = await reservar("ask");
       assert(r.ok && r.r.pool === "trial", `la prueba no usó su bolsa: ${!r.ok && r.code}`);

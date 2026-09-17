@@ -317,6 +317,7 @@ check("C.2 migraciones: 0001–0103 intactas, la 0104 única; posteriores solo l
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0212_paid_plans_have_no_clock.sql",
     "0183_billing_operations_alerts.sql",
     "0184_billing_provider_renewal_ownership.sql",
     "0185_billing_provider_plans.sql",

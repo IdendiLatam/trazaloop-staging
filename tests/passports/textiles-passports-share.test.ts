@@ -127,6 +127,7 @@ check("1. Existe 0092 y las migraciones posteriores están bajo control hasta el
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0212_paid_plans_have_no_clock.sql",
     "0183_billing_operations_alerts.sql",
     // MP0184 · propiedad de la recurrencia por proveedor: `billing_due_renewals`
     // deja de reclamar las suscripciones que cobra el proveedor. Todo lo que
