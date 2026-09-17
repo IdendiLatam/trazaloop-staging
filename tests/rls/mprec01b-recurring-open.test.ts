@@ -763,6 +763,105 @@ await check("9D. El carril manual no lo refresca nadie", async () => {
   await q(`delete from billing_subscriptions where id = $1`, [man.id]);
 });
 
+console.log("\n10 · CONCURRENCIA REAL · MP-REC-01C.4");
+
+await check("10A. Dos conexiones a la vez sobre el MISMO ciclo: un solo efecto", async () => {
+  /*
+    NO es una simulación con un mutex en memoria. Son DOS conexiones distintas
+    a Postgres llamando a la primitiva canónica a la vez, con la misma identidad
+    de ciclo externo. Compiten de verdad contra la base.
+
+    Lo que tiene que sostener la invariante es el índice único de
+    `billing_provider_cycles`, no el orden en que lleguen.
+  */
+  const f = await recurrenciaParaCiclos();
+  const inv = `inv-conc-${sello}`;
+  const cycleAt = iso(f.p1.period_end);
+
+  const worker = async () => {
+    const c = new PgClient({ connectionString: DB_URL });
+    await c.connect();
+    try {
+      await c.query("set role postgres");
+      const r = await c.query(
+        `select public.billing_reconcile_provider_cycle(
+           'mercadopago', $1, $2, $3::timestamptz, $2, 'approved', 190400, 'COP', false) as r`,
+        [f.preapproval, inv, cycleAt]);
+      return { ok: true, outcome: r.rows[0].r.outcome as string };
+    } catch (e) {
+      // Un conflicto de unicidad recuperado NO es un error financiero: es la
+      // base impidiendo el duplicado. Se anota y se distingue.
+      const m = e instanceof Error ? e.message : String(e);
+      return { ok: false, outcome: /duplicate key|unique/i.test(m)
+        ? "unique_conflict" : `error:${m.slice(0, 60)}` };
+    } finally { await c.end(); }
+  };
+
+  const [a, b] = await Promise.all([worker(), worker()]);
+  const resultados = [a.outcome, b.outcome].sort();
+
+  // Exactamente UNO salda. El otro: ya estaba, o chocó con la unicidad.
+  const saldaron = [a, b].filter((x) => x.outcome === "renewed").length;
+  assert(saldaron === 1,
+    `saldaron ${saldaron} de 2 · resultados: ${resultados.join(" | ")}`);
+  for (const x of [a, b]) {
+    assert(["renewed", "already_reconciled", "unique_conflict"].includes(x.outcome),
+      `un trabajador devolvió un error no gobernado: ${x.outcome}`);
+  }
+
+  // Y la base quedó con UNO de cada cosa.
+  const ciclos = await q(
+    `select count(*)::int n from billing_provider_cycles
+      where provider_subscription_id = $1 and provider_invoice_id = $2`,
+    [f.preapproval, inv]);
+  assert(ciclos[0].n === 1, `quedaron ${ciclos[0].n} ciclos del proveedor`);
+
+  const per = await q(
+    `select count(*)::int n from billing_subscription_periods
+      where subscription_id = $1`, [f.subId]);
+  assert(per[0].n === 2, `quedaron ${per[0].n} periodos (se esperaban 2)`);
+
+  const pagos = await q(
+    `select count(*)::int n from billing_payments
+      where organization_id = $1 and provider_payment_id = $2`, [f.orgId, inv]);
+  assert(pagos[0].n === 1, `quedaron ${pagos[0].n} pagos internos para ese cobro`);
+
+  // El acceso se extendió UNA vez: hasta el fin del periodo 2, ni más allá.
+  const [p2] = await q(
+    `select period_end from billing_subscription_periods
+      where subscription_id = $1 order by period_sequence desc limit 1`, [f.subId]);
+  const mods = await q(
+    `select module_code, access_expires_at from organization_modules
+      where organization_id = $1 and access_expires_at is not null`, [f.orgId]);
+  for (const m of mods) {
+    assert(iso(m.access_expires_at) === iso(p2.period_end),
+      `${m.module_code} se extendió a ${iso(m.access_expires_at)} y el periodo acaba en ${iso(p2.period_end)}`);
+  }
+});
+
+await check("10B. Y repetirlo después sigue sin efecto", async () => {
+  const f = await recurrenciaParaCiclos();
+  const inv = `inv-conc2-${sello}`;
+  await cicloDeProveedor({ preapproval: f.preapproval, invoice: inv,
+    cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "approved" });
+  const antes = await q(
+    `select count(*)::int n from billing_subscription_periods where subscription_id = $1`,
+    [f.subId]);
+  const [x, y] = await Promise.all([
+    cicloDeProveedor({ preapproval: f.preapproval, invoice: inv,
+      cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "approved" }),
+    cicloDeProveedor({ preapproval: f.preapproval, invoice: inv,
+      cycleAt: iso(f.p1.period_end), amount: 190400, outcome: "approved" }),
+  ]);
+  for (const r of [x, y]) {
+    assert(r.outcome === "already_reconciled", `outcome=${r.outcome}`);
+  }
+  const despues = await q(
+    `select count(*)::int n from billing_subscription_periods where subscription_id = $1`,
+    [f.subId]);
+  assert(antes[0].n === despues[0].n, "repetir en paralelo creó periodos");
+});
+
   // ── limpieza ───────────────────────────────────────────────────────────────
   // Best-effort y en orden de dependencia. Un fallo limpiando NO puede tumbar
   // la batería: lo que se estaba comprobando ya se comprobó, y un fixture que

@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C2-2026-09-17-post-cancel-copy";
+const QA_MARCADOR = "MPREC01C4-2026-09-17-runner-smoke";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -77,6 +77,8 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   // MP-REC-01B.6 · TEMPORAL · cerrar un intento de recurrencia
                   // rechazado por el proveedor. Se retira con el disparador.
                   "close_recurring_attempt", "recurring_state", "reconcile_recurring",
+                  // MP-REC-01C.4 · disparar el barrido sin sacar el secreto.
+                  "run_recurring_runner",
                   "qa_version", "plan_create", "plan_create_annual", "probe_plan_state",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
@@ -1193,6 +1195,49 @@ async function manejar(request: Request) {
   // canónica que usarán el retorno, el aviso del proveedor y el barrido
   // programado, con sus mismas comprobaciones de entorno, cobrador, correlación,
   // importe y moneda. Se retira con el resto del disparador.
+  // -------------------------------------------------------------------------
+  // MP-REC-01C.4 · TEMPORAL · disparar el barrido sin sacar su credencial
+  // -------------------------------------------------------------------------
+  //
+  // POR QUÉ NO SE INVOCA DESDE FUERA
+  //
+  // El barrido se autentica con un secreto de servidor. Llamarlo desde una
+  // consola obligaría a tener ese valor delante, y un secreto que pasa por una
+  // pantalla deja de serlo. Aquí la llamada la hace el SERVIDOR: lee el secreto
+  // de su propio entorno, lo pone en la cabecera y devuelve solo los recuentos.
+  // El valor no aparece en la respuesta, ni en el registro, ni en ningún sitio.
+  //
+  // `spoil` sirve para la prueba negativa: manda un secreto INVENTADO —no una
+  // versión alterada del real— para comprobar que la puerta responde 404 sin
+  // que haya que conocer el bueno.
+  if (accion === "run_recurring_runner") {
+    const secreto = process.env.BILLING_RECURRING_RUNNER_SECRET
+      ?? process.env.BILLING_RENEWAL_RUNNER_SECRET;
+    const modo = String(cuerpo.mode ?? "valid");
+    const cabeceras: Record<string, string> = { "Content-Type": "application/json" };
+    if (modo === "valid") {
+      if (!secreto) return no("RUNNER_SECRET_NOT_CONFIGURED", 424);
+      cabeceras["x-billing-runner-secret"] = secreto;
+    } else if (modo === "wrong") {
+      cabeceras["x-billing-runner-secret"] =
+        "no-es-el-secreto-de-nadie-0000000000000000";
+    }
+    // `none` no manda cabecera ninguna.
+    const origen = new URL(request.url).origin;
+    try {
+      const r = await fetch(`${origen}/api/billing/recurring/run`, {
+        method: "POST", headers: cabeceras,
+        body: JSON.stringify({ limit: Number(cuerpo.limit ?? 50) }) });
+      let j: unknown = null;
+      try { j = await r.json(); } catch { j = null; }
+      log_seguro("barrido_recurrente", { modo, http: r.status });
+      return NextResponse.json({ ok: true, mode: modo, http: r.status, result: j });
+    } catch (e) {
+      return NextResponse.json({ ok: false, mode: modo,
+        message: e instanceof Error ? e.name : "UnknownError" });
+    }
+  }
+
   if (accion === "reconcile_recurring") {
     const id = String(cuerpo.authorization_id ?? "");
     if (!/^[0-9a-f-]{36}$/i.test(id)) return no("AUTHORIZATION_ID_REQUIRED", 400);
