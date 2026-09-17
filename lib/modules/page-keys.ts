@@ -1191,6 +1191,18 @@ export const PAGE_KEY_EXCLUSIONS: readonly PageKeyExclusion[] = [
   // ruido en el peor momento.
   { route: "/settings/billing/checkout/return",
     reason: "Vuelta del pago · trámite de una sola vez, no se opera" },
+  // MP-REC-01B.3 · La vuelta de la autorización recurrente, por el mismo
+  // motivo y con más razón: se entra una sola vez, al volver de la pasarela,
+  // para leer si la suscripción quedó autorizada.
+  { route: "/settings/billing/recurring/return",
+    reason: "Vuelta de la autorización recurrente · trámite de una sola vez" },
+
+  // --- Público ---------------------------------------------------------------
+  // COMMERCIAL-UX-01D · La página de planes y precios la abre quien todavía no
+  // es cliente. El botón del tutorial vive dentro del shell autenticado, y aun
+  // si viviera fuera: a alguien que está decidiendo si compra no se le enseña
+  // cómo usar lo que aún no tiene.
+  { route: "/planes", reason: "Comercial pública · sin sesión, se lee para decidir" },
 
   // --- Legal ---------------------------------------------------------------
   // Un vídeo encima de un texto que hay que aceptar compite con el texto. Y la

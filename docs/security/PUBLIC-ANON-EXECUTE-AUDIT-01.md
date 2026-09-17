@@ -122,7 +122,7 @@ Las tres últimas son anteriores a los diagnósticos públicos y se conservan
 porque tienen consumidor real: se comprobó en el repositorio, función por
 función, no se supuso.
 
-### Las seis relaciones que se leen sin sesión
+### Las siete relaciones que se leen sin sesión
 
 `legal_documents` (los textos de `/terms` y `/privacy`), `v_faq_public` y
 `v_faq_public_categories` (las preguntas frecuentes de `/faq`). Son públicas
@@ -271,3 +271,24 @@ La puerta queda **superada**, con evidencia de privilegios efectiva —el
 esquema recorrido como `anon`— y no solo con una lista. Los dos huecos que
 quedan (`supabase_admin` y la tolerancia del disparador) están arriba, con el
 control que los cubre.
+
+
+### La séptima: el vídeo de la portada
+
+**COMMERCIAL-UX-01E** (migración 0215) añadió `v_public_home_video`: el vídeo
+que la portada enseña en un aviso a quien todavía no ha entrado.
+
+La vista proyecta ocho campos —qué vídeo es, qué versión, cómo se titula,
+cuánto dura, si tiene póster— y deliberadamente **ninguna ruta de fichero**,
+ninguna huella de contenido y ninguna autoría. `platform_tutorials` y
+`platform_tutorial_versions` siguen denegadas a `anon`, y el bucket
+`tutorial-media` sigue privado: no se hizo público un almacén entero para poder
+enseñar un vídeo.
+
+El medio se sirve aparte, con una URL temporal que firma el servidor. La
+función que resuelve la ruta —`public_home_video_object_path()`— **no acepta
+parámetros**, así que no se le puede pedir que firme otro vídeo: no existe el
+argumento. Está revocada de `anon` y de `authenticated`; solo la ejecuta el
+servidor. Es la misma idea que `tutorial_current_object_path`, llevada un paso
+más allá para un consumidor que no tiene sesión y por tanto no puede acreditar
+nada.

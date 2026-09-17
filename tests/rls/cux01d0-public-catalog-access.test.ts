@@ -228,9 +228,11 @@ async function main() {
     const nombres = filas.map((f) => String(f.relname));
     // Seis desde COMMERCIAL-UX-01D: la página de precios necesitaba además la
     // política de prueba para poder anunciarla (0214, misma frontera de vista).
+    // Siete desde COMMERCIAL-UX-01E: el vídeo que la portada enseña sin sesión.
     assert(JSON.stringify(nombres) === JSON.stringify([
       "legal_documents", "v_faq_public", "v_faq_public_categories",
-      "v_public_plan_catalog", "v_public_plan_limits", "v_public_trial_policy"]),
+      "v_public_home_video", "v_public_plan_catalog", "v_public_plan_limits",
+      "v_public_trial_policy"]),
       `legibles sin sesión: ${nombres.join(", ")}`);
   });
 
@@ -244,7 +246,7 @@ async function main() {
       assert(new RegExp(rel).test(doc),
         `el documento no declara ${rel}: la superficie creció sin dejarlo escrito`);
     }
-    assert(/seis relaciones/i.test(doc),
+    assert(/siete relaciones/i.test(doc),
       "el documento no está al día con la superficie pública real");
   });
 

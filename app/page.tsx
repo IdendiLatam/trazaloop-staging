@@ -21,6 +21,8 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { PublicHeader, PublicFooter } from "@/components/layout/public-shell";
+import { readPublicHomeVideo } from "@/lib/db/public-home-video";
+import { HomeVideoPopup } from "@/components/domain/commercial/home-video-popup";
 import { heroModule, specializedModules, ENTRY_COPY } from "@/lib/modules/entry";
 import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
 import { isPublicRegistrationEnabled } from "@/lib/auth/public-registration";
@@ -41,6 +43,12 @@ export default async function PublicLandingPage() {
   // El protagonista y los tres especializados, en el orden congelado. Lo que se
   // pinta aquí es PRESENTACIÓN DE PRODUCTO: qué existe y en qué estado está para
   // Trazaloop, nunca qué tiene contratado quien mira — todavía no ha entrado.
+  // COMMERCIAL-UX-01E · Solo la IDENTIDAD del vídeo de portada: una fila, sin
+  // ruta y sin bytes. Si no hay vídeo —o no se pudo leer— devuelve `null` y la
+  // portada se pinta igual. Un vídeo de presentación no puede llevarse por
+  // delante la página que presenta.
+  const videoPortada = await readPublicHomeVideo();
+
   const hero = heroModule();
   const especializados = specializedModules();
   const disponible = (key: string, status: string) =>
@@ -187,6 +195,20 @@ export default async function PublicLandingPage() {
           logins separados por módulo.
         </p>
       </main>
+
+      {/* El modal va al final del árbol y solo si hay vídeo. Quien ya dijo «no
+          volver a mostrar» no descarga nada: la decisión la mira el componente
+          antes de pedir la URL firmada. */}
+      {videoPortada !== null ? (
+        <HomeVideoPopup
+          video={{
+            tutorialId: videoPortada.tutorialId,
+            versionId: videoPortada.versionId,
+            title: videoPortada.title,
+            description: videoPortada.description,
+          }}
+        />
+      ) : null}
 
       <PublicFooter />
     </div>

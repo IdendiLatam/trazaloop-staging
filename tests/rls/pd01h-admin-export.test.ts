@@ -59,6 +59,7 @@ const PUBLIC_ANON_EXECUTE_ALLOWLIST = [
 const RELACIONES_PUBLICAS = [
   "legal_documents", "v_faq_public", "v_faq_public_categories",
   "v_public_plan_catalog", "v_public_plan_limits", "v_public_trial_policy",
+  "v_public_home_video",
 ];
 
 let passed = 0, failed = 0;
@@ -168,8 +169,20 @@ async function main() {
 
     assert(JSON.stringify(permitidas.sort()) === JSON.stringify([...RELACIONES_PUBLICAS].sort()),
       `alcanzables por anon: ${permitidas.join(", ") || "ninguna"}`);
-    assert(JSON.stringify(conFilas.sort()) === JSON.stringify([...RELACIONES_PUBLICAS].sort()),
-      `con filas para anon: ${conFilas.join(", ") || "ninguna"}`);
+    // COMMERCIAL-UX-01E · Esto era una igualdad y ya no puede serlo.
+    //
+    // `v_public_home_video` está DECLARADA y puede estar legítimamente vacía:
+    // mientras superadministración no publique un vídeo de portada, no hay
+    // ninguno, y la portada simplemente no enseña aviso. Exigir que toda
+    // relación declarada devuelva filas confundía «abierta» con «con
+    // contenido», que son cosas distintas.
+    //
+    // La propiedad de SEGURIDAD no se toca y sigue siendo la igualdad exacta de
+    // arriba —qué se puede ALCANZAR—. Aquí solo se exige que nada sin declarar
+    // devuelva una sola fila.
+    const indebidas = conFilas.filter((r) => !RELACIONES_PUBLICAS.includes(r));
+    assert(indebidas.length === 0,
+      `devuelven filas sin estar declaradas: ${indebidas.join(", ")}`);
     assert(denegadas === relaciones.length - RELACIONES_PUBLICAS.length,
       `${denegadas} denegadas de ${relaciones.length}: no cuadra con las `
       + `${RELACIONES_PUBLICAS.length} declaradas`);

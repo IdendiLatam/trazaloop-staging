@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 import {
   listTutorialsForConsole, getTutorialDetail, createPageTutorial,
+  createPublicHomeTutorial,
   reserveTutorialUpload, finalizeTutorialUpload, publishTutorialVersion,
   unpublishTutorial, restoreTutorialVersion, signTutorialPreview,
   failTutorialVersion,
@@ -101,6 +102,28 @@ export async function createTutorialAction(
   if (title.length < 3) return { error: "El tutorial necesita un nombre." };
 
   const res = await createPageTutorial({ pageKey, title });
+  if (!res.ok) return { error: res.message };
+  revalidar(res.id);
+  return { error: null, ok: true, id: res.id };
+}
+
+/**
+ * COMMERCIAL-UX-01E · Crear el vídeo de la portada pública.
+ *
+ * Misma puerta que todo lo demás de esta consola —solo superadministración— y
+ * mismo camino después: subir, verificar y publicar se hacen con las acciones
+ * que ya existen. Aquí solo nace la identidad, igual que en las pantallas.
+ */
+export async function createPublicHomeTutorialAction(
+  _prev: TutorialAdminState, formData: FormData
+): Promise<TutorialAdminState> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) return { error: TUTORIAL_FORBIDDEN_MESSAGE };
+
+  const title = texto(formData, "title");
+  if (title.length < 3) return { error: "El vídeo necesita un nombre." };
+
+  const res = await createPublicHomeTutorial({ title });
   if (!res.ok) return { error: res.message };
   revalidar(res.id);
   return { error: null, ok: true, id: res.id };

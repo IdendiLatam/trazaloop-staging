@@ -55,7 +55,7 @@ export const TUTORIAL_UNKNOWN_PAGE_MESSAGE =
 
 export type TutorialSummary = {
   id: string;
-  tutorialType: "page" | "welcome";
+  tutorialType: TutorialPlacement;
   pageKey: string | null;
   moduleKey: string | null;
   title: string;
@@ -70,6 +70,47 @@ export type TutorialSummary = {
  * registro se comprueba aquí. Es la frontera que impide que un tutorial cuelgue
  * de una pantalla que no existe.
  */
+/**
+ * DÓNDE se enseña un vídeo. Es la gramática de `platform_tutorials`, no una
+ * clase de objeto: los tres comparten versionado, publicación, hash, MIME real,
+ * póster y esta misma consola.
+ *
+ *   page        · la ayuda de una pantalla concreta
+ *   welcome     · la bienvenida de dentro del producto
+ *   public_home · COMMERCIAL-UX-01E · la portada pública, sin sesión
+ */
+export type TutorialPlacement = "page" | "welcome" | "public_home";
+
+/**
+ * Crear el vídeo de la portada pública.
+ *
+ * Sin `page_key` ni `module_key` —no cuelga de ninguna pantalla— y con la
+ * unicidad garantizada por la base: si ya hay uno activo, el índice lo impide y
+ * el mensaje lo explica. No se comprueba antes «por si acaso»: comprobar y
+ * luego insertar deja una rendija entre las dos cosas.
+ */
+export async function createPublicHomeTutorial(
+  input: { title: string },
+  client?: Db
+): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  const supabase = await db(client);
+  const { data, error } = await supabase
+    .from("platform_tutorials")
+    .insert({ tutorial_type: "public_home", page_key: null,
+              module_key: null, title: input.title })
+    .select("id");
+
+  if (error) {
+    return { ok: false, message: /duplicate key|unique/i.test(error.message)
+      ? "Ya hay un vídeo de portada activo. Retíralo antes de crear otro, o "
+        + "publícale una versión nueva."
+      : error.message };
+  }
+  const fila = filaAfectada(data as { id: string }[] | null);
+  if (!fila) return { ok: false, message: TUTORIAL_FORBIDDEN_MESSAGE };
+  return { ok: true, id: fila.id };
+}
+
 export async function createPageTutorial(
   input: { pageKey: string; title: string }, client?: Db
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
@@ -106,7 +147,7 @@ export async function listTutorials(client?: Db): Promise<TutorialSummary[]> {
     .order("page_key", { nullsFirst: true });
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),
-    tutorialType: r.tutorial_type as "page" | "welcome",
+    tutorialType: r.tutorial_type as TutorialPlacement,
     pageKey: (r.page_key as string | null) ?? null,
     moduleKey: (r.module_key as string | null) ?? null,
     title: String(r.title),
@@ -326,7 +367,7 @@ export async function listTutorialVersions(
 
 export type TutorialConsoleRow = {
   id: string;
-  tutorialType: "page" | "welcome";
+  tutorialType: TutorialPlacement;
   pageKey: string | null;
   moduleKey: string | null;
   title: string;
@@ -399,7 +440,7 @@ export async function listTutorialsForConsole(
       .sort((a, b) => Number(b.version_number) - Number(a.version_number));
     return {
       id: String(t.id),
-      tutorialType: t.tutorial_type as "page" | "welcome",
+      tutorialType: t.tutorial_type as TutorialPlacement,
       pageKey: (t.page_key as string | null) ?? null,
       moduleKey: (t.module_key as string | null) ?? null,
       title: String(t.title),
@@ -476,7 +517,7 @@ export async function getTutorialDetail(
     data: {
       tutorial: {
         id: String(fila.id),
-        tutorialType: fila.tutorial_type as "page" | "welcome",
+        tutorialType: fila.tutorial_type as TutorialPlacement,
         pageKey: (fila.page_key as string | null) ?? null,
         moduleKey: (fila.module_key as string | null) ?? null,
         title: String(fila.title),

@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 
 import { listTutorialsAction } from "@/server/actions/tutorials-admin";
-import { CreateTutorialForm } from "@/components/domain/tutorials/tutorial-admin-forms";
+import {
+  CreateTutorialForm, CreatePublicHomeVideoForm,
+} from "@/components/domain/tutorials/tutorial-admin-forms";
 import { PAGE_KEYS, PAGE_KEY_EXCLUSIONS } from "@/lib/modules/page-keys";
 import { COMMERCIAL_MODULES } from "@/lib/modules/catalog";
 import {
@@ -45,6 +47,7 @@ export default async function PlatformTutorialsPage(
     .map((p) => ({ key: p.key, label: p.label }));
 
   const bienvenida = rows.filter((r) => r.tutorialType === "welcome");
+  const portada = rows.filter((r) => r.tutorialType === "public_home");
   const dePagina = rows.filter((r) => r.tutorialType === "page");
 
   // La cobertura se cuenta sobre el REGISTRO, no sobre lo que hay: lo que
@@ -181,6 +184,7 @@ export default async function PlatformTutorialsPage(
               <option value="">Todos</option>
               <option value="page">Tutorial de pantalla</option>
               <option value="welcome">Vídeo de bienvenida</option>
+              <option value="public_home">Vídeo de la portada pública</option>
             </select>
           </label>
           <label className="block">
@@ -204,6 +208,32 @@ export default async function PlatformTutorialsPage(
             </Link>
           </div>
         </form>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* COMMERCIAL-UX-01E · El de la portada va primero porque es el único
+          que ve gente de fuera, y el único del que conviene saber de un
+          vistazo si está publicado. */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Vídeo de la portada pública</h2>
+        <p className="text-sm text-ink-soft">
+          Se enseña en un aviso de la portada a quien todavía no ha entrado.
+          Solo puede haber uno activo: para cambiarlo, publícale una versión
+          nueva —y a quien ya lo hubiera descartado le volverá a aparecer— o
+          retira éste antes de crear otro.
+        </p>
+        {portada.length === 0 ? (
+          <div className="rounded-lg border border-hairline bg-paper p-4">
+            <p className="text-sm text-ink-soft">
+              No hay ninguno. Mientras no lo haya, la portada no enseña ningún aviso.
+            </p>
+            <CreatePublicHomeVideoForm />
+          </div>
+        ) : (
+          portada.map((r) => (
+            <FilaTutorial key={r.id} row={r} nombre="Portada pública" />
+          ))
+        )}
       </section>
 
       {/* ---------------------------------------------------------------- */}

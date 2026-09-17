@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import {
-  createTutorialAction, publishTutorialVersionAction, unpublishTutorialAction,
+  createTutorialAction, createPublicHomeTutorialAction, publishTutorialVersionAction, unpublishTutorialAction,
   restoreTutorialVersionAction, discardCandidateAction, saveCandidateMetadataAction,
   previewTutorialVersionAction, reactivateTutorialAction, type TutorialAdminState,
 } from "@/server/actions/tutorials-admin";
@@ -19,6 +19,39 @@ const inicial: TutorialAdminState = { error: null };
  * Todos siguen el reparto de PE-02: el botón se esconde por cortesía y la
  * barrera está en la acción y en la base. Ninguno decide nada por su cuenta.
  */
+
+/**
+ * COMMERCIAL-UX-01E · Crear el vídeo de la portada pública.
+ *
+ * Hermano del de arriba y deliberadamente igual de sobrio: solo un nombre. No
+ * elige pantalla —no cuelga de ninguna— y no sube nada. Después se le sube una
+ * versión y se publica con las MISMAS acciones que el resto: un segundo camino
+ * de subida sería un segundo sitio donde se comprueba el MIME y la huella.
+ */
+export function CreatePublicHomeVideoForm() {
+  const [state, action, pending] = useActionState(
+    createPublicHomeTutorialAction, inicial);
+
+  return (
+    <form action={action} className="mt-3 flex flex-wrap items-end gap-3">
+      <div className="w-full">
+        <ErrorAlert message={state.error} />
+        {state.ok ? (
+          <SuccessAlert message="Creado. Todavía no tiene vídeo, así que la portada sigue sin enseñar nada: súbele una versión y publícala." />
+        ) : null}
+      </div>
+      <Field
+        label="Nombre del vídeo" name="title" required
+        placeholder="Qué es Trazaloop"
+        hint="Lo que se lee junto al vídeo en el aviso de la portada."
+      />
+      <button type="submit" disabled={pending}
+        className="rounded-md bg-loop px-4 py-2 text-sm font-semibold text-white hover:bg-loop-deep disabled:opacity-60">
+        {pending ? "Creando…" : "Crear"}
+      </button>
+    </form>
+  );
+}
 
 export function CreateTutorialForm({
   pages,
