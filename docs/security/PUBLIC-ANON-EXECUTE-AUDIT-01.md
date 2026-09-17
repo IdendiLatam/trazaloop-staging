@@ -122,11 +122,35 @@ Las tres últimas son anteriores a los diagnósticos públicos y se conservan
 porque tienen consumidor real: se comprobó en el repositorio, función por
 función, no se supuso.
 
-### Las tres relaciones que se leen sin sesión
+### Las cinco relaciones que se leen sin sesión
 
 `legal_documents` (los textos de `/terms` y `/privacy`), `v_faq_public` y
 `v_faq_public_categories` (las preguntas frecuentes de `/faq`). Son públicas
 por diseño y solo con SELECT.
+
+**COMMERCIAL-UX-01D0 añadió dos** (migración 0213): `v_public_plan_catalog` y
+`v_public_plan_limits`, el catálogo comercial que `/planes` enseña a quien
+todavía no es cliente. Pedirle sesión a alguien para ver cuánto cuesta el
+producto es lo contrario de lo que hace una página pública.
+
+Las dos son VISTAS, y ahí está la decisión. Se evalúan con los privilegios de
+su propietario, así que quien las consulta no necesita permiso sobre las tablas
+de debajo: `plans`, `plan_revisions`, `plan_revision_limits` y `plan_resources`
+siguen denegadas a `anon`, y se comprueba en la propia migración.
+
+La alternativa —dejarlas como `security_invoker` y abrirle a `anon` las cuatro
+tablas con políticas nuevas— se descartó con motivo. Conceder SELECT sobre
+`plan_revisions` publica esa tabla en PostgREST, y la RLS filtra FILAS, no
+COLUMNAS: cualquiera podría pedir `internal_notes` de una revisión publicada,
+que es justo lo que 0162 prometió que no saldría nunca por el catálogo público.
+Abrir cuatro tablas para enseñar tres precios amplía la superficie en lugar de
+acotarla.
+
+Antes de cambiar nada se midió, con el rol suplantado: `authenticated` y
+`postgres` veían exactamente las mismas filas a través de esas vistas (3 planes
+y 57 límites). Es decir, la RLS no estaba filtrando nada ahí, y por tanto el
+cambio no puede ampliar lo que alguien ya veía. Después se volvió a medir: 3 y
+57 también sin sesión, y las cuatro tablas siguen denegadas.
 
 Cerrarlas de más también habría sido un defecto, y estuvo a punto de pasar: al
 retirar `is_platform_staff()` del alcance anónimo, `/terms` dejó de cargar.

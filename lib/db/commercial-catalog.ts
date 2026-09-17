@@ -36,11 +36,19 @@ import {
  *
  * SOBRE QUIÉN PUEDE LEER ESTO
  *
- * `v_public_plan_catalog` y `v_public_plan_limits` están concedidas a
- * `authenticated`, no a `anon` (0162). Son vistas con `security_invoker`, así
- * que quien las consulte necesita identidad. El cliente entra por parámetro
- * precisamente para que quien monte una superficie pública decida con qué
- * identidad lee, en vez de que este módulo lo decida por todos.
+ * Sin sesión. Desde COMMERCIAL-UX-01D0 (migración 0213), las dos vistas se
+ * evalúan con los privilegios de su propietario y están concedidas a `anon`
+ * solo para leer: una página de precios la mira quien todavía no es cliente, y
+ * pedirle que inicie sesión para ver cuánto cuesta el producto es lo contrario
+ * de lo que hace una superficie pública.
+ *
+ * La VISTA es la frontera. `plans`, `plan_revisions`, `plan_revision_limits` y
+ * `plan_resources` siguen denegadas sin sesión, y eso se comprueba contra la
+ * base en `cux01d0-public-catalog-access`.
+ *
+ * Por eso este módulo NO necesita —ni usa— una identidad de servidor. El
+ * cliente sigue entrando por parámetro para poder inyectar uno en las pruebas,
+ * no para elegir con qué permisos se lee: hay un solo camino de lectura.
  */
 export async function readCommercialCatalog(
   client?: SupabaseClient

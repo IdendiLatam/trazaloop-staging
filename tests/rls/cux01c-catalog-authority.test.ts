@@ -47,9 +47,10 @@ async function main() {
   const q = async (sql: string, params: unknown[] = []) => (await pg.query(sql, params)).rows;
   await q("set role postgres");
 
-  // Las vistas son `security_invoker` y están concedidas a `authenticated`. Se
-  // leen con el mismo SQL que ellas declaran, para comprobar la forma REAL de
-  // las columnas que el lector de la aplicación consume.
+  // Se leen con el mismo SQL que declara el lector de la aplicación, para
+  // comprobar la forma REAL de las columnas que consume. Desde 01D0 las vistas
+  // se evalúan con los privilegios de su propietario y `anon` puede leerlas;
+  // quién puede leer qué lo congela `cux01d0-public-catalog-access`.
   const filasPlan = await q(
     `select plan_code, display_order, plan_revision_id, display_name, description,
             public_conditions, price_state, currency,
@@ -245,18 +246,22 @@ async function main() {
     assert(Number(n.n) === 0, `la vista deja pasar ${n.n} recursos no públicos`);
   });
 
-  await check("5C. Y nadie anónimo las lee todavía", async () => {
-    // Dato que el tramo siguiente necesita saber: las vistas están concedidas a
-    // `authenticated`, NO a `anon` (0162). Una página de precios abierta al
-    // público necesitará una decisión sobre esto —conceder a `anon`, o leer con
-    // una identidad de servidor—. Se deja comprobado para que la decisión se
-    // tome a la vista, y no se descubra con la página ya construida.
+  await check("5C. Y sin sesión se leen, pero SOLO para leer", async () => {
+    // Esta comprobación decía lo contrario hasta 01D0, y dejaba escrito que el
+    // tramo siguiente tendría que decidir. Se decidió: la vista es la frontera
+    // —evaluada con los privilegios de su propietario— y se concede `select` a
+    // `anon`. Las tablas de debajo siguen cerradas; el contrato entero vive en
+    // `cux01d0-public-catalog-access`.
+    //
+    // Aquí solo se vigila la forma del permiso: leer, y nada más.
     const filas = await q(
       `select grantee, privilege_type from information_schema.role_table_grants
         where table_name in ('v_public_plan_catalog', 'v_public_plan_limits')
-          and grantee = 'anon'`);
-    assert(filas.length === 0,
-      `anon ya puede leer el catálogo: ${JSON.stringify(filas)} — si es deliberado, actualiza esta comprobación`);
+          and grantee = 'anon' order by privilege_type`);
+    const privilegios = [...new Set(filas.map((f) => String(f.privilege_type)))];
+    assert(JSON.stringify(privilegios) === JSON.stringify(["SELECT"]),
+      `anon tiene sobre el catálogo: ${privilegios.join(", ") || "nada"}`);
+    assert(filas.length === 2, `se esperaban las dos vistas y hay ${filas.length}`);
   });
 
   await pg.end();

@@ -334,11 +334,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0210_recurring_lifecycle_refresh.sql",
     "0211_full_monthly_minutes_authority.sql",
     "0212_paid_plans_have_no_clock.sql",
+    "0213_public_catalog_reads_without_session.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0212_paid_plans_have_no_clock.sql",
+  assert(cabecera === "0213_public_catalog_reads_without_session.sql",
     `la cabecera es ${cabecera}`);
 });
 

@@ -39,7 +39,26 @@ const PUBLIC_ANON_EXECUTE_ALLOWLIST = [
 ];
 
 /** Y las relaciones que se leen sin sesión, por diseño. */
-const RELACIONES_PUBLICAS = ["legal_documents", "v_faq_public", "v_faq_public_categories"];
+/**
+ * Las relaciones que se leen SIN SESIÓN, declaradas una a una.
+ *
+ * Las tres primeras vienen de 0202: los textos legales de `/terms` y
+ * `/privacy`, y las preguntas frecuentes de `/faq`.
+ *
+ * Las dos últimas las añade COMMERCIAL-UX-01D0: el catálogo comercial de
+ * `/planes`, que lo mira quien todavía no es cliente y por tanto no tiene
+ * sesión. Son VISTAS con proyección fija —sin notas internas, sin borradores,
+ * sin revisiones retiradas, sin recursos privados— y las tablas de debajo
+ * siguen cerradas a `anon`. La vista es la frontera; la tabla no se abre.
+ *
+ * Esta lista es la declaración, y el recorrido de más abajo la comprueba
+ * intentando leer el esquema entero. Añadir una relación aquí sin querer es
+ * fácil; que el recorrido no lo note, imposible.
+ */
+const RELACIONES_PUBLICAS = [
+  "legal_documents", "v_faq_public", "v_faq_public_categories",
+  "v_public_plan_catalog", "v_public_plan_limits",
+];
 
 let passed = 0, failed = 0;
 async function check(nombre: string, fn: () => Promise<void>) {
@@ -118,7 +137,7 @@ async function main() {
       `escribibles por anon: ${filas.map((f) => f.relname).join(", ")}`);
   });
 
-  await check("Y solo LEE las tres declaradas · recorrido real del esquema", async () => {
+  await check("Y solo LEE las declaradas · recorrido real del esquema", async () => {
     // No se mira el permiso: se INTENTA leer las 420 relaciones como `anon`.
     // Es la diferencia entre creer que está cerrado y saberlo.
     await q("savepoint barrido");
@@ -151,7 +170,8 @@ async function main() {
     assert(JSON.stringify(conFilas.sort()) === JSON.stringify([...RELACIONES_PUBLICAS].sort()),
       `con filas para anon: ${conFilas.join(", ") || "ninguna"}`);
     assert(denegadas === relaciones.length - RELACIONES_PUBLICAS.length,
-      `${denegadas} denegadas de ${relaciones.length}: no cuadra con las tres declaradas`);
+      `${denegadas} denegadas de ${relaciones.length}: no cuadra con las `
+      + `${RELACIONES_PUBLICAS.length} declaradas`);
     console.log(`      (${relaciones.length} relaciones recorridas · ${denegadas} denegadas)`);
   });
 
