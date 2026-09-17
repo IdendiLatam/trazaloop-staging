@@ -27,6 +27,8 @@ import { readFileSync } from "node:fs";
 import {
   resolveRecurringLane, isRecurringLaneOpen,
 } from "../../lib/billing/recurring/policy";
+import { resolveModuleAccess } from "../../lib/modules/access";
+import { renewalCopyFor } from "../../lib/domain/billing-renewal-copy";
 
 let passed = 0, failed = 0;
 function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m); }
@@ -229,6 +231,88 @@ check("L4. Presupone la proyección de 0194 en vez de confiar en ella", () => {
   const m = leer("supabase/migrations/0204_billing_recurring_authorization.sql");
   assert(/t_project_module_access_on_period/.test(m),
     "0204 no comprueba que la proyección de módulos exista");
+});
+
+console.log("\nC · CANCELAR CONSERVA LO PAGADO, Y VENCER NO BORRA NADA");
+
+/*
+  El caso real: se canceló la renovación el 17 de septiembre con el periodo
+  pagado hasta el 16 de octubre. Lo que sigue comprueba las dos mitades de esa
+  promesa sin tocar una sola fecha de Staging.
+
+  La proyección de 0194 escribe `access_expires_at = fin del periodo pagado`, y
+  `resolveModuleAccess` decide con ella. Aquí se le dan exactamente esos datos.
+*/
+const FIN_PAGADO = "2026-10-16T22:47:38.000Z";
+const accesoEn = (cuando: string) => resolveModuleAccess({
+  isFunctional: true,
+  killSwitchActive: true,
+  assignment: { enabled: true, accessMode: "full", accessExpiresAt: FIN_PAGADO },
+  now: new Date(cuando),
+});
+
+check("C1. Cancelada y dentro del periodo pagado → Full de verdad", () => {
+  const r = accesoEn("2026-10-01T00:00:00.000Z");
+  assert(r.allowed, "no dejó trabajar con el plan pagado");
+  assert(r.accessMode === "full", `modo ${r.accessMode}`);
+  assert(!r.isExpired, "lo dio por vencido antes de tiempo");
+  assert(r.expiresAt === FIN_PAGADO, "no dice hasta cuándo llega");
+});
+
+check("C2. Un segundo antes del vencimiento sigue siendo Full", () => {
+  const r = accesoEn("2026-10-16T22:47:37.000Z");
+  assert(r.allowed, "cortó un segundo antes de tiempo");
+});
+
+check("C3. Al vencer: se acaba el derecho, NO la información", () => {
+  const r = accesoEn("2026-10-16T22:47:38.000Z");
+  assert(!r.allowed, "siguió permitiendo mutar después de la fecha pagada");
+  assert(r.retainedRead, "se perdió la consulta de lo que la empresa pagó");
+  assert(r.reason === "full_expired", `motivo ${r.reason}`);
+});
+
+check("C4. Y un mes después sigue conservando la consulta", () => {
+  const r = accesoEn("2026-11-20T00:00:00.000Z");
+  assert(!r.allowed && r.retainedRead,
+    "el tiempo acabó borrando el acceso de lectura");
+});
+
+check("C5. Nadie tuvo que apagarlo: lo gobierna la FECHA", () => {
+  // Es la propiedad que hace innecesario un proceso programado para el
+  // derecho. La misma asignación decide distinto solo porque cambió el reloj.
+  const antes = accesoEn("2026-10-16T22:47:37.000Z");
+  const despues = accesoEn("2026-10-16T22:47:39.000Z");
+  assert(antes.allowed && !despues.allowed,
+    "el vencimiento no depende solo de la fecha");
+});
+
+console.log("\nD · LA FICHA NO SE CONTRADICE DESPUÉS DE CANCELAR");
+
+check("D1. Con cobros vivos, la fecha es el siguiente cobro", () => {
+  const c = renewalCopyFor("provider", false);
+  assert(c.dateLabel === "Siguiente cobro", `etiqueta «${c.dateLabel}»`);
+  assert(c.impliesAutomaticCharge, "no reconoce que va a cobrarse");
+  assert(c.offersCancellation, "no ofrece cancelar algo que sí existe");
+});
+
+check("D2. Cancelados, la MISMA fecha pasa a ser hasta cuándo llega", () => {
+  // La fecha no cambia: cambia lo que significa. Seguir llamándola «siguiente
+  // cobro» contradiría, en la misma pantalla, el mensaje que acaba de decir
+  // que no habrá más cobros.
+  const c = renewalCopyFor("provider", true);
+  assert(c.dateLabel === "Plan activo hasta", `etiqueta «${c.dateLabel}»`);
+  assert(!c.impliesAutomaticCharge, "sigue prometiendo un cobro que no llegará");
+  assert(!c.offersCancellation, "ofrece cancelar lo ya cancelado");
+});
+
+check("D3. El carril manual no se entera de nada de esto", () => {
+  for (const detenidos of [false, true]) {
+    const c = renewalCopyFor("manual", detenidos);
+    assert(c.dateLabel === "Activo hasta", `etiqueta «${c.dateLabel}»`);
+    assert(!c.impliesAutomaticCharge, "el pago único prometió un cobro");
+    assert(/no se renueva solo/i.test(c.note ?? ""),
+      "dejó de decir que no se renueva solo");
+  }
 });
 
 console.log(`\nMP-REC-01 · carril: ${passed} en verde, ${failed} en rojo`);

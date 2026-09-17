@@ -93,7 +93,13 @@ export default async function BillingPage({
 
   // Bajar de plan puede dejar a la empresa por encima del espacio del plan
   // nuevo. Las dos cifras se traen ANTES de que nadie confirme nada.
-  const copiaRenovacion = renewalCopyFor(estado?.renewalMode ?? null);
+  // MP-REC-01C.2 · Con la recurrencia cancelada, la fecha NO es un próximo
+  // cobro: es hasta cuándo llega lo pagado. Titularla «Siguiente cobro» en la
+  // misma pantalla que confirma que no habrá más cobros es contradecirse.
+  const cobrosDetenidos = Boolean(estado?.cancelAtPeriodEnd)
+    || estado?.status === "cancel_at_period_end"
+    || estado?.status === "ended";
+  const copiaRenovacion = renewalCopyFor(estado?.renewalMode ?? null, cobrosDetenidos);
   // MP-REC-01C.1 · ¿Hay cobros programados con la pasarela? Decide DOS cosas:
   // si se ofrece cancelarlos, y si se esconde la renovación manual. Lo segundo
   // es la defensa visible contra el doble cobro; la de verdad está en el

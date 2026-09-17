@@ -60,6 +60,23 @@ const COBRO_AUTOMATICO: RenewalCopy = {
   note: null,
 };
 
+/**
+ * MP-REC-01C.2 · Cuando la recurrencia YA se canceló.
+ *
+ * El cobro se detuvo, pero el tiempo comprado sigue siendo suyo. Seguir
+ * titulando esa fecha «Siguiente cobro» sería contradecir, en la misma
+ * pantalla, el mensaje que acaba de confirmar que no habrá más cobros. Y la
+ * fecha no cambia: cambia lo que significa.
+ *
+ * Tampoco se ofrece cancelar: ya está hecho.
+ */
+const COBRO_DETENIDO: RenewalCopy = {
+  dateLabel: "Plan activo hasta",
+  impliesAutomaticCharge: false,
+  offersCancellation: false,
+  note: null,
+};
+
 const SIN_COBRO_AUTOMATICO: RenewalCopy = {
   dateLabel: "Activo hasta",
   impliesAutomaticCharge: false,
@@ -89,8 +106,14 @@ export const FORBIDDEN_AUTO_CHARGE_WORDS = [
  * `null` y cualquier valor desconocido caen del lado prudente: sin cobro
  * automático.
  */
-export function renewalCopyFor(mode: string | null | undefined): RenewalCopy {
-  return mode === "platform" || mode === "provider"
-    ? COBRO_AUTOMATICO
-    : SIN_COBRO_AUTOMATICO;
+export function renewalCopyFor(
+  mode: string | null | undefined,
+  /**
+   * ¿Los cobros ya están detenidos? Es lo que distingue «va a cobrarse» de
+   * «esto es hasta cuándo llega lo que ya pagaste».
+   */
+  chargesStopped: boolean = false
+): RenewalCopy {
+  if (mode !== "platform" && mode !== "provider") return SIN_COBRO_AUTOMATICO;
+  return chargesStopped ? COBRO_DETENIDO : COBRO_AUTOMATICO;
 }

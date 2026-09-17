@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01B12-2026-09-16-reconcile-without-browser";
+const QA_MARCADOR = "MPREC01C2-2026-09-17-post-cancel-copy";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1157,11 +1157,11 @@ async function manejar(request: Request) {
             + "last_provider_failure, last_provider_diagnostic, created_at")
       .eq("organization_id", org).order("created_at", { ascending: false });
     const pagos = await a.from("billing_payments")
-      .select("id, provider, provider_payment_id, status, amount, currency, paid_at")
+      .select("id, provider, provider_payment_id, status, total_amount, currency, paid_at")
       .eq("organization_id", org).order("created_at", { ascending: false });
     const periodos = await a.from("billing_subscription_periods")
       .select("id, subscription_id, period_sequence, period_start, period_end, "
-            + "status, base_amount, charge_currency, settled_at")
+            + "status, base_amount, charge_currency, settled_at, settled_payment_id")
       .eq("organization_id", org).order("period_sequence", { ascending: true });
     // La PROYECCIÓN de 0194: lo que de verdad abre la puerta de los módulos.
     const modulos = await a.from("organization_modules")
