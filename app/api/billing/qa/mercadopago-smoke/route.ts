@@ -63,7 +63,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C4-2026-09-17-runner-smoke";
+const QA_MARCADOR = "MPREC01C4-2026-09-17-runner-smoke-b";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1223,11 +1223,19 @@ async function manejar(request: Request) {
         "no-es-el-secreto-de-nadie-0000000000000000";
     }
     // `none` no manda cabecera ninguna.
+    //
+    // SE INVOCA EL MANEJADOR, NO LA URL. Una petición HTTP a nuestro propio
+    // origen la intercepta la protección de despliegue de Vercel y devuelve
+    // 401 antes de llegar a la función: se estaría comprobando esa puerta, no
+    // la del barrido. Importando el manejador se ejercitan sus tres candados
+    // —secreto, Producción y carril— que es lo que aquí importa.
     const origen = new URL(request.url).origin;
     try {
-      const r = await fetch(`${origen}/api/billing/recurring/run`, {
+      const { POST: correrBarrido } = await import(
+        "@/app/api/billing/recurring/run/route");
+      const r = await correrBarrido(new Request(`${origen}/api/billing/recurring/run`, {
         method: "POST", headers: cabeceras,
-        body: JSON.stringify({ limit: Number(cuerpo.limit ?? 50) }) });
+        body: JSON.stringify({ limit: Number(cuerpo.limit ?? 50) }) }));
       let j: unknown = null;
       try { j = await r.json(); } catch { j = null; }
       log_seguro("barrido_recurrente", { modo, http: r.status });
