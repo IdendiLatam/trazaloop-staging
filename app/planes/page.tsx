@@ -89,6 +89,9 @@ export default async function PlanesPage() {
     // facturación. Si el carril que cobra Extra no puede cobrar, no se promete
     // desde aquí tampoco: sería el mismo defecto con más público.
     upgradeTransactional: resolveUpgradeAvailability().transactional,
+    // De qué plan es la prueba, según la política. Así «Empezar la prueba»
+    // solo puede salir en la tarjeta del plan que la prueba concede de verdad.
+    trialPlanCode: catalogo?.trial?.effectivePlanCode ?? null,
   };
   const principal = resolvePrimaryCta(visitante, capacidades);
   const prueba = catalogo?.trial ?? null;

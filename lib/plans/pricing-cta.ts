@@ -83,6 +83,16 @@ export type PricingCapabilities = {
   registrationOpen: boolean;
   /** ¿Puede completarse una mejora con cobro? Sale de `resolveUpgradeAvailability`. */
   upgradeTransactional: boolean;
+  /**
+   * De qué plan es la prueba, según `commercial_trial_policy`. `null` si no hay
+   * prueba que ofrecer.
+   *
+   * Existe para que «Empezar la prueba» solo pueda aparecer en la tarjeta del
+   * plan que la prueba concede DE VERDAD. Sin este dato, ese texto en cualquier
+   * otra tarjeta promete una prueba que no existe — y es exactamente lo que
+   * pasaba en la tarjeta de Extra.
+   */
+  trialPlanCode: string | null;
 };
 
 /** El canal real cuando no hay autoservicio. Es el que ya usa la portada. */
@@ -99,9 +109,50 @@ export function resolvePlanCta(
   visitor: VisitorState,
   caps: PricingCapabilities
 ): PlanCta {
+  const enOrganizacion = visitor.kind === "organization";
+  const contratado = enOrganizacion ? visitor.contractedPlanCode : null;
+
+  // ── EXTRA, ANTES QUE NADA Y PARA TODO EL MUNDO ────────────────────────────
+  //
+  // Va primero a propósito. La primera versión de esta función resolvía por
+  // estado del visitante, y a un anónimo le ofrecía «Empezar la prueba» en las
+  // tres tarjetas. En la de Extra eso prometía una prueba de Extra, y la única
+  // prueba que existe es de Full: nadie la habría visto fallar hasta que
+  // alguien se registrara esperando probar Extra.
+  //
+  // Mientras el carril que cobra la mejora no pueda cobrarla, Extra NO tiene
+  // acción transaccional en ningún estado. Se ofrece hablar, que es lo único
+  // que de verdad se puede cumplir.
+  if (planCode === "extra") {
+    if (contratado === "extra") {
+      return { label: null, href: null, tone: "quiet",
+               suppressedReason: "ALREADY_ON_PLAN", note: "Tu plan actual." };
+    }
+    if (!caps.upgradeTransactional) {
+      return {
+        label: "Hablemos de Extra", href: CONTACT_HREF, tone: "quiet",
+        suppressedReason: "UPGRADE_NOT_TRANSACTIONAL",
+        note: "El paso a Extra lo hacemos contigo.",
+      };
+    }
+    // El día que el carril pueda cobrar: cada quien por donde le toca, y sin
+    // prometerle una prueba a nadie.
+    if (visitor.kind === "anonymous") {
+      return caps.registrationOpen
+        ? { label: "Crear cuenta", href: "/register", tone: "quiet" }
+        : { label: "Solicitar acceso", href: CONTACT_HREF, tone: "quiet",
+            suppressedReason: "REGISTRATION_CLOSED" };
+    }
+    if (visitor.kind === "authenticated_no_org") {
+      return { label: "Crear mi empresa", href: "/select-org", tone: "quiet" };
+    }
+    return { label: "Pasar a Extra", href: "/settings/billing", tone: "primary" };
+  }
+
   // ── sin cuenta ────────────────────────────────────────────────────────────
-  // Todo el mundo empieza igual: creando una cuenta. No se le promete a nadie
-  // que va a contratar Extra desde aquí, porque desde aquí no se contrata nada.
+  // Todo el mundo empieza igual: creando una cuenta. Y «Empezar la prueba»
+  // SOLO en la tarjeta del plan que la prueba concede, que lo dice la política
+  // y no este fichero.
   if (visitor.kind === "anonymous") {
     if (!caps.registrationOpen) {
       return {
@@ -110,10 +161,10 @@ export function resolvePlanCta(
         note: "Ahora mismo damos acceso por invitación.",
       };
     }
-    return planCode === "free"
-      ? { label: "Crear cuenta", href: "/register", tone: "quiet" }
-      : { label: "Empezar la prueba", href: "/register", tone: "primary",
-          note: "Se crea la cuenta y la prueba empieza sola." };
+    return caps.trialPlanCode !== null && planCode === caps.trialPlanCode
+      ? { label: "Empezar la prueba", href: "/register", tone: "primary",
+          note: "Se crea la cuenta y la prueba empieza sola." }
+      : { label: "Crear cuenta", href: "/register", tone: "quiet" };
   }
 
   // ── con cuenta, sin empresa ───────────────────────────────────────────────
@@ -126,20 +177,6 @@ export function resolvePlanCta(
 
   // ── con empresa ───────────────────────────────────────────────────────────
   const enPrueba = visitor.grantKind === "trial";
-  const contratado = visitor.contractedPlanCode;
-
-  // Extra: comercialmente se presenta, pero hoy no se contrata desde ningún
-  // sitio. Se ofrece hablar, que es lo único que de verdad se puede cumplir.
-  if (planCode === "extra" && contratado !== "extra") {
-    if (!caps.upgradeTransactional) {
-      return {
-        label: "Hablemos de Extra", href: CONTACT_HREF, tone: "quiet",
-        suppressedReason: "UPGRADE_NOT_TRANSACTIONAL",
-        note: "El paso a Extra lo hacemos contigo.",
-      };
-    }
-    return { label: "Pasar a Extra", href: "/settings/billing", tone: "primary" };
-  }
 
   // Lo que ya se tiene contratado no se vuelve a ofrecer.
   if (contratado === planCode && !enPrueba) {
@@ -155,14 +192,10 @@ export function resolvePlanCta(
 
   // Free cuando ya se paga algo: bajar de plan es una decisión de la ficha, con
   // sus fechas y sus consecuencias delante. No se despacha con un botón.
-  if (planCode === "free" && visitor.hasSubscription) {
-    return { label: null, href: null, tone: "quiet",
-             suppressedReason: "ALREADY_ON_PLAN" };
-  }
-
   if (planCode === "free") {
     return { label: null, href: null, tone: "quiet",
-             suppressedReason: "ALREADY_ON_PLAN", note: "Tu plan actual." };
+             suppressedReason: "ALREADY_ON_PLAN",
+             note: visitor.hasSubscription ? undefined : "Tu plan actual." };
   }
 
   // Full. Quien está en la prueba tiene prisa y merece el camino corto.

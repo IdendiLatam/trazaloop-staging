@@ -45,8 +45,11 @@ const TABLA = "components/domain/commercial/plan-comparison.tsx";
 const RUTAS_REALES = ["/register", "/login", "/select-org", "/settings/billing",
                       "/modules", "/faq", "/planes", "/", CONTACT_HREF];
 
-const TODO: PricingCapabilities = { registrationOpen: true, upgradeTransactional: true };
-const SIN_MEJORA: PricingCapabilities = { registrationOpen: true, upgradeTransactional: false };
+/** La prueba es de Full, como dice la política. NINGÚN otro plan la tiene. */
+const TODO: PricingCapabilities = {
+  registrationOpen: true, upgradeTransactional: true, trialPlanCode: "full" };
+const SIN_MEJORA: PricingCapabilities = {
+  registrationOpen: true, upgradeTransactional: false, trialPlanCode: "full" };
 
 const anonimo: VisitorState = { kind: "anonymous" };
 const sinEmpresa: VisitorState = { kind: "authenticated_no_org" };
@@ -58,7 +61,9 @@ const empresa = (o: Partial<Extract<VisitorState, { kind: "organization" }>> = {
 console.log("\n1 · LA MATRIZ DE CTAs · SIETE SITUACIONES");
 
 check("1A. Sin cuenta: se empieza creando cuenta, nunca contratando", () => {
-  for (const plan of ["free", "full", "extra"]) {
+  // Extra queda fuera: con el carril sin cobrar, su camino es hablar, no
+  // registrarse. Lo comprueba entero la sección 2.
+  for (const plan of ["free", "full"]) {
     const c = resolvePlanCta(plan, anonimo, SIN_MEJORA);
     assert(c.href === "/register", `${plan} lleva a ${c.href}`);
   }
@@ -78,6 +83,15 @@ check("1C. Con cuenta y sin empresa: el paso que falta, y solo ese", () => {
     const c = resolvePlanCta(plan, sinEmpresa, TODO);
     assert(c.href === "/select-org", `${plan} lleva a ${c.href}`);
   }
+});
+
+check("1B.2. Con el registro cerrado, Extra tampoco manda a registrarse", () => {
+  const cerrado = { ...SIN_MEJORA, registrationOpen: false };
+  for (const v of [anonimo, { ...TODO, registrationOpen: false }] as const) {
+    void v;
+  }
+  const c = resolvePlanCta("extra", anonimo, cerrado);
+  assert(c.href === CONTACT_HREF, `Extra lleva a ${c.href}`);
 });
 
 check("1D. En Free: no se ofrece Free otra vez", () => {
@@ -129,30 +143,112 @@ check("1H. En Extra: Extra no se vuelve a ofrecer", () => {
 
 console.log("\n2 · EL CTA DE EXTRA · EL QUE NO PUEDE MENTIR");
 
-check("2A. Sin carril que cobre la mejora, NO se promete un upgrade", () => {
-  const v = empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
-                      grantKind: "sold", hasSubscription: true });
-  const c = resolvePlanCta("extra", v, SIN_MEJORA);
-  assert(c.href === CONTACT_HREF,
-    `se ofrece un upgrade que no puede completarse: ${c.href}`);
-  assert(c.suppressedReason === "UPGRADE_NOT_TRANSACTIONAL", "no consta el motivo");
-  assert(!/pasar a extra|contratar extra|subir a extra/i.test(c.label ?? ""),
-    `el texto promete una transacción: «${c.label}»`);
+/** Los siete estados, para recorrer Extra por todos ellos. */
+const ESTADOS: readonly (readonly [string, VisitorState])[] = [
+  ["anónimo", anonimo],
+  ["con cuenta sin empresa", sinEmpresa],
+  ["Free", empresa()],
+  ["en prueba de Full", empresa({ effectivePlanCode: "full", grantKind: "trial" })],
+  ["Full activo", empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
+                            grantKind: "sold", hasSubscription: true })],
+  ["Full con cancelación", empresa({ contractedPlanCode: "full",
+                                     effectivePlanCode: "full", grantKind: "sold",
+                                     hasSubscription: true, cancelAtPeriodEnd: true })],
+  ["Extra", empresa({ contractedPlanCode: "extra", effectivePlanCode: "extra",
+                      grantKind: "sold", hasSubscription: true })],
+];
+
+check("2A. EXTRA NO SUGIERE UNA PRUEBA QUE NO EXISTE · en ningún estado", () => {
+  // EL DEFECTO QUE ESTA COMPROBACIÓN CIERRA.
+  //
+  // La primera versión resolvía por estado del visitante, y a un anónimo le
+  // ofrecía «Empezar la prueba» en las TRES tarjetas. En la de Extra eso
+  // prometía una prueba de Extra — y la única prueba que existe es de Full, 48
+  // horas. Nadie lo habría visto fallar hasta que alguien se registrara
+  // esperando probar Extra y se encontrara con otra cosa.
+  for (const [nombre, v] of ESTADOS) {
+    for (const caps of [SIN_MEJORA, TODO, { ...SIN_MEJORA, registrationOpen: false }]) {
+      const c = resolvePlanCta("extra", v, caps);
+      const texto = `${c.label ?? ""} ${c.note ?? ""}`.toLowerCase();
+      assert(!/prueba|trial|48|gratis|probar/.test(texto),
+        `Extra le sugiere una prueba a «${nombre}»: «${c.label}» / «${c.note}»`);
+    }
+  }
 });
 
-check("2B. Y el día que el carril pueda cobrar, se ofrece solo", () => {
+check("2B. Sin carril que cobre la mejora, Extra lleva a hablar · siempre", () => {
+  for (const [nombre, v] of ESTADOS) {
+    const c = resolvePlanCta("extra", v, SIN_MEJORA);
+    const yaLoTiene = v.kind === "organization" && v.contractedPlanCode === "extra";
+    if (yaLoTiene) {
+      assert(c.label === null && c.suppressedReason === "ALREADY_ON_PLAN",
+        `a quien ya tiene Extra se le ofrece «${c.label}»`);
+      continue;
+    }
+    assert(c.label === "Hablemos de Extra",
+      `«${nombre}» ve «${c.label}» en Extra`);
+    assert(c.href === CONTACT_HREF, `«${nombre}» va a ${c.href}`);
+    assert(c.suppressedReason === "UPGRADE_NOT_TRANSACTIONAL",
+      `«${nombre}» no deja constancia del motivo`);
+  }
+});
+
+check("2C. Y NUNCA una acción transaccional de Extra", () => {
+  for (const [nombre, v] of ESTADOS) {
+    const c = resolvePlanCta("extra", v, SIN_MEJORA);
+    assert(c.href !== "/settings/billing",
+      `«${nombre}» va al checkout por Extra, que hoy no puede cobrarse`);
+    assert(!/pasar a extra|contratar extra|subir a extra|comprar/i.test(c.label ?? ""),
+      `«${nombre}» ve una promesa transaccional: «${c.label}»`);
+  }
+});
+
+check("2D. El día que el carril pueda cobrar, se ofrece solo · y por su camino", () => {
   // La decisión se pregunta por CAPACIDAD. Cuando cambie, esto cambia con ella
-  // sin que nadie tenga que acordarse de volver aquí.
-  const v = empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
-                      grantKind: "sold", hasSubscription: true });
-  const c = resolvePlanCta("extra", v, TODO);
-  assert(c.href === "/settings/billing", `lleva a ${c.href}`);
+  // sin que nadie tenga que acordarse de volver aquí — y aun entonces, a un
+  // anónimo se le ofrece crear cuenta, no una prueba de Extra.
+  const conEmpresa = empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
+                               grantKind: "sold", hasSubscription: true });
+  assert(resolvePlanCta("extra", conEmpresa, TODO).href === "/settings/billing",
+    "con carril disponible, Extra sigue sin ofrecerse desde la ficha");
+  const anon = resolvePlanCta("extra", anonimo, TODO);
+  assert(anon.label === "Crear cuenta" && anon.href === "/register",
+    `a un anónimo se le ofrece «${anon.label}» en Extra`);
 });
 
-check("2C. La página consulta la MISMA autoridad que la ficha", () => {
+check("2E. «Empezar la prueba» SOLO en la tarjeta del plan que la prueba concede", () => {
+  // Y quién es ese plan lo dice la política, no este fichero. Si mañana la
+  // prueba fuera de otro plan, el texto se mudaría solo.
+  for (const plan of ["free", "full", "extra"]) {
+    const c = resolvePlanCta(plan, anonimo, SIN_MEJORA);
+    const ofrecePrueba = /empezar la prueba/i.test(c.label ?? "");
+    assert(ofrecePrueba === (plan === SIN_MEJORA.trialPlanCode),
+      `«${c.label}» en ${plan} con la prueba siendo de ${SIN_MEJORA.trialPlanCode}`);
+  }
+  // Con la prueba en otro plan, el texto se muda con ella.
+  const comoSiFueraDeFree = { ...SIN_MEJORA, trialPlanCode: "free" };
+  assert(/empezar la prueba/i.test(
+    resolvePlanCta("free", anonimo, comoSiFueraDeFree).label ?? ""),
+    "el texto de la prueba no sigue a la política");
+  assert(!/empezar la prueba/i.test(
+    resolvePlanCta("full", anonimo, comoSiFueraDeFree).label ?? ""),
+    "el texto de la prueba se quedó pegado a Full");
+});
+
+check("2F. Y sin prueba declarada, no se ofrece ninguna", () => {
+  const sinPrueba = { ...SIN_MEJORA, trialPlanCode: null };
+  for (const plan of ["free", "full", "extra"]) {
+    assert(!/prueba/i.test(resolvePlanCta(plan, anonimo, sinPrueba).label ?? ""),
+      `se ofrece una prueba que la política no declara, en ${plan}`);
+  }
+});
+
+check("2G. La página consulta la MISMA autoridad que la ficha", () => {
   const p = leer(PAGINA);
   assert(/resolveUpgradeAvailability\(\)\.transactional/.test(p),
     "la página decide por su cuenta si Extra se puede contratar");
+  assert(/trialPlanCode: catalogo\?\.trial\?\.effectivePlanCode/.test(p),
+    "el plan de la prueba no sale del catálogo");
 });
 
 console.log("\n3 · NINGÚN BOTÓN COBRA, Y NINGUNO INVENTA UNA RUTA");
@@ -292,6 +388,23 @@ check("6A. Se presenta aparte y se dice de qué plan es", () => {
   assert(/no un plan aparte/.test(p),
     "no se aclara que la prueba es una concesión, no un plan");
   assert(/trialTagline/.test(p), "el titular de la prueba no sale del catálogo");
+});
+
+check("6A.2. El botón del hero nunca queda huérfano del plan al que se refiere", () => {
+  // «Empezar la prueba» en un botón suelto no dice de qué plan es. En el hero
+  // va inmediatamente debajo del distintivo que compone `trialTagline`, que
+  // dice «Prueba Full 48 horas · sin tarjeta de crédito» con el nombre del plan
+  // y la duración sacados de la autoridad.
+  //
+  // Esta comprobación fija esa vecindad: si alguien quita el distintivo, el
+  // botón se queda prometiendo «una prueba» sin decir de qué.
+  const p = leer(PAGINA).replace(/\s+/g, " ");
+  const i = p.indexOf("titularPrueba !== null");
+  const j = p.indexOf("principal.href !== null");
+  assert(i > 0 && j > i,
+    "el distintivo de la prueba ya no precede al botón principal del hero");
+  assert(j - i < 700,
+    "el distintivo y el botón se separaron: el botón promete una prueba sin decir de cuál");
 });
 
 check("6B. Y sus créditos no se confunden con los del plan contratado", () => {
