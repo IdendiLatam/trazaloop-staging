@@ -247,6 +247,23 @@ export async function openRecurringCheckout(input: {
     p_observed_collector_id: creada.value.collectorId === null
       ? null : String(creada.value.collectorId),
   });
+  // Y SE ATA TAMBIÉN EL INTENTO, con la primitiva de 0171.
+  //
+  // No es redundante: `billing_reconcile_provider_cycle` resuelve la
+  // suscripción DESDE EL INTENTO, por su `provider_subscription_id`. Sin esta
+  // llamada el primer cobro real devolvió `subscription_unknown` — el dinero
+  // estaba, la suscripción estaba, y no había puente entre los dos.
+  await admin.rpc("billing_attach_provider_subscription", {
+    p_intent_id: intentId,
+    p_provider_subscription_id: creada.value.providerSubscriptionId,
+    p_init_point: creada.value.initPoint,
+    p_provider_status: creada.value.providerStatus,
+    p_status: "provider_created",
+    p_synced_amount: creada.value.amount,
+    p_provider_version: creada.value.version,
+    p_next_payment_date: creada.value.nextPaymentDate,
+  });
+
   if (atada.error) {
     // El recurso del proveedor EXISTE y no se pudo atar. No se esconde: la
     // autorización se queda con su hueco `pending:…`, que es la señal de
@@ -390,6 +407,21 @@ export async function reconcileRecurringAuthorization(
              canonicalStatus: null, authorized: false, settledNow: 0,
              alreadyReconciled: 0, rejected: [], alreadySeen: 0, outcomes: [] };
   }
+
+  // EL PUENTE, RESTAURADO SI FALTA.
+  //
+  // La conciliación es el camino que repara la verdad, así que también repara
+  // esto: si el intento no lleva el objeto del proveedor —porque el atado
+  // falló, o porque la contratación es anterior a que se atara— se ata ahora,
+  // con la MISMA primitiva gobernada y con el identificador que acaba de decir
+  // el proveedor. Es idempotente: volver a atar el mismo objeto no hace nada.
+  await admin.rpc("billing_attach_provider_subscription", {
+    p_intent_id: i.id,
+    p_provider_subscription_id: fila.provider_subscription_id,
+    p_init_point: null,
+    p_provider_status: cabeza.value.providerStatus,
+    p_status: "provider_created",
+  });
 
   const { data: vistos } = await admin.from("billing_provider_cycles")
     .select("provider_invoice_id").eq("provider_subscription_id",
