@@ -328,11 +328,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0204_billing_recurring_authorization.sql",
     "0205_billing_recurring_open_and_attach.sql",
     "0206_recurring_attempt_truth.sql",
+    "0207_recurring_period_anchor.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0206_recurring_attempt_truth.sql",
+  assert(cabecera === "0207_recurring_period_anchor.sql",
     `la cabecera es ${cabecera}`);
 });
 

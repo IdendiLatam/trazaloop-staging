@@ -487,6 +487,14 @@ export async function reconcileRecurringAuthorization(
       if (error) return { outcome: `rpc_error:${error.message}` };
       return (r ?? { outcome: "unknown" }) as { outcome: string };
     },
+    // El ancla de periodos: el PRIMER cobro reconocido. La primitiva se niega
+    // sola si ya hay ancla o ya hay periodos, así que llamarla es seguro.
+    setAnchor: async (anchorAt) => {
+      await admin.rpc("billing_set_recurring_anchor", {
+        p_subscription_id: fila.subscription_id,
+        p_anchor_at: anchorAt,
+      });
+    },
     recordObservation: async (o) => {
       await admin.rpc("billing_observe_recurring_authorization", {
         p_authorization_id: authorizationId,

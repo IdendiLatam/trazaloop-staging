@@ -104,6 +104,12 @@ export type RecurringReconcileDeps = {
     observedCollectorId: number | null;
     reconciledAt: string;
   }): Promise<void>;
+  /**
+   * Fija el ancla de periodos en el primer cobro reconocido. Opcional: las
+   * pruebas deterministas no la necesitan, y una recurrencia ya anclada
+   * tampoco —la primitiva se niega sola—.
+   */
+  setAnchor?(anchorAt: string): Promise<void>;
   /** El reloj, inyectado para que las pruebas no dependan de la hora. */
   now(): Date;
 };
@@ -211,6 +217,14 @@ export async function reconcileRecurringSubscription(
   let alreadyReconciled = 0;
   const outcomes: string[] = [];
   const rejected = [...veredicto.rejected];
+
+  // EL ANCLA, ANTES DEL PRIMER CICLO. Es el primer cobro reconocido, no la
+  // fecha en que se creó la preapproval: entre una y otra puede haber días,
+  // y anclar en la creación dejaría ciclos fantasma que nadie pagó.
+  const primeraFecha = veredicto.settle
+    .map((s) => porFecha.get(s.providerPaymentId) ?? "")
+    .filter((f) => f !== "").sort()[0];
+  if (primeraFecha && deps.setAnchor) await deps.setAnchor(primeraFecha);
 
   for (const s of veredicto.settle) {
     const cycleAt = porFecha.get(s.providerPaymentId) ?? "";
