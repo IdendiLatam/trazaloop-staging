@@ -283,6 +283,111 @@ await check("4B. La fecha de autorización se sella UNA vez", async () => {
     "volver a mirar movió la fecha en que el comprador autorizó");
 });
 
+console.log("\n6 · UN CICLO PAGADO PROMUEVE · MP-REC-01C");
+
+await check("6A. Autorizar NO promueve: sigue pendiente", async () => {
+  const [sub] = await q(
+    `select id, status from billing_subscriptions
+      where organization_id = $1 and renewal_mode = 'provider'
+      order by created_at limit 1`, [orgId]);
+  assert(sub.status === "pending", `la suscripción ya estaba «${sub.status}»`);
+});
+
+await check("6B. Un periodo SALDADO la pone activa, en la misma transacción", async () => {
+  const [sub] = await q(
+    `select id from billing_subscriptions
+      where organization_id = $1 and renewal_mode = 'provider'
+      order by created_at limit 1`, [orgId]);
+  // Se crea el periodo ya saldado: es lo que hace la liquidación canónica.
+  await q(
+    `insert into billing_subscription_periods
+       (subscription_id, organization_id, period_sequence, period_start,
+        period_end, base_amount, charge_currency, status, settled_at)
+     values ($1, $2, 1, now(), now() + interval '1 month', 160000, 'COP',
+             'settled', now())`, [sub.id, orgId]);
+  const [despues] = await q(
+    `select status from billing_subscriptions where id = $1`, [sub.id]);
+  assert(despues.status === "active", `quedó «${despues.status}»`);
+});
+
+/* Una empresa APARTE para los dos casos negativos: la principal ya tiene su
+   suscripción viva, y `billing_subscriptions_one_live` —con razón— no admite
+   una segunda. Meter el fixture ahí probaría el índice, no el disparador. */
+const [orgB] = await q(
+  `insert into organizations (name, country, contact_email, created_by)
+   values ($1, 'CO', $2, $3) returning id`,
+  [`MPREC01C-B-${sello}`, correo, usuario]);
+const orgIdB = orgB.id as string;
+
+await check("6C. Un periodo ABIERTO no promueve a nadie", async () => {
+  // Solo `settled`. Un periodo abierto es una obligación, no un cobro.
+  const [otra] = await q(
+    `insert into billing_subscriptions
+       (organization_id, provider, plan_code, plan_revision_id, billing_interval,
+        catalog_amount_minor, catalog_currency, base_charge_amount, charge_currency,
+        status, renewal_mode)
+     select $1, 'mercadopago', plan_code, plan_revision_id, billing_interval,
+            catalog_amount_minor, catalog_currency, base_amount, charge_currency,
+            'ended', 'provider'
+       from billing_quotes where organization_id <> $1 order by created_at desc limit 1
+     returning id`, [orgIdB]);
+  await q(`update billing_subscriptions set status = 'pending' where id = $1`, [otra.id]);
+  await q(
+    `insert into billing_subscription_periods
+       (subscription_id, organization_id, period_sequence, period_start,
+        period_end, base_amount, charge_currency, status)
+     values ($1, $2, 1, now(), now() + interval '1 month', 160000, 'COP', 'open')`,
+    [otra.id, orgIdB]);
+  const [d] = await q(`select status from billing_subscriptions where id = $1`, [otra.id]);
+  assert(d.status === "pending", `un periodo abierto promovió a «${d.status}»`);
+  await q(`delete from billing_subscription_periods where subscription_id = $1`, [otra.id]);
+  await q(`delete from billing_subscriptions where id = $1`, [otra.id]);
+});
+
+await check("6D. El carril MANUAL no lo toca el disparador", async () => {
+  const [man] = await q(
+    `insert into billing_subscriptions
+       (organization_id, provider, plan_code, plan_revision_id, billing_interval,
+        catalog_amount_minor, catalog_currency, base_charge_amount, charge_currency,
+        status, renewal_mode)
+     select $1, 'mercadopago', plan_code, plan_revision_id, billing_interval,
+            catalog_amount_minor, catalog_currency, base_amount, charge_currency,
+            'ended', 'manual'
+       from billing_quotes where organization_id <> $1 order by created_at desc limit 1
+     returning id`, [orgIdB]);
+  await q(`update billing_subscriptions set status = 'pending' where id = $1`, [man.id]);
+  await q(
+    `insert into billing_subscription_periods
+       (subscription_id, organization_id, period_sequence, period_start,
+        period_end, base_amount, charge_currency, status, settled_at)
+     values ($1, $2, 1, now(), now() + interval '1 month', 160000, 'COP',
+             'settled', now())`, [man.id, orgIdB]);
+  const [d] = await q(`select status from billing_subscriptions where id = $1`, [man.id]);
+  assert(d.status === "pending",
+    `el disparador promovió una suscripción manual a «${d.status}»`);
+  await q(`delete from billing_subscription_periods where subscription_id = $1`, [man.id]);
+  await q(`delete from billing_subscriptions where id = $1`, [man.id]);
+});
+
+await check("6E. Una cancelada al borde no vuelve a activa por cobrar", async () => {
+  // Cancelar es una decisión del cliente; el último ciclo cobrado no la revoca.
+  const [sub] = await q(
+    `select id from billing_subscriptions
+      where organization_id = $1 and renewal_mode = 'provider' and status = 'active'
+      limit 1`, [orgId]);
+  await q(`update billing_subscriptions set status = 'cancel_at_period_end' where id = $1`,
+          [sub.id]);
+  await q(
+    `insert into billing_subscription_periods
+       (subscription_id, organization_id, period_sequence, period_start,
+        period_end, base_amount, charge_currency, status, settled_at)
+     values ($1, $2, 2, now() + interval '1 month', now() + interval '2 months',
+             160000, 'COP', 'settled', now())`, [sub.id, orgId]);
+  const [d] = await q(`select status from billing_subscriptions where id = $1`, [sub.id]);
+  assert(d.status === "cancel_at_period_end",
+    `un cobro revirtió la cancelación: «${d.status}»`);
+});
+
 console.log("\n5 · EL CARRIL MANUAL NO SE ENTERA");
 
 await check("5A. Ninguna suscripción manual cambió de modo", async () => {
@@ -310,6 +415,7 @@ await check("5B. No se abrió ningún cobro único por el camino recurrente", as
   // sobrevive se recoge con el barrido de higiene.
   await q(`select set_config('request.jwt.claims', null, false)`);
   for (const sql of [
+    `delete from billing_subscription_periods where organization_id = $1`,
     `delete from billing_recurring_authorizations where organization_id = $1`,
     `delete from billing_checkout_intents where organization_id = $1`,
     `update billing_quotes set subscription_id = null where organization_id = $1`,
@@ -321,6 +427,11 @@ await check("5B. No se abrió ningún cobro único por el camino recurrente", as
     try { await q(sql, [orgId]); }
     catch (e) { console.log(`  · limpieza parcial: ${e instanceof Error ? e.message : e}`); }
   }
+  for (const sql of [
+    `delete from billing_subscription_periods where organization_id = $1`,
+    `delete from billing_subscriptions where organization_id = $1`,
+    `delete from organizations where id = $1`,
+  ]) { try { await q(sql, [orgIdB]); } catch { /* fixture superviviente */ } }
   try { await q(`delete from auth.users where id = $1`, [usuario]); }
   catch { /* el perfil queda referenciado: inocuo en una base local */ }
 
