@@ -77,7 +77,13 @@ export type RecurringRefusal =
   /** Solo en producción: el cobro no viene de credenciales productivas. */
   | "LIVE_MODE_REQUIRED"
   /** El proveedor no declaró el entorno del cobro. Sin dato no se procesa. */
-  | "LIVE_MODE_UNDECLARED";
+  | "LIVE_MODE_UNDECLARED"
+  /**
+   * El proveedor no dijo quién cobró. Con `live_mode` fuera de juego en
+   * pruebas, el cobrador es la guarda que sostiene la frontera: sin él no hay
+   * con qué comprobar que el dinero cayó donde debía.
+   */
+  | "PAYMENT_COLLECTOR_UNDECLARED";
 
 /** Un cobro que se reconoce, con la evidencia que se persiste. */
 export type RecurringSettlement = {
@@ -163,26 +169,51 @@ export function decideRecurringSettlements(
       rechazo("PAYMENT_NOT_APPROVED", p.canonicalStatus ?? "(sin traducir)");
       continue;
     }
-    // Sin entorno declarado no se procesa. Es la misma regla que el webhook y
-    // que la primitiva de la base: procesar un cobro de origen desconocido es
-    // la única respuesta que no se puede comprobar.
+    // --- LA MATRIZ DE ENTORNO · MP-REC-01B.13 ------------------------------
+    //
+    // En PRODUCCIÓN `live_mode` es obligatorio y sigue siéndolo: un cobro que
+    // no venga de credenciales productivas no se reconoce, y sin el dato
+    // tampoco, porque «no lo sé» no puede valer por «sí».
+    //
+    // En PRUEBAS deja de ser autoridad. El motivo es del proveedor y está
+    // documentado en MP-ENV-01: una aplicación creada como VENDEDOR DE PRUEBA
+    // emite credenciales bajo el epígrafe «producción», y sus pagos de sandbox
+    // llegan con `live_mode = true`. Rechazarlos por esa etiqueta es rechazar
+    // el entorno que existe para probar — y eso bloqueó un cobro real de
+    // 190 400 COP perfectamente legítimo.
+    //
+    // Lo que sostiene la frontera en su lugar es la IDENTIDAD: el entorno
+    // declarado, que no viene del navegador, y el COBRADOR esperado, que se
+    // exige justo debajo y ahora es obligatorio también en pruebas. Es la misma
+    // decisión que el repositorio ya tomó al dejar de clasificar por el
+    // prefijo del token.
+    // El DATO tiene que venir en los dos entornos. Lo que cambia es si DECIDE.
+    // Sin él no se procesa —«no lo sé» no puede valer por «sí»— y además la
+    // capa de base lo exige igual: dejarlo pasar aquí solo movería el rechazo
+    // una función más adentro, con la transacción ya abierta.
     if (p.liveMode === null || p.liveMode === undefined) {
       rechazo("LIVE_MODE_UNDECLARED");
       continue;
     }
+    // Y en producción, además, tiene que ser `true`.
     if (expectation.configuredEnvironment === "live" && !p.liveMode) {
       rechazo("LIVE_MODE_REQUIRED");
       continue;
     }
-    // Y al revés: en pruebas, un cobro REAL no se reconoce. Un cargo productivo
-    // que entrara por el carril de pruebas daría plan sin que el dinero haya
-    // pasado por la contabilidad que corresponde.
-    if (expectation.configuredEnvironment === "test" && p.liveMode) {
-      rechazo("AUTHORIZATION_ENVIRONMENT_MISMATCH", "live_mode=true en entorno test");
+
+    // EL COBRADOR ES AHORA LA GUARDA QUE CARGA EL PESO, así que se exige y no
+    // se salta cuando falta. Antes un cobro sin cobrador declarado pasaba de
+    // largo; con `live_mode` fuera de juego en pruebas, eso dejaría la frontera
+    // sin nadie vigilándola.
+    if (expectation.expectedOwnerId === null) {
+      rechazo("CREDENTIAL_OWNER_MISMATCH");
       continue;
     }
-    if (p.collectorId !== null && expectation.expectedOwnerId !== null
-        && p.collectorId !== expectation.expectedOwnerId) {
+    if (p.collectorId === null || p.collectorId === undefined) {
+      rechazo("PAYMENT_COLLECTOR_UNDECLARED");
+      continue;
+    }
+    if (p.collectorId !== expectation.expectedOwnerId) {
       rechazo("PAYMENT_COLLECTOR_MISMATCH", String(p.collectorId));
       continue;
     }
@@ -228,4 +259,6 @@ export const RECURRING_REFUSAL_MESSAGE: Record<RecurringRefusal, string> = {
     "El cobro no proviene de credenciales productivas.",
   LIVE_MODE_UNDECLARED:
     "El proveedor no declaró el entorno del cobro.",
+  PAYMENT_COLLECTOR_UNDECLARED:
+    "El proveedor no indicó qué cuenta recibió el cobro.",
 };

@@ -66,9 +66,14 @@ check("1. Existe una sola 0186 y nada anterior la pisa", () => {
     "hay más de una migración 0186");
   assert(todas.includes(ARCHIVO), `desapareció ${ARCHIVO}`);
   const posteriores = todas.filter((f) => f.slice(0, 4) > "0186");
+  // Se miran SENTENCIAS, no prosa. Una migración posterior puede explicar por
+  // qué presupone la conciliación de 0186 —y varias lo hacen— sin tocarla; lo
+  // que no puede es reescribirla. Perseguir la subcadena por los comentarios
+  // da rojos que no son, y un rojo que no es acaba desactivándose.
+  const sinComentarios = (t: string) => t.replace(/--[^\n]*/g, "");
   const pisan = posteriores.filter((f) =>
-    /billing_provider_cycles|billing_reconcile_provider_cycle|billing_provider_cycle_sequence/
-      .test(readFileSync(`supabase/migrations/${f}`, "utf8")));
+    /(create|drop|alter)[\s\S]{0,40}(billing_provider_cycles|billing_reconcile_provider_cycle|billing_provider_cycle_sequence)/i
+      .test(sinComentarios(readFileSync(`supabase/migrations/${f}`, "utf8"))));
   assert(pisan.length === 0,
     `una migración posterior toca lo que 0186 protege: ${pisan.join(", ")}`);
 });

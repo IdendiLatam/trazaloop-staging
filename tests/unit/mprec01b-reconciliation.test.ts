@@ -301,14 +301,22 @@ await check("N1. Una autorización de otro entorno bloquea todo", async () => {
   assert(r.settle.length === 0, "saldó algo de otro entorno");
 });
 
-await check("N2. Un cobro REAL no se reconoce en el carril de pruebas", async () => {
-  // Al revés que el caso de producción: un cargo productivo entrando por aquí
-  // daría plan sin que el dinero haya pasado por la contabilidad que toca.
+await check("N2. En pruebas, `live_mode=true` ya NO descalifica por sí solo", async () => {
+  // ESTA PRUEBA AFIRMABA LO CONTRARIO, y estaba equivocada.
+  //
+  // Decía que un cobro con `live_mode=true` no se reconoce en el carril de
+  // pruebas. Parecía prudente y bloqueó un cobro REAL de 190 400 COP en
+  // sandbox: Mercado Pago marca así los pagos cuando la aplicación pertenece a
+  // un vendedor de prueba, porque emite sus credenciales bajo el epígrafe
+  // «producción». Es el mismo motivo por el que este repositorio dejó de
+  // clasificar entornos por el prefijo del token.
+  //
+  // Lo que protege la frontera es el COBRADOR, y eso se comprueba en Z3 y Z4.
   const { deps: d, db } = deps({ pagos: [pago({ liveMode: true })] });
   const r = await reconcileRecurringSubscription(BASE, d);
-  assert(r.settledNow === 0 && db.periodos.length === 0, "reconoció un cobro real en pruebas");
-  assert(r.rejected[0]?.reason === "AUTHORIZATION_ENVIRONMENT_MISMATCH",
-    `motivo inesperado: ${r.rejected[0]?.reason}`);
+  assert(r.settledNow === 1,
+    `un cobro legítimo de sandbox se rechazó: ${r.rejected[0]?.reason}`);
+  assert(db.periodos.length === 1, "no se creó el periodo");
 });
 
 await check("N3. En producción, un cobro de pruebas se rechaza", async () => {
@@ -378,6 +386,104 @@ await check("O6. Y la preapproval releída tiene que ser la nuestra", async () =
   assert(!r.ok && r.blocked === "SUBSCRIPTION_REFERENCE_MISMATCH",
     `no se rechazó por referencia: ${r.blocked}`);
   assert(db.periodos.length === 0, "saldó sobre una suscripción ajena");
+});
+
+console.log("\nZ · LA FRONTERA DE ENTORNO · MP-REC-01B.13");
+
+/*
+  La matriz que se defiende aquí salió de un cobro REAL de 190 400 COP que se
+  rechazó siendo legítimo. Mercado Pago devuelve `live_mode = true` en pagos de
+  sandbox cuando la aplicación pertenece a un vendedor de prueba, porque emite
+  sus credenciales bajo el epígrafe «producción».
+
+  Así que en PRUEBAS la etiqueta deja de decidir y el peso lo carga la
+  IDENTIDAD: entorno declarado, que no viene del navegador, y cobrador
+  esperado, que pasa a ser obligatorio. En PRODUCCIÓN no se afloja nada.
+*/
+const LIVE = { ...BASE, configuredEnvironment: "live" as const,
+               authorizationEnvironment: "live" as const };
+
+await check("Z1. TEST + cobrador esperado + live_mode=true → SE ACEPTA", async () => {
+  // El caso exacto que bloqueaba el cobro real.
+  const r = decideRecurringSettlements([pago({ liveMode: true })], BASE);
+  assert(r.settle.length === 1, `rechazado: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z2. TEST + cobrador esperado + live_mode=false → SE ACEPTA", async () => {
+  const r = decideRecurringSettlements([pago({ liveMode: false })], BASE);
+  assert(r.settle.length === 1, `rechazado: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z3. TEST + cobrador AJENO + live_mode=true → SE RECHAZA", async () => {
+  // Con la etiqueta fuera de juego, esta es la guarda que queda. Si cediera,
+  // la frontera de pruebas se quedaría sin nadie vigilándola.
+  const r = decideRecurringSettlements(
+    [pago({ liveMode: true, collectorId: OTRO_COLLECTOR })], BASE);
+  assert(r.settle.length === 0, "aceptó un cobro de otro vendedor en pruebas");
+  assert(r.rejected[0]?.reason === "PAYMENT_COLLECTOR_MISMATCH",
+    `motivo: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z4. TEST sin cobrador declarado → SE RECHAZA", async () => {
+  const r = decideRecurringSettlements([pago({ collectorId: null })], BASE);
+  assert(r.settle.length === 0, "aceptó un cobro sin cobrador");
+  assert(r.rejected[0]?.reason === "PAYMENT_COLLECTOR_UNDECLARED",
+    `motivo: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z5. LIVE + live_mode=true + cobrador esperado → SE ACEPTA", async () => {
+  const r = decideRecurringSettlements([pago({ liveMode: true })], LIVE);
+  assert(r.settle.length === 1, `rechazado: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z6. LIVE + live_mode=false → SE RECHAZA", async () => {
+  // Producción NO se afloja. Esta es la guarda que el tramo protege.
+  const r = decideRecurringSettlements([pago({ liveMode: false })], LIVE);
+  assert(r.settle.length === 0, "producción aceptó un cobro no productivo");
+  assert(r.rejected[0]?.reason === "LIVE_MODE_REQUIRED",
+    `motivo: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z7. LIVE + live_mode=true + cobrador AJENO → SE RECHAZA", async () => {
+  const r = decideRecurringSettlements(
+    [pago({ liveMode: true, collectorId: OTRO_COLLECTOR })], LIVE);
+  assert(r.settle.length === 0, "producción aceptó un cobro de otro vendedor");
+  assert(r.rejected[0]?.reason === "PAYMENT_COLLECTOR_MISMATCH",
+    `motivo: ${r.rejected[0]?.reason}`);
+});
+
+await check("Z8. Sin `live_mode` declarado → SE RECHAZA en los dos entornos", async () => {
+  // El dato tiene que venir; lo que cambia es si decide. Y la capa de base lo
+  // exige igual, así que dejarlo pasar aquí solo movería el rechazo adentro.
+  for (const exp of [BASE, LIVE]) {
+    const r = decideRecurringSettlements([pago({ liveMode: null })], exp);
+    assert(r.rejected[0]?.reason === "LIVE_MODE_UNDECLARED",
+      `${exp.configuredEnvironment}: ${r.rejected[0]?.reason}`);
+  }
+});
+
+await check("Z9. Autorización de otro entorno → bloquea antes de mirar cobros", async () => {
+  const r = decideRecurringSettlements([pago({ liveMode: true })],
+    { ...BASE, authorizationEnvironment: "live" });
+  assert(r.blocked === "AUTHORIZATION_ENVIRONMENT_MISMATCH",
+    `bloqueo: ${r.blocked}`);
+  assert(r.settle.length === 0, "saldó pese al bloqueo");
+});
+
+await check("Z10. A la base le viaja el entorno GOBERNADO, no la etiqueta", async () => {
+  // Es lo que mantiene estrictas las dos capas sin tocar 0186. En pruebas, un
+  // pago marcado como productivo se salda igualmente, pero el ciclo se guarda
+  // como `test`; y en producción solo se llega aquí con `live_mode` verdadero,
+  // así que la base recibe lo mismo que recibía.
+  const vistos: boolean[] = [];
+  const db = baseFalsa();
+  const espia = { ...deps({ pagos:[pago({ liveMode:true })], db }).deps,
+    settleCycle: async (i: Parameters<RecurringReconcileDeps["settleCycle"]>[0]) => {
+      vistos.push(i.liveMode); return db.settleCycle(i); } };
+  const r = await reconcileRecurringSubscription(BASE, espia);
+  assert(r.settledNow === 1, "no saldó el cobro de sandbox");
+  assert(vistos.length === 1 && vistos[0] === false,
+    `a la base le llegó live_mode=${vistos[0]} en entorno test`);
 });
 
 console.log("\nR · LA CORRELACIÓN NO SE ADIVINA, SE VERIFICA");

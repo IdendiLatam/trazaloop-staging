@@ -222,11 +222,29 @@ export async function reconcileRecurringSubscription(
                       reason: "PAYMENT_NOT_APPROVED", observed: "(sin fecha de ciclo)" });
       continue;
     }
+    // EL ENTORNO QUE VIAJA A LA BASE ES EL GOBERNADO, NO LA ETIQUETA DEL AVISO.
+    //
+    // `billing_reconcile_provider_cycle` usa este booleano para UNA cosa:
+    // decidir de qué entorno es el ciclo. Y la etiqueta del proveedor no sirve
+    // para eso en Mercado Pago: una aplicación de vendedor de prueba emite
+    // pagos de sandbox marcados como productivos, y pasarla tal cual hizo que
+    // un cobro real de 190 400 COP se rechazara siendo legítimo.
+    //
+    // Lo que sí es autoridad es el entorno DECLARADO, que no viene del
+    // navegador — y para cuando se llega aquí ya se comprobó además que el
+    // cobrador observado es el esperado. La etiqueta cruda no se pierde: sigue
+    // en `s.liveMode` como evidencia.
+    //
+    // Esto NO afloja la base. En producción solo se llega hasta aquí con un
+    // pago cuyo `live_mode` observado es `true`, así que la base sigue
+    // recibiendo exactamente lo que recibía. Y el camino del webhook, que
+    // llama a la misma función sin comprobar cobrador, se queda con la regla
+    // estricta de 0186 intacta.
     const r = await deps.settleCycle({
       providerSubscriptionId: expectation.providerSubscriptionId,
       providerPaymentId: s.providerPaymentId,
       cycleAt, amountMinor: s.amountMinor, currency: s.currency,
-      liveMode: s.liveMode,
+      liveMode: expectation.configuredEnvironment === "live",
     });
     outcomes.push(r.outcome);
     // EL VOCABULARIO ES EL DE LA BASE, no uno inventado aquí.
