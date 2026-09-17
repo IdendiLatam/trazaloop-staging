@@ -541,6 +541,7 @@ check("La 0101 acumulada sigue siendo ADITIVA y 0102 es el único cierre QA post
     "0208_recurring_status_promotion.sql",
     "0209_recurring_cancellation.sql",
     "0210_recurring_lifecycle_refresh.sql",
+    "0211_full_monthly_minutes_authority.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",

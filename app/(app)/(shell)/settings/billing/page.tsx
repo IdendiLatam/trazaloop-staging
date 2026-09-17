@@ -12,6 +12,7 @@ import { describeBillingState } from "@/lib/domain/billing-state";
 import { renewalCopyFor } from "@/lib/domain/billing-renewal-copy";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
+import { resolveUpgradeAvailability } from "@/lib/billing/upgrade-availability";
 import { RecurringCancelPanel }
   from "@/components/domain/billing/recurring-cancel-panel";
 import { findLiveRecurring } from "@/lib/db/recurring-checkout";
@@ -108,6 +109,10 @@ export default async function BillingPage({
     ? await findLiveRecurring(org.organizationId) : null;
   // El nombre visible de la pasarela llega como DATO desde la autoridad de
   // proveedor. Esta pantalla no sabe —ni debe saber— cuál es.
+  // COMMERCIAL-UX-01B · ¿Puede completarse una mejora con cobro en este
+  // despliegue? El carril que la cobra no es el de la contratación, y hoy
+  // pueden ser pasarelas distintas.
+  const mejora = resolveUpgradeAvailability();
   const rutaCompra = recurrenteViva !== null ? resolvePurchaseRoutingFromEnv() : null;
   const providerName = rutaCompra !== null && rutaCompra.available
     ? rutaCompra.displayName : "la pasarela";
@@ -213,8 +218,14 @@ export default async function BillingPage({
         />
       ) : null}
 
+      {/* COMMERCIAL-UX-01B · El panel TRANSACCIONAL de mejora solo aparece si el
+          carril que la cobra puede cobrarla. Antes se ofrecía siempre, y con
+          Mercado Pago —que no guarda medios de pago— el botón contestaba «no
+          disponible» al pulsarlo. Un botón muerto en una pantalla de dinero es
+          una promesa que el producto no puede cumplir. */}
       {esAdministrador && estado?.hasSubscription && estado.planCode === "full"
-        && !estado.cancelAtPeriodEnd && !estado.downgradeScheduled ? (
+        && !estado.cancelAtPeriodEnd && !estado.downgradeScheduled
+        && mejora.transactional ? (
         <section className="rounded-md border border-hairline bg-surface p-4">
           <h2 className="text-sm font-semibold">Subir a Extra</h2>
           {subidaEnCurso ? (
@@ -245,7 +256,15 @@ export default async function BillingPage({
             currentPeriodEnd={estado.currentPeriodEnd}
             cancelScheduled={estado.cancelAtPeriodEnd}
             scheduledPlanLabel={estado.downgradeScheduled ? "el plan programado" : null}
-            offersCancellation={copiaRenovacion.offersCancellation}
+            /* COMMERCIAL-UX-01B · UNA SOLA CANCELACIÓN POR ESTADO.
+               Con una recurrencia viva ya existe «Cancelar renovación
+               automática», que detiene los cobros en la pasarela. «Cancelar el
+               plan» de aquí programa la cancelación canónica y NO toca la
+               preapproval: alguien podría cancelar creyendo que deja de pagar y
+               seguir siendo cobrado el mes siguiente. Dos botones que parecen lo
+               mismo y hacen cosas distintas, en dinero, no pueden convivir. */
+            offersCancellation={recurrenteViva !== null
+              ? false : copiaRenovacion.offersCancellation}
             storageUsedBytes={espacio?.usedBytes ?? null}
             targetStorageBytes={espacio?.targetQuotaBytes ?? null}
           />
