@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing/qa/fx-fixture";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerClient } from "@/lib/supabase/server";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import { recurrenceFor } from "@/lib/billing/mercadopago/mapping";
@@ -63,7 +64,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C4R-2026-09-17-cycles-via-view";
+const QA_MARCADOR = "MPREC01C4R-2026-09-17-cycles-via-session";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -1178,9 +1179,16 @@ async function manejar(request: Request) {
     // una lista vacía — que se leyó como «no hay ciclos» cuando significaba «no
     // pude mirar». Son noticias distintas, y confundirlas ya costó un informe
     // equivocado.
-    const ciclos = await a.from("v_billing_provider_cycles")
+    // Y SE LEE CON LA SESIÓN, no con el rol de servicio.
+    //
+    // La vista lleva `where is_platform_staff()`. Una consulta con rol de
+    // servicio no tiene identidad de usuario, así que ese filtro la deja en
+    // cero SIN error: la misma trampa que la tabla, un nivel más adentro. Un
+    // cero silencioso es peor que un permiso denegado, porque parece un dato.
+    const sesion = await createServerClient();
+    const ciclos = await sesion.from("v_billing_provider_cycles")
       .select("provider_invoice_id, provider_cycle_at, period_sequence, outcome, "
-            + "environment, organization_id, subscription_id, period_id, payment_id")
+            + "environment, organization_id, subscription_id, period_id")
       .eq("organization_id", org).order("provider_cycle_at", { ascending: true });
     // MP-REC-01C.4R · FORENSE. El mismo recuento SIN filtrar por empresa y
     // buscando por el objeto del proveedor: si la fila existiera con otra
@@ -1190,7 +1198,7 @@ async function manejar(request: Request) {
       .map((x) => (x as unknown as { provider_subscription_id: string }).provider_subscription_id)
       .filter((x) => x && !x.startsWith("pending:"));
     const ciclosPorObjeto = preapprovals.length > 0
-      ? await a.from("v_billing_provider_cycles")
+      ? await sesion.from("v_billing_provider_cycles")
           .select("provider_invoice_id, environment, outcome, organization_id, period_id")
           .in("provider_subscription_id", preapprovals)
       : { data: [], error: null };
