@@ -409,6 +409,139 @@ await check("5B. No se abrió ningún cobro único por el camino recurrente", as
   assert(uno[0].n === 0, `el carril recurrente abrió ${uno[0].n} cobros únicos`);
 });
 
+console.log("\n7 · CANCELAR NO ES PERDER LO PAGADO · MP-REC-01C.1");
+
+/** Una recurrencia recién hecha, con su autorización atada. */
+const recurrenciaConPeriodo = async (finPeriodo: string) => {
+  const [org2] = await q(
+    `insert into organizations (name, country, contact_email, created_by)
+     values ($1, 'CO', $2, $3) returning id`,
+    [`MPREC01C1-${sello}-${Math.random().toString(36).slice(2, 8)}`, correo, usuario]);
+  const [sub] = await q(
+    `insert into billing_subscriptions
+       (organization_id, provider, plan_code, plan_revision_id, billing_interval,
+        catalog_amount_minor, catalog_currency, base_charge_amount, charge_currency,
+        status, renewal_mode)
+     select $1, 'mercadopago', plan_code, plan_revision_id, billing_interval,
+            catalog_amount_minor, catalog_currency, base_amount, charge_currency,
+            'pending', 'provider'
+       from billing_quotes where organization_id = $2 limit 1
+     returning id`, [org2.id, orgId]);
+  const [aut] = await q(
+    `insert into billing_recurring_authorizations
+       (subscription_id, organization_id, provider, provider_subscription_id,
+        environment, status, authorized_at)
+     -- El estado autorizado EXIGE su fecha: lo impone bra_authorized_shape de
+     -- 0204, y es correcto. Un estado que dice que alguien autorizo sin decir
+     -- cuando es media verdad. El fixture la pone, como la observacion real.
+     values ($1, $2, 'mercadopago', $3, 'test', 'authorized', now()) returning id`,
+    [sub.id, org2.id, `pre-${Math.random().toString(36).slice(2, 12)}`]);
+  if (finPeriodo !== "ninguno") {
+    await q(
+      `insert into billing_subscription_periods
+         (subscription_id, organization_id, period_sequence, period_start,
+          period_end, base_amount, charge_currency, status, settled_at)
+       values ($1, $2, 1, now() - interval '1 day', ${finPeriodo}, 160000, 'COP',
+               'settled', now())`, [sub.id, org2.id]);
+  }
+  // Nace `pending` —como en el flujo real— y la promueve su periodo saldado,
+  // por el disparador de 0208. Crearla `active` sin periodo lo impide el guard
+  // `billing_live_subscription_has_period`, y con razón.
+  return { orgId: org2.id as string, subId: sub.id as string, autId: aut.id as string };
+};
+
+await check("7A. Con tiempo pagado: cancel_at_period_end y el acceso SIGUE", async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  const [r] = await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled') as r`,
+                      [f.autId]);
+  assert(r.r.outcome === "cancelled", `outcome=${r.r.outcome}`);
+  assert(r.r.canonical_status === "cancel_at_period_end", `estado=${r.r.canonical_status}`);
+  assert(r.r.access_preserved === true, "se declaró que el acceso no se conserva");
+
+  const [sub] = await q(`select status, cancel_at_period_end, cancelled_at
+                           from billing_subscriptions where id = $1`, [f.subId]);
+  assert(sub.status === "cancel_at_period_end", `suscripción en «${sub.status}»`);
+  assert(sub.cancel_at_period_end === true, "no quedó marcada al borde del periodo");
+  // Y NADA de lo pagado se tocó.
+  const per = await q(`select status from billing_subscription_periods
+                        where subscription_id = $1`, [f.subId]);
+  assert(per.length === 1 && per[0].status === "settled",
+    "cancelar tocó el periodo pagado");
+  const [aut] = await q(`select status, cancelled_at
+                           from billing_recurring_authorizations where id = $1`, [f.autId]);
+  assert(aut.status === "cancelled" && aut.cancelled_at !== null,
+    "la autorización no quedó cancelada con su fecha");
+});
+
+await check("7B. Sin tiempo pagado vigente: ended", async () => {
+  const f = await recurrenciaConPeriodo("now() - interval '1 hour'");
+  const [r] = await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled') as r`,
+                      [f.autId]);
+  assert(r.r.canonical_status === "ended", `estado=${r.r.canonical_status}`);
+  assert(r.r.access_preserved === false, "declaró acceso conservado sin tiempo pagado");
+});
+
+await check("7C. Sin ningún periodo: ended", async () => {
+  const f = await recurrenciaConPeriodo("ninguno");
+  const [r] = await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled') as r`,
+                      [f.autId]);
+  assert(r.r.canonical_status === "ended", `estado=${r.r.canonical_status}`);
+});
+
+await check("7D. Cancelar dos veces no hace nada nuevo", async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled')`, [f.autId]);
+  const [antes] = await q(`select cancelled_at from billing_recurring_authorizations
+                             where id = $1`, [f.autId]);
+  const [r2] = await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled') as r`,
+                       [f.autId]);
+  assert(r2.r.outcome === "cancelled", "la segunda no respondió lo mismo");
+  const [despues] = await q(`select cancelled_at, status from billing_recurring_authorizations
+                               where id = $1`, [f.autId]);
+  assert(String(despues.cancelled_at) === String(antes.cancelled_at),
+    "la segunda cancelación movió la fecha de la primera");
+  const per = await q(`select id from billing_subscription_periods
+                        where subscription_id = $1`, [f.subId]);
+  assert(per.length === 1, "cancelar dos veces tocó los periodos");
+});
+
+await check("7E. Un fallo AMBIGUO no cancela ni quita acceso", async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  const [r] = await q(
+    `select public.billing_cancel_recurring($1, 'uncertain', null, 'provider_unavailable',
+       'tiempo agotado al pedir la cancelacion') as r`, [f.autId]);
+  assert(r.r.outcome === "uncertain", `outcome=${r.r.outcome}`);
+  assert(r.r.access_preserved === true, "no declaró el acceso conservado");
+  const [sub] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(sub.status === "active", `una duda movió la suscripción a «${sub.status}»`);
+  const [aut] = await q(`select status, last_provider_failure, last_provider_diagnostic
+                           from billing_recurring_authorizations where id = $1`, [f.autId]);
+  assert(aut.status === "authorized", `una duda cerró la autorización: «${aut.status}»`);
+  assert(aut.last_provider_failure === "provider_unavailable", "no anotó la causa");
+  assert(Boolean(aut.last_provider_diagnostic), "no anotó el diagnóstico");
+});
+
+await check("7F. Un rechazo definitivo tampoco quita acceso", async () => {
+  const f = await recurrenciaConPeriodo("now() + interval '20 days'");
+  const [r] = await q(
+    `select public.billing_cancel_recurring($1, 'refused', null, 'invalid_request',
+       'la pasarela no acepto la cancelacion') as r`, [f.autId]);
+  assert(r.r.outcome === "refused", `outcome=${r.r.outcome}`);
+  const [sub] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(sub.status === "active", `un rechazo movió la suscripción a «${sub.status}»`);
+  assert(r.r.access_preserved === true, "declaró que el acceso se pierde");
+});
+
+await check("7G. Una `ended` no revive al cancelar otra vez", async () => {
+  const f = await recurrenciaConPeriodo("ninguno");
+  await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled')`, [f.autId]);
+  const [sub] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(sub.status === "ended", `quedó «${sub.status}»`);
+  await q(`select public.billing_cancel_recurring($1, 'cancelled', 'cancelled')`, [f.autId]);
+  const [d] = await q(`select status from billing_subscriptions where id = $1`, [f.subId]);
+  assert(d.status === "ended", `la segunda la movió a «${d.status}»`);
+});
+
   // ── limpieza ───────────────────────────────────────────────────────────────
   // Best-effort y en orden de dependencia. Un fallo limpiando NO puede tumbar
   // la batería: lo que se estaba comprobando ya se comprobó, y un fixture que

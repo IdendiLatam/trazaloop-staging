@@ -12,6 +12,10 @@ import { describeBillingState } from "@/lib/domain/billing-state";
 import { renewalCopyFor } from "@/lib/domain/billing-renewal-copy";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
+import { RecurringCancelPanel }
+  from "@/components/domain/billing/recurring-cancel-panel";
+import { findLiveRecurring } from "@/lib/db/recurring-checkout";
+import { isRecurringLaneOpen } from "@/lib/billing/recurring/policy";
 import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
 import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
 import { storageImpactOf } from "@/lib/db/storage-impact";
@@ -90,6 +94,17 @@ export default async function BillingPage({
   // Bajar de plan puede dejar a la empresa por encima del espacio del plan
   // nuevo. Las dos cifras se traen ANTES de que nadie confirme nada.
   const copiaRenovacion = renewalCopyFor(estado?.renewalMode ?? null);
+  // MP-REC-01C.1 · ¿Hay cobros programados con la pasarela? Decide DOS cosas:
+  // si se ofrece cancelarlos, y si se esconde la renovación manual. Lo segundo
+  // es la defensa visible contra el doble cobro; la de verdad está en el
+  // servicio, que se niega aunque alguien llegue por otro camino.
+  const recurrenteViva = isRecurringLaneOpen()
+    ? await findLiveRecurring(org.organizationId) : null;
+  // El nombre visible de la pasarela llega como DATO desde la autoridad de
+  // proveedor. Esta pantalla no sabe —ni debe saber— cuál es.
+  const rutaCompra = recurrenteViva !== null ? resolvePurchaseRoutingFromEnv() : null;
+  const providerName = rutaCompra !== null && rutaCompra.available
+    ? rutaCompra.displayName : "la pasarela";
 
   const revisionDestino = estado?.planCode === "extra"
     ? ((catalogo ?? []).find((p) => p.planCode === "full")?.planRevisionId ?? null)
@@ -174,12 +189,21 @@ export default async function BillingPage({
           aquí se dice cuándo vence y se ofrece renovarlo. Los avisos de siete,
           tres y un día se derivan de la fecha al pintar: no hay proceso
           programado detrás, y no hace falta. */}
-      {esAdministrador ? (
+      {esAdministrador && recurrenteViva === null ? (
         <RenewalPanel
           planCode={estado?.planCode ?? null}
           billingInterval={estado?.billingInterval ?? null}
           periodEndsAt={estado?.renewsAt ?? null}
           nowIso={new Date().toISOString()}
+        />
+      ) : null}
+
+      {esAdministrador && recurrenteViva !== null ? (
+        <RecurringCancelPanel
+          authorizationId={recurrenteViva.authorizationId}
+          paidThroughLabel={recurrenteViva.paidThrough
+            ? longDate(recurrenteViva.paidThrough) : null}
+          providerName={providerName}
         />
       ) : null}
 

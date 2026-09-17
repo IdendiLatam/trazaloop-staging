@@ -617,9 +617,29 @@ export function mercadoPagoProvider(
     async cancelSubscription(providerSubscriptionId) {
       if (!cliente) return sinCredencial();
       try {
+        // EL `reason` NO SE INVENTA: SE RELEE.
+        //
+        // Esto mandaba `{ status: "cancelled" }` a secas, y MP-SBX-01C dejó
+        // anotado que esa forma volvía con `400 · Invalid value for
+        // preapproval_plan_id` —un campo que no se envía— porque sin `reason`
+        // el validador toma la rama de las suscripciones CON plan asociado.
+        //
+        // Se lee el de la suscripción y se devuelve tal cual: mandar otro la
+        // renombraría por el camino. Si no se puede leer, se cancela igual con
+        // la forma mínima: no poder leer el nombre no puede impedir parar un
+        // cobro.
+        let motivo: string | null = null;
+        try {
+          const previa = (await new PreApproval(cliente).get(
+            { id: providerSubscriptionId })) as unknown as Record<string, unknown>;
+          motivo = str(previa.reason);
+        } catch { motivo = null; }
+
         const r = await new PreApproval(cliente).update({
           id: providerSubscriptionId,
-          body: { status: "cancelled" },
+          body: motivo === null
+            ? { status: "cancelled" }
+            : { reason: motivo, status: "cancelled" },
         }) as unknown as Record<string, unknown>;
         return { ok: true, value: {
           status: mapSubscriptionStatus(str(r.status)) ?? "manual_review" } };

@@ -511,3 +511,181 @@ export async function reconcileRecurringAuthorization(
 }
 
 export type { ObservedRecurringPayment };
+
+// ---------------------------------------------------------------------------
+// LA CANCELACIÓN
+// ---------------------------------------------------------------------------
+
+export type CancelRecurringResult =
+  | { ok: true; outcome: "cancelled"; canonicalStatus: "cancel_at_period_end" | "ended";
+      paidThrough: string | null; accessPreserved: boolean }
+  | { ok: false; code: CancelRecurringError; detail?: string;
+      paidThrough?: string | null };
+
+export type CancelRecurringError =
+  | "RECURRING_NOT_AVAILABLE"
+  | "NOT_FOUND"
+  | "NOT_AUTHORIZED"
+  | "NOT_A_PROVIDER_RECURRENCE"
+  | "PROVIDER_UNAVAILABLE"
+  | "PROVIDER_REFUSED"
+  | "IDENTITY_MISMATCH";
+
+/** Lo que ve quien cancela. Nunca un código, nunca la respuesta del proveedor. */
+export const CANCEL_RECURRING_MESSAGE: Record<CancelRecurringError, string> = {
+  RECURRING_NOT_AVAILABLE:
+    "Esta opción todavía no está disponible.",
+  NOT_FOUND:
+    "No encontramos esta contratación.",
+  NOT_AUTHORIZED:
+    "No encontramos esta contratación.",
+  NOT_A_PROVIDER_RECURRENCE:
+    "Esta contratación no tiene cobros programados que detener.",
+  PROVIDER_UNAVAILABLE:
+    "No pudimos contactar con la pasarela. Tu plan sigue activo y no se canceló nada; inténtalo de nuevo en unos minutos.",
+  PROVIDER_REFUSED:
+    "La pasarela no pudo detener los cobros. Tu plan sigue activo; inténtalo de nuevo.",
+  IDENTITY_MISMATCH:
+    "No pudimos verificar esta contratación. Tu plan sigue activo y no se canceló nada.",
+};
+
+/**
+ * Detiene los cobros futuros de una recurrencia.
+ *
+ * EL ORDEN, Y POR QUÉ ESE
+ *
+ *   1. Se relee al proveedor ANTES de tocar nada. Cancelar a ciegas sobre un
+ *      objeto que ya cambió es cómo se acaba cancelando otra cosa.
+ *   2. Se comprueba que ese objeto es NUESTRO —referencia y cobrador— con las
+ *      mismas reglas que la conciliación.
+ *   3. Se cancela.
+ *   4. Se RELEE otra vez. Lo que se persiste es lo que el proveedor dice
+ *      después, no lo que devolvió la llamada: una respuesta optimista que no
+ *      se confirma es exactamente cómo se registra una cancelación que no
+ *      ocurrió.
+ *
+ * Y ante la duda no se mueve nada: un tiempo agotado no cancela, no retira
+ * acceso y no miente. Se anota y se puede reintentar.
+ */
+export async function cancelRecurringSubscription(input: {
+  authorizationId: string;
+  supabase: SupabaseClient;
+}): Promise<CancelRecurringResult> {
+  const carril = resolveRecurringLane();
+  if (!carril.open) return { ok: false, code: "RECURRING_NOT_AVAILABLE" };
+
+  // QUIÉN PUEDE. La RLS de 0204 decide: una autorización de otra empresa
+  // sencillamente no aparece. Del navegador solo llega este puntero.
+  const { data, error } = await input.supabase
+    .from("billing_recurring_authorizations")
+    .select("id, subscription_id, provider, provider_subscription_id, environment, status")
+    .eq("id", input.authorizationId).maybeSingle();
+  if (error) return { ok: false, code: "NOT_AUTHORIZED", detail: error.message };
+  if (!data) return { ok: false, code: "NOT_FOUND" };
+  const fila = data as unknown as {
+    id: string; subscription_id: string; provider: string;
+    provider_subscription_id: string; environment: string; status: string };
+
+  if (fila.provider_subscription_id.startsWith("pending:")) {
+    return { ok: false, code: "NOT_A_PROVIDER_RECURRENCE" };
+  }
+
+  const admin = createAdminClient();
+  const proveedor = mercadoPagoFromEnv();
+  if (!proveedor.identity.ok) return { ok: false, code: "IDENTITY_MISMATCH" };
+
+  const { data: sub } = await admin.from("billing_subscriptions")
+    .select("id, renewal_mode").eq("id", fila.subscription_id).maybeSingle();
+  if (!sub || (sub as { renewal_mode: string }).renewal_mode !== "provider") {
+    return { ok: false, code: "NOT_A_PROVIDER_RECURRENCE" };
+  }
+
+  // --- 1 · Releer ANTES ------------------------------------------------------
+  const antes = await proveedor.getSubscriptionDetail(fila.provider_subscription_id);
+  if (!antes.ok) {
+    await admin.rpc("billing_cancel_recurring", {
+      p_authorization_id: fila.id, p_outcome: "uncertain",
+      p_failure: antes.failure,
+      p_diagnostic: (antes as { detail?: string | null }).detail ?? null });
+    return { ok: false, code: "PROVIDER_UNAVAILABLE" };
+  }
+
+  // --- 2 · ¿Es nuestro? ------------------------------------------------------
+  if (antes.value.collectorId !== null
+      && proveedor.identity.value.expectedOwnerId !== null
+      && antes.value.collectorId !== proveedor.identity.value.expectedOwnerId) {
+    return { ok: false, code: "IDENTITY_MISMATCH" };
+  }
+
+  // YA ESTABA CANCELADA. No es un error: es un doble clic, o una cancelación
+  // hecha desde el panel del proveedor. Se asienta igual, sin volver a pedirla.
+  const yaCancelada = ["cancelled", "canceled", "finished", "expired"]
+    .includes((antes.value.providerStatus ?? "").trim().toLowerCase());
+
+  // --- 3 · Cancelar ----------------------------------------------------------
+  if (!yaCancelada) {
+    const r = await proveedor.cancelSubscription(fila.provider_subscription_id, false);
+    if (!r.ok) {
+      const incierto = r.failure === "provider_unavailable";
+      await admin.rpc("billing_cancel_recurring", {
+        p_authorization_id: fila.id,
+        p_outcome: incierto ? "uncertain" : "refused",
+        p_failure: r.failure,
+        p_diagnostic: (r as { detail?: string | null }).detail ?? null });
+      return { ok: false,
+               code: incierto ? "PROVIDER_UNAVAILABLE" : "PROVIDER_REFUSED" };
+    }
+  }
+
+  // --- 4 · Releer DESPUÉS ----------------------------------------------------
+  //
+  // Lo que se persiste sale de aquí. Si no se puede releer, NO se afirma que se
+  // canceló: se deja en duda, que es la verdad.
+  const despues = await proveedor.getSubscriptionDetail(fila.provider_subscription_id);
+  if (!despues.ok) {
+    await admin.rpc("billing_cancel_recurring", {
+      p_authorization_id: fila.id, p_outcome: "uncertain",
+      p_failure: despues.failure,
+      p_diagnostic: (despues as { detail?: string | null }).detail ?? null });
+    return { ok: false, code: "PROVIDER_UNAVAILABLE" };
+  }
+  const estadoFinal = (despues.value.providerStatus ?? "").trim().toLowerCase();
+  if (!["cancelled", "canceled", "finished", "expired"].includes(estadoFinal)) {
+    await admin.rpc("billing_cancel_recurring", {
+      p_authorization_id: fila.id, p_outcome: "uncertain",
+      p_provider_status: despues.value.providerStatus,
+      p_failure: "provider_state_not_cancelled" });
+    return { ok: false, code: "PROVIDER_REFUSED" };
+  }
+
+  const { data: asentado, error: eCancel } = await admin.rpc("billing_cancel_recurring", {
+    p_authorization_id: fila.id, p_outcome: "cancelled",
+    p_provider_status: despues.value.providerStatus });
+  if (eCancel) return { ok: false, code: "PROVIDER_REFUSED", detail: eCancel.message };
+
+  const a = (asentado ?? {}) as { canonical_status?: string; paid_through?: string | null;
+                                  access_preserved?: boolean };
+  return { ok: true, outcome: "cancelled",
+           canonicalStatus: a.canonical_status === "ended" ? "ended" : "cancel_at_period_end",
+           paidThrough: a.paid_through ?? null,
+           accessPreserved: Boolean(a.access_preserved) };
+}
+
+/** ¿Tiene esta empresa una recurrencia viva? Decide la coexistencia. */
+export async function findLiveRecurring(organizationId: string): Promise<{
+  authorizationId: string; subscriptionId: string; status: string;
+  paidThrough: string | null } | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("billing_recurring_authorizations")
+    .select("id, subscription_id, status")
+    .eq("organization_id", organizationId)
+    .in("status", ["awaiting_authorization", "authorized", "uncertain"])
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!data) return null;
+  const a = data as unknown as { id: string; subscription_id: string; status: string };
+  const { data: per } = await admin.from("billing_subscription_periods")
+    .select("period_end").eq("subscription_id", a.subscription_id)
+    .eq("status", "settled").order("period_end", { ascending: false }).limit(1).maybeSingle();
+  return { authorizationId: a.id, subscriptionId: a.subscription_id, status: a.status,
+           paidThrough: (per as { period_end: string } | null)?.period_end ?? null };
+}

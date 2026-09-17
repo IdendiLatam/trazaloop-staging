@@ -445,6 +445,31 @@ export async function startOneTimeCheckoutAction(
  * comprobarlo, el que decide sigue siendo el mismo y sigue estando cerrado en
  * Producción.
  */
+/**
+ * MP-REC-01C.1 · Detener los cobros automáticos de una recurrencia.
+ *
+ * Es una acción de servidor —POST— a propósito: cancelar por una navegación o
+ * por cargar una página sería cancelar sin que nadie lo haya decidido. La
+ * confirmación explícita la pide la interfaz antes de llamar aquí.
+ *
+ * Del navegador llega UN puntero: el identificador de la autorización. Ni el
+ * estado, ni el identificador del proveedor, ni la empresa. Todo lo demás lo
+ * comprueba el servicio releyendo al proveedor.
+ */
+export async function cancelRecurringAction(
+  authorizationId: string
+): Promise<{ error: string | null; paidThrough?: string | null }> {
+  const quien = await exigirAdministracion();
+  if (!quien.ok) return { error: quien.error };
+
+  const supabase = await createServerClient();
+  const { cancelRecurringSubscription, CANCEL_RECURRING_MESSAGE } =
+    await import("@/lib/db/recurring-checkout");
+  const r = await cancelRecurringSubscription({ authorizationId, supabase });
+  if (!r.ok) return { error: CANCEL_RECURRING_MESSAGE[r.code] };
+  return { error: null, paidThrough: r.paidThrough };
+}
+
 export async function startRecurringCheckoutForQuoteAction(
   quoteId: string
 ): Promise<OneTimeStartState> {

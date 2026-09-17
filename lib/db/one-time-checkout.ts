@@ -43,6 +43,8 @@ export type OpenCheckoutResult =
 
 export type OpenCheckoutError =
   | "PROVIDER_NOT_CONFIGURED"
+  /** MP-REC-01C.1 · La pasarela ya tiene una recurrencia viva para esta empresa. */
+  | "RECURRING_ALREADY_ACTIVE"
   | "CHECKOUT_NOT_OPENED"
   | "PROVIDER_REFUSED"
   | "PROVIDER_UNAVAILABLE";
@@ -51,6 +53,9 @@ export type OpenCheckoutError =
 export const OPEN_ERROR_MESSAGE: Record<OpenCheckoutError, string> = {
   PROVIDER_NOT_CONFIGURED:
     "El pago en línea no está disponible ahora mismo. No se cobró nada.",
+  RECURRING_ALREADY_ACTIVE:
+    "Tu plan ya tiene cobros programados con la pasarela. No hace falta pagar "
+    + "otra vez; no se cobró nada.",
   CHECKOUT_NOT_OPENED:
     "No fue posible preparar el pago. No se cobró nada; inténtalo de nuevo.",
   PROVIDER_REFUSED:
@@ -78,6 +83,29 @@ export async function openOneTimeCheckout(input: {
   const pasarela = oneTimeGatewayFor(defaultOneTimeProviderCode());
   if (!pasarela || pasarela.environment === null) {
     return { ok: false, code: "PROVIDER_NOT_CONFIGURED" };
+  }
+
+  // MP-REC-01C.1 · NO SE ABRE UN COBRO MANUAL SI LA PASARELA YA VA A COBRAR.
+  //
+  // Una empresa con recurrencia viva que además pague a mano pagaría dos veces
+  // el mismo mes. La interfaz ya esconde el botón, pero esconder no es impedir:
+  // un enlace guardado, una pestaña vieja o una llamada a mano llegarían igual.
+  //
+  // Esto NO cambia el carril manual de nadie más: hoy solo puede haber
+  // recurrencias en Staging, y sin ellas esta comprobación no ve nada.
+  // La empresa sale del OBJETIVO —el presupuesto o el periodo—, leído con la
+  // sesión de quien compra: no llega por parámetro y no se puede suplantar.
+  const destino = input.purpose === "initial"
+    ? await input.supabase.from("billing_quotes")
+        .select("organization_id").eq("id", input.targetId).maybeSingle()
+    : await input.supabase.from("billing_subscription_periods")
+        .select("organization_id").eq("id", input.targetId).maybeSingle();
+  const orgDestino = (destino.data as { organization_id: string } | null)?.organization_id;
+  if (orgDestino) {
+    const { findLiveRecurring } = await import("@/lib/db/recurring-checkout");
+    if (await findLiveRecurring(orgDestino)) {
+      return { ok: false, code: "RECURRING_ALREADY_ACTIVE" };
+    }
   }
 
   const abierto = await input.supabase.rpc("billing_open_one_time_checkout", {

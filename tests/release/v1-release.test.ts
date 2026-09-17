@@ -159,6 +159,7 @@ const QUALITY_01_ALLOWED = new Set([
   "0206_recurring_attempt_truth.sql",
   "0207_recurring_period_anchor.sql",
   "0208_recurring_status_promotion.sql",
+  "0209_recurring_cancellation.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -1337,6 +1338,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
   "0206_recurring_attempt_truth.sql",
   "0207_recurring_period_anchor.sql",
   "0208_recurring_status_promotion.sql",
+  "0209_recurring_cancellation.sql",
     "0182_commercial_fx_administration_and_history.sql",
     "0181_billing_immediate_upgrade_and_interval.sql",
     "0154_quality_intelligence_integrated_sources.sql",
@@ -2728,13 +2730,47 @@ check("53. Mercado Pago no se presenta como integrado", () => {
   );
 });
 
+/*
+  MP-REC-01C.1 · LA EXCEPCIÓN, Y POR QUÉ ES ESTRECHA.
+
+  Cuando se escribió esta comprobación no existía ningún carril que renovara
+  solo, así que prometerlo era mentir en cualquier sitio. Ahora existe uno —de
+  pruebas, apagado en Producción por `policy.ts`— y en ÉL la frase es la verdad:
+  quien cancela necesita entender que está deteniendo unos cobros automáticos,
+  no perdiendo el plan que ya pagó.
+
+  La excepción se nombra por FICHERO, no por palabra. El carril manual sigue
+  protegido entero, y tiene que seguir diciendo que no se renueva solo: ahí la
+  frase seguiría siendo mentira, y es justo donde más caro sale.
+*/
+const SUPERFICIES_RECURRENTES = [
+  "components/domain/billing/recurring-cancel-panel.tsx",
+  "components/domain/billing/recurring-checkout-panel.tsx",
+];
+
 check("54. No se promete renovación automática técnica", () => {
   for (const { file, code } of uiSources()) {
+    if (SUPERFICIES_RECURRENTES.includes(file)) continue;
     assert(
       !/renovaci[oó]n autom|se renueva autom|renovar autom|renovaremos autom/i.test(code),
       `${file} no debe prometer renovación automática: no existe en v1.0.0`
     );
   }
+  // Y la excepción es EXACTAMENTE la declarada: ni un fichero más.
+  const nombran = uiSources()
+    .filter(({ code }) =>
+      /renovaci[oó]n autom|se renueva autom|renovar autom|renovaremos autom/i.test(code))
+    .map(({ file }) => file).sort();
+  assert(
+    JSON.stringify(nombran) === JSON.stringify(
+      SUPERFICIES_RECURRENTES.filter((f) => nombran.includes(f)).sort()),
+    `hay lenguaje de renovación automática fuera del carril recurrente: ${nombran.join(", ")}`
+  );
+  // El carril manual sigue diciendo lo contrario, que es lo cierto en él.
+  assert(
+    /no se renueva solo/i.test(read("lib/domain/billing-renewal-copy.ts")),
+    "el carril manual dejó de decir que no se renueva solo"
+  );
   const s = read(ROUTE_A);
   assert(
     /No existe renovación automática/i.test(s),
