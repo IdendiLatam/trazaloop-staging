@@ -33,6 +33,7 @@ const leer = (p: string) => readFileSync(p, "utf8");
 const PAGINA = "app/(app)/(shell)/settings/billing/page.tsx";
 const M0211 = "supabase/migrations/0211_full_monthly_minutes_authority.sql";
 const DISPONIBILIDAD = "lib/billing/upgrade-availability.ts";
+const ACCIONES = "server/actions/billing.ts";
 
 console.log("\nA · LOS 600 MINUTOS VIVEN EN LA AUTORIDAD, NO EN UNA PANTALLA");
 
@@ -110,6 +111,43 @@ check("C4. Y el carril de Wompi NO se borra", () => {
     "no se declara que el carril se conserva");
 });
 
+check("C5. Y la puerta de verdad está en el SERVIDOR, no en la pantalla", () => {
+  // Esconder el botón protege a quien mira la pantalla. Una acción de servidor
+  // se puede invocar sin pantalla —para eso existe— así que la comprobación
+  // tiene que estar también ahí, o la protección es decorativa.
+  const a = leer(ACCIONES);
+  for (const accion of ["quoteUpgradeAction", "confirmUpgradeAction"]) {
+    const i = a.indexOf(`export async function ${accion}`);
+    assert(i > 0, `no existe ${accion}`);
+    const cuerpo = a.slice(i, i + 1400);
+    assert(/resolveUpgradeAvailability\(\)\.transactional/.test(cuerpo),
+      `${accion} atiende una mejora que el carril no puede cobrar`);
+  }
+});
+
+check("C6. Y va DELANTE de la primera escritura", () => {
+  // Éste es el orden que importa. `openUpgradeIntent` deja el cambio en
+  // `submitted`, y desde ahí no se puede ni retirar ni reintentar: la empresa se
+  // queda sin poder subir de plan nunca más, sin que se haya movido un peso.
+  const a = leer(ACCIONES);
+  const i = a.indexOf("export async function confirmUpgradeAction");
+  const cuerpo = a.slice(i, i + 1800);
+  const guarda = cuerpo.indexOf("resolveUpgradeAvailability()");
+  const escritura = cuerpo.indexOf("openUpgradeIntent(");
+  assert(guarda > 0 && escritura > 0, "no se encontraron guarda y escritura");
+  assert(guarda < escritura,
+    "se abre el intento ANTES de comprobar si el cobro puede completarse");
+});
+
+check("C7. La negativa dice que no quedó nada a medias", () => {
+  const a = leer(ACCIONES);
+  const i = a.indexOf("upgrade_not_available:");
+  assert(i > 0, "no hay mensaje propio para «este carril no puede cobrar»");
+  const mensaje = a.slice(i, i + 320).replace(/"\s*\+\s*"/g, "").replace(/\s+/g, " ");
+  assert(/No se cambió nada/.test(mensaje) && /no se cobró nada/.test(mensaje),
+    `la negativa no aclara que no se cambió ni se cobró nada: ${mensaje.slice(0, 160)}`);
+});
+
 console.log("\nD · UNA SOLA CANCELACIÓN POR ESTADO");
 
 check("D1. Con recurrencia viva, «Cancelar el plan» no se ofrece", () => {
@@ -141,6 +179,27 @@ check("D4. Cancelada la recurrencia, la ficha deja de ofrecer cancelar", () => {
   const c = leer("lib/domain/billing-renewal-copy.ts");
   assert(/const COBRO_DETENIDO: RenewalCopy = \{[\s\S]{0,200}offersCancellation: false/.test(c),
     "una recurrencia ya cancelada seguiría ofreciendo cancelar");
+});
+
+check("D5. El carril manual no hereda acciones de recurrencia", () => {
+  // `renewalCopyFor` manda a SIN_COBRO_AUTOMATICO todo lo que no sea
+  // `platform` ni `provider`. Con pago único no hay recurrencia que cancelar, y
+  // ofrecerlo invitaría a cancelar algo inexistente —con el riesgo añadido de
+  // que alguien crea que cancelando recupera dinero—.
+  const c = leer("lib/domain/billing-renewal-copy.ts");
+  assert(/if \(mode !== "platform" && mode !== "provider"\) return SIN_COBRO_AUTOMATICO;/
+    .test(c), "un modo desconocido ya no cae del lado prudente");
+  assert(/const SIN_COBRO_AUTOMATICO: RenewalCopy = \{[\s\S]{0,240}offersCancellation: false/
+    .test(c), "el carril manual ofrece cancelar una recurrencia que no tiene");
+});
+
+check("D6. Y quien termina un plan manual lee que no habrá cobro nuevo", () => {
+  const d = leer("components/domain/billing/plan-decisions.tsx");
+  const plano = d.replace(/\s+/g, " ");
+  assert(/No se cobrará nada más/.test(plano),
+    "confirmar el final de un plan no aclara que no habrá otro cobro");
+  assert(/no se borra ningún dato/.test(plano),
+    "no se dice que cancelar no borra datos");
 });
 
 console.log("\nE · LO QUE NO SE HA TOCADO");

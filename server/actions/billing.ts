@@ -10,6 +10,7 @@ import {
   submitCardToken, readCheckoutStatus,
   type CheckoutStatus, type SubmitErrorCode,
 } from "@/lib/db/billing-checkout";
+import { resolveUpgradeAvailability } from "@/lib/billing/upgrade-availability";
 
 /**
  * Trazaloop · PE-05B2W4 · Contratar un plan de pago.
@@ -253,6 +254,12 @@ const NO_SE_PUEDE: Record<string, string> = {
     "Todavía no podemos calcular el precio del plan nuevo en pesos. No se cambió nada.",
   not_authorized: "Solo quien administra la empresa puede cambiar el plan.",
   unavailable: "No pudimos preparar el cambio de plan. No se cambió nada.",
+  // COMMERCIAL-UX-01B · El carril que cobra la mejora no puede cobrarla en este
+  // despliegue. Se dice ANTES de abrir nada, y se dice entero: quien lo lee
+  // tiene que saber que no ha quedado un cambio a medias esperándole.
+  upgrade_not_available:
+    "Ahora mismo no podemos completar una subida de plan desde aquí. No se "
+    + "cambió nada y no se cobró nada. Escríbenos y lo hacemos contigo.",
 };
 
 export async function quoteUpgradeAction(
@@ -260,6 +267,13 @@ export async function quoteUpgradeAction(
 ): Promise<UpgradeQuoteState> {
   const quien = await exigirAdministracion();
   if (!quien.ok) return { error: quien.error };
+  // COMMERCIAL-UX-01B · La MISMA condición que decide si la pantalla ofrece
+  // subir de plan decide si el servidor lo atiende. Esconder el botón protege a
+  // quien mira la pantalla; esto protege a quien llega por otro camino, que es
+  // exactamente para lo que existe una acción de servidor.
+  if (!resolveUpgradeAvailability().transactional) {
+    return { error: NO_SE_PUEDE.upgrade_not_available };
+  }
   const sub = await suscripcionDe(quien.organizationId);
   if (!sub) return { error: NO_SE_PUEDE.subscription_not_found };
 
@@ -286,6 +300,17 @@ export async function confirmUpgradeAction(
 ): Promise<UpgradeConfirmState> {
   const quien = await exigirAdministracion();
   if (!quien.ok) return { error: quien.error };
+  // Y aquí otra vez, ANTES de `openUpgradeIntent`. No es repetirse: es el orden.
+  //
+  // Abrir el intento pone el cambio en `submitted`, y desde ahí
+  // `billing_cancel_upgrade` contesta `not_cancellable` y
+  // `billing_quote_upgrade` contesta `upgrade_already_pending` para siempre. Sin
+  // mover un peso, la empresa se quedaba sin poder volver a subir de plan nunca
+  // y hacía falta una persona de plataforma para sacarla de ahí. La comprobación
+  // tiene que ir DELANTE de la primera escritura, no detrás.
+  if (!resolveUpgradeAvailability().transactional) {
+    return { error: NO_SE_PUEDE.upgrade_not_available };
+  }
 
   const { openUpgradeIntent } = await import("@/lib/db/billing-upgrade");
   const { wompiFromEnv } = await import("@/lib/billing/providers/wompi");
