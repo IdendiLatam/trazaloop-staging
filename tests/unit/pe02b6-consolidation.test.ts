@@ -117,10 +117,19 @@ check("B1. Dentro se llama «Ayuda», siempre", () => {
 });
 
 check("B2. Fuera sigue llamándose «Preguntas frecuentes»", () => {
-  const visible = sinComentarios(PORTADA);
-  assert(/Preguntas frecuentes/.test(visible),
-    "la portada pública perdió el nombre por el que se busca desde fuera");
-  assert(/href="\/faq"/.test(visible), "la portada no lleva a la ayuda");
+  // COMMERCIAL-UX-01C · La portada dejó de tener cabecera y pie propios: los
+  // enlaces públicos viven ahora en la cáscara común, que es UNA. El nombre de
+  // fuera se comprueba allí, que es donde se decide para todas las páginas
+  // públicas a la vez.
+  const cascara = sinComentarios(leer("components/layout/public-shell.tsx"));
+  assert(/Preguntas frecuentes/.test(cascara),
+    "lo público perdió el nombre por el que se busca desde fuera");
+  assert(/href: "\/faq"/.test(cascara), "la navegación pública no lleva a la ayuda");
+  // Y NO se cuela el nombre de dentro en una superficie pública.
+  assert(!/label: "Ayuda"/.test(cascara),
+    "la navegación pública llama «Ayuda» a la FAQ, y ese es el nombre de dentro");
+  assert(/PublicHeader/.test(PORTADA) && /PublicFooter/.test(PORTADA),
+    "la portada dejó de usar la cáscara pública");
 });
 
 check("B3. Y la consola de contenido conserva su propio nombre", () => {

@@ -149,9 +149,27 @@ check("B3. Sin vocabulario interno en lo visible", () => {
 console.log("\nC · Dónde se encuentra la FAQ");
 // ===========================================================================
 
-check("C1. Desde fuera: cabecera y pie de la portada", () => {
-  const enlaces = [...PORTADA_CODIGO.matchAll(/href="\/faq"/g)];
-  assert(enlaces.length >= 2, `solo hay ${enlaces.length} enlaces a la FAQ en la portada`);
+check("C1. Desde fuera: cabecera y pie de lo público", () => {
+  // COMMERCIAL-UX-01C · Los dos enlaces siguen estando, pero ya no dentro de
+  // `app/page.tsx`: la portada dejó de tener cabecera y pie propios y usa la
+  // cáscara pública común. Antes había cuatro páginas públicas con cuatro
+  // cabeceras escritas a mano, y añadir un destino obligaba a acordarse de
+  // cuatro sitios.
+  //
+  // Lo que esta comprobación defiende no ha cambiado —desde fuera se llega a la
+  // FAQ sin saberse la URL— y ahora se comprueba donde vive: en la lista única.
+  // Se sigue exigiendo que la portada USE esa cáscara, porque si volviera a
+  // escribir la suya el problema regresaría sin que nadie lo notara.
+  const cascara = leer("components/layout/public-shell.tsx");
+  // Los dos enlaces: uno en la navegación de cabecera y otro en el pie. Se
+  // cuentan sobre las DOS listas, que es donde viven.
+  const cabecera = cascara.slice(cascara.indexOf("PUBLIC_NAV_ITEMS"),
+                                 cascara.indexOf("PUBLIC_FOOTER_ITEMS"));
+  const pie = cascara.slice(cascara.indexOf("PUBLIC_FOOTER_ITEMS"));
+  assert(/href: "\/faq"/.test(cabecera), "la cabecera pública dejó de llevar a la FAQ");
+  assert(/href: "\/faq"/.test(pie), "el pie público dejó de llevar a la FAQ");
+  assert(/PublicHeader/.test(PORTADA_CODIGO) && /PublicFooter/.test(PORTADA_CODIGO),
+    "la portada dejó de usar la cáscara pública: sus enlaces vuelven a ser suyos");
 });
 
 check("C2. Desde dentro: en la navegación TRANSVERSAL, no dentro de un módulo", () => {

@@ -288,3 +288,47 @@ export async function getTrialPolicy(client?: Db): Promise<TrialPolicy | null> {
     return null;
   }
 }
+
+/**
+ * COMMERCIAL-UX-01C · Los límites publicados, tal como se le pueden enseñar a
+ * un cliente.
+ *
+ * Sale de `v_public_plan_limits`, que deja fuera los recursos marcados como no
+ * públicos y las revisiones que no están vigentes. Igual que su hermana de
+ * arriba: la decisión de qué es público vive en la base, porque «no lo
+ * pintamos» es una decisión de pantalla y PostgREST expone la vista igual.
+ */
+export type PublicPlanLimit = {
+  planCode: CanonicalPlanCode;
+  resourceCode: string;
+  resourceLabel: string | null;
+  unit: string | null;
+  limitState: "finite" | "unlimited" | "not_configured";
+  limitValue: number | null;
+};
+
+export async function listPublicPlanLimits(
+  client?: Db
+): Promise<PublicPlanLimit[] | null> {
+  try {
+    const supabase = await db(client);
+    const { data, error } = await supabase
+      .from("v_public_plan_limits")
+      .select("plan_code, resource_code, resource_label, unit, limit_state, limit_value");
+    if (error) return null;   // sin dato NO es «sin límites»
+    type Fila = {
+      plan_code: string; resource_code: string; resource_label: string | null;
+      unit: string | null; limit_state: string; limit_value: number | null;
+    };
+    return ((data ?? []) as unknown as Fila[]).map((r) => ({
+      planCode: r.plan_code as CanonicalPlanCode,
+      resourceCode: String(r.resource_code),
+      resourceLabel: (r.resource_label as string | null) ?? null,
+      unit: (r.unit as string | null) ?? null,
+      limitState: r.limit_state as "finite" | "unlimited" | "not_configured",
+      limitValue: r.limit_value === null ? null : Number(r.limit_value),
+    }));
+  } catch {
+    return null;
+  }
+}

@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
-import { Wordmark } from "@/components/layout/logo";
+import { PublicHeader, PublicFooter } from "@/components/layout/public-shell";
 import { heroModule, specializedModules, ENTRY_COPY } from "@/lib/modules/entry";
 import { isTextilesModuleEnabled } from "@/lib/modules/textiles";
 import { isPublicRegistrationEnabled } from "@/lib/auth/public-registration";
@@ -47,35 +47,42 @@ export default async function PublicLandingPage() {
     status === "functional" && (key !== "textiles" || isTextilesModuleEnabled());
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
-        <Wordmark />
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/faq" className="text-ink-soft hover:text-loop hover:underline">
-            Ayuda
-          </Link>
-          <Link href="/login" className="text-ink-soft hover:text-loop hover:underline">
-            Iniciar sesión
-          </Link>
-          {registrationOpen ? (
-            <Link
-              href="/register"
-              className="rounded-md bg-loop px-4 py-2 font-semibold text-white hover:bg-loop-deep"
-            >
-              Crear cuenta Demo
-            </Link>
-          ) : (
-            <a
-              href="mailto:contacto@idendi.org"
-              className="rounded-md bg-loop px-4 py-2 font-semibold text-white hover:bg-loop-deep"
-            >
-              Solicitar acceso
-            </a>
-          )}
-        </nav>
-      </header>
+    <div className="flex min-h-screen flex-col bg-paper">
+      {/* COMMERCIAL-UX-01C · La cabecera y el pie salen del componente común.
+          Antes esta página llevaba los suyos propios, y también la FAQ, y
+          términos, y privacidad: cuatro sitios donde acordarse de añadir un
+          enlace. «Planes y precios» aparece aquí porque está en UNA lista.
 
-      <main className="mx-auto max-w-5xl space-y-10 px-6 pb-20 pt-10">
+          El botón de registro sigue viniendo de esta página: depende de un
+          interruptor de servidor que la cáscara no debe conocer. */}
+      <PublicHeader
+        currentPath="/"
+        entryHref={entryHref}
+        entryLabel={user ? "Entrar" : "Iniciar sesión"}
+        action={registrationOpen ? (
+          <Link
+            href="/register"
+            className="ml-2 rounded-md border border-loop px-4 py-2 text-sm font-semibold
+                       text-loop hover:bg-loop hover:text-white focus-visible:outline
+                       focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-loop"
+          >
+            Crear cuenta Demo
+          </Link>
+        ) : (
+          <a
+            href="mailto:contacto@idendi.org"
+            className="ml-2 rounded-md border border-loop px-4 py-2 text-sm font-semibold
+                       text-loop hover:bg-loop hover:text-white focus-visible:outline
+                       focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-loop"
+          >
+            Solicitar acceso
+          </a>
+        )}
+      />
+
+      <main id="contenido" className="mx-auto w-full max-w-5xl flex-1 space-y-10 px-6 pb-20 pt-10">
         <section className="space-y-4">
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-ink">
             Trazaloop
@@ -181,27 +188,7 @@ export default async function PublicLandingPage() {
         </p>
       </main>
 
-      <footer className="mx-auto max-w-5xl border-t border-hairline px-6 py-6 text-xs text-ink-soft">
-        <p>
-          {/* PE-02B3 · La FAQ es lo primero que se busca desde fuera, así que va
-              la primera. Sin ella, la única forma de llegar era saberse la URL. */}
-          <Link href="/faq" className="text-loop hover:underline">
-            Preguntas frecuentes
-          </Link>
-          {" · "}
-          <Link href="/legal" className="text-loop hover:underline">
-            Acerca de Trazaloop
-          </Link>
-          {" · "}
-          <Link href="/terms" className="text-loop hover:underline">
-            Términos de uso
-          </Link>
-          {" · "}
-          <Link href="/privacy" className="text-loop hover:underline">
-            Política de privacidad
-          </Link>
-        </p>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }
