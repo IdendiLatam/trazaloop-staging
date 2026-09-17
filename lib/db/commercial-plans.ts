@@ -264,6 +264,17 @@ export async function listPublicPlanCatalog(client?: Db): Promise<PublicPlan[] |
  * cambiarlas exige una migración y el propietario del producto no puede
  * tocarlas. B1 la saca a una fila; **B2 hará que la creación de empresas la
  * lea**.
+ *
+ * COMMERCIAL-UX-01D · Se lee por `v_public_trial_policy`, no por la tabla.
+ *
+ * La tabla lleva `updated_by` —quién tocó la política por última vez— y eso es
+ * auditoría interna que no tiene por qué salir. La vista (0214) proyecta las
+ * tres cosas que se necesitan para anunciar la prueba y está concedida también
+ * a `anon`, que es quien abre una página de precios.
+ *
+ * Hay UN lector, y este es: lo consumen tanto el catálogo comercial público
+ * como el aviso de Demo de dentro del producto. Si fueran dos, un día dirían
+ * cosas distintas sobre la misma prueba.
  */
 export type TrialPolicy = {
   enabled: boolean;
@@ -275,7 +286,7 @@ export async function getTrialPolicy(client?: Db): Promise<TrialPolicy | null> {
   try {
     const supabase = await db(client);
     const { data, error } = await supabase
-      .from("commercial_trial_policy")
+      .from("v_public_trial_policy")
       .select("enabled, trial_plan_code, trial_duration_hours")
       .maybeSingle();
     if (error || !data) return null;

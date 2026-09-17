@@ -122,7 +122,7 @@ Las tres últimas son anteriores a los diagnósticos públicos y se conservan
 porque tienen consumidor real: se comprobó en el repositorio, función por
 función, no se supuso.
 
-### Las cinco relaciones que se leen sin sesión
+### Las seis relaciones que se leen sin sesión
 
 `legal_documents` (los textos de `/terms` y `/privacy`), `v_faq_public` y
 `v_faq_public_categories` (las preguntas frecuentes de `/faq`). Son públicas
@@ -151,6 +151,20 @@ Antes de cambiar nada se midió, con el rol suplantado: `authenticated` y
 y 57 límites). Es decir, la RLS no estaba filtrando nada ahí, y por tanto el
 cambio no puede ampliar lo que alguien ya veía. Después se volvió a medir: 3 y
 57 también sin sesión, y las cuatro tablas siguen denegadas.
+
+**COMMERCIAL-UX-01D añadió una sexta** (migración 0214):
+`v_public_trial_policy`. Se descubrió con la página ya construida: un visitante
+anónimo no veía el distintivo «Prueba Full · sin tarjeta de crédito», ni la
+sección de la prueba, ni su mención en la descripción para buscadores — y sin
+embargo la FAQ le respondía qué pasa al terminar las 48 horas. Una página que
+responde por una prueba que nunca ha ofrecido es incoherente justo delante de
+quien está decidiendo.
+
+La vista proyecta tres campos: si hay prueba, de qué plan es y cuánto dura.
+Deliberadamente NO salen `updated_by` ni `updated_at` —auditoría interna: nadie
+de fuera tiene por qué saber quién configuró nada— ni `trial_ai_credits`, que
+la página no enseña. La tabla `commercial_trial_policy` sigue denegada a `anon`
+y se comprueba en la propia migración.
 
 Cerrarlas de más también habría sido un defecto, y estuvo a punto de pasar: al
 retirar `is_platform_staff()` del alcance anónimo, `/terms` dejó de cargar.

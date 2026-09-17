@@ -143,3 +143,88 @@ export const TRIAL_COPY = {
   shortDescription:
     "Para ver Full por dentro con tus datos antes de decidir nada.",
 } as const;
+
+/**
+ * La FAQ comercial de /planes.
+ *
+ * Cada respuesta corresponde a una regla que YA está verificada en el producto,
+ * y al lado se deja dicho dónde. No es decoración: una página de precios que
+ * responde de memoria acaba prometiendo garantías que nadie implementó, y quien
+ * las lee decide con ellas.
+ *
+ * Las que no se pueden responder con una regla comprobada no están. Preferible
+ * una FAQ corta y cierta que una larga y optimista.
+ */
+export type CommercialQuestion = {
+  question: string;
+  answer: string;
+  /** De dónde sale la respuesta. Para quien la revise, no para quien la lea. */
+  basis: string;
+};
+
+export const COMMERCIAL_FAQ: readonly CommercialQuestion[] = [
+  {
+    question: "¿Necesito tarjeta para la prueba?",
+    answer:
+      "No. Se crea la cuenta, se crea la empresa y la prueba empieza sola. No "
+      + "se pide ningún medio de pago y no se cobra nada al terminar.",
+    basis: "commercial_trial_policy · la prueba se concede al aprovisionar la "
+      + "empresa, sin pasar por checkout (COMMERCIAL-UX-01C · trial.cardRequired)",
+  },
+  {
+    question: "¿Qué pasa cuando terminan las 48 horas?",
+    answer:
+      "La concesión de prueba caduca sola y la empresa se queda con Free, que "
+      + "no caduca. No se borra nada de lo que hayas cargado: sigue ahí cuando "
+      + "contrates.",
+    basis: "organization_plan_assignments · la prueba lleva `ends_at` y deja de "
+      + "aplicar por efecto del tiempo; debajo sigue viva la concesión `base` de Free",
+  },
+  {
+    question: "¿Full tiene límite de tiempo de uso?",
+    answer:
+      "No. El tiempo que tengas Trazaloop abierto no se mide ni se limita en "
+      + "los planes de pago. Lo que se dimensiona es el almacenamiento, los "
+      + "créditos de Intelligence y las capacidades del plan.",
+    basis: "COMMERCIAL-UX-01B.2 · migración 0212 · invariante «todo plan con "
+      + "precio > 0 se presenta sin reloj», comprobada contra la autoridad",
+  },
+  {
+    question: "¿En qué se diferencian Full y Extra?",
+    answer:
+      "En capacidad, no en funciones: Extra amplía el almacenamiento y los "
+      + "créditos de Intelligence, y añade casos de acompañamiento funcional. "
+      + "Las cifras exactas están en la comparación de arriba.",
+    basis: "plan_revision_limits de las revisiones vigentes · se remite a la "
+      + "tabla para no escribir aquí una cifra que se desincronice",
+  },
+  {
+    question: "¿El Acompañamiento va incluido?",
+    answer:
+      "No. Es un servicio complementario que se acuerda aparte y se suma a "
+      + "cualquier plan. No se contrata desde la plataforma ni se cobra solo.",
+    basis: "COMMERCIAL-UX-01C · vive en `commercialServices`, fuera de `saasPlans`",
+  },
+  {
+    question: "¿Puedo pagar mensual o anual?",
+    answer:
+      "Las dos cosas. El precio de cada periodicidad está arriba, y el importe "
+      + "final con los impuestos que correspondan se calcula al contratar.",
+    basis: "plan_revisions declara los dos precios · el total lo produce "
+      + "billing_create_quote, nunca esta página",
+  },
+  {
+    question: "¿Qué pasa con mi información si cambio de plan?",
+    answer:
+      "No se borra nada. Si bajas de plan y quedas por encima del cupo de "
+      + "almacenamiento, puedes seguir consultando y descargando lo que ya "
+      + "tienes; lo que se bloquea es añadir más hasta que haya sitio.",
+    basis: "política de almacenamiento por encima del cupo: se consulta, se "
+      + "descarga y se borra; solo se impide crecer",
+  },
+] as const;
+
+/** La salvedad de impuestos, escrita una vez. */
+export const TAX_NOTICE =
+  "Precios en dólares y antes de impuestos. Los que correspondan se calculan "
+  + "al contratar, según el país y la actividad de tu empresa.";

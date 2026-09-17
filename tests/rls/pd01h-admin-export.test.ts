@@ -45,11 +45,12 @@ const PUBLIC_ANON_EXECUTE_ALLOWLIST = [
  * Las tres primeras vienen de 0202: los textos legales de `/terms` y
  * `/privacy`, y las preguntas frecuentes de `/faq`.
  *
- * Las dos últimas las añade COMMERCIAL-UX-01D0: el catálogo comercial de
- * `/planes`, que lo mira quien todavía no es cliente y por tanto no tiene
- * sesión. Son VISTAS con proyección fija —sin notas internas, sin borradores,
- * sin revisiones retiradas, sin recursos privados— y las tablas de debajo
- * siguen cerradas a `anon`. La vista es la frontera; la tabla no se abre.
+ * Las tres últimas las añaden COMMERCIAL-UX-01D0 y 01D: el catálogo comercial
+ * de `/planes` y la política de prueba que esa página anuncia. Lo mira quien
+ * todavía no es cliente y por tanto no tiene sesión. Son VISTAS con proyección
+ * fija —sin notas internas, sin borradores, sin revisiones retiradas, sin
+ * recursos privados, sin auditoría— y las tablas de debajo siguen cerradas a
+ * `anon`. La vista es la frontera; la tabla no se abre.
  *
  * Esta lista es la declaración, y el recorrido de más abajo la comprueba
  * intentando leer el esquema entero. Añadir una relación aquí sin querer es
@@ -57,7 +58,7 @@ const PUBLIC_ANON_EXECUTE_ALLOWLIST = [
  */
 const RELACIONES_PUBLICAS = [
   "legal_documents", "v_faq_public", "v_faq_public_categories",
-  "v_public_plan_catalog", "v_public_plan_limits",
+  "v_public_plan_catalog", "v_public_plan_limits", "v_public_trial_policy",
 ];
 
 let passed = 0, failed = 0;

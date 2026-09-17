@@ -226,9 +226,11 @@ async function main() {
         where n.nspname='public' and c.relkind in ('r','p','v','m','f')
           and has_table_privilege('anon', c.oid,'SELECT') order by 1`);
     const nombres = filas.map((f) => String(f.relname));
+    // Seis desde COMMERCIAL-UX-01D: la página de precios necesitaba además la
+    // política de prueba para poder anunciarla (0214, misma frontera de vista).
     assert(JSON.stringify(nombres) === JSON.stringify([
       "legal_documents", "v_faq_public", "v_faq_public_categories",
-      "v_public_plan_catalog", "v_public_plan_limits"]),
+      "v_public_plan_catalog", "v_public_plan_limits", "v_public_trial_policy"]),
       `legibles sin sesión: ${nombres.join(", ")}`);
   });
 
@@ -237,12 +239,13 @@ async function main() {
     // a ser un comentario.
     const doc = leer("docs/security/PUBLIC-ANON-EXECUTE-AUDIT-01.md");
     assert(/\*\*Estado:\*\*\s*CERRADA/.test(doc), "la auditoría dejó de estar cerrada");
-    for (const rel of ["v_public_plan_catalog", "v_public_plan_limits"]) {
+    for (const rel of ["v_public_plan_catalog", "v_public_plan_limits",
+                       "v_public_trial_policy"]) {
       assert(new RegExp(rel).test(doc),
         `el documento no declara ${rel}: la superficie creció sin dejarlo escrito`);
     }
-    assert(/cinco relaciones/i.test(doc),
-      "el documento sigue hablando de tres relaciones");
+    assert(/seis relaciones/i.test(doc),
+      "el documento no está al día con la superficie pública real");
   });
 
   console.log("\n5 · UN SOLO CAMINO");

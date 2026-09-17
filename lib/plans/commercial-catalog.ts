@@ -232,9 +232,18 @@ function construirPrueba(
     // La prueba nunca ha pedido tarjeta, y el gate lo fija: el producto no
     // tiene ningún camino que la solicite para empezarla.
     cardRequired: false,
-    durationLabel: horas % 24 === 0 && horas >= 24
-      ? `${horas / 24} ${horas === 24 ? "día" : "días"}`
-      : `${horas} horas`,
+    // En HORAS mientras la prueba sea corta, y en días solo cuando ya no
+    // quepa en horas sin sonar raro.
+    //
+    // No es una preferencia de estilo: «48 horas» se lee como una prueba —algo
+    // acotado, que empieza ya— y «2 días» se lee como un plazo. Es además el
+    // texto que la decisión comercial aprobó. El umbral está en 72 porque a
+    // partir de ahí contar horas deja de ayudar a nadie.
+    durationLabel: horas < 72
+      ? `${horas} ${horas === 1 ? "hora" : "horas"}`
+      : horas % 24 === 0
+        ? `${horas / 24} ${horas === 24 ? "día" : "días"}`
+        : `${horas} horas`,
     timeUsage: concedido.timeUsage,
   };
 }

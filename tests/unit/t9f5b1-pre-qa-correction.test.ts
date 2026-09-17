@@ -505,6 +505,7 @@ check("B5. 0102 es el único cierre QA posterior y 0100 no se modifica", () => {
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0214_public_trial_policy_without_session.sql",
     "0213_public_catalog_reads_without_session.sql",
     "0212_paid_plans_have_no_clock.sql",
     "0183_billing_operations_alerts.sql",

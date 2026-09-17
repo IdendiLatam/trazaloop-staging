@@ -69,7 +69,8 @@ check("1B. Y están los destinos que el gate pide", () => {
 check("1C. La ruta /planes existe · el enlace no lleva a un 404", () => {
   const p = leer(PLANES);
   assert(p.length > 0, "no existe la página de planes");
-  assert(/export default function/.test(p), "la página de planes no exporta nada");
+  assert(/export default (async )?function/.test(p),
+    "la página de planes no exporta nada");
 });
 
 check("1D. El pie conserva los cuatro destinos legales", () => {
@@ -136,27 +137,21 @@ check("2D. Y no se ha introducido un middleware para esto", () => {
     "la protección por ruta de la zona privada dejó de estar donde estaba");
 });
 
-console.log("\n3 · EL MARCADOR DE POSICIÓN NO SE ADELANTA");
+console.log("\n3 · LA RUTA DE PLANES, YA CONSTRUIDA");
 
-check("3A. /planes NO pinta precios ni duplica el catálogo", () => {
-  // La tentación evidente —«ya que estoy, dejo los tres planes puestos»— es
-  // exactamente lo que crearía el problema que este tramo vino a evitar.
-  const p = leer(PLANES).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  for (const cifra of ["4000", "40000", "10000", "100000", "40", "400", "500", "600",
-                       "300", "30", "25", "2000"]) {
-    assert(!new RegExp(`\\b${cifra}\\b`).test(p),
-      `/planes escribe la cifra ${cifra} a mano`);
-  }
-  assert(!/readCommercialCatalog|saasPlans|PLAN_COPY/.test(p),
-    "el marcador de posición ya pinta catálogo: eso es el tramo siguiente");
-});
-
-check("3B. Y dice que es temporal, en el código y en la pantalla", () => {
+check("3A. Usa la cáscara pública, no una suya", () => {
+  // En 01C esta sección vigilaba que el marcador de posición no se adelantara a
+  // pintar catálogo. Con la página ya construida (01D) lo que queda por vigilar
+  // desde aquí es lo que le toca a la cáscara: que /planes no se salga de ella.
+  //
+  // Lo de «ni una cifra escrita a mano» lo comprueba `cux01d`, que es quien
+  // sabe distinguir un precio de un `border-loop/30`.
   const p = leer(PLANES);
-  assert(/temporal|marcador de posición|Marcador de posición/i.test(p),
-    "nada indica que la página sea provisional");
-  assert(/Estamos terminando esta página/.test(p),
-    "a quien llegue no se le dice que la página está sin terminar");
+  assert(/<PublicShell/.test(p), "/planes no usa la cáscara pública");
+  assert(!/<header|<footer/.test(p),
+    "/planes escribió su propia cabecera o su propio pie");
+  assert(/currentPath="\/planes"/.test(p),
+    "/planes no se marca como el destino actual en la navegación");
 });
 
 console.log("\n4 · ACCESIBILIDAD · LO QUE NO SE VE MIRANDO");

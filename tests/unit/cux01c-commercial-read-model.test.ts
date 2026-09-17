@@ -262,7 +262,7 @@ check("4B. Full 48 h, sin tarjeta", () => {
   assert(t.durationHours === 48, `la prueba dura ${t.durationHours} h`);
   assert(t.cardRequired === false, "la prueba pide tarjeta");
   assert(t.effectivePlanCode === "full", `la prueba concede ${t.effectivePlanCode}`);
-  assert(trialTagline(t, catalogo.saasPlans) === "Prueba Full 2 días · sin tarjeta de crédito",
+  assert(trialTagline(t, catalogo.saasPlans) === "Prueba Full 48 horas · sin tarjeta de crédito",
     `el titular es «${trialTagline(t, catalogo.saasPlans)}»`);
 });
 
@@ -272,6 +272,15 @@ check("4C. Su duración sale de la POLÍTICA, no de una constante", () => {
     trialPolicy: { ...POLITICA, trialDurationHours: 72 } });
   assert(otro.trial?.durationHours === 72,
     "la duración está escrita en el código en vez de leerse de la política");
+  // Y se escribe en horas mientras sea corta: «48 horas» se lee como una
+  // prueba; «2 días», como un plazo.
+  assert(otro.trial?.durationLabel === "3 días",
+    `72 horas se escribe «${otro.trial?.durationLabel}»`);
+  const corta = buildCommercialCatalog({
+    plans: PLANES, limits: LIMITES,
+    trialPolicy: { ...POLITICA, trialDurationHours: 24 } });
+  assert(corta.trial?.durationLabel === "24 horas",
+    `24 horas se escribe «${corta.trial?.durationLabel}»`);
 });
 
 check("4D. Hereda el tiempo del plan que concede, no lo declara", () => {
