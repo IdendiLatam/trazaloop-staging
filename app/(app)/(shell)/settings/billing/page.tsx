@@ -242,7 +242,16 @@ export default async function BillingPage({
           aquí se dice cuándo vence y se ofrece renovarlo. Los avisos de siete,
           tres y un día se derivan de la fecha al pintar: no hay proceso
           programado detrás, y no hace falta. */}
-      {esAdministrador && recurrenteViva === null ? (
+      {/* COMMERCIAL-UX-01G · Y NO se ofrece renovar a mano lo que se va a
+          cobrar solo. `recurrenteViva` solo ve el carril del proveedor: una
+          suscripción del carril de la plataforma pasaba el filtro y leía
+          «Renovar Full» justo debajo de «se renueva solo». Alguien podía pagar
+          dos veces por el mismo mes.
+
+          La pregunta la responde el resumen, que ya distingue los dos carriles;
+          preguntarla otra vez aquí sería una tercera copia de la misma regla. */}
+      {esAdministrador && recurrenteViva === null
+        && resumen.state !== "PROVIDER_ACTIVE" ? (
         <RenewalPanel
           planCode={estado?.planCode ?? null}
           billingInterval={estado?.billingInterval ?? null}

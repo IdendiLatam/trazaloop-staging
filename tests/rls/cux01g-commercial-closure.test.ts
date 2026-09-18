@@ -248,6 +248,34 @@ async function main() {
     }
   });
 
+  await check("3E. Y no se invita a renovar a mano lo que se cobra solo", () => {
+    // Lo vio el smoke: una empresa del carril de la plataforma leía «Tu plan
+    // está activo y se renueva solo» y, dos secciones más abajo, «Renovar
+    // Full». Quien hiciera caso pagaría dos veces el mismo mes.
+    //
+    // El panel se ofrecía cuando no había autorización del PROVEEDOR, que no es
+    // lo mismo que «no hay cobro automático». La pregunta la responde el
+    // resumen, que distingue los dos carriles.
+    const pagina = leer(BILLING);
+    const i = pagina.indexOf("<RenewalPanel");
+    assert(i !== -1, "ya no existe el panel de renovación manual");
+    const condicion = pagina.slice(Math.max(0, i - 400), i);
+    assert(/resumen\.state !== "PROVIDER_ACTIVE"/.test(condicion),
+      "el panel de renovar a mano no descarta los planes que se cobran solos");
+    // Y que ese estado sigue significando lo que aquí se supone.
+    const auto = summarizeBilling({
+      hasSubscription: true, contractedPlanCode: "full", effectivePlanCode: "full",
+      grantKind: "sold", grantEndsAt: null, currentPeriodEnd: null,
+      renewsAt: "2026-10-04T00:00:00.000Z", cancelAtPeriodEnd: false,
+      hasLiveRecurring: false, renewalMode: "platform",
+      subscriptionStatus: "active", manualReview: false,
+      downgradeScheduled: false, paymentMethodMissing: false,
+      pendingCheckout: false, isAdmin: true,
+    }, (iso) => iso.slice(0, 10));
+    assert(auto.state === "PROVIDER_ACTIVE",
+      `el carril de la plataforma resuelve a ${auto.state}`);
+  });
+
   console.log("\n4 · EXTRA · VISIBLE, Y SIN PROMETER UNA TRANSACCIÓN");
 
   await check("4A. Se puede conocer Extra en las dos superficies", () => {
