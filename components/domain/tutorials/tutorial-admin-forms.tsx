@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 
 import {
-  createTutorialAction, createPublicHomeTutorialAction, publishTutorialVersionAction, unpublishTutorialAction,
+  createTutorialAction, createPublicHomeTutorialAction, retireTutorialAction, publishTutorialVersionAction, unpublishTutorialAction,
   restoreTutorialVersionAction, discardCandidateAction, saveCandidateMetadataAction,
   previewTutorialVersionAction, reactivateTutorialAction, type TutorialAdminState,
 } from "@/server/actions/tutorials-admin";
@@ -201,6 +201,53 @@ export function ReactivateTutorialForm({ tutorialId }: { tutorialId: string }) {
       <Button type="submit" variant="quiet" disabled={pending}>
         {pending ? "Activando…" : "Volver a activar"}
       </Button>
+    </form>
+  );
+}
+
+/**
+ * COMMERCIAL-UX-01E.2 · Quitar el vídeo de la portada pública.
+ *
+ * NO se llama «Eliminar», y es deliberado: no elimina nada. La identidad, sus
+ * versiones, sus huellas y su historia se quedan donde están — se puede seguir
+ * sabiendo qué vídeo se veía en qué fecha. Lo único que ocurre es que deja de
+ * estar vigente, y el hueco de la portada queda libre para otro.
+ *
+ * Un texto destructivo sobre una operación reversible enseña a temer un botón
+ * que no hace daño, y —peor— a no fiarse del que sí lo hace.
+ */
+export function RetireFromHomeForm({ tutorialId }: { tutorialId: string }) {
+  const [state, action, pending] = useActionState(retireTutorialAction, inicial);
+  const [confirmando, setConfirmando] = useState(false);
+
+  if (!confirmando) {
+    return (
+      <div className="space-y-2">
+        <ErrorAlert message={state.error} />
+        <Button type="button" variant="quiet" onClick={() => setConfirmando(true)}>
+          Quitar de la portada
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-3 rounded-lg border border-hairline bg-paper p-4">
+      <input type="hidden" name="tutorialId" value={tutorialId} />
+      <ErrorAlert message={state.error} />
+      <p className="text-sm text-ink">
+        La portada dejará de enseñar el aviso.
+        <strong className="font-medium"> No se borra nada</strong>: el vídeo y su
+        historia quedan, y podrás configurar otro para la portada.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="quiet" disabled={pending}>
+          {pending ? "Quitando…" : "Sí, quitar de la portada"}
+        </Button>
+        <Button type="button" variant="quiet" onClick={() => setConfirmando(false)}>
+          Cancelar
+        </Button>
+      </div>
     </form>
   );
 }

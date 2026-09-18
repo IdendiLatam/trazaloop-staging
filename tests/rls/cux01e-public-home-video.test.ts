@@ -545,7 +545,148 @@ async function main() {
     assert(/requirePlatformStaff/.test(nueva), "la creación no exige superadministración");
   });
 
-  console.log("\n9 · LA SUPERFICIE PÚBLICA, DECLARADA");
+  console.log("\n11 · EL DIÁLOGO, PIEZA A PIEZA");
+
+  // POR QUÉ ESTA SECCIÓN EXISTE CON ESTE DETALLE.
+  //
+  // La automatización de navegador de este entorno NO entrega pulsaciones de
+  // teclado a la página —se comprobó instalando un oyente: cero teclas— ni
+  // cambia el viewport al redimensionar. Así que Tab, Shift+Tab, la devolución
+  // del foco y el ancho móvil no se pueden ejercitar ahí.
+  //
+  // No se inventa un verde de navegador. Se cubre cada pieza contra el código
+  // que las implementa, que es lo que sí se puede afirmar con evidencia.
+
+  const DIALOGO = "components/domain/tutorials/tutorial-player.tsx";
+
+  await check("11A. El foco ENTRA al abrir, y antes se recuerda a dónde volver", () => {
+    const p = leer(DIALOGO);
+    const i = p.indexOf("devolverFoco.current = document.activeElement");
+    const j = p.indexOf("contenedor.current?.focus()");
+    assert(i > 0, "no se recuerda a dónde devolver el foco");
+    assert(j > i, "se enfoca el diálogo antes de recordar de dónde venía el foco");
+    assert(/tabIndex=\{-1\}/.test(p),
+      "el contenedor no es enfocable: `focus()` no haría nada");
+  });
+
+  await check("11B. Tab y Shift+Tab quedan atrapados dentro", () => {
+    const p = leer(DIALOGO);
+    assert(/e\.key !== "Tab"/.test(p), "no se intercepta el tabulador");
+    assert(/e\.shiftKey && document\.activeElement === primero/.test(p),
+      "Shift+Tab en el primer elemento no vuelve al último");
+    assert(/!e\.shiftKey && document\.activeElement === ultimo/.test(p),
+      "Tab en el último elemento no vuelve al primero");
+    assert(/e\.preventDefault\(\)/.test(p),
+      "se detecta el borde pero se deja pasar el salto");
+  });
+
+  await check("11C. Escape cierra", () => {
+    const p = leer(DIALOGO);
+    assert(/if \(e\.key === "Escape"\) \{ onClose\(\); return; \}/.test(p),
+      "Escape no cierra el diálogo");
+  });
+
+  await check("11D. Y al cerrar, el foco vuelve a donde estaba", () => {
+    const p = leer(DIALOGO);
+    assert(/return \(\) => \{\s*\(devolverFoco\.current as HTMLElement \| null\)\?\.focus\?\.\(\);/
+      .test(p), "el foco no se devuelve al desmontar");
+  });
+
+  await check("11E. El control de «no volver a mostrar» es un botón de verdad", () => {
+    // Un `div` con `onClick` no se alcanza con el tabulador ni se activa con
+    // Intro. Que sea `<button>` lo resuelve sin escribir una línea de teclado.
+    const c = leer("components/domain/commercial/home-video-popup.tsx");
+    assert(/<button\s+type="button"\s+onClick=\{noMostrarMas\}/.test(c.replace(/\s+/g, " ")),
+      "«No volver a mostrar» no es un botón");
+    assert(/<button\s+type="button"\s+onClick=\{cerrar\}/.test(c.replace(/\s+/g, " ")),
+      "«Cerrar» no es un botón");
+    assert((c.match(/focus-visible:outline/g) || []).length >= 2,
+      "los botones del modal no muestran el foco");
+  });
+
+  await check("11F. Y el diálogo no desborda una pantalla estrecha", () => {
+    const p = leer(DIALOGO);
+    assert(/w-full max-w-3xl/.test(p),
+      "el diálogo no se adapta al ancho disponible");
+    assert(/max-h-\[90vh\] w-full/.test(p) || /max-h-\[90vh\]/.test(p),
+      "el diálogo puede ser más alto que la pantalla");
+    assert(/overflow-y-auto/.test(p),
+      "si el contenido no cabe, no se puede desplazar dentro del diálogo");
+    assert(/p-4/.test(p), "el diálogo se pega a los bordes en móvil");
+    assert(!/\bw-\[\d+px\]|\bmin-w-\[\d{3,}px\]/.test(p),
+      "hay un ancho fijo en píxeles que desbordaría una pantalla pequeña");
+  });
+
+console.log("\n10 · QUITAR DE LA PORTADA, DESDE LA CONSOLA");
+
+  await check("10A. Existe la acción, y es el espejo de reactivar", () => {
+    // Lo encontró el humo: se podía crear y publicar el vídeo de portada, y
+    // quitarle el vídeo — pero no retirar la identidad. Como solo puede haber
+    // UNA activa, esa identidad seguía ocupando el hueco y no había forma de
+    // configurar otra. La limpieza hubo que hacerla con un `update` directo, y
+    // eso no es una operación de producto.
+    const a = leer("server/actions/tutorials-admin.ts");
+    assert(/export async function retireTutorialAction/.test(a),
+      "no se puede retirar un tutorial desde la consola");
+    const i = a.indexOf("export async function retireTutorialAction");
+    const cuerpo = a.slice(i, i + 900);
+    assert(/status: "retired"/.test(cuerpo), "la acción no retira");
+    assert(!/delete\(|\.remove\(/.test(cuerpo), "la acción borra algo");
+  });
+
+  await check("10B. Solo superadministración, y en el servidor", () => {
+    const a = leer("server/actions/tutorials-admin.ts");
+    const i = a.indexOf("export async function retireTutorialAction");
+    const cuerpo = a.slice(i, i + 900);
+    assert(/requirePlatformStaff\(\)/.test(cuerpo), "no exige personal de plataforma");
+    assert(/if \(!isSuperadmin\) return \{ error: TUTORIAL_FORBIDDEN_MESSAGE \}/.test(cuerpo),
+      "no exige superadministración");
+    assert(/^"use server";/m.test(a), "el fichero de acciones no es de servidor");
+    assert(/createServerClient\(\)/.test(cuerpo),
+      "no usa la sesión: RLS y la bitácora no verían al actor real");
+    assert(!/createAdminClient/.test(cuerpo),
+      "retira con identidad de servidor, saltándose RLS");
+  });
+
+  await check("10C. Y en la pantalla NO se llama «Eliminar»", () => {
+    // Un texto destructivo sobre una operación reversible enseña a temer un
+    // botón que no hace daño y, peor, a no fiarse del que sí.
+    const f = leer("components/domain/tutorials/tutorial-admin-forms.tsx");
+    const i = f.indexOf("export function RetireFromHomeForm");
+    assert(i > 0, "no hay formulario para quitar de la portada");
+    const cuerpo = f.slice(i, i + 1800);
+    assert(/Quitar de la portada/.test(cuerpo), "el botón no dice qué hace");
+    assert(!/Eliminar|Borrar/.test(cuerpo), "el botón usa un verbo destructivo");
+    assert(/No se borra nada/.test(cuerpo), "no se aclara que no se borra nada");
+    assert(/confirmando/.test(cuerpo), "no hay confirmación");
+    const consola = leer("app/(app)/platform/tutorials/page.tsx");
+    assert(/<RetireFromHomeForm tutorialId/.test(consola),
+      "la consola no ofrece quitar el vídeo de la portada");
+  });
+
+  await check("10D. Retirar deja el hueco libre y conserva la historia", async () => {
+    await soloActivo(null);
+    const a = await crearPortada("CUX01E Retiro", 1);
+    // Se retira con el MISMO efecto que la acción: cambiar el estado.
+    await q(`update platform_tutorials set status='retired' where id=$1`, [a.tutorialId]);
+
+    const publico = await comoAnon<{ n: number }>(
+      "select count(*)::int n from public.v_public_home_video");
+    assert(publico.ok && Number(publico.filas[0].n) === 0,
+      "tras retirar, la portada sigue enseñando el aviso");
+
+    const [hist] = await q(
+      `select count(*)::int n from platform_tutorial_versions where tutorial_id=$1`,
+      [a.tutorialId]);
+    assert(Number(hist.n) === 1, "retirar se llevó por delante la historia");
+
+    // Y el hueco queda libre: se puede configurar otro.
+    const b = await crearPortada("CUX01E Sustituto", 1);
+    assert(b.tutorialId !== a.tutorialId, "no se pudo configurar otro vídeo de portada");
+    await soloActivo(uno.tutorialId);
+  });
+
+console.log("\n9 · LA SUPERFICIE PÚBLICA, DECLARADA");
 
   await check("9A. Siete relaciones, exactamente", async () => {
     await soloActivo(uno.tutorialId);

@@ -292,6 +292,43 @@ export async function reactivateTutorialAction(
   return { error: null, ok: true };
 }
 
+/**
+ * COMMERCIAL-UX-01E.2 · Retirar la IDENTIDAD de un tutorial.
+ *
+ * Es el espejo exacto de `reactivateTutorialAction`, y existe por el mismo
+ * motivo que aquélla: sin él, la operación es un callejón sin salida.
+ *
+ * Lo descubrió el humo en Staging. Superadministración podía crear y publicar
+ * el vídeo de la portada, y quitarle el vídeo — pero no podía retirar la
+ * identidad. Como solo puede haber UN `public_home` activo, esa identidad
+ * seguía ocupando el único hueco: con la portada ya sin aviso, no había forma
+ * de configurar otro vídeo desde la consola. La limpieza hubo que hacerla con
+ * un `update` directo contra la base, y eso no es una operación de producto.
+ *
+ * RETIRAR NO ES BORRAR, y por eso no se llama así en ningún sitio. La fila se
+ * queda, sus versiones se quedan, sus huellas se quedan y su historia se queda:
+ * se puede seguir sabiendo qué vídeo se veía en qué fecha. Lo único que cambia
+ * es que deja de estar vigente.
+ *
+ * Sirve para cualquier emplazamiento —pantalla, bienvenida o portada— porque el
+ * modelo es el mismo. No se escribe una segunda semántica para la portada.
+ */
+export async function retireTutorialAction(
+  _prev: TutorialAdminState, formData: FormData
+): Promise<TutorialAdminState> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) return { error: TUTORIAL_FORBIDDEN_MESSAGE };
+
+  const tutorialId = texto(formData, "tutorialId");
+  const supabase = await createServerClient();
+  const { data, error } = await supabase.from("platform_tutorials")
+    .update({ status: "retired" }).eq("id", tutorialId).select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: TUTORIAL_FORBIDDEN_MESSAGE };
+  revalidar(tutorialId);
+  return { error: null, ok: true };
+}
+
 /** Retirar: deja de verse, y la historia queda entera. */
 export async function unpublishTutorialAction(
   _prev: TutorialAdminState, formData: FormData

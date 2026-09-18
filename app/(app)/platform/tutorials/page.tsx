@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { listTutorialsAction } from "@/server/actions/tutorials-admin";
 import {
-  CreateTutorialForm, CreatePublicHomeVideoForm,
+  CreateTutorialForm, CreatePublicHomeVideoForm, RetireFromHomeForm,
 } from "@/components/domain/tutorials/tutorial-admin-forms";
 import { PAGE_KEYS, PAGE_KEY_EXCLUSIONS } from "@/lib/modules/page-keys";
 import { COMMERCIAL_MODULES } from "@/lib/modules/catalog";
@@ -231,7 +231,12 @@ export default async function PlatformTutorialsPage(
           </div>
         ) : (
           portada.map((r) => (
-            <FilaTutorial key={r.id} row={r} nombre="Portada pública" />
+            <div key={r.id} className="space-y-2">
+              <FilaTutorial row={r} nombre="Portada pública" />
+              {/* Quitar la identidad, no solo su vídeo: mientras siga activa
+                  ocupa el único hueco de portada y no se puede poner otra. */}
+              <RetireFromHomeForm tutorialId={r.id} />
+            </div>
           ))
         )}
       </section>
