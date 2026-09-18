@@ -467,6 +467,22 @@ async function main() {
       "el modal se pinta sin medio");
   });
 
+  await check("7D.2. El foco ENTRA en el diálogo al abrirse", () => {
+    // Lo cazó el humo en Staging: al abrirse, `document.activeElement` seguía
+    // siendo el `body`. La trampa de foco solo actúa cuando el foco ya está
+    // dentro, así que no llegaba a engancharse nunca, y el primer tabulador se
+    // iba por detrás del diálogo a elementos visualmente tapados.
+    const p = leer("components/domain/tutorials/tutorial-player.tsx");
+    assert(/contenedor\.current\?\.focus\(\)/.test(p),
+      "el diálogo no recibe el foco al abrirse");
+    assert(/tabIndex=\{-1\}/.test(p),
+      "el contenedor no es enfocable por programa");
+    const i = p.indexOf("devolverFoco.current = document.activeElement");
+    const j = p.indexOf("contenedor.current?.focus()");
+    assert(i > 0 && j > i,
+      "se enfoca el diálogo ANTES de recordar a dónde devolver el foco");
+  });
+
   await check("7E. Sin reproducción automática", () => {
     const player = leer("components/domain/tutorials/tutorial-player.tsx");
     assert(!/autoPlay/.test(player.replace(/\/\*[\s\S]*?\*\//g, "")),
@@ -504,6 +520,17 @@ async function main() {
     const p = leer("app/(app)/platform/tutorials/page.tsx");
     assert(/public_home/.test(p), "la consola no contempla el vídeo de portada");
     assert(/CreatePublicHomeVideoForm/.test(p), "no se puede crear desde la consola");
+  });
+
+  await check("8A.2. Y la ficha lo rotula por su emplazamiento", () => {
+    // Lo cazó el humo en Staging: la ficha del vídeo de portada decía «TUTORIAL
+    // DE PANTALLA · Vídeo de bienvenida». Con dos emplazamientos el «si no es
+    // pantalla, es bienvenida» funcionaba; con tres, mentía.
+    const f = leer("app/(app)/platform/tutorials/[id]/page.tsx");
+    assert(/tutorial\.tutorialType === "public_home"/.test(f),
+      "la ficha no distingue el vídeo de portada");
+    assert(/Vídeo de la portada pública/.test(f) && /Portada pública/.test(f),
+      "la ficha no nombra el emplazamiento de portada");
   });
 
   await check("8B. Sin segunda tubería de subida ni de publicación", () => {

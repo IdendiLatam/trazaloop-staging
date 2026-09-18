@@ -44,6 +44,22 @@ export function TutorialDialogShell({
 
   useEffect(() => {
     devolverFoco.current = document.activeElement;
+
+    // COMMERCIAL-UX-01E.1 · EL FOCO ENTRA AL ABRIR.
+    //
+    // Faltaba, y se descubrió midiéndolo en el despliegue: al abrirse el
+    // diálogo, `document.activeElement` seguía siendo el `body`. Dos
+    // consecuencias, las dos malas para quien navega con teclado:
+    //
+    //   · la trampa de foco de más abajo no llegaba a engancharse nunca,
+    //     porque solo actúa cuando el foco YA está dentro;
+    //   · el primer tabulador se iba al principio de la página, por detrás
+    //     del diálogo, a elementos que visualmente están tapados.
+    //
+    // Se enfoca el contenedor —no el primer botón— para que un lector de
+    // pantalla anuncie el diálogo y su nombre antes que una acción suelta.
+    contenedor.current?.focus();
+
     return () => {
       (devolverFoco.current as HTMLElement | null)?.focus?.();
     };
@@ -78,6 +94,9 @@ export function TutorialDialogShell({
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        // Enfocable por programa, no por tabulador: el foco entra aquí al
+        // abrir, y a partir de ahí el recorrido lo llevan los controles.
+        tabIndex={-1}
         className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-hairline bg-surface p-5 shadow-lg"
       >
         {children}

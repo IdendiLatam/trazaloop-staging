@@ -51,9 +51,16 @@ export default async function PlatformTutorialDetailPage(
   if (!detail) notFound();
 
   const { tutorial, versions } = detail;
+  // COMMERCIAL-UX-01E.1 · Los tres emplazamientos, cada uno con su nombre.
+  //
+  // Antes eran dos, y todo lo que no colgaba de una pantalla se rotulaba
+  // «Vídeo de bienvenida». Con el vídeo de portada eso pasó a ser falso: la
+  // ficha del vídeo público decía que era la bienvenida.
   const nombrePantalla = tutorial.pageKey
     ? PAGE_KEYS.find((p) => p.key === tutorial.pageKey)?.label ?? tutorial.pageKey
-    : "Vídeo de bienvenida";
+    : tutorial.tutorialType === "public_home"
+      ? "Vídeo de la portada pública"
+      : "Vídeo de bienvenida";
 
   const publicada = versions.find((v) => v.effectiveFrom && !v.effectiveTo) ?? null;
   const candidatas = versions.filter((v) => v.effectiveFrom === null && v.fileState === "verified");
@@ -76,7 +83,9 @@ export default async function PlatformTutorialDetailPage(
 
       <header className="space-y-1">
         <p className="eyebrow">
-          {tutorial.tutorialType === "welcome" ? "Bienvenida" : "Tutorial de pantalla"}
+          {tutorial.tutorialType === "welcome" ? "Bienvenida"
+            : tutorial.tutorialType === "public_home" ? "Portada pública"
+            : "Tutorial de pantalla"}
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">{nombrePantalla}</h1>
         <p className="text-sm text-ink-soft">{tutorial.title}</p>
