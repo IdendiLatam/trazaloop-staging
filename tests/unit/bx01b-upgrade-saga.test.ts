@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
-  decideUpgradeStep, recurringTotalFor,
+  decideUpgradeStep, recurringTotalFor, classifySettlementOutcome,
   type UpgradeSagaFacts, type ObservedDeltaPayment,
 } from "../../lib/billing/upgrade/saga";
 import {
@@ -39,6 +39,8 @@ const EFECTIVA = "2026-09-20T00:00:00.000Z";
 const EXTRA_RECURRENTE = 476_000;
 /** La diferencia de media mensualidad: 120 000 + 22 800. */
 const DELTA_TOTAL = 142_800;
+/** Full mensual: 160 000 de base + 30 400 de IVA. Lo que la autorización tenía. */
+const FULL_RECURRENTE = 190_400;
 
 const pago = (o: Partial<ObservedDeltaPayment> = {}): ObservedDeltaPayment => ({
   providerPaymentId: "mp-1", canonicalStatus: "approved",
@@ -51,7 +53,9 @@ const hechos = (o: Partial<UpgradeSagaFacts> = {}): UpgradeSagaFacts => ({
   renewalMode: "manual", configuredEnvironment: "test",
   deltaPayment: null, providerCyclesInsideWindow: 0,
   authorization: null, targetRecurringAmountMinor: EXTRA_RECURRENTE,
-  authorizationUpdateAttempted: false, ...o });
+  authorizationUpdateAttempted: false,
+  providerRecurringAmountBefore: null, providerRestored: false,
+  restoreTargetAmount: null, authorizationRestoreAttempted: false, ...o });
 
 const autorizacion = (o: Partial<NonNullable<UpgradeSagaFacts["authorization"]>> = {}) => ({
   providerSubscriptionId: "preapproval-1", status: "authorized",
@@ -247,14 +251,27 @@ async function main() {
     }
   });
 
-  check("5B. Una compensación abierta manda sobre todo lo demás", () => {
-    // Incluso con todo en orden: de `compensation_required` NO se sale hacia
-    // Extra. Un cobro que se decidió devolver no concede nada.
-    const r = decideUpgradeStep(hechos({
-      changeStatus: "compensation_required",
-      renewalMode: "provider", deltaPayment: pago(),
-      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
-    assert(r.kind === "compensate", `decidió ${r.kind}`);
+  check("5B. De una compensación abierta NUNCA se sale hacia Extra", () => {
+    // Ni con todo lo demás en orden. Un cobro que se decidió devolver no
+    // concede nada: sólo caben devolver la autorización, devolver el dinero, o
+    // quedarse quieto.
+    const casos: UpgradeSagaFacts[] = [
+      hechos({ changeStatus: "compensation_required", deltaPayment: pago() }),
+      hechos({ changeStatus: "compensation_required", renewalMode: "provider",
+               deltaPayment: pago(),
+               authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }),
+               providerRecurringAmountBefore: FULL_RECURRENTE,
+               restoreTargetAmount: FULL_RECURRENTE }),
+      hechos({ changeStatus: "compensation_required", renewalMode: "provider",
+               deltaPayment: pago(), providerRestored: true,
+               providerRecurringAmountBefore: FULL_RECURRENTE,
+               authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }),
+    ];
+    for (const f of casos) {
+      const r = decideUpgradeStep(f);
+      assert(["refund", "restore_authorization", "hold"].includes(r.kind),
+        `decidió ${r.kind}`);
+    }
   });
 
   check("5C. Y lo que aún no salió al proveedor, espera", () => {
@@ -352,6 +369,12 @@ async function main() {
     assert(/createServerClient/.test(limpio),
       "la recuperación llama a la base con el cliente administrativo: "
       + "entonces la auditoría no guarda a una persona");
+    // BILLING-EXTRA-01B.1 · Y cede el turno a la saga canónica en vez de
+    // compensar por su cuenta. Dos algoritmos que mueven dinero divergen.
+    assert(/reconcileUpgrade/.test(limpio),
+      "la recuperación compensa por su cuenta en vez de usar la saga");
+    assert(!/refundPayment|billing_record_upgrade_refund/.test(limpio),
+      "la recuperación tiene su propio camino de reembolso");
   });
 
   check("8C. Y el reembolso usa una llave derivada, no una inventada", () => {
@@ -402,6 +425,157 @@ async function main() {
       assert(!new RegExp(`create or replace function public\\.${f}\\b`).test(sql),
         `0216 reescribe ${f}, que tenía que quedarse como estaba`);
     }
+  });
+
+  console.log("\n10 · LA SEGUNDA DEVOLUCIÓN · LA AUTORIZACIÓN");
+
+  /** Una compensación abierta sobre el carril del proveedor. */
+  const compensando = (o: Partial<UpgradeSagaFacts> = {}) => hechos({
+    changeStatus: "compensation_required", renewalMode: "provider",
+    deltaPayment: pago(), providerRecurringAmountBefore: FULL_RECURRENTE,
+    restoreTargetAmount: FULL_RECURRENTE, ...o });
+
+  check("10A. Con la autorización en Extra se devuelve ELLA primero", () => {
+    // Y al importe ORIGINAL, no al del catálogo de hoy.
+    const r = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(r.kind === "restore_authorization", `decidió ${r.kind}`);
+    assert(r.amountMinor === FULL_RECURRENTE, `pide volver a ${r.amountMinor}`);
+  });
+
+  check("10B. Reversión pedida y el proveedor sigue en Extra · NO se cierra", () => {
+    // El caso que da nombre a este tramo: devolver el dinero aquí dejaría una
+    // autorización cobrando Extra sobre una suscripción Full.
+    const r = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }),
+      authorizationRestoreAttempted: true }));
+    assert(r.kind === "hold" && r.reason === "RESTORE_NOT_APPLIED",
+      `decidió ${r.kind}`);
+  });
+
+  check("10C. Y si no se puede leer al proveedor, tampoco se cierra", () => {
+    // «No se sabe» no es «está como estaba».
+    const primera = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: null }) }));
+    assert(primera.kind === "restore_authorization",
+      `la primera vez decidió ${primera.kind}`);
+    const despues = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: null }),
+      authorizationRestoreAttempted: true }));
+    assert(despues.kind === "hold" && despues.reason === "PROVIDER_AMOUNT_UNKNOWN",
+      `decidió ${despues.kind}`);
+  });
+
+  check("10D. Ya verificada en su importe · ahora sí se devuelve el dinero", () => {
+    const porSello = decideUpgradeStep(compensando({
+      providerRestored: true,
+      authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }));
+    assert(porSello.kind === "refund", `decidió ${porSello.kind}`);
+    // Y también cuando el proveedor dice el original aunque nunca llegáramos a
+    // cambiarlo: lo que importa es cómo está el mundo.
+    const porLectura = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }));
+    assert(porLectura.kind === "refund" && porLectura.reason === "PROVIDER_ALREADY_AT_ORIGINAL",
+      `decidió ${porLectura.kind}`);
+  });
+
+  check("10E. Si nunca se tocó nada fuera, no hay nada que restaurar", () => {
+    const r = decideUpgradeStep(compensando({
+      providerRecurringAmountBefore: null, restoreTargetAmount: null,
+      authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }));
+    assert(r.kind === "refund" && r.reason === "NO_PROVIDER_CHANGE",
+      `decidió ${r.kind}`);
+  });
+
+  check("10F. Sin saber a qué importe volver, NO se inventa uno", () => {
+    const r = decideUpgradeStep(compensando({
+      restoreTargetAmount: null,
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(r.kind === "hold" && r.reason === "RESTORE_TARGET_UNKNOWN",
+      `decidió ${r.kind}`);
+  });
+
+  check("10G. Un importe que no es ni el uno ni el otro se queda quieto", () => {
+    const r = decideUpgradeStep(compensando({
+      authorization: autorizacion({ observedAmountMinor: 333_333 }),
+      authorizationRestoreAttempted: true }));
+    assert(r.kind === "hold" && r.reason === "PROVIDER_AMOUNT_UNEXPECTED",
+      `decidió ${r.kind}`);
+  });
+
+  check("10H. El carril manual no tiene autorización: devuelve y ya", () => {
+    const r = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required", renewalMode: "manual",
+      deltaPayment: pago() }));
+    assert(r.kind === "refund", `decidió ${r.kind}`);
+  });
+
+  console.log("\n11 · UN TIEMPO DE ESPERA NO ES UN FALLO");
+
+  check("11A. Lo que dice que se aplicó, converge", () => {
+    for (const o of ["upgraded", "already_settled"]) {
+      assert(classifySettlementOutcome(o) === "settled", `«${o}»`);
+    }
+  });
+
+  check("11B. Lo que no puede casar nunca, compensa", () => {
+    for (const o of ["reconciliation_mismatch", "environment_mismatch",
+                     "provider_mismatch", "not_an_upgrade", "declined", "failed"]) {
+      assert(classifySettlementOutcome(o) === "permanent", `«${o}»`);
+    }
+  });
+
+  check("11C. Y todo lo demás se REINTENTA, no se compensa", () => {
+    // Incluida la respuesta que no llegó. Devolver el dinero de una subida que
+    // sí se aplicó sería quitarle a alguien un plan que pagó.
+    for (const o of [null, "unknown", "rpc_error", "subscription_not_found"]) {
+      assert(classifySettlementOutcome(o) === "retry", `«${o}»`);
+    }
+  });
+
+  check("11D. Y el conciliador RELEE la fila antes de decidir que falló", () => {
+    const rec = sinComentarios(leer("lib/db/upgrade-mercadopago.ts"));
+    assert(/classifySettlementOutcome/.test(rec),
+      "el conciliador no clasifica el desenlace de la liquidación");
+    assert(/SETTLED_CONFIRMED_BY_STATE/.test(rec),
+      "no se relee la autoridad interna antes de compensar");
+    assert(/SETTLE_RETRYABLE/.test(rec),
+      "un desenlace reintentable acaba compensando igual");
+  });
+
+  console.log("\n12 · EL IMPORTE OBJETIVO ES EL DE EXTRA");
+
+  check("12A. `target_full_base` es la base del plan DESTINO, no la de Full", () => {
+    // Con el catálogo de hoy: Full 160 000 y Extra 400 000 de base en COP.
+    // El importe recurrente que deja la subida es 476 000, no 190 400.
+    // Las cifras entran como datos para que el compilador no resuelva la
+    // comparación por su cuenta: lo que se comprueba es la aritmética, y una
+    // comparación que TypeScript declara imposible no comprueba nada.
+    const baseExtra: number = 400_000, ivaExtra: number = 76_000;
+    const baseFull: number = 160_000, ivaFull: number = 30_400;
+    const objetivo = recurringTotalFor(baseExtra, ivaExtra);
+    const deFull = recurringTotalFor(baseFull, ivaFull);
+    assert(objetivo === EXTRA_RECURRENTE, `salió ${objetivo}`);
+    assert(deFull === FULL_RECURRENTE, `el de Full salió ${deFull}`);
+    // Aquí NO se comprueba que los dos números sean distintos: después de las
+    // dos líneas de arriba eso es cierto por construcción, y una aserción que
+    // el compilador puede resolver no comprueba nada. Que la columna que se usa
+    // sea la de Extra y no la de Full se comprueba contra la BASE, en la suite
+    // `bx01b-db`, que es donde están las columnas.
+    // Y la saga pide exactamente ése al proveedor.
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }));
+    assert(r.kind === "update_authorization" && r.amountMinor === EXTRA_RECURRENTE,
+      `pide ${r.kind === "update_authorization" ? r.amountMinor : r.kind}`);
+  });
+
+  check("12B. Y el nombre confuso queda explicado donde confunde", () => {
+    const sql = leer("supabase/migrations/0217_billing_upgrade_provider_restoration.sql");
+    assert(/comment on column public\.billing_subscription_changes\.target_full_base/
+      .test(sql), "nadie explica qué es `target_full_base`");
+    assert(/NO es la base de Full/.test(sql),
+      "la explicación no dice lo único que hay que saber");
   });
 
   console.log(`\nBILLING-EXTRA-01B · saga: ${passed} en verde, ${failed} en rojo\n`);

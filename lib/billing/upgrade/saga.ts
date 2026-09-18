@@ -94,6 +94,23 @@ export type UpgradeSagaFacts = {
    *  autorización que no acepta el cambio haría girar el conciliador para
    *  siempre. */
   authorizationUpdateAttempted: boolean;
+
+  /**
+   * BILLING-EXTRA-01B.1 · Lo que el proveedor tenía ANTES de que esta subida lo
+   * tocara. `null` significa que nunca se llegó a tocar —anotarlo es lo primero
+   * que se hace antes del cambio—, y por tanto que no hay nada que restaurar.
+   */
+  providerRecurringAmountBefore: number | null;
+  /** ¿Se VERIFICÓ por GET que la autorización volvió a su importe? */
+  providerRestored: boolean;
+  /**
+   * A qué importe hay que volver, resuelto por la base: lo observado, o la
+   * reconstrucción desde lo congelado. `null` = no se puede saber, y entonces
+   * no se finaliza nada.
+   */
+  restoreTargetAmount: number | null;
+  /** ¿Ya se pidió la reversión en esta pasada? */
+  authorizationRestoreAttempted: boolean;
 };
 
 export type UpgradeSagaStep =
@@ -105,8 +122,20 @@ export type UpgradeSagaStep =
   | { kind: "update_authorization"; amountMinor: number; currency: string }
   /** Se puede conceder Extra: el dinero está y el carril queda coherente. */
   | { kind: "settle" }
-  /** Entró dinero y la subida no se completa. Se devuelve. */
+  /** Entró dinero y la subida no se completa. Se abre la compensación. */
   | { kind: "compensate"; reason: string }
+  /**
+   * BILLING-EXTRA-01B.1 · La autorización quedó en Extra y la subida no se
+   * completó: hay que devolverla a su importe ANTES de devolver el dinero.
+   */
+  | { kind: "restore_authorization"; amountMinor: number; currency: string }
+  /** Ya se puede devolver el dinero: fuera todo está como estaba. */
+  | { kind: "refund"; reason: string }
+  /**
+   * No se puede avanzar sin arriesgar el invariante, y tampoco se puede cerrar.
+   * Se queda en compensación, que mantiene el barrido bloqueado.
+   */
+  | { kind: "hold"; reason: string }
   /** Ya está resuelto. Volver a llamar no hace nada. */
   | { kind: "done"; reason: string };
 
@@ -154,7 +183,7 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
   // resto: mientras haya algo que devolver, no se evalúa si se podría
   // completar. De `compensation_required` no se sale hacia Extra.
   if (f.changeStatus === "compensation_required") {
-    return { kind: "compensate", reason: "COMPENSATION_ALREADY_OPEN" };
+    return decidirCompensacion(f);
   }
 
   // ── todavía no ha salido al proveedor ─────────────────────────────────────
@@ -256,6 +285,100 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
   // No se confía en el 200: se confía en lo que dice después. Y como el dinero
   // ya entró, la única salida es devolverlo.
   return { kind: "compensate", reason: "AUTHORIZATION_AMOUNT_NOT_APPLIED" };
+}
+
+
+/**
+ * BILLING-EXTRA-01B.1 · Qué toca cuando ya hay una compensación abierta.
+ *
+ *
+ * COMPENSAR UNA SUBIDA A MEDIAS SON DOS DEVOLUCIONES
+ *
+ * El dinero, y el importe recurrente. La segunda sólo hace falta si esta subida
+ * llegó a tocar la autorización, y eso se sabe por una cosa: si se anotó el
+ * importe anterior. Anotarlo es lo primero que se hace antes de tocarla, así
+ * que «no hay anotación» significa «no se tocó».
+ *
+ *
+ * EL ORDEN NO ES NEGOCIABLE
+ *
+ * Primero la autorización, después el dinero. Al revés dejaría, durante el rato
+ * que tardara el segundo paso, una empresa con su dinero de vuelta y una
+ * autorización cobrándole Extra todos los meses. Y si ese segundo paso no
+ * llegara nunca, el cambio ya estaría cerrado y el barrido suelto.
+ *
+ * Por eso `refunded` es inalcanzable mientras la restauración no esté
+ * verificada: lo impide esta función, lo impide la primitiva del reembolso y lo
+ * impide una restricción de la tabla. Tres veces, porque saltarse una es fácil.
+ */
+function decidirCompensacion(f: UpgradeSagaFacts): UpgradeSagaStep {
+  const tocada = f.providerRecurringAmountBefore !== null;
+
+  // Nunca se tocó nada fuera: no hay autorización que devolver.
+  if (!tocada) return { kind: "refund", reason: "NO_PROVIDER_CHANGE" };
+
+  // Ya se verificó que volvió a su importe.
+  if (f.providerRestored) return { kind: "refund", reason: "PROVIDER_RESTORED" };
+
+  // Hay que devolverla, y no se sabe a qué importe. NO se inventa uno desde el
+  // catálogo: se para. Un importe equivocado es peor que ninguno, porque parece
+  // resuelto.
+  if (f.restoreTargetAmount === null) {
+    return { kind: "hold", reason: "RESTORE_TARGET_UNKNOWN" };
+  }
+
+  const observado = f.authorization?.observedAmountMinor ?? null;
+
+  // No se pudo leer al proveedor. «No se sabe» no es «está como estaba», y
+  // mientras quepa que siga en Extra no se cierra nada.
+  if (observado === null) {
+    return f.authorizationRestoreAttempted
+      ? { kind: "hold", reason: "PROVIDER_AMOUNT_UNKNOWN" }
+      : { kind: "restore_authorization", amountMinor: f.restoreTargetAmount,
+          currency: f.expectedCurrency };
+  }
+
+  // Dice el importe original. Cuenta como restaurada aunque nunca llegáramos a
+  // cambiarla: lo que importa es cómo está el mundo, no cuántas peticiones
+  // hicieron falta. Quien llama lo sellará con su GET.
+  if (observado === f.providerRecurringAmountBefore) {
+    return { kind: "refund", reason: "PROVIDER_ALREADY_AT_ORIGINAL" };
+  }
+
+  // Ni el original ni nada reconocible. Si ya se pidió la reversión y sigue sin
+  // aplicarse, esto no lo arregla otra petición.
+  if (f.authorizationRestoreAttempted) {
+    return { kind: "hold", reason: observado === f.targetRecurringAmountMinor
+      ? "RESTORE_NOT_APPLIED" : "PROVIDER_AMOUNT_UNEXPECTED" };
+  }
+  return { kind: "restore_authorization", amountMinor: f.restoreTargetAmount,
+           currency: f.expectedCurrency };
+}
+
+/**
+ * BILLING-EXTRA-01B.1 · Qué significa que la liquidación no dijera «subida».
+ *
+ * Distinguir esto es lo que impide que un tiempo de espera de red dispare una
+ * compensación destructiva. Devolver el dinero de una subida que sí se aplicó
+ * sería quitarle a alguien un plan que pagó.
+ */
+export type SettlementVerdict = "settled" | "retry" | "permanent";
+
+/** Las que dicen que el dinero y la subida NO pueden casarse nunca. */
+const LIQUIDACION_DEFINITIVA = new Set([
+  "reconciliation_mismatch", "environment_mismatch", "provider_mismatch",
+  "not_an_upgrade", "declined", "failed",
+]);
+
+export function classifySettlementOutcome(
+  outcome: string | null
+): SettlementVerdict {
+  if (outcome === "upgraded" || outcome === "already_settled") return "settled";
+  if (outcome !== null && LIQUIDACION_DEFINITIVA.has(outcome)) return "permanent";
+  // Todo lo demás —una respuesta que no llegó, un error de transporte, un
+  // estado que no sabemos leer— se REINTENTA. No se compensa: primero se
+  // vuelve a mirar qué dice la autoridad interna.
+  return "retry";
 }
 
 /**

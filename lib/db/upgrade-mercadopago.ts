@@ -4,7 +4,7 @@ import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
 import { providerAmountToMinor } from "@/lib/billing/mercadopago/mapping";
 import { buildUpgradeReference } from "@/lib/billing/upgrade-reference";
 import {
-  decideUpgradeStep, recurringTotalFor,
+  decideUpgradeStep, recurringTotalFor, classifySettlementOutcome,
   type ObservedDeltaPayment, type UpgradeSagaFacts,
 } from "@/lib/billing/upgrade/saga";
 
@@ -242,9 +242,10 @@ export async function reconcileMercadoPagoUpgrade(
 
   // ── el importe recurrente que Extra debe dejar puesto ─────────────────────
   //
-  // Se DERIVA de la fila del cambio, y el impuesto se lo pregunta a la única
-  // autoridad de redondeo que tiene el dominio. Reimplementar aquí ese redondeo
-  // sería una segunda aritmética fiscal.
+  // Se DERIVA de la fila del cambio: `target_full_base` es la base del periodo
+  // COMPLETO del plan DESTINO —en Full→Extra, la de Extra— y el impuesto se lo
+  // pregunta a la única autoridad de redondeo que tiene el dominio.
+  // Reimplementar aquí ese redondeo sería una segunda aritmética fiscal.
   const base = Number(cambio.target_full_base);
   const { data: impuestoRaw } = await admin.rpc("billing_tax_amount", {
     p_base: base, p_rate_basis_points: Number(cambio.tax_rate_basis_points),
@@ -253,11 +254,48 @@ export async function reconcileMercadoPagoUpgrade(
   if (impuesto === null) return fin("blocked", "TAX_UNRESOLVED");
   const objetivo = recurringTotalFor(base, impuesto);
 
-  // ── decidir, hacer, y volver a decidir ────────────────────────────────────
-  let estado = String(cambio.status);
-  let intentadoElCambio = false;
+  // ── y a qué importe habría que volver si esto no sale ─────────────────────
+  //
+  // Lo responde la base: lo observado antes de tocar nada, o la reconstrucción
+  // desde lo congelado en la propia transición. Nunca el catálogo de hoy.
+  const { data: destinoRaw } = await admin.rpc("billing_upgrade_restore_target",
+    { p_change_id: changeId });
+  const destino = (destinoRaw ?? {}) as Fila;
+  const restaurarA = num(destino.amount);
 
-  for (let vuelta = 0; vuelta < 3; vuelta += 1) {
+  /** Leer la autorización y DEJAR ANOTADO lo que dijo. */
+  const releerAutorizacion = async (id: string) => {
+    const d = await proveedor.getSubscriptionDetail(id);
+    const importe = d.ok && d.value.amount !== null
+      ? providerAmountToMinor(d.value.amount, d.value.currency) : null;
+    const moneda = d.ok ? d.value.currency : null;
+    await admin.rpc("billing_note_upgrade_recurring_observed", {
+      p_change_id: changeId, p_amount: importe, p_currency: moneda });
+    autorizacion = { ...(autorizacion ?? {
+      providerSubscriptionId: id, status: null,
+      observedAmountMinor: null, observedCurrency: null }),
+      observedAmountMinor: importe, observedCurrency: moneda };
+    return d.ok;
+  };
+
+  /** Releer la fila: la autoridad interna manda sobre cualquier respuesta. */
+  const releerCambio = async () => {
+    const { data } = await admin.from("billing_subscription_changes")
+      .select("status, provider_recurring_amount_before, provider_recurring_restored_at")
+      .eq("id", changeId).maybeSingle();
+    return (data ?? {}) as Fila;
+  };
+
+  // ── decidir, hacer, y volver a decidir ────────────────────────────────────
+  let fila = await releerCambio();
+  let estado = String(fila.status ?? cambio.status);
+  let anteriorRecurrente = num(fila.provider_recurring_amount_before);
+  let restaurada = fila.provider_recurring_restored_at !== null
+                && fila.provider_recurring_restored_at !== undefined;
+  let intentadoElCambio = false;
+  let intentadaLaReversion = false;
+
+  for (let vuelta = 0; vuelta < 6; vuelta += 1) {
     const paso = decideUpgradeStep({
       changeStatus: estado,
       expectedTotalAmount: Number(intento.expected_total_amount),
@@ -272,11 +310,16 @@ export async function reconcileMercadoPagoUpgrade(
       authorization: autorizacion,
       targetRecurringAmountMinor: objetivo,
       authorizationUpdateAttempted: intentadoElCambio,
+      providerRecurringAmountBefore: anteriorRecurrente,
+      providerRestored: restaurada,
+      restoreTargetAmount: restaurarA,
+      authorizationRestoreAttempted: intentadaLaReversion,
     });
     pasos.push(paso.kind + (("reason" in paso) ? `:${paso.reason}` : ""));
 
     if (paso.kind === "done") return fin("not_applicable", paso.reason);
     if (paso.kind === "wait") return fin("waiting", paso.reason);
+    if (paso.kind === "hold") return fin("compensation_required", paso.reason);
 
     if (paso.kind === "abandon") {
       await admin.rpc("billing_settle_upgrade_payment", {
@@ -298,23 +341,38 @@ export async function reconcileMercadoPagoUpgrade(
       }
       const id = autorizacion?.providerSubscriptionId;
       if (!id) { intentadoElCambio = true; continue; }
-      const puesto = await proveedor.updateRecurringAmount(
-        id, paso.amountMinor, paso.currency);
-      intentadoElCambio = true;
-      // NO se confía en el 200. Se vuelve a preguntar, siempre, salga como
-      // salga: una petición que falló puede haberse aplicado igual.
-      const detalle = await proveedor.getSubscriptionDetail(id);
-      if (detalle.ok) {
-        autorizacion = {
-          ...autorizacion!,
-          observedAmountMinor: detalle.value.amount === null
-            ? null : providerAmountToMinor(detalle.value.amount, detalle.value.currency),
-          observedCurrency: detalle.value.currency,
-        };
-      } else if (!puesto.ok) {
-        // Ni se pudo poner ni se puede comprobar. No se concede nada.
-        autorizacion = { ...autorizacion!, observedAmountMinor: null };
+
+      // Y se anota A DÓNDE VOLVER, también antes. Después del cambio, lo que se
+      // lea ya podría ser lo que pusimos nosotros.
+      const actual = autorizacion?.observedAmountMinor ?? null;
+      if (actual !== null) {
+        const { data: n } = await admin.rpc("billing_note_upgrade_recurring_before", {
+          p_change_id: changeId, p_amount: actual,
+          p_currency: autorizacion?.observedCurrency
+            ?? String(intento.expected_currency) });
+        anteriorRecurrente = num((n as Fila | null)?.amount) ?? actual;
       }
+
+      await proveedor.updateRecurringAmount(id, paso.amountMinor, paso.currency);
+      intentadoElCambio = true;
+      // NO se confía en la respuesta. Se vuelve a preguntar SIEMPRE: una
+      // petición que falló puede haberse aplicado igual.
+      await releerAutorizacion(id);
+      continue;
+    }
+
+    if (paso.kind === "restore_authorization") {
+      const id = autorizacion?.providerSubscriptionId;
+      if (!id) return fin("compensation_required", "RESTORE_WITHOUT_AUTHORIZATION");
+      await proveedor.updateRecurringAmount(
+        id, paso.amountMinor, paso.currency);
+      intentadaLaReversion = true;
+      // Igual que arriba, y por lo mismo: el 200 no prueba nada y el error
+      // tampoco. Manda lo que el proveedor diga después.
+      await releerAutorizacion(id);
+      const f2 = await releerCambio();
+      restaurada = f2.provider_recurring_restored_at !== null
+                && f2.provider_recurring_restored_at !== undefined;
       continue;
     }
 
@@ -323,27 +381,40 @@ export async function reconcileMercadoPagoUpgrade(
       await admin.rpc("billing_observe_upgrade_delta", {
         p_change_id: changeId, p_provider_payment_id: delta.providerPaymentId,
       });
-      const { data: r } = await admin.rpc("billing_settle_upgrade_payment", {
+      const { data: r, error } = await admin.rpc("billing_settle_upgrade_payment", {
         p_intent_id: String(intento.id), p_provider: MP,
         p_provider_payment_id: delta.providerPaymentId,
         p_outcome: "approved", p_amount: delta.amountMinor, p_currency: delta.currency,
         p_live_mode: entorno === "live", p_failure_reason: null,
       });
-      const salida = str((r as Fila | null)?.outcome) ?? "unknown";
-      if (salida === "upgraded" || salida === "already_settled") {
-        return fin("upgraded", salida);
+      const salida = error ? null : (str((r as Fila | null)?.outcome) ?? null);
+      const veredicto = classifySettlementOutcome(salida);
+      pasos.push(`settle:${salida ?? "no_response"}:${veredicto}`);
+
+      if (veredicto === "settled") return fin("upgraded", salida ?? "settled");
+
+      // LA AUTORIDAD INTERNA MANDA SOBRE LA RESPUESTA. Una respuesta que no
+      // llegó no significa que no se aplicara, y compensar una subida que sí se
+      // aplicó sería quitarle a alguien un plan que pagó.
+      fila = await releerCambio();
+      if (String(fila.status) === "settled") {
+        return fin("upgraded", "SETTLED_CONFIRMED_BY_STATE");
       }
-      // La liquidación se negó después de que el dinero entrara. Hay que
-      // devolverlo: no hay ningún otro final honesto.
+      if (veredicto === "retry") {
+        // Se queda donde está, bloqueando el barrido, y se vuelve a intentar.
+        // No se compensa por un tiempo de espera.
+        return fin("waiting", `SETTLE_RETRYABLE:${salida ?? "no_response"}`);
+      }
+      // Definitivo: el dinero entró y esta subida no puede aplicarse nunca.
       estado = "submitted";
-      const abierta = await abrirCompensacion(changeId, `SETTLE_${salida.toUpperCase()}`);
-      if (!abierta) return fin("blocked", `SETTLE_REFUSED:${salida}`);
+      if (!await abrirCompensacion(changeId, `SETTLE_${(salida ?? "unknown").toUpperCase()}`)) {
+        return fin("blocked", `SETTLE_REFUSED:${salida}`);
+      }
       estado = "compensation_required";
       continue;
     }
 
-    // paso.kind === "compensate"
-    if (estado !== "compensation_required") {
+    if (paso.kind === "compensate") {
       if (delta) {
         await admin.rpc("billing_observe_upgrade_delta", {
           p_change_id: changeId, p_provider_payment_id: delta.providerPaymentId,
@@ -353,7 +424,14 @@ export async function reconcileMercadoPagoUpgrade(
         return fin("blocked", `COMPENSATION_NOT_OPENED:${paso.reason}`);
       }
       estado = "compensation_required";
+      fila = await releerCambio();
+      anteriorRecurrente = num(fila.provider_recurring_amount_before);
+      restaurada = fila.provider_recurring_restored_at !== null
+                && fila.provider_recurring_restored_at !== undefined;
+      continue;
     }
+
+    // paso.kind === "refund"
     return await devolver(changeId, pasos);
   }
 

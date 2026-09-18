@@ -75,6 +75,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0217_billing_upgrade_provider_restoration.sql",
     "0216_billing_upgrade_compensation.sql",
     "0215_public_home_video_placement.sql",
     "0214_public_trial_policy_without_session.sql",

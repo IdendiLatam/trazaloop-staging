@@ -136,11 +136,33 @@ export async function resolveStuckUpgrade(changeId: string): Promise<StuckResolu
     return { ok: false, status: error.message, evidence: prueba.evidence,
              detail: prueba.detail };
   }
-  const estado = String((data as Record<string, unknown> | null)?.status ?? "unknown");
+  let estado = String((data as Record<string, unknown> | null)?.status ?? "unknown");
+
+  // BILLING-EXTRA-01B.1 · Y A PARTIR DE AQUÍ, LA MISMA SAGA.
+  //
+  // Un `submitted` con cobro aprobado y la autorización ya cambiada a Extra no
+  // se arregla devolviendo el dinero: hay que devolver también el importe
+  // recurrente. Esa secuencia ya existe y está probada; escribirla otra vez
+  // aquí sería un segundo algoritmo de compensación, y dos algoritmos que
+  // mueven dinero acaban divergiendo.
+  //
+  // Así que esta herramienta hace lo único que la saga no puede hacer sola
+  // —decidir, con una persona detrás, que un cobro aprobado se compensa— y
+  // luego le cede el turno.
+  if (estado === "compensation_required") {
+    const { reconcileUpgrade } = await import("@/lib/db/upgrade-reconcile");
+    const r = await reconcileUpgrade(changeId);
+    estado = r.outcome === "refunded" ? "refunded" : estado;
+    return {
+      ok: r.outcome === "refunded" || r.outcome === "compensation_required",
+      status: `${estado}:${r.reason}`, evidence: prueba.evidence,
+      detail: prueba.detail,
+    };
+  }
+
   return {
     // `still_uncertain` NO es un éxito: es que sigue sin saberse.
-    ok: estado === "released" || estado === "compensation_required"
-        || estado === "already_resolved",
+    ok: estado === "released" || estado === "already_resolved",
     status: estado, evidence: prueba.evidence, detail: prueba.detail,
   };
 }

@@ -125,6 +125,15 @@ async function subidaAbierta(
            total: Number(cuenta.total_amount) };
 }
 
+/** Los dos importes recurrentes, calculados por la autoridad de redondeo. */
+async function tasas(baseDestino: number, baseOrigen: number, bp: number) {
+  const { data: a } = await admin.rpc("billing_tax_amount",
+    { p_base: baseDestino, p_rate_basis_points: bp });
+  const { data: b } = await admin.rpc("billing_tax_amount",
+    { p_base: baseOrigen, p_rate_basis_points: bp });
+  return [{ extra: baseDestino + Number(a), full: baseOrigen + Number(b) }];
+}
+
 async function cambio(changeId: string): Promise<Fila> {
   const { data } = await admin.from("billing_subscription_changes")
     .select("*").eq("id", changeId).single();
@@ -554,6 +563,198 @@ async function main() {
         p_billing_interval: "monthly", p_coupon_code: null });
       assert(!error && (q as Fila).quote_id, `comprar Extra directo: ${error?.message}`);
     });
+
+    console.log("\n6 · Y DEVOLVER LA AUTORIZACIÓN, NO SOLO EL DINERO");
+
+    await check("6A. El importe objetivo sale de la base de EXTRA, no de Full", () => {
+      // La comprobación que §I pedía, contra las columnas de verdad.
+      return (async () => {
+        const e = await empresaConFull("V objetivo");
+        const s = await subidaAbierta(e);
+        const c = await cambio(s.changeId);
+        const [{ extra, full }] = await tasas(
+          Number(c.target_full_base), Number(c.current_full_base),
+          Number(c.tax_rate_basis_points));
+        assert(Number(c.target_full_base) > Number(c.current_full_base),
+          `target_full_base (${c.target_full_base}) no es mayor que la de origen `
+          + `(${c.current_full_base}): se está guardando la base equivocada`);
+        assert(extra !== full,
+          `el importe recurrente objetivo coincide con el de Full: ${extra}`);
+        // Con el catálogo de hoy: Full 160 000 + IVA y Extra 400 000 + IVA.
+        assert(extra === 476_000 && full === 190_400,
+          `objetivo=${extra} origen=${full}`);
+      })();
+    });
+
+    await check("6B. A qué importe volver: observado, reconstruido o nada", async () => {
+      const e = await empresaConFull("W destino");
+      const s = await subidaAbierta(e);
+
+      // Sin observación: se RECONSTRUYE desde lo congelado en la transición.
+      const { data: r1 } = await admin.rpc("billing_upgrade_restore_target",
+        { p_change_id: s.changeId });
+      assert((r1 as Fila).status === "reconstructed", `salió ${(r1 as Fila).status}`);
+      assert(Number((r1 as Fila).amount) === 190_400,
+        `reconstruyó ${(r1 as Fila).amount}`);
+
+      // Con observación: manda lo que de verdad había.
+      await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 123_456, p_currency: "cop" });
+      const { data: r2 } = await admin.rpc("billing_upgrade_restore_target",
+        { p_change_id: s.changeId });
+      assert((r2 as Fila).status === "observed", `salió ${(r2 as Fila).status}`);
+      assert(Number((r2 as Fila).amount) === 123_456,
+        `devolvió ${(r2 as Fila).amount}`);
+
+      // Y esa observación es INMUTABLE: la segunda lectura ya vería lo nuestro.
+      const { data: r3 } = await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 999_999, p_currency: "COP" });
+      assert((r3 as Fila).status === "already_noted", `salió ${(r3 as Fila).status}`);
+      const c = await cambio(s.changeId);
+      assert(Number(c.provider_recurring_amount_before) === 123_456,
+        "el importe anterior se pudo reescribir");
+    });
+
+    await check("6C. Con la autorización en Extra, el reembolso se NIEGA", async () => {
+      // El invariante de este tramo, en la primitiva.
+      const e = await empresaConFull("X invariante");
+      const s = await subidaAbierta(e);
+      const pago = `mp-inv-${s.changeId.slice(0, 8)}`;
+      await admin.rpc("billing_observe_upgrade_delta",
+        { p_change_id: s.changeId, p_provider_payment_id: pago });
+      await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      await admin.rpc("billing_open_upgrade_compensation",
+        { p_change_id: s.changeId, p_reason: "SETTLE_RECONCILIATION_MISMATCH" });
+      // El proveedor sigue diciendo Extra.
+      await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: 476_000, p_currency: "COP" });
+
+      const { data: r } = await admin.rpc("billing_record_upgrade_refund", {
+        p_change_id: s.changeId, p_provider_refund_id: `refX-${s.changeId.slice(0, 8)}`,
+        p_amount: s.total, p_currency: "COP" });
+      assert((r as Fila).status === "provider_not_restored",
+        `el reembolso salió ${(r as Fila).status}`);
+      const c = await cambio(s.changeId);
+      assert(c.status === "compensation_required", `quedó en ${c.status}`);
+    });
+
+    await check("6D. Y en cuanto vuelve a su importe, el reembolso pasa", async () => {
+      const e = await empresaConFull("Y restaurada");
+      const s = await subidaAbierta(e);
+      const pago = `mp-res-${s.changeId.slice(0, 8)}`;
+      await admin.rpc("billing_observe_upgrade_delta",
+        { p_change_id: s.changeId, p_provider_payment_id: pago });
+      await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      await admin.rpc("billing_open_upgrade_compensation",
+        { p_change_id: s.changeId, p_reason: "AUTHORIZATION_AMOUNT_NOT_APPLIED" });
+      await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: 476_000, p_currency: "COP" });
+      const bloqueado = await admin.rpc("billing_record_upgrade_refund", {
+        p_change_id: s.changeId, p_provider_refund_id: `refY1-${s.changeId.slice(0, 8)}`,
+        p_amount: s.total, p_currency: "COP" });
+      assert((bloqueado.data as Fila).status === "provider_not_restored", "no bloqueó");
+
+      // Vuelve a su importe: se sella la restauración.
+      const { data: obs } = await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      assert((obs as Fila).restored === true, "no se dio por restaurada");
+
+      const { data: r } = await admin.rpc("billing_record_upgrade_refund", {
+        p_change_id: s.changeId, p_provider_refund_id: `refY2-${s.changeId.slice(0, 8)}`,
+        p_amount: s.total, p_currency: "COP" });
+      assert((r as Fila).status === "refunded", `salió ${(r as Fila).status}`);
+    });
+
+    await check("6E. Una lectura ilegible BORRA el sello de restauración", async () => {
+      // Porque un sello viejo sobre un mundo que ya no se puede leer es una
+      // afirmación sin respaldo.
+      const e = await empresaConFull("Z ilegible");
+      const s = await subidaAbierta(e);
+      await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      assert((await cambio(s.changeId)).provider_recurring_restored_at !== null,
+        "no se selló");
+      const { data: r } = await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: null, p_currency: null });
+      assert((r as Fila).status === "unknown", `salió ${(r as Fila).status}`);
+      assert((await cambio(s.changeId)).provider_recurring_restored_at === null,
+        "el sello sobrevivió a una lectura que no se pudo hacer");
+    });
+
+    await check("6F. Y la tabla lo impide aunque alguien se salte la primitiva",
+      async () => {
+        // La restricción de 0217. Un invariante que sólo vive en la función que
+        // lo escribe es una costumbre: basta llamar a otra para perderlo.
+        const e = await empresaConFull("AA restriccion");
+        const s = await subidaAbierta(e);
+        await admin.rpc("billing_observe_upgrade_delta",
+          { p_change_id: s.changeId,
+            p_provider_payment_id: `mp-cons-${s.changeId.slice(0, 8)}` });
+        await admin.rpc("billing_note_upgrade_recurring_before",
+          { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+        await admin.rpc("billing_open_upgrade_compensation",
+          { p_change_id: s.changeId, p_reason: "X" });
+        const { error } = await admin.from("billing_subscription_changes")
+          .update({ status: "refunded", refund_provider_id: "a-mano",
+                    refund_completed_at: new Date().toISOString() })
+          .eq("id", s.changeId);
+        assert(error !== null,
+          "se pudo marcar devuelta con la autorización sin restaurar");
+      });
+
+    await check("6G. El barrido sigue bloqueado mientras el mundo diverge", async () => {
+      const e = await empresaConFull("AB lease");
+      const s = await subidaAbierta(e);
+      await admin.rpc("billing_observe_upgrade_delta",
+        { p_change_id: s.changeId,
+          p_provider_payment_id: `mp-lea-${s.changeId.slice(0, 8)}` });
+      await admin.rpc("billing_note_upgrade_recurring_before",
+        { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+      await admin.rpc("billing_open_upgrade_compensation",
+        { p_change_id: s.changeId, p_reason: "X" });
+      await admin.rpc("billing_note_upgrade_recurring_observed",
+        { p_change_id: s.changeId, p_amount: 476_000, p_currency: "COP" });
+      const bloqueado = await admin.rpc("billing_upgrade_in_flight",
+        { p_subscription_id: e.subscriptionId });
+      assert(bloqueado.data === true,
+        "el barrido quedó suelto con la autorización en Extra");
+    });
+
+    await check("6H. Un huérfano con la autorización en Extra tampoco se cierra",
+      async () => {
+        // §K. El desatasco operacional no puede ser un atajo: pasa por la misma
+        // compensación, y esa se niega mientras la autorización siga en Extra.
+        const e = await empresaConFull("AC huerfano extra");
+        const s = await subidaAbierta(e);
+        const staff = await persona("bx-sa5", "superadmin");
+        await admin.rpc("billing_note_upgrade_recurring_before",
+          { p_change_id: s.changeId, p_amount: 190_400, p_currency: "COP" });
+        await admin.rpc("billing_note_upgrade_recurring_observed",
+          { p_change_id: s.changeId, p_amount: 476_000, p_currency: "COP" });
+
+        const { data: r } = await staff.cli.rpc("billing_resolve_stuck_upgrade", {
+          p_change_id: s.changeId, p_evidence: "payment_approved",
+          p_provider_payment_id: `mp-huerfx-${s.changeId.slice(0, 8)}`,
+          p_reason: "Hay un cobro aprobado." });
+        assert((r as Fila).status === "compensation_required",
+          `el desatasco salió ${(r as Fila).status}`);
+
+        const { data: dev } = await admin.rpc("billing_record_upgrade_refund", {
+          p_change_id: s.changeId,
+          p_provider_refund_id: `refAC-${s.changeId.slice(0, 8)}`,
+          p_amount: s.total, p_currency: "COP" });
+        assert((dev as Fila).status === "provider_not_restored",
+          `se pudo cerrar sin restaurar: ${(dev as Fila).status}`);
+        const c = await cambio(s.changeId);
+        assert(c.status === "compensation_required", `quedó en ${c.status}`);
+        assert(await admin.rpc("billing_upgrade_in_flight",
+          { p_subscription_id: e.subscriptionId }).then((x) => x.data === true),
+          "el barrido quedó suelto");
+      });
 
   } finally {
     for (const org of orgs) {
