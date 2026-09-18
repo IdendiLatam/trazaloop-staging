@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import {
   MercadoPagoConfig, PreApproval, Payment, Preference, PaymentRefund,
 } from "mercadopago";
@@ -263,6 +264,28 @@ function diagnostico(e: unknown): string | null {
   return salida === "" ? null : salida;
 }
 
+
+/**
+ * BILLING-EXTRA-01C.1 · La llave de idempotencia, con la forma que el proveedor
+ * admite.
+ *
+ * Mercado Pago pide un UUID en `X-Idempotency-Key`. La llave del dominio no lo
+ * es —lleva el cambio y el cobro dentro, a propósito, para que se pueda leer—,
+ * así que se deriva una por resumen: mismos hechos, mismo UUID, y reintentar
+ * sigue pidiendo el mismo reembolso en vez de uno nuevo.
+ *
+ * Generar uno al azar habría sido más corto y habría roto justo la garantía
+ * por la que existe esta llave.
+ */
+function uuidDesde(semilla: string): string {
+  const h = createHash("sha256").update(semilla).digest("hex");
+  // Versión 4 y variante RFC 4122, para que tenga la forma que se espera.
+  const v = `4${h.slice(13, 16)}`;
+  const var_ = ((parseInt(h.slice(16, 17), 16) & 0x3) | 0x8).toString(16)
+    + h.slice(17, 20);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${v}-${var_}-${h.slice(20, 32)}`;
+}
+
 function fallo(e: unknown): {
   ok: false; failure: ReturnType<typeof classifyProviderError>;
   message: string; detail: string | null;
@@ -410,13 +433,24 @@ export function mercadoPagoProvider(
         return { ok: false, failure: "invalid_request",
                  message: "REFUND_IDENTITY_REQUIRED" };
       }
+      // LA LLAVE VIAJA COMO UUID, PORQUE ES LO QUE EL PROVEEDOR ADMITE.
+      //
+      // La documentación pide un UUID en `X-Idempotency-Key`, y la primera
+      // ejecución real contra Sandbox devolvió `invalid_request` con la llave
+      // del dominio —`upgrefund:<cambio>:<pago>`— tal cual.
+      //
+      // No se genera una al azar: se DERIVA de la del dominio por resumen, así
+      // que sigue siendo la misma para los mismos hechos y reintentar sigue
+      // pidiendo EL MISMO reembolso. Lo único que cambia es la forma con la que
+      // cruza la frontera.
+      const uuidIdempotente = uuidDesde(idempotencyKey);
       try {
         // TOTAL, nunca parcial. La compensación de una subida devuelve el cobro
         // entero: un parcial dejaría a alguien pagando una parte de algo que no
         // recibió, y nadie sabría cuál.
         const r = await new PaymentRefund(cliente).total({
           payment_id: providerPaymentId,
-          requestOptions: { idempotencyKey },
+          requestOptions: { idempotencyKey: uuidIdempotente },
         }) as unknown as Record<string, unknown>;
         const id = str(r.id) ?? (num(r.id) !== null ? String(num(r.id)) : null);
         if (!id) {

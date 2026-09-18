@@ -81,6 +81,17 @@ check("A2. El catálogo canónico se consulta por sus resolutores, no a mano", (
   const ADMINISTRACION = [
     "lib/db/commercial-console.ts",
     "server/actions/commercial-console.ts",
+    // BILLING-EXTRA-01C.1 · El disparador QA, y sólo para MIRAR.
+    //
+    // Su trabajo es retratar lo que las tablas contienen para poder contrastar
+    // una ejecución real contra el modelo. Preguntarle a un resolutor sería
+    // preguntar por la interpretación cuando lo que se quiere comprobar es el
+    // dato: si el resolutor se equivocara, el retrato repetiría su error.
+    //
+    // No escribe ninguna de estas tablas —las mutaciones van por las primitivas
+    // gobernadas—, no es interfaz, exige superadministrador y está muerto en
+    // Producción por su primera línea.
+    "app/api/billing/qa/mercadopago-smoke/route.ts",
   ];
   const tablas = ["plan_revisions", "plan_revision_limits",
     "organization_plan_assignments", "commercial_trial_policy"];

@@ -46,7 +46,15 @@ export type ObservedDeltaPayment = {
    */
   amountMinor: number | null;
   currency: string;
+  /**
+   * `true` = credenciales PRODUCTIVAS del proveedor. NO significa «producción
+   * nuestra»: un usuario de prueba operando con sus credenciales hace
+   * operaciones que el proveedor marca como productivas, de una cuenta falsa.
+   * Ver PROD-LAUNCH-01B.4.
+   */
   liveMode: boolean | null;
+  /** Quién cobró, si el proveedor lo dice. `null` = no lo dijo. */
+  collectorId: number | null;
 };
 
 export type UpgradeSagaFacts = {
@@ -64,6 +72,12 @@ export type UpgradeSagaFacts = {
   renewalMode: string | null;
   /** El entorno que ESTE despliegue tiene configurado. */
   configuredEnvironment: "test" | "live";
+  /** El entorno con el que se abrió ESTE intento. */
+  intentEnvironment: string | null;
+  /** El titular que la credencial debe resolver. `null` = no se pudo saber. */
+  expectedOwnerId: number | null;
+  /** ¿La credencial resuelve a ese titular? Falla cerrado si no se pudo mirar. */
+  credentialOwnerMatches: boolean;
 
   /** El cobro de la diferencia, si ya se ha visto en el proveedor. */
   deltaPayment: ObservedDeltaPayment | null;
@@ -236,13 +250,38 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
 
   // ── el dinero entró. A partir de aquí, cualquier «no» se DEVUELVE ─────────
 
-  // Entorno. Falla cerrado, igual que en los otros tres caminos: un cobro de
-  // pruebas no concede nada real y un cobro real no se reconoce en un
-  // despliegue de pruebas.
-  const entornoDelPago = pago.liveMode === null
-    ? null : (pago.liveMode ? "live" : "test");
-  if (entornoDelPago === null || entornoDelPago !== f.configuredEnvironment) {
-    return { kind: "compensate", reason: "ENVIRONMENT_MISMATCH" };
+  // ── IDENTIDAD Y ENTORNO · el modelo de PROD-LAUNCH-01B.4 ─────────────────
+  //
+  // La primera versión de esto comparaba `live_mode` con el entorno del
+  // despliegue, y un cobro REAL de Sandbox —aprobado, por el importe exacto,
+  // con la referencia exacta— llegó con `live_mode: true` y se mandó a
+  // devolver. La bandera describe LA NATURALEZA DE LA CREDENCIAL, no nuestro
+  // entorno: un usuario de prueba opera con credenciales que el proveedor marca
+  // como productivas, de una cuenta falsa.
+  //
+  // Es el mismo error que el carril de pago único cerró en 01B.4 y que MP-ENV-01
+  // había cerrado antes para las suscripciones. Lo que separa «nuestro» de
+  // «ajeno» es la IDENTIDAD, y se comprueba por partes.
+
+  // 1 · Los dos entornos tienen que ser el mismo. Cruzarlos es de nadie.
+  if (f.intentEnvironment !== null
+      && f.intentEnvironment !== f.configuredEnvironment) {
+    return { kind: "compensate", reason: "INTENT_ENVIRONMENT_MISMATCH" };
+  }
+  // 2 · La credencial resuelve al titular esperado. Falla cerrado.
+  if (!f.credentialOwnerMatches) {
+    return { kind: "compensate", reason: "CREDENTIAL_OWNER_MISMATCH" };
+  }
+  // 3 · Y el cobro lo recibió ESE titular, cuando el proveedor lo dice.
+  if (pago.collectorId !== null && f.expectedOwnerId !== null
+      && pago.collectorId !== f.expectedOwnerId) {
+    return { kind: "compensate", reason: "COLLECTOR_MISMATCH" };
+  }
+  // 4 · EN PRODUCCIÓN, `live_mode` SÍ manda. Sin excepción y sin `null`: un
+  //     cobro que no viene de credenciales productivas no concede un plan
+  //     productivo. En pruebas se observa y se guarda, pero no decide.
+  if (f.configuredEnvironment === "live" && pago.liveMode !== true) {
+    return { kind: "compensate", reason: "LIVE_MODE_REQUIRED" };
   }
 
   // Conciliación exacta contra lo que el intento congeló. Un importe que no se

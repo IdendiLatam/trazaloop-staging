@@ -90,7 +90,9 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   // BILLING-EXTRA-01C.1 · la subida a Extra contra Sandbox real.
                   "upgrade_prepare", "upgrade_quote", "upgrade_checkout",
                   "upgrade_reconcile", "upgrade_state",
-                  "upgrade_force_settlement_mismatch"] as const;
+                  "upgrade_force_settlement_mismatch",
+                  // BILLING-EXTRA-01C.1 · la evidencia del proveedor, sin tocar nada.
+                  "upgrade_payment_evidence"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -679,6 +681,70 @@ async function manejar(request: Request) {
         organization_id: orgId, ...(await foto(orgId)) });
     }
 
+    // --- upgrade_payment_evidence · SOLO LECTURA, contra el proveedor ------
+    //
+    // Lo que Mercado Pago dice de un cobro y de sus devoluciones. Existe para
+    // poder contrastar el modelo con la realidad sin escribir nada: cuando los
+    // dos no coinciden, lo primero es mirar, no arreglar.
+    if (accion === "upgrade_payment_evidence") {
+      const changeId = String(cuerpo.change_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(changeId)) return no("CHANGE_ID_REQUIRED", 400);
+      const ctx = await contexto(changeId);
+      if (ctx.error !== undefined) return no(ctx.error, 403);
+      const pagoId = ctx.cambio.delta_provider_payment_id
+        ? String(ctx.cambio.delta_provider_payment_id) : null;
+      if (!pagoId) return no("NO_OBSERVED_PAYMENT", 409);
+
+      const detalle = await proveedor.getPaymentDetail(pagoId);
+      const devoluciones = await proveedor.listRefunds(pagoId);
+      // El diagnóstico CRUDO del último intento de devolución, cuando se pide.
+      // Pedir el reembolso otra vez es seguro —la llave es la misma— y es la
+      // única forma de ver qué contesta el proveedor de verdad.
+      const reintentar = cuerpo.retry_refund === true;
+      const { data: cAux } = await adminUp.from("billing_subscription_changes")
+        .select("refund_idempotency_key").eq("id", changeId).maybeSingle();
+      const llave = (cAux as { refund_idempotency_key: string | null } | null)
+        ?.refund_idempotency_key ?? null;
+      const intentoDevolucion = reintentar && llave
+        ? await proveedor.refundPayment(pagoId, llave) : null;
+      const { buildUpgradeReference } =
+        await import("@/lib/billing/upgrade-reference");
+      const porReferencia = ctx.intento
+        ? await proveedor.searchPaymentsByReference(
+            buildUpgradeReference(String(ctx.intento.id)))
+        : null;
+
+      return NextResponse.json({ ok: true,
+        organization: ctx.org.name,
+        change_id: changeId,
+        provider_payment_id: pagoId,
+        configured_environment: proveedor.identity.ok
+          ? proveedor.identity.value.environment : null,
+        owner_matches_expected: duenno.ownerMatchesExpected,
+        payment: detalle.ok ? {
+          provider_status: detalle.value.providerStatus,
+          canonical_status: mapPaymentStatus(detalle.value.providerStatus),
+          amount: detalle.value.amount, currency: detalle.value.currency,
+          live_mode: detalle.value.liveMode,
+          external_reference: detalle.value.externalReference,
+        } : { error: detalle.failure, message: detalle.message },
+        refunds: devoluciones.ok ? devoluciones.value.refunds
+          : { error: devoluciones.failure, message: devoluciones.message },
+        refund_attempt: intentoDevolucion === null ? null
+          : intentoDevolucion.ok ? { ok: true, ...intentoDevolucion.value }
+          : { ok: false, failure: intentoDevolucion.failure,
+              message: intentoDevolucion.message,
+              detail: (intentoDevolucion as { detail?: string | null }).detail ?? null },
+        by_reference: porReferencia === null ? null
+          : porReferencia.ok ? porReferencia.value.payments.map((p) => ({
+              provider_payment_id: p.providerPaymentId,
+              canonical_status: p.canonicalStatus, amount: p.amount,
+              currency: p.currency, live_mode: p.liveMode,
+              external_reference: p.externalReference }))
+          : { error: porReferencia.failure, message: porReferencia.message },
+      });
+    }
+
     // --- upgrade_prepare · la línea base, y si esta empresa puede subir ----
     if (accion === "upgrade_prepare") {
       const orgId = String(cuerpo.organization_id ?? "");
@@ -809,7 +875,9 @@ async function manejar(request: Request) {
       if (!proveedor.identity.ok || proveedor.identity.value.environment !== "test") {
         return no("QA_FAULT_REQUIRES_TEST_ENVIRONMENT");
       }
-      if (!duenno.isTestUser) return no("QA_FAULT_REQUIRES_TEST_SELLER");
+      // MP-ENV-01 cerró que la identidad es el TITULAR ESPERADO, no la
+      // etiqueta `test_user`: esa etiqueta describe a una persona, no a un
+      // entorno, y confundirlas fue el error que ese tramo retiró.
       if (!duenno.ownerMatchesExpected) return no("QA_FAULT_OWNER_MISMATCH");
       if (!isSuperadmin) return no("QA_FAULT_REQUIRES_SUPERADMIN");
 

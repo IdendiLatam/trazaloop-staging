@@ -179,6 +179,10 @@ export async function reconcileMercadoPagoUpgrade(
   const proveedor = mercadoPagoFromEnv();
   if (!proveedor.identity.ok) return fin("blocked", "PROVIDER_NOT_CONFIGURED");
   const entorno = proveedor.identity.value.environment;
+  // La identidad de la CREDENCIAL, preguntada al proveedor. Si no se puede
+  // mirar, no se afirma que coincide: falla cerrado.
+  const duennoCoincide =
+    (await proveedor.resolveEnvironment()).ownerMatchesExpected === true;
 
   const { data: subRaw } = await admin.from("billing_subscriptions")
     .select("id, renewal_mode, charge_currency")
@@ -208,6 +212,7 @@ export async function reconcileMercadoPagoUpgrade(
       amountMinor: providerAmountToMinor(elegido.amount, elegido.currency),
       currency: elegido.currency ?? String(intento.expected_currency),
       liveMode: elegido.liveMode,
+      collectorId: elegido.collectorId,
     };
   }
 
@@ -321,6 +326,10 @@ export async function reconcileMercadoPagoUpgrade(
       now: new Date().toISOString(),
       renewalMode: modo,
       configuredEnvironment: entorno,
+      intentEnvironment: str(intento.environment),
+      expectedOwnerId: proveedor.identity.ok
+        ? proveedor.identity.value.expectedOwnerId : null,
+      credentialOwnerMatches: duennoCoincide,
       deltaPayment: delta,
       providerCyclesInsideWindow: ciclosDentro,
       authorization: autorizacion,

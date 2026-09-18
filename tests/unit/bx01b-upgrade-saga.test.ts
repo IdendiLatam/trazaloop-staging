@@ -44,13 +44,16 @@ const FULL_RECURRENTE = 190_400;
 
 const pago = (o: Partial<ObservedDeltaPayment> = {}): ObservedDeltaPayment => ({
   providerPaymentId: "mp-1", canonicalStatus: "approved",
-  amountMinor: DELTA_TOTAL, currency: "COP", liveMode: false, ...o });
+  amountMinor: DELTA_TOTAL, currency: "COP", liveMode: false,
+  collectorId: 3663569024, ...o });
 
 const hechos = (o: Partial<UpgradeSagaFacts> = {}): UpgradeSagaFacts => ({
   changeStatus: "submitted",
   expectedTotalAmount: DELTA_TOTAL, expectedCurrency: "COP",
   effectiveAt: EFECTIVA, periodEnd: FIN, now: AHORA,
   renewalMode: "manual", configuredEnvironment: "test",
+  intentEnvironment: "test", expectedOwnerId: 3663569024,
+  credentialOwnerMatches: true,
   deltaPayment: null, providerCyclesInsideWindow: 0,
   authorization: null, targetRecurringAmountMinor: EXTRA_RECURRENTE,
   authorizationUpdateAttempted: false,
@@ -119,12 +122,51 @@ async function main() {
     assert(r.kind === "compensate", `decidió ${r.kind}`);
   });
 
-  check("2C. Entorno que no es el de este despliegue · y sin dato, tampoco", () => {
-    const vivo = decideUpgradeStep(hechos({ deltaPayment: pago({ liveMode: true }) }));
-    assert(vivo.kind === "compensate" && vivo.reason === "ENVIRONMENT_MISMATCH",
-      `decidió ${vivo.kind}`);
-    const sinDato = decideUpgradeStep(hechos({ deltaPayment: pago({ liveMode: null }) }));
-    assert(sinDato.kind === "compensate", `sin dato decidió ${sinDato.kind}`);
+  check("2C. En PRUEBAS, `live_mode` se observa pero NO decide", () => {
+    // PROD-LAUNCH-01B.4, reaprendido a la mala en 01C.1: un cobro REAL de
+    // Sandbox llega con `live_mode: true` porque la bandera describe la
+    // naturaleza de la CREDENCIAL, no nuestro entorno. Un usuario de prueba
+    // opera con credenciales que el proveedor marca como productivas.
+    for (const bandera of [true, false, null]) {
+      const r = decideUpgradeStep(hechos({ deltaPayment: pago({ liveMode: bandera }) }));
+      assert(r.kind === "settle", `con live_mode=${bandera} decidió ${r.kind}`);
+    }
+  });
+
+  check("2C.2. Y en PRODUCCIÓN sí manda, sin excepción y sin `null`", () => {
+    for (const bandera of [false, null]) {
+      const r = decideUpgradeStep(hechos({
+        configuredEnvironment: "live", intentEnvironment: "live",
+        deltaPayment: pago({ liveMode: bandera }) }));
+      assert(r.kind === "compensate" && r.reason === "LIVE_MODE_REQUIRED",
+        `con live_mode=${bandera} decidió ${r.kind}`);
+    }
+    const bueno = decideUpgradeStep(hechos({
+      configuredEnvironment: "live", intentEnvironment: "live",
+      deltaPayment: pago({ liveMode: true }) }));
+    assert(bueno.kind === "settle", `decidió ${bueno.kind}`);
+  });
+
+  check("2C.3. Lo que separa «nuestro» de «ajeno» es la IDENTIDAD", () => {
+    // Cruzar entornos.
+    const cruzado = decideUpgradeStep(hechos({
+      intentEnvironment: "live", deltaPayment: pago() }));
+    assert(cruzado.kind === "compensate"
+      && cruzado.reason === "INTENT_ENVIRONMENT_MISMATCH", `decidió ${cruzado.kind}`);
+    // Una credencial que no resuelve al titular esperado. Falla cerrado.
+    const credencial = decideUpgradeStep(hechos({
+      credentialOwnerMatches: false, deltaPayment: pago() }));
+    assert(credencial.kind === "compensate"
+      && credencial.reason === "CREDENTIAL_OWNER_MISMATCH", `decidió ${credencial.kind}`);
+    // Y un cobro que recibió OTRO vendedor.
+    const otroVendedor = decideUpgradeStep(hechos({
+      deltaPayment: pago({ collectorId: 999 }) }));
+    assert(otroVendedor.kind === "compensate"
+      && otroVendedor.reason === "COLLECTOR_MISMATCH", `decidió ${otroVendedor.kind}`);
+    // Si el proveedor no dice quién cobró, no se inventa un desajuste.
+    const sinDecir = decideUpgradeStep(hechos({
+      deltaPayment: pago({ collectorId: null }) }));
+    assert(sinDecir.kind === "settle", `decidió ${sinDecir.kind}`);
   });
 
   check("2D. El periodo se acabó DESPUÉS de cobrar", () => {
@@ -416,6 +458,20 @@ async function main() {
       "el reembolso no lee la llave derivada");
     assert(/listRefunds/.test(rec),
       "no se pregunta si el reembolso ya existe antes de pedir otro");
+  });
+
+  check("8D. La llave de idempotencia del reembolso viaja como UUID", () => {
+    // BILLING-EXTRA-01C.1 · Mercado Pago pide un UUID en `X-Idempotency-Key` y
+    // devolvió `invalid_request` con la llave del dominio tal cual. Se DERIVA
+    // por resumen: mismos hechos, mismo UUID, y reintentar sigue pidiendo el
+    // mismo reembolso.
+    const mp = leer("lib/billing/providers/mercadopago.ts");
+    assert(/function uuidDesde\(/.test(mp), "no se deriva un UUID de la llave");
+    assert(/idempotencyKey: uuidIdempotente/.test(mp),
+      "el reembolso manda la llave del dominio en crudo");
+    const limpio = sinComentarios(mp);
+    assert(!/randomUUID\(\)/.test(limpio.split("refundPayment")[1] ?? ""),
+      "la llave del reembolso se genera al azar: entonces no es idempotente");
   });
 
   console.log("\n9 · LO QUE ESTE TRAMO NO ENCIENDE");
