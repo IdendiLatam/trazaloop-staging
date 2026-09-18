@@ -9,12 +9,14 @@ import {
   decideQaFxFixture, QA_FX_BASE, QA_FX_QUOTE, QA_FX_MICROS, QA_FX_LEGACY_MARKER,
   type QaFxRow,
 } from "@/lib/billing/qa/fx-fixture";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { checkPlatformStatus } from "@/lib/db/platform";
 import { mercadoPagoFromEnv } from "@/lib/billing/providers/mercadopago";
-import { recurrenceFor } from "@/lib/billing/mercadopago/mapping";
+import {
+  recurrenceFor, MERCADOPAGO, mapPaymentStatus,
+} from "@/lib/billing/mercadopago/mapping";
 import { veredictoDeCambio } from "@/lib/billing/mercadopago/qa-amount-verdict";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +66,7 @@ const QA_DISENO = "MPPLAN01R-2026-09-09-plan-initpoint-discovery-cancel";
  * distinguirse, que es justo lo que falló cuando una llamada fue a un
  * despliegue anterior y devolvió `ACTION_UNKNOWN`.
  */
-const QA_MARCADOR = "MPREC01C4R-2026-09-17-cycles-via-session";
+const QA_MARCADOR = "BX01C1-2026-09-18-upgrade-sandbox";
 
 // QA_TRIGGER_IS_TEMPORARY · se retira en el cierre de PE-05B2.
 // Ver PE_05B2_SANDBOX_TESTS.md. Un fichero de ruta de Next.js solo puede
@@ -84,12 +86,52 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "plan_cancel_raw", "plan_get",
                   // PROD-LAUNCH-01B.2 · el disparador del pago único
                   "one_time_prepare", "one_time_state", "one_time_observe",
-                  "one_time_login_link"] as const;
+                  "one_time_login_link",
+                  // BILLING-EXTRA-01C.1 · la subida a Extra contra Sandbox real.
+                  "upgrade_prepare", "upgrade_quote", "upgrade_checkout",
+                  "upgrade_reconcile", "upgrade_state",
+                  "upgrade_force_settlement_mismatch"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
 function log_seguro(evento: string, campos: Record<string, unknown>) {
   console.log(`[billing:qa] ${evento}`, JSON.stringify(campos));
+}
+
+
+/**
+ * BILLING-EXTRA-01C.1 · Una sesión REAL del administrador de la empresa.
+ *
+ * `billing_quote_upgrade` comprueba `auth.uid()` y el papel: presupuestar una
+ * subida es un acto de alguien, no de un proceso. Esta ruta se autentica por
+ * otro camino y no trae sesión de empresa, así que hay que abrir una.
+ *
+ * Con un enlace de UN SOLO USO, no cambiándole la contraseña a nadie: cambiar
+ * la contraseña de una persona para poder probar la deja fuera de su cuenta.
+ */
+async function sesionDeAdministrador(
+  admin: ReturnType<typeof createAdminClient>, orgId: string
+): Promise<{ cli: SupabaseClient } | { error: string }> {
+  const { data: mem } = await admin.from("memberships")
+    .select("user_id").eq("organization_id", orgId).eq("role_code", "admin").limit(1);
+  const uid = (mem ?? [])[0]?.user_id as string | undefined;
+  if (!uid) return { error: "ORGANIZATION_HAS_NO_ADMIN" };
+  const { data: persona } = await admin.auth.admin.getUserById(uid);
+  const correo = persona.user?.email ?? "";
+  if (!correo) return { error: "ORGANIZATION_ADMIN_HAS_NO_EMAIL" };
+  const { data: enlace, error: eEnlace } = await admin.auth.admin.generateLink({
+    type: "magiclink", email: correo });
+  const otp = enlace?.properties?.hashed_token;
+  if (eEnlace || !otp) return { error: "QA_SESSION_UNAVAILABLE" };
+  const cli: SupabaseClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+    (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string,
+    { auth: { persistSession: false } });
+  const { error: eOtp } = await cli.auth.verifyOtp(
+    { token_hash: otp, type: "magiclink" });
+  if (eOtp) return { error: `QA_SESSION_REFUSED:${eOtp.message.slice(0, 60)}` };
+  return { cli };
 }
 
 const no = (motivo: string, code = 403) =>
@@ -521,6 +563,328 @@ async function manejar(request: Request) {
       init_point: abierto.initPoint,
       reused: abierto.reused,
       ...(await estadoDe()) });
+  }
+
+
+  // =========================================================================
+  // BILLING-EXTRA-01C.1 · LA SUBIDA A EXTRA, CONTRA MERCADO PAGO SANDBOX REAL
+  // =========================================================================
+  //
+  // Seis acciones, y ninguna decide nada de dinero. Son una FACHADA sobre las
+  // primitivas que ya existen y que ya se prueban solas: presupuestar, abrir el
+  // intento, cobrar, conciliar. Si alguna regla financiera viviera aquí, estas
+  // pruebas probarían esta ruta en vez del producto.
+  //
+  // Lo único que el navegador puede decir es SOBRE QUÉ empresa o SOBRE QUÉ
+  // cambio. Ni un importe, ni un identificador del proveedor, ni un estado.
+  // Todo lo demás se deriva aquí con el cliente administrativo.
+  if (accion.startsWith("upgrade_")) {
+    const adminUp = createAdminClient();
+
+    /** Una empresa de PRUEBAS, y se comprueba: nunca una real. */
+    const esFixtureQa = (nombre: string) => /^QA[\s\-]/i.test(nombre.trim());
+
+    type Ctx =
+      | { error: string }
+      | { error?: undefined; cambio: Record<string, unknown>;
+          org: { id: string; name: string };
+          intento: Record<string, unknown> | null };
+
+    /** El cambio, su empresa y su suscripción, derivados del identificador. */
+    const contexto = async (changeId: string): Promise<Ctx> => {
+      const { data } = await adminUp.from("billing_subscription_changes")
+        .select("id, organization_id, subscription_id, status, total_amount, "
+          + "charge_currency, delta_provider_payment_id, target_full_base, "
+          + "current_full_base, tax_rate_basis_points, period_end, "
+          + "provider_recurring_amount_before, provider_recurring_amount_observed, "
+          + "provider_recurring_restored_at, refund_provider_id, from_plan_code, "
+          + "to_plan_code")
+        .eq("id", changeId).maybeSingle();
+      const c = data as Record<string, unknown> | null;
+      if (!c) return { error: "CHANGE_NOT_FOUND" };
+      const { data: o } = await adminUp.from("organizations")
+        .select("id, name").eq("id", String(c.organization_id)).maybeSingle();
+      const org = o as { id: string; name: string } | null;
+      if (!org || !esFixtureQa(org.name)) {
+        return { error: "NOT_A_QA_FIXTURE" };
+      }
+      const { data: i } = await adminUp.from("billing_checkout_intents")
+        .select("id, provider, environment, expected_total_amount, expected_currency")
+        .eq("subscription_change_id", changeId)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      return { cambio: c, org, intento: i as Record<string, unknown> | null };
+    };
+
+    /** La foto completa, de sólo lectura. */
+    const foto = async (orgId: string) => {
+      const { data: sub } = await adminUp.from("billing_subscriptions")
+        .select("id, plan_code, plan_revision_id, status, renewal_mode, provider, "
+          + "base_charge_amount, charge_currency, current_period_start, "
+          + "current_period_end, renews_at")
+        .eq("organization_id", orgId).order("created_at", { ascending: false })
+        .limit(1).maybeSingle();
+      const s = sub as Record<string, unknown> | null;
+      const subId = s ? String(s.id) : null;
+      const { data: per } = subId
+        ? await adminUp.from("billing_subscription_periods")
+            .select("id, period_sequence, period_start, period_end, status, base_amount")
+            .eq("subscription_id", subId as string)
+        .order("period_sequence", { ascending: false })
+            .limit(3)
+        : { data: [] };
+      const { data: asg } = await adminUp.from("organization_plan_assignments")
+        .select("scope, module_code, grant_kind, plan_revision_id")
+        .eq("organization_id", orgId).is("ends_at", null);
+      const { data: cam } = await adminUp.from("billing_subscription_changes")
+        .select("id, status, delta_provider_payment_id, refund_provider_id, "
+          + "provider_recurring_amount_before, provider_recurring_amount_observed, "
+          + "provider_recurring_restored_at, total_amount, compensation_reason")
+        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(4);
+      const { data: pag } = await adminUp.from("billing_payments")
+        .select("id, provider, status, total_amount, refunded_amount, "
+          + "provider_refund_id, subscription_change_id")
+        .eq("organization_id", orgId).order("created_at", { ascending: false }).limit(6);
+      const { data: aut } = subId
+        ? await adminUp.from("billing_recurring_authorizations")
+            .select("status, provider_status, environment, provider_subscription_id")
+            .eq("subscription_id", subId).order("created_at", { ascending: false })
+            .limit(1).maybeSingle()
+        : { data: null };
+      const enVuelo = subId
+        ? (await adminUp.rpc("billing_upgrade_in_flight",
+            { p_subscription_id: subId })).data
+        : null;
+      const asignaciones = (asg ?? []) as Array<Record<string, unknown>>;
+      return {
+        subscription: s, periods: per ?? [], changes: cam ?? [], payments: pag ?? [],
+        authorization: aut ?? null,
+        upgrade_in_flight: enVuelo,
+        active_paid_assignments: asignaciones.filter(
+          (a) => a.grant_kind === "sold" || a.grant_kind === "courtesy").length,
+        active_base_assignments: asignaciones.filter(
+          (a) => a.grant_kind === "base").length,
+      };
+    };
+
+    // --- upgrade_state · SOLO LECTURA ------------------------------------
+    if (accion === "upgrade_state") {
+      const orgId = String(cuerpo.organization_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(orgId)) return no("ORGANIZATION_ID_REQUIRED", 400);
+      const { data: o } = await adminUp.from("organizations")
+        .select("id, name").eq("id", orgId).maybeSingle();
+      const org = o as { id: string; name: string } | null;
+      if (!org) return no("ORGANIZATION_NOT_FOUND", 404);
+      if (!esFixtureQa(org.name)) return no("NOT_A_QA_FIXTURE", 403);
+      return NextResponse.json({ ok: true, organization: org.name,
+        organization_id: orgId, ...(await foto(orgId)) });
+    }
+
+    // --- upgrade_prepare · la línea base, y si esta empresa puede subir ----
+    if (accion === "upgrade_prepare") {
+      const orgId = String(cuerpo.organization_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(orgId)) return no("ORGANIZATION_ID_REQUIRED", 400);
+      const { data: o } = await adminUp.from("organizations")
+        .select("id, name").eq("id", orgId).maybeSingle();
+      const org = o as { id: string; name: string } | null;
+      if (!org) return no("ORGANIZATION_NOT_FOUND", 404);
+      if (!esFixtureQa(org.name)) return no("NOT_A_QA_FIXTURE", 403);
+
+      const f = await foto(orgId);
+      const s = f.subscription;
+      // NO se fabrica una suscripción: tener Full pagado es un hecho
+      // financiero y se consigue pagando. Aquí sólo se comprueba y se retrata.
+      const razones: string[] = [];
+      if (!s) razones.push("SIN_SUSCRIPCION");
+      else {
+        if (s.plan_code !== "full") razones.push(`PLAN_ES_${String(s.plan_code)}`);
+        if (s.status !== "active") razones.push(`ESTADO_ES_${String(s.status)}`);
+        const ultimo = (f.periods as Array<Record<string, unknown>>)[0];
+        if (!ultimo) razones.push("SIN_PERIODO");
+        else if (ultimo.status !== "settled") {
+          razones.push(`PERIODO_${String(ultimo.status)}`);
+        }
+        if (s.current_period_end
+            && new Date(String(s.current_period_end)).getTime() <= Date.now()) {
+          razones.push("PERIODO_VENCIDO");
+        }
+      }
+      return NextResponse.json({ ok: true, organization: org.name,
+        organization_id: orgId, upgradable: razones.length === 0,
+        blocked_by: razones, ...f });
+    }
+
+    // --- upgrade_quote · la primitiva real, con una sesión real ------------
+    if (accion === "upgrade_quote") {
+      const orgId = String(cuerpo.organization_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(orgId)) return no("ORGANIZATION_ID_REQUIRED", 400);
+      const { data: o } = await adminUp.from("organizations")
+        .select("id, name").eq("id", orgId).maybeSingle();
+      const org = o as { id: string; name: string } | null;
+      if (!org || !esFixtureQa(org.name)) return no("NOT_A_QA_FIXTURE", 403);
+
+      const { data: sub } = await adminUp.from("billing_subscriptions")
+        .select("id").eq("organization_id", orgId)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const subId = (sub as { id: string } | null)?.id;
+      if (!subId) return no("SUBSCRIPTION_NOT_FOUND", 404);
+
+      // `billing_quote_upgrade` comprueba `auth.uid()` y el papel: presupuestar
+      // es un acto de alguien. Se abre una sesión de un solo uso del
+      // administrador, igual que el carril de pago único.
+      const ses = await sesionDeAdministrador(adminUp, orgId);
+      if ("error" in ses) return no(ses.error, 424);
+      const { data: q, error: eq } = await ses.cli.rpc("billing_quote_upgrade", {
+        p_subscription_id: subId, p_target_plan_code: "extra" });
+      if (eq) {
+        return NextResponse.json({ ok: false, error: "QUOTE_REFUSED",
+          detail: eq.message }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true, organization: org.name, quote: q });
+    }
+
+    // --- upgrade_checkout · el cobro REAL del delta ------------------------
+    if (accion === "upgrade_checkout") {
+      const changeId = String(cuerpo.change_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(changeId)) return no("CHANGE_ID_REQUIRED", 400);
+      const ctx = await contexto(changeId);
+      if (ctx.error !== undefined) return no(ctx.error, 403);
+
+      const { startMercadoPagoUpgradeCheckout } =
+        await import("@/lib/db/upgrade-mercadopago");
+      const url = new URL(request.url);
+      // Con la SESIÓN del administrador: abrir el cobro de una subida es un
+      // acto de alguien, y la base lo comprueba.
+      const ses = await sesionDeAdministrador(
+        adminUp, String(ctx.cambio.organization_id));
+      if ("error" in ses) return no(ses.error, 424);
+      const r = await startMercadoPagoUpgradeCheckout({
+        changeId,
+        supabase: ses.cli,
+        origin: `${url.protocol}//${url.host}`,
+        // El comprador de PRUEBA del entorno, nunca uno que llegue de fuera.
+        payerEmail: process.env.MERCADOPAGO_TEST_BUYER_EMAIL ?? null,
+      });
+      if (!r.ok) {
+        return NextResponse.json({ ok: false, error: r.code,
+          detail: r.detail ?? null }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true, organization: ctx.org.name,
+        change_id: changeId, intent_id: r.intentId, init_point: r.initPoint,
+        expected_total_amount: r.total, expected_currency: r.currency });
+    }
+
+    // --- upgrade_reconcile · la saga canónica, sin atajos -----------------
+    if (accion === "upgrade_reconcile") {
+      const changeId = String(cuerpo.change_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(changeId)) return no("CHANGE_ID_REQUIRED", 400);
+      const ctx = await contexto(changeId);
+      if (ctx.error !== undefined) return no(ctx.error, 403);
+
+      const { reconcileUpgrade } = await import("@/lib/db/upgrade-reconcile");
+      const r = await reconcileUpgrade(changeId);
+      return NextResponse.json({ ok: true, organization: ctx.org.name,
+        change_id: changeId, outcome: r.outcome, reason: r.reason, steps: r.steps,
+        ...(await foto(String(ctx.cambio.organization_id))) });
+    }
+
+    // --- upgrade_force_settlement_mismatch · LA COSTURA -------------------
+    //
+    // Existe para demostrar UNA cosa: que un cobro real aprobado, con la
+    // autorización real ya en Extra, y una liquidación que se niega de forma
+    // permanente, termina en la compensación canónica y no en un callejón.
+    //
+    // No falsea nada. Llama a la primitiva REAL con el identificador REAL del
+    // pago y un importe deliberadamente distinto del congelado, que es
+    // exactamente lo que la guarda de 0181 rechaza. El rechazo es de verdad.
+    if (accion === "upgrade_force_settlement_mismatch") {
+      const changeId = String(cuerpo.change_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(changeId)) return no("CHANGE_ID_REQUIRED", 400);
+
+      // GUARDA 1 · el entorno. Las tres primeras las impone la ruta antes de
+      // llegar aquí; se vuelven a exigir porque esta acción mueve el estado de
+      // un cobro real y no puede depender de que nadie reordene el fichero.
+      if ((process.env.VERCEL_ENV ?? "local") === "production") {
+        return no("QA_FAULT_FORBIDDEN_IN_PRODUCTION");
+      }
+      if (!proveedor.identity.ok || proveedor.identity.value.environment !== "test") {
+        return no("QA_FAULT_REQUIRES_TEST_ENVIRONMENT");
+      }
+      if (!duenno.isTestUser) return no("QA_FAULT_REQUIRES_TEST_SELLER");
+      if (!duenno.ownerMatchesExpected) return no("QA_FAULT_OWNER_MISMATCH");
+      if (!isSuperadmin) return no("QA_FAULT_REQUIRES_SUPERADMIN");
+
+      // GUARDA 2 · el cambio es de un fixture QA y su carril es Mercado Pago.
+      const ctx = await contexto(changeId);
+      if (ctx.error !== undefined) return no(ctx.error, 403);
+      const { cambio, intento } = ctx;
+      if (!intento) return no("QA_FAULT_INTENT_NOT_FOUND", 409);
+      if (intento.provider !== MERCADOPAGO) return no("QA_FAULT_NOT_MERCADOPAGO", 409);
+      if (intento.environment !== "test") return no("QA_FAULT_INTENT_NOT_TEST", 409);
+
+      // GUARDA 3 · el estado exacto del escenario: enviada y con un cobro
+      // REAL ya observado.
+      if (cambio.status !== "submitted") {
+        return no(`QA_FAULT_CHANGE_STATE_${String(cambio.status).toUpperCase()}`, 409);
+      }
+      const pagoId = cambio.delta_provider_payment_id
+        ? String(cambio.delta_provider_payment_id) : null;
+      if (!pagoId) return no("QA_FAULT_NO_OBSERVED_PAYMENT", 409);
+
+      // GUARDA 4 · ese pago está APROBADO de verdad, preguntándole al proveedor.
+      const detalle = await proveedor.getPaymentDetail(pagoId);
+      if (!detalle.ok) return no("QA_FAULT_PAYMENT_UNREADABLE", 424);
+      if (mapPaymentStatus(detalle.value.providerStatus) !== "approved") {
+        return no("QA_FAULT_PAYMENT_NOT_APPROVED", 409);
+      }
+      if (detalle.value.liveMode !== false) return no("QA_FAULT_PAYMENT_NOT_TEST", 409);
+
+      // GUARDA 5 · la autorización ya está en Extra y verificada. Sin esto la
+      // demostración no vale: el caso es justamente ése.
+      const objetivo = Number(cambio.target_full_base)
+        + Number((await adminUp.rpc("billing_tax_amount", {
+            p_base: Number(cambio.target_full_base),
+            p_rate_basis_points: Number(cambio.tax_rate_basis_points) })).data ?? NaN);
+      const antes = cambio.provider_recurring_amount_before;
+      const observado = cambio.provider_recurring_amount_observed;
+      if (antes === null || antes === undefined) {
+        return no("QA_FAULT_AUTHORIZATION_NEVER_TOUCHED", 409);
+      }
+      if (Number(observado) !== objetivo) {
+        return NextResponse.json({ ok: false,
+          error: "QA_FAULT_AUTHORIZATION_NOT_AT_EXTRA",
+          observed: observado, expected_extra: objetivo }, { status: 409 });
+      }
+
+      // LA DISCREPANCIA se DERIVA: el importe congelado del intento más una
+      // unidad mínima. No hay ninguna cifra de negocio escrita aquí, y es lo
+      // mínimo que activa exactamente la guarda real de 0181.
+      const esperado = Number(intento.expected_total_amount);
+      const discrepante = esperado + 1;
+
+      const { data: r, error } = await adminUp.rpc("billing_settle_upgrade_payment", {
+        p_intent_id: String(intento.id), p_provider: MERCADOPAGO,
+        p_provider_payment_id: pagoId, p_outcome: "approved",
+        p_amount: discrepante, p_currency: String(intento.expected_currency),
+        p_live_mode: false, p_failure_reason: null });
+      if (error) {
+        return NextResponse.json({ ok: false, error: "QA_FAULT_RPC_ERROR",
+          detail: error.message }, { status: 500 });
+      }
+      const salida = String((r as Record<string, unknown>).outcome ?? "unknown");
+
+      const despues = await contexto(changeId);
+      const estado = despues.error !== undefined ? null : despues.cambio.status;
+      return NextResponse.json({ ok: true,
+        organization: ctx.org.name,
+        change_id: changeId,
+        expected_amount: esperado,
+        submitted_amount: discrepante,
+        settlement_outcome: salida,
+        change_status_after: estado,
+        ...(await foto(String(cambio.organization_id))) });
+    }
+
+    return no("UPGRADE_ACTION_UNHANDLED", 400);
   }
 
   if (accion === "qa_version") {

@@ -41,6 +41,12 @@ import {
 const MP = "mercadopago";
 
 type Fila = Record<string, unknown>;
+
+/** Lo único que hace falta de un cliente de Supabase: poder llamar una RPC. */
+type SupabaseLike = {
+  rpc: (fn: string, args: Record<string, unknown>) =>
+    PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
 const str = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 ? v : null;
 const num = (v: unknown): number | null =>
@@ -63,6 +69,16 @@ export async function startMercadoPagoUpgradeCheckout(input: {
   changeId: string;
   origin: string;
   payerEmail: string | null;
+  /**
+   * La sesión de quien sube de plan.
+   *
+   * `billing_open_upgrade_intent` comprueba `auth.uid()` y el papel de
+   * administrador: abrir el cobro de una subida es un acto de alguien, no de un
+   * servicio. La primera versión de esto llamaba con el cliente administrativo
+   * y la base contestaba `AUTH_REQUIRED` — lo encontró la primera ejecución
+   * real contra Sandbox, que es justo para lo que servía.
+   */
+  supabase: SupabaseLike;
 }): Promise<UpgradeCheckoutResult> {
   const proveedor = mercadoPagoFromEnv();
   if (!proveedor.identity.ok) {
@@ -71,7 +87,7 @@ export async function startMercadoPagoUpgradeCheckout(input: {
   const entorno = proveedor.identity.value.environment;
 
   const admin = createAdminClient();
-  const abierto = await admin.rpc("billing_open_upgrade_intent", {
+  const abierto = await input.supabase.rpc("billing_open_upgrade_intent", {
     p_change_id: input.changeId, p_provider: MP, p_environment: entorno,
   });
   if (abierto.error || !abierto.data) {

@@ -364,6 +364,19 @@ async function main() {
 
   console.log("\n8 · LO QUE NO SE PUEDE RECIBIR DE FUERA");
 
+  check("8A.0. Y abrir el cobro exige una SESIÓN, no el cliente de servicio", () => {
+    // BILLING-EXTRA-01C.1 · Lo encontró la primera ejecución real contra
+    // Sandbox: `billing_open_upgrade_intent` comprueba `auth.uid()` y el papel
+    // de administrador, y llamarlo con el cliente administrativo devolvía
+    // `AUTH_REQUIRED` siempre. Abrir el cobro de una subida es un acto de
+    // alguien.
+    const rec = leer("lib/db/upgrade-mercadopago.ts");
+    assert(/supabase: SupabaseLike/.test(rec),
+      "el inicio del cobro no recibe la sesión de quien sube de plan");
+    assert(/input\.supabase\.rpc\("billing_open_upgrade_intent"/.test(rec),
+      "el intento se abre con el cliente administrativo");
+  });
+
   check("8A. El conciliador sólo recibe el cambio", () => {
     const rec = leer("lib/db/upgrade-mercadopago.ts");
     assert(/reconcileMercadoPagoUpgrade\(\s*changeId: string\s*\)/.test(rec),
