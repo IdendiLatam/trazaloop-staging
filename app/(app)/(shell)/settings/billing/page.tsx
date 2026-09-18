@@ -1,14 +1,23 @@
 // Ruta protegida: depende de cookies/sesión/Supabase → nunca se prerenderiza.
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { requireActiveOrg } from "@/lib/auth/require-active-org";
 import { getOrganizationBillingState } from "@/lib/db/billing";
 import { listPaymentHistory } from "@/lib/db/billing-history";
-import { listPublicPlanCatalog } from "@/lib/db/commercial-plans";
+import { readCommercialCatalog } from "@/lib/db/commercial-catalog";
+import { getOrganizationCommercialState } from "@/lib/db/commercial-state";
+import {
+  getOrganizationTimeStatus, getAiCreditStatus,
+} from "@/lib/db/organization-usage";
+import { summarizeBilling } from "@/lib/domain/billing-experience";
+import {
+  presentStorage, presentAiCredits, presentTrialAi, presentTime,
+} from "@/lib/domain/usage-presentation";
+import { MyPlanCard } from "@/components/domain/billing/my-plan-card";
+import { UsagePanel } from "@/components/domain/billing/usage-panel";
+import { PlanOptions } from "@/components/domain/billing/plan-options";
 import { InfoAlert } from "@/components/ui/alert";
 import { planLabel, money, longDate } from "@/lib/domain/billing-display";
-import { describeBillingState } from "@/lib/domain/billing-state";
 import { renewalCopyFor } from "@/lib/domain/billing-renewal-copy";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
@@ -53,9 +62,6 @@ const CONCEPTO: Record<string, string> = {
   cambio_de_plan: "Cambio de plan",
 };
 
-const dinero = (minor: number | null, moneda: string | null) =>
-  minor === null || moneda === null ? null : money(minor, moneda);
-
 export default async function BillingPage({
   searchParams,
 }: {
@@ -81,15 +87,22 @@ export default async function BillingPage({
   const rutaDePago = resolvePurchaseRoutingFromEnv();
   const pasarela = rutaDePago.available ? rutaDePago.displayName : null;
   const esAdministrador = org.roleCode === "admin";
-  const [estado, catalogo, historial, subidaEnCurso, cobroEnCurso] = await Promise.all([
+  const [estado, catalogo, historial, subidaEnCurso, cobroEnCurso,
+         comercial, tiempo, creditos, espacioActual] = await Promise.all([
     getOrganizationBillingState(org.organizationId),
-    listPublicPlanCatalog(),
+    // COMMERCIAL-UX-01F · El MISMO catálogo que /planes. No hay un segundo
+    // sitio donde vivan los precios y los límites.
+    readCommercialCatalog(),
     listPaymentHistory(org.organizationId),
     pendingUpgrade(org.organizationId),
     // 01B.4 · Un pago único abierto y sin confirmar. Es lo que ve quien cerró
     // la ventana de la pasarela: no tiene a dónde volver, así que el botón de
     // comprobar tiene que estar en la pantalla a la que sí vuelve.
     findOpenOneTimeCheckout(org.organizationId),
+    getOrganizationCommercialState(org.organizationId),
+    getOrganizationTimeStatus(org.organizationId),
+    getAiCreditStatus(org.organizationId),
+    storageImpactOf(org.organizationId, null),
   ]);
 
   // Bajar de plan puede dejar a la empresa por encima del espacio del plan
@@ -117,76 +130,104 @@ export default async function BillingPage({
   const providerName = rutaCompra !== null && rutaCompra.available
     ? rutaCompra.displayName : "la pasarela";
 
-  const revisionDestino = estado?.planCode === "extra"
-    ? ((catalogo ?? []).find((p) => p.planCode === "full")?.planRevisionId ?? null)
-    : null;
-  const espacio = revisionDestino
-    ? await storageImpactOf(org.organizationId, revisionDestino) : null;
+  // Bajar de Extra a Full puede dejar a la empresa por encima del espacio del
+  // plano nuevo. Se comprueba ANTES de que nadie confirme nada.
+  const espacio = estado?.planCode === "extra"
+    ? await storageImpactOf(org.organizationId, null) : null;
 
-  // Sin dato NO es «no hay planes»: es que no se pudo leer.
-  const dePago = (catalogo ?? []).filter((p) => p.planCode !== "free");
-
-  const situacion = describeBillingState({
-    status: estado?.status ?? null,
-    hasSubscription: estado?.hasSubscription ?? false,
-    graceUntil: estado?.graceUntil ?? null,
-    cancelScheduled: estado?.cancelAtPeriodEnd ?? false,
-    downgradeScheduled: estado?.downgradeScheduled ?? false,
+  // ── COMMERCIAL-UX-01F · El resumen de «Mi plan» ───────────────────────────
+  //
+  // Toda la decisión de QUÉ se cuenta vive en una función pura y probada. Aquí
+  // solo se le pasan los hechos que las autoridades ya dijeron.
+  const enPrueba = comercial.grantKind === "trial";
+  const resumen = summarizeBilling({
+    hasSubscription: estado === null ? null : estado.hasSubscription,
+    contractedPlanCode: comercial.contractedPlanCode,
+    effectivePlanCode: comercial.effectivePlanCode,
+    grantKind: comercial.grantKind,
+    grantEndsAt: comercial.grantEndsAt,
+    currentPeriodEnd: estado?.currentPeriodEnd ?? null,
+    renewsAt: estado?.renewsAt ?? null,
+    cancelAtPeriodEnd: estado?.cancelAtPeriodEnd ?? false,
+    hasLiveRecurring: recurrenteViva !== null,
+    subscriptionStatus: estado?.status ?? null,
     manualReview: estado?.manualReview ?? false,
+    downgradeScheduled: estado?.downgradeScheduled ?? false,
     paymentMethodMissing: estado?.paymentMethodMissing ?? false,
+    pendingCheckout: cobroEnCurso !== null,
+    isAdmin: esAdministrador,
+  }, longDate);
+
+  // El nombre COMERCIAL del plan efectivo, del catálogo. Nunca un código.
+  const planEfectivo = comercial.effectivePlanCode ?? estado?.planCode ?? "free";
+  const fichaPlan = catalogo?.saasPlans.find((p) => p.code === planEfectivo) ?? null;
+  const nombrePlan = fichaPlan?.headline
+    ?? planLabel(planEfectivo);
+
+  // ── El consumo, con su modo ya resuelto ───────────────────────────────────
+  const usoEspacio = presentStorage(
+    espacioActual?.usedBytes ?? null, espacioActual?.currentQuotaBytes ?? null);
+  const usoCreditos = presentAiCredits(
+    creditos?.monthlyUsed ?? null, creditos?.monthlyLimit ?? null,
+    creditos?.limitState ?? null);
+  const usoPrueba = enPrueba && creditos?.trialActive
+    ? presentTrialAi(creditos.trialTotal, creditos.trialUsed)
+    : { mode: "unknown" as const };
+  const usoTiempo = presentTime(tiempo === null ? null : {
+    metered: tiempo.metered,
+    dailyLimit: tiempo.dailyLimit, monthlyLimit: tiempo.monthlyLimit,
+    dailyUsed: tiempo.dailyUsed, monthlyUsed: tiempo.monthlyUsed,
+    isTrial: enPrueba,
   });
 
+  /**
+   * El botón de cada plan en la comparación contextual.
+   *
+   * COMMERCIAL-UX-01B/01D · Extra NO ofrece una acción transaccional mientras
+   * el carril que la cobra no pueda cobrarla. Se ofrece hablar, que es lo único
+   * que de verdad se puede cumplir.
+   */
+  const ctaDePlan = (code: string): { label: string; href: string } | null => {
+    if (!esAdministrador) return null;
+    if (code === comercial.contractedPlanCode && !enPrueba) return null;
+    if (code === "free") return null;
+    if (code === "extra" && !mejora.transactional) {
+      return { label: "Hablemos de Extra", href: "mailto:contacto@idendi.org" };
+    }
+    return {
+      label: enPrueba ? "Contratar" : "Cambiar a este plan",
+      href: moduleAwareHref(
+        `/settings/billing/checkout?plan=${code}&interval=monthly`, activeModule.key),
+    };
+  };
+
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="eyebrow">Configuración</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Plan y facturación</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Mi plan</h1>
         <p className="max-w-2xl text-sm text-ink-soft">
-          Qué plan tiene {org.organizationName} y cómo cambiarlo.
+          Qué tiene {org.organizationName}, qué está usando y qué opciones hay.
         </p>
       </header>
 
-      <section className="rounded-md border border-hairline bg-surface p-4">
-        <h2 className="text-sm font-semibold">Ahora mismo</h2>
-        {estado !== null && estado.hasSubscription && situacion.state !== "active" ? (
-          <p className="pt-2 text-sm text-ink-soft">{situacion.detail}</p>
-        ) : null}
-        {estado === null ? (
-          <p className="pt-2 text-sm text-ink-soft">
-            No pudimos leer el estado de facturación. Vuelve a intentarlo en un momento.
-          </p>
-        ) : estado.hasSubscription ? (
-          <dl className="grid grid-cols-2 gap-2 pt-2 text-sm">
-            <dt className="text-ink-soft">Plan</dt>
-            <dd className="font-medium">{planLabel(estado.planCode)}</dd>
-            <dt className="text-ink-soft">Facturación</dt>
-            <dd>{estado.billingInterval === "annual" ? "Anual" : "Mensual"}</dd>
-            <dt className="text-ink-soft">Estado</dt>
-            {/*
-              Nunca el estado interno. `past_due` no le dice nada a nadie, y
-              «rechazado» sería una afirmación que a veces no podemos sostener.
-            */}
-            <dd>{situacion.title}</dd>
-            {estado.renewsAt ? (
-              <>
-                {/* 01B.9 · «Siguiente cobro» solo cuando alguien va a cobrar.
-                    Con pago único la fecha es un vencimiento, y prometer un
-                    cargo que no llega hace que la gente se despreocupe justo
-                    antes de quedarse sin plan. */}
-                <dt className="text-ink-soft">{copiaRenovacion.dateLabel}</dt>
-                <dd>{longDate(estado.renewsAt)}</dd>
-              </>
-            ) : null}
-          </dl>
-        ) : (
-          <p className="pt-2 text-sm text-ink-soft">
-            La empresa está en el plan de entrada. No hay ningún cobro programado.
-          </p>
-        )}
-        {estado?.hasSubscription && copiaRenovacion.note ? (
-          <p className="pt-2 text-sm text-ink-soft">{copiaRenovacion.note}</p>
-        ) : null}
-      </section>
+      {/* 1 · RESUMEN · lo primero, y muchas veces lo único que se lee. */}
+      <MyPlanCard planName={nombrePlan} summary={resumen} isTrial={enPrueba} />
+
+      {/* 2 · CONSUMO · con «ilimitado» dicho como ilimitado, nunca como cero. */}
+      <UsagePanel
+        medidas={[
+          { titulo: "Almacenamiento", uso: usoEspacio },
+          { titulo: "Créditos de Intelligence", uso: usoCreditos },
+          ...(usoPrueba.mode !== "unknown"
+            ? [{ titulo: "Créditos de la prueba", uso: usoPrueba,
+                 nota: "La prueba trae su propia bolsa: no se suma a la mensual "
+                     + "de un plan contratado." }]
+            : []),
+          { titulo: "Uso de la plataforma", uso: usoTiempo },
+        ]}
+      />
 
       {esAdministrador && cobroEnCurso !== null ? (
         <PendingCheckoutPanel
@@ -346,54 +387,22 @@ export default async function BillingPage({
         </section>
       )}
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Planes de pago</h2>
-        {catalogo === null ? (
-          <p className="text-sm text-ink-soft">
-            No pudimos leer el catálogo de planes. Vuelve a intentarlo en un momento.
-          </p>
-        ) : dePago.length === 0 ? (
-          <p className="text-sm text-ink-soft">No hay planes de pago publicados.</p>
-        ) : (
-          dePago.map((p) => (
-            <article key={p.planCode}
-                     className="rounded-md border border-hairline bg-surface p-4">
-              <h3 className="font-medium">{p.displayName}</h3>
-              {p.description ? (
-                <p className="pt-1 text-sm text-ink-soft">{p.description}</p>
-              ) : null}
-              {p.priceState !== "configured" ? (
-                <p className="pt-2 text-sm text-ink-soft">
-                  Este plan todavía no tiene precio publicado.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2 pt-3">
-                  {([["monthly", p.monthlyPriceMinor, "Mensual"],
-                     ["annual", p.annualPriceMinor, "Anual"]] as const)
-                    .filter(([, minor]) => minor !== null)
-                    .map(([intervalo, minor, etiqueta]) => (
-                      <Link
-                        key={intervalo}
-                        href={esAdministrador
-                          ? moduleAwareHref(
-                              `/settings/billing/checkout?plan=${p.planCode}`
-                              + `&interval=${intervalo}`, activeModule.key)
-                          : moduleAwareHref("/settings/billing", activeModule.key)}
-                        aria-disabled={!esAdministrador}
-                        className={"rounded-md border border-hairline px-3 py-1.5 text-sm "
-                          + (esAdministrador
-                            ? "hover:border-loop"
-                            : "pointer-events-none opacity-50")}
-                      >
-                        {etiqueta} · {dinero(minor, p.currency)} + impuestos
-                      </Link>
-                    ))}
-                </div>
-              )}
-            </article>
-          ))
-        )}
-      </section>
+      {/* COMMERCIAL-UX-01F · Las otras opciones, con el catálogo de 01C. No se
+          duplica /planes: esto es un resumen contextual con enlace al detalle. */}
+      {catalogo === null ? (
+        <p className="text-sm text-ink-soft">
+          No pudimos leer el catálogo de planes. Vuelve a intentarlo en un momento.
+        </p>
+      ) : (
+        <PlanOptions
+          planes={catalogo.saasPlans}
+          servicios={catalogo.services}
+          currentPlanCode={comercial.contractedPlanCode ?? estado?.planCode ?? "free"}
+          isTrial={enPrueba}
+          ctaFor={ctaDePlan}
+        />
+      )}
+
     </div>
   );
 }

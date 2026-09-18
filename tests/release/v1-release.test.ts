@@ -2758,6 +2758,14 @@ check("53. Mercado Pago no se presenta como integrado", () => {
 const SUPERFICIES_RECURRENTES = [
   "components/domain/billing/recurring-cancel-panel.tsx",
   "components/domain/billing/recurring-checkout-panel.tsx",
+  // COMMERCIAL-UX-01F · El resumen de «Mi plan». La frase aparece en UNA sola
+  // rama —la que exige `hasLiveRecurring`— y la rama del carril manual dice
+  // expresamente lo contrario, a dos líneas de distancia.
+  //
+  // La exención es por fichero y no puede ver esa condición, así que no basta
+  // con añadirlo aquí: `cux01f` comprueba estado por estado que la promesa NO
+  // llegue a un plan manual. Sin esa comprobación, esta línea sería un agujero.
+  "lib/domain/billing-experience.ts",
 ];
 
 check("54. No se promete renovación automática técnica", () => {
