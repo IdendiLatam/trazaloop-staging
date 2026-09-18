@@ -725,3 +725,44 @@ export async function resolveStuckUpgradeAction(
   }
   return { error: null, status: r.status, evidence: r.evidence };
 }
+
+/**
+ * BILLING-EXTRA-01C.3 · Completar una subida que ya se pagó.
+ *
+ * La acción de OPERACIÓN que 01C.3 aprobó. Quien la ejecuta decide que un cobro
+ * observado es legítimo; lo que pasa después no lo decide nadie a mano: lo
+ * decide la saga canónica, con sus comprobaciones intactas.
+ *
+ * No recibe ni importe, ni plan, ni identificador del proveedor, ni empresa:
+ * sólo el cambio. Todo lo demás se deriva de él en el servidor.
+ */
+export async function completePaidUpgradeAction(
+  changeId: string
+): Promise<{ error: string | null; outcome?: string; reason?: string }> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) {
+    return { error: "Solo un superadministrador de plataforma puede hacer esto." };
+  }
+  const { completePaidUpgrade } = await import("@/lib/db/upgrade-recovery");
+  const r = await completePaidUpgrade(changeId);
+  revalidatePath("/platform/plans");
+  revalidatePath("/settings/billing");
+  if (!r.ok) {
+    return { error: r.outcome === "no_approved_payment"
+      ? "No hay un cobro aprobado para esta subida, así que no hay nada que "
+        + "completar."
+      : `No se pudo completar: ${r.reason}.`,
+      outcome: r.outcome, reason: r.reason };
+  }
+  return { error: null, outcome: r.outcome, reason: r.reason };
+}
+
+/** Lo que hay pendiente de resolver, para la consola de operación. */
+export async function getUpgradesNeedingActionAction(): Promise<{
+  rows: import("@/lib/db/upgrade-recovery").PendingUpgradeRow[];
+  canManage: boolean;
+}> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  const { listUpgradesNeedingAction } = await import("@/lib/db/upgrade-recovery");
+  return { rows: await listUpgradesNeedingAction(), canManage: isSuperadmin };
+}

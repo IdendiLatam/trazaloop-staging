@@ -11,6 +11,10 @@ import { getPromotionsAction } from "@/server/actions/promotions-console";
 import { getFxRatesAction } from "@/server/actions/commercial-fx";
 import { FxConsole } from "@/components/domain/platform/fx-console";
 import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
+import { getUpgradesNeedingActionAction } from "@/server/actions/billing";
+import {
+  PaidUpgradeRecovery,
+} from "@/components/domain/platform/paid-upgrade-recovery";
 
 /**
  * Trazaloop · PE-04B5 · Planes y uso.
@@ -20,11 +24,13 @@ import { PRICE_TAX_NOTE } from "@/lib/domain/commercial-catalog";
  * plataforma cambia condiciones, y la base lo vuelve a comprobar.
  */
 export default async function PlatformPlansPage() {
-  const [catalogo, renovaciones, promociones, cambio] = await Promise.all([
+  const [catalogo, renovaciones, promociones, cambio, subidas] = await Promise.all([
     getPlanCatalogAction(),
     getRenewalOperationsAction(),
     getPromotionsAction(),
     getFxRatesAction(),
+    // BILLING-EXTRA-01C.3 · Las subidas con un cobro sin resolver.
+    getUpgradesNeedingActionAction(),
   ]);
 
   return (
@@ -99,6 +105,8 @@ export default async function PlatformPlansPage() {
           </p>
         </div>
         <RenewalOperations rows={renovaciones.rows} alerts={renovaciones.alerts} />
+
+        <PaidUpgradeRecovery rows={subidas.rows} canManage={subidas.canManage} />
       </section>
 
       <section className="space-y-2 rounded-lg border border-hairline bg-surface p-4">

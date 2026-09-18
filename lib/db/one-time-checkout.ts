@@ -132,6 +132,10 @@ export async function openOneTimeCheckout(input: {
   const preferencia = await pasarela.createCheckout({
     externalReference: c.checkout_id,
     title: input.planLabel,
+    // BILLING-EXTRA-01C.3 · Qué se compró, para quien lo lea en su resumen
+    // dentro de dos meses. Sale de la etiqueta del plan, que ya viene formada
+    // con su periodicidad; aquí no se escribe ningún precio.
+    description: `Suscripción Trazaloop · ${input.planLabel}`,
     amountMinor: c.expected_total_amount,
     currency: c.expected_currency,
     payerEmail: input.payerEmail ?? null,

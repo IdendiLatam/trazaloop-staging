@@ -28,7 +28,9 @@ import type { UpgradeReconcileResult } from "@/lib/db/upgrade-mercadopago";
 export type { UpgradeReconcileResult } from "@/lib/db/upgrade-mercadopago";
 
 export async function reconcileUpgrade(
-  changeId: string
+  changeId: string,
+  /** Lo que una persona con autoridad decidió, si hay alguna. */
+  operatorIntent: "none" | "complete" | "refund" = "none"
 ): Promise<UpgradeReconcileResult> {
   const admin = createAdminClient();
   const { data } = await admin.from("billing_checkout_intents")
@@ -39,7 +41,7 @@ export async function reconcileUpgrade(
   if (proveedor === "mercadopago") {
     const { reconcileMercadoPagoUpgrade } =
       await import("@/lib/db/upgrade-mercadopago");
-    return await reconcileMercadoPagoUpgrade(changeId);
+    return await reconcileMercadoPagoUpgrade(changeId, operatorIntent);
   }
   // Sin carril que preguntar no se inventa un desenlace.
   return { outcome: "not_applicable",

@@ -159,6 +159,16 @@ export type MercadoPagoAdapter = BillingProvider & {
   createOneTimeCheckout(input: {
     externalReference: string;
     title: string;
+    /**
+     * BILLING-EXTRA-01C.3 · Qué se está comprando, en palabras.
+     *
+     * La medición de calidad de Mercado Pago lo pide, y tiene razón: el título
+     * cabe en una línea y la descripción es lo que alguien lee cuando no
+     * recuerda qué fue ese cargo. Se DERIVA de metadata real —plan, periodicidad
+     * o el cambio concreto—; nunca lleva precios, ni identificadores nuestros,
+     * ni nada sensible.
+     */
+    description?: string | null;
     amountMinor: number;
     currency: string;
     payerEmail?: string | null;
@@ -277,6 +287,23 @@ function diagnostico(e: unknown): string | null {
  * Generar uno al azar habría sido más corto y habría roto justo la garantía
  * por la que existe esta llave.
  */
+/**
+ * BILLING-EXTRA-01C.3 · La URL de avisos, si alguien la declaró.
+ *
+ * Devuelve el fragmento listo para mezclar, o `null`. No se inventa desde el
+ * host de la petición: en Preview eso mandaría a Mercado Pago la dirección de un
+ * despliegue efímero, y como la preferencia prevalece sobre el panel, los avisos
+ * productivos dejarían de llegar donde tienen que llegar.
+ */
+function notificacionConfigurada(): { notification_url: string } | null {
+  const u = process.env.MERCADOPAGO_NOTIFICATION_URL;
+  if (typeof u !== "string" || u.trim() === "") return null;
+  // HTTPS o nada. Un aviso por http es un aviso que cualquiera puede leer.
+  if (!u.startsWith("https://")) return null;
+  return { notification_url: u.trim() };
+}
+
+
 function uuidDesde(semilla: string): string {
   const h = createHash("sha256").update(semilla).digest("hex");
   // Versión 4 y variante RFC 4122, para que tenga la forma que se espera.
@@ -570,6 +597,7 @@ export function mercadoPagoProvider(
             items: [{
               id: input.externalReference,
               title: input.title,
+              ...(input.description ? { description: input.description } : {}),
               quantity: 1,
               unit_price: importe,
               currency_id: input.currency.toUpperCase(),
@@ -588,7 +616,18 @@ export function mercadoPagoProvider(
             // activado no existe, y explicárselo a alguien que ya pagó es peor
             // que pedirle que use otro medio.
             binary_mode: true,
-            ...(input.notificationUrl ? { notification_url: input.notificationUrl } : {}),
+            // BILLING-EXTRA-01C.3 · El aviso, SOLO desde configuración.
+            //
+            // Mercado Pago documenta que una `notification_url` puesta en la
+            // preferencia PREVALECE sobre la del panel. Derivarla del host que
+            // atiende la petición mandaría la URL de un Preview en un cobro
+            // productivo y silenciaría los avisos de verdad. Así que sale de una
+            // variable declarada, y si no la hay no se manda nada: manda el
+            // panel, que es lo que gobierna hoy en Producción.
+            //
+            // Nada de esto es requisito para que las cuentas cuadren: la
+            // conciliación pregunta al proveedor y no espera que la avisen.
+            ...(notificacionConfigurada() ?? {}),
             ...(input.payerEmail ? { payer: { email: input.payerEmail } } : {}),
             ...(input.expiresAt
               ? { expires: true, expiration_date_to: input.expiresAt }

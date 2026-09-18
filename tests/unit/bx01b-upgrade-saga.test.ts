@@ -58,7 +58,8 @@ const hechos = (o: Partial<UpgradeSagaFacts> = {}): UpgradeSagaFacts => ({
   authorization: null, targetRecurringAmountMinor: EXTRA_RECURRENTE,
   authorizationUpdateAttempted: false,
   providerRecurringAmountBefore: null, providerRestored: false,
-  restoreTargetAmount: null, authorizationRestoreAttempted: false, ...o });
+  restoreTargetAmount: null, authorizationRestoreAttempted: false,
+  operatorIntent: "none", ...o });
 
 const autorizacion = (o: Partial<NonNullable<UpgradeSagaFacts["authorization"]>> = {}) => ({
   providerSubscriptionId: "preapproval-1", status: "authorized",
@@ -419,10 +420,17 @@ async function main() {
       "el intento se abre con el cliente administrativo");
   });
 
-  check("8A. El conciliador sólo recibe el cambio", () => {
+  check("8A. El conciliador no recibe NADA financiero de fuera", () => {
     const rec = leer("lib/db/upgrade-mercadopago.ts");
-    assert(/reconcileMercadoPagoUpgrade\(\s*changeId: string\s*\)/.test(rec),
-      "el conciliador recibe algo más que el identificador del cambio");
+    // Recibe el cambio y, desde 01C.3, lo que una persona con autoridad
+    // decidió. Ni un importe, ni un identificador del proveedor, ni un plan.
+    assert(/changeId: string,/.test(rec), "el conciliador no recibe el cambio");
+    assert(/operatorIntent: "none" \| "complete" \| "refund"/.test(rec),
+      "la decisión del operador no está acotada a tres valores");
+    for (const prohibido of ["amount", "planCode", "providerPaymentId", "total"]) {
+      assert(!new RegExp(`reconcileMercadoPagoUpgrade\\([^)]*${prohibido}`, "s")
+        .test(rec), `el conciliador recibe «${prohibido}» de fuera`);
+    }
     const limpio = sinComentarios(rec);
     // El importe recurrente se DERIVA: de la fila y del impuesto de la base.
     assert(/billing_tax_amount/.test(limpio),
@@ -474,6 +482,101 @@ async function main() {
       "la llave del reembolso se genera al azar: entonces no es idempotente");
   });
 
+  console.log("\n13 · COMPLETAR UNA SUBIDA PAGADA · LA OPERACIÓN GOBERNADA");
+
+  check("13A. La decide una persona, pero NO la ejecuta a mano", () => {
+    const rec = sinComentarios(leer("lib/db/upgrade-recovery.ts"));
+    assert(/reconcileUpgrade\(changeId, "complete"\)/.test(rec),
+      "completar no pasa por la saga canónica");
+    // Ni toca el plan, ni el periodo, ni las asignaciones por su cuenta.
+    for (const prohibido of ["plan_code", "billing_subscriptions",
+                             "organization_plan_assignments"]) {
+      assert(!new RegExp(`update[\\s\\S]{0,80}${prohibido}`).test(rec),
+        `la recuperación escribe «${prohibido}» a mano`);
+    }
+  });
+
+  check("13B. Y exige un cobro APROBADO antes de nada", () => {
+    const rec = sinComentarios(leer("lib/db/upgrade-recovery.ts"));
+    assert(/prueba\.evidence !== "payment_approved"/.test(rec),
+      "se puede completar una subida sin cobro aprobado");
+  });
+
+  check("13C. Sólo superadministrador, y sin recibir cifras", () => {
+    const acc = sinComentarios(leer("server/actions/billing.ts"));
+    const i = acc.indexOf("completePaidUpgradeAction");
+    assert(i !== -1, "no existe la acción");
+    const bloque = acc.slice(i, i + 700);
+    assert(/isSuperadmin/.test(bloque), "no exige superadministrador");
+    assert(/completePaidUpgradeAction\(\s*changeId: string\s*\)/.test(acc),
+      "la acción recibe algo más que el identificador del cambio");
+  });
+
+  check("13D. La consola no deja teclear ninguna cifra", () => {
+    const ui = leer("components/domain/platform/paid-upgrade-recovery.tsx");
+    assert(!/<input|<textarea|contentEditable/.test(ui),
+      "la consola tiene un campo editable en una pantalla de dinero");
+    assert(/completePaidUpgradeAction\(changeId\)/.test(ui),
+      "la consola no manda el identificador del cambio y nada más");
+    assert(/completar\(r\.changeId\)/.test(ui),
+      "la fila no pasa SU cambio: se podría completar otro");
+    assert(/confirmando === r\.changeId/.test(ui),
+      "se puede completar una subida sin confirmar");
+  });
+
+  console.log("\n14 · CALIDAD DE LA INTEGRACIÓN CON MERCADO PAGO");
+
+  check("14A. Las preferencias llevan las tres URLs de vuelta", () => {
+    const mp = sinComentarios(leer("lib/billing/providers/mercadopago.ts"));
+    for (const u of ["success: input.successUrl", "failure: input.failureUrl",
+                     "pending: input.pendingUrl"]) {
+      assert(mp.includes(u), `falta ${u}`);
+    }
+  });
+
+  check("14B. El aviso sale de configuración, nunca del host que atiende", () => {
+    // Mercado Pago documenta que la `notification_url` de la preferencia
+    // PREVALECE sobre la del panel. Derivarla del host mandaría la dirección de
+    // un Preview en un cobro productivo y callaría los avisos de verdad.
+    const mp = sinComentarios(leer("lib/billing/providers/mercadopago.ts"));
+    assert(/MERCADOPAGO_NOTIFICATION_URL/.test(mp),
+      "el aviso no sale de una variable declarada");
+    // Sobre el fichero CRUDO: `sinComentarios` se come el «//» de dentro de la
+    // cadena y dejaría esta comprobación mirando a otra cosa.
+    assert(/startsWith\("https:\/\/"\)/.test(leer("lib/billing/providers/mercadopago.ts")),
+      "se admite una URL de avisos sin cifrar");
+    assert(!/notification_url: `\$\{/.test(mp),
+      "la URL de avisos se compone con interpolación: entonces sale del host");
+  });
+
+  check("14C. Y los artículos dicen qué se está comprando", () => {
+    const mp = sinComentarios(leer("lib/billing/providers/mercadopago.ts"));
+    assert(/input\.description \? \{ description: input\.description \}/.test(mp),
+      "la preferencia no manda descripción");
+    const uno = leer("lib/db/one-time-checkout.ts");
+    const sub = leer("lib/db/upgrade-mercadopago.ts");
+    assert(/description: `Suscripción Trazaloop/.test(uno),
+      "la contratación no describe lo que se compra");
+    assert(/description: descripcion/.test(sub),
+      "la subida no describe lo que se compra");
+    // Y ninguna mete precios ni identificadores nuestros en esa frase.
+    assert(!/description:[^\n]*\$\{[^}]*(amount|total|id)\b/i.test(uno + sub),
+      "la descripción lleva un importe o un identificador dentro");
+  });
+
+  check("14D. Y NO se inventa un apellido que nadie ha capturado", () => {
+    // `profiles` sólo guarda `full_name`. Partirlo por el primer espacio sería
+    // inventarse el apellido de alguien y mandárselo a un tercero.
+    const mp = sinComentarios(leer("lib/billing/providers/mercadopago.ts"));
+    assert(!/last_name/.test(mp),
+      "se manda un apellido que no existe como dato estructurado");
+    for (const f of ["lib/db/one-time-checkout.ts", "lib/db/upgrade-mercadopago.ts"]) {
+      const src = sinComentarios(leer(f));
+      assert(!/\.split\(" "\)/.test(src),
+        `${f} parte un nombre por el espacio para fabricar un apellido`);
+    }
+  });
+
   console.log("\n9 · LO QUE ESTE TRAMO NO ENCIENDE");
 
   check("9A. El CTA de Extra sigue siendo «Hablemos de Extra»", () => {
@@ -518,6 +621,8 @@ async function main() {
   /** Una compensación abierta sobre el carril del proveedor. */
   const compensando = (o: Partial<UpgradeSagaFacts> = {}) => hechos({
     changeStatus: "compensation_required", renewalMode: "provider",
+    // Desde 01C.3 devolver el dinero es una DECISIÓN, no el camino automático.
+    operatorIntent: "refund",
     deltaPayment: pago(), providerRecurringAmountBefore: FULL_RECURRENTE,
     restoreTargetAmount: FULL_RECURRENTE, ...o });
 
@@ -592,8 +697,60 @@ async function main() {
   check("10H. El carril manual no tiene autorización: devuelve y ya", () => {
     const r = decideUpgradeStep(hechos({
       changeStatus: "compensation_required", renewalMode: "manual",
-      deltaPayment: pago() }));
+      operatorIntent: "refund", deltaPayment: pago() }));
     assert(r.kind === "refund", `decidió ${r.kind}`);
+  });
+
+  console.log("\n10bis · EL CAMINO AUTOMÁTICO YA NO DEVUELVE DINERO SOLO");
+
+  check("10I. Sin nadie que lo decida, una compensación abierta ESPERA", () => {
+    // BILLING-EXTRA-01C.3 · Cambio de política. Devolver dinero es una decisión
+    // comercial, no el desenlace por defecto de un fallo técnico. El automático
+    // para, bloquea el barrido y avisa.
+    const r = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required", renewalMode: "provider",
+      deltaPayment: pago(), providerRecurringAmountBefore: FULL_RECURRENTE,
+      restoreTargetAmount: FULL_RECURRENTE,
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(r.kind === "hold" && r.reason === "ACTION_REQUIRED",
+      `decidió ${r.kind}`);
+  });
+
+  check("10J. Y con alguien que decide completarlo, se completa", () => {
+    // Sin saltarse NADA: pasa por las mismas comprobaciones económicas.
+    const coherente = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required", renewalMode: "provider",
+      operatorIntent: "complete", deltaPayment: pago(),
+      providerRecurringAmountBefore: FULL_RECURRENTE,
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(coherente.kind === "settle", `decidió ${coherente.kind}`);
+
+    // Y si el mundo de fuera no está coherente, NO completa aunque se pida.
+    const incoherente = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required", renewalMode: "provider",
+      operatorIntent: "complete", deltaPayment: pago(),
+      providerRecurringAmountBefore: FULL_RECURRENTE,
+      authorization: autorizacion({ observedAmountMinor: FULL_RECURRENTE }) }));
+    assert(incoherente.kind === "update_authorization",
+      `decidió ${incoherente.kind}`);
+
+    // Ni con un importe que no cuadra: la decisión de una persona no es un
+    // salvoconducto.
+    const importeMalo = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required", renewalMode: "manual",
+      operatorIntent: "complete",
+      deltaPayment: pago({ amountMinor: DELTA_TOTAL - 1 }) }));
+    assert(importeMalo.kind === "compensate",
+      `un importe que no cuadra decidió ${importeMalo.kind}`);
+  });
+
+  check("10K. Una fallida con dinero también se puede completar", () => {
+    const sinNadie = decideUpgradeStep(hechos({
+      changeStatus: "failed", deltaPayment: pago() }));
+    assert(sinNadie.kind === "compensate", `decidió ${sinNadie.kind}`);
+    const conNadie = decideUpgradeStep(hechos({
+      changeStatus: "failed", operatorIntent: "complete", deltaPayment: pago() }));
+    assert(conNadie.kind === "settle", `decidió ${conNadie.kind}`);
   });
 
   console.log("\n11 · UN TIEMPO DE ESPERA NO ES UN FALLO");

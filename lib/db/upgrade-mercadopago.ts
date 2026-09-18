@@ -104,6 +104,16 @@ export async function startMercadoPagoUpgradeCheckout(input: {
   // La vuelta lleva a una pantalla que PREGUNTA, no que confirma. Y la
   // referencia es la misma que la idempotencia de la preferencia: pedirla dos
   // veces devuelve la misma, nunca dos cobros distintos para lo mismo.
+  // Qué se está comprando, leído del propio cambio. Sin precios, sin
+  // identificadores nuestros y sin nada sensible.
+  const { data: cRaw } = await admin.from("billing_subscription_changes")
+    .select("from_plan_code, to_plan_code").eq("id", input.changeId).maybeSingle();
+  const c = cRaw as Fila | null;
+  const descripcion = c
+    ? `Cambio de plan ${String(c.from_plan_code)} a ${String(c.to_plan_code)}`
+      + " · diferencia del periodo en curso"
+    : "Cambio de plan · diferencia del periodo en curso";
+
   const referencia = buildUpgradeReference(intentId);
   // La vuelta lleva el CAMBIO, no el intento: es lo que el conciliador
   // necesita y lo que la pantalla puede comprobar que es de esta empresa.
@@ -112,6 +122,8 @@ export async function startMercadoPagoUpgradeCheckout(input: {
   const preferencia = await proveedor.createOneTimeCheckout({
     externalReference: referencia,
     title: "Diferencia por subir a Extra",
+    // Derivada del cambio real, sin cifras y sin identificadores nuestros.
+    description: descripcion,
     amountMinor: total,
     currency: moneda,
     payerEmail: input.payerEmail,
@@ -156,7 +168,16 @@ export type UpgradeReconcileResult = {
  * el cambio. Todo lo demás se deriva aquí.
  */
 export async function reconcileMercadoPagoUpgrade(
-  changeId: string
+  changeId: string,
+  /**
+   * BILLING-EXTRA-01C.3 · Lo que una persona con autoridad ha decidido, si hay
+   * alguna. El camino automático es `none` y desde este tramo NUNCA devuelve
+   * dinero por su cuenta: si no puede completar, para y avisa.
+   *
+   * No llega del navegador: lo pone la acción de operación, que ya comprobó
+   * quién la pide.
+   */
+  operatorIntent: "none" | "complete" | "refund" = "none"
 ): Promise<UpgradeReconcileResult> {
   const admin = createAdminClient();
   const pasos: string[] = [];
@@ -339,6 +360,7 @@ export async function reconcileMercadoPagoUpgrade(
       providerRestored: restaurada,
       restoreTargetAmount: restaurarA,
       authorizationRestoreAttempted: intentadaLaReversion,
+      operatorIntent,
     });
     pasos.push(paso.kind + (("reason" in paso) ? `:${paso.reason}` : ""));
 

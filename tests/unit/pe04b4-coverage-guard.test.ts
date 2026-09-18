@@ -148,7 +148,21 @@ const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
   // Su puerta es otra, y es más estrecha: `requirePlatformStaff` aquí, y debajo
   // `is_platform_superadmin()` dentro de `billing_resolve_stuck_upgrade`, que
   // además se niega a liberar nada si la prueba dice que hay un cobro aprobado.
-  "server/actions/billing.ts:resolveStuckUpgradeAction":
+  // BILLING-EXTRA-01C.3 · Completar una subida que la empresa YA pagó.
+  //
+  // La puerta comercial mide si a una empresa le cabe algo dentro de su plan.
+  // Esto no consume cupo: lo que hace es terminar una compra que ya ocurrió, y
+  // el plan que concede es justamente el que se pagó. Preguntarle a la puerta
+  // si cabe sería preguntar por el cupo del plan que está a punto de dejar.
+  //
+  // Su puerta es otra y más estrecha: `requirePlatformStaff` más `isSuperadmin`
+  // aquí, y debajo la saga canónica, que se niega a conceder nada si el cobro
+  // no está aprobado, si el importe no cuadra o si la autorización recurrente
+  // no está donde tiene que estar.
+  "server/actions/billing.ts:completePaidUpgradeAction":
+    "Termina una subida ya pagada; no consume cupo de nadie. Su puerta es "
+    + "requirePlatformStaff + isSuperadmin, y la saga verifica el cobro.",
+    "server/actions/billing.ts:resolveStuckUpgradeAction":
     "Operación de plataforma sobre un cambio atascado, sin empresa que consuma "
     + "nada. Su puerta es requirePlatformStaff + is_platform_superadmin en la base.",
   // PD-01D · Administración de campañas públicas de diagnóstico.

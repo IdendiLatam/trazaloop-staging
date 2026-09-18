@@ -125,6 +125,20 @@ export type UpgradeSagaFacts = {
   restoreTargetAmount: number | null;
   /** ¿Ya se pidió la reversión en esta pasada? */
   authorizationRestoreAttempted: boolean;
+
+  /**
+   * BILLING-EXTRA-01C.3 · Lo que una PERSONA con autoridad ha decidido.
+   *
+   * `none` es el camino automático, y desde este tramo el automático NUNCA
+   * devuelve dinero por su cuenta: si no puede completar, para y avisa.
+   *
+   * `complete` es alguien de plataforma diciendo «este cobro es legítimo,
+   * llévalo a Extra». No salta ninguna comprobación: las tiene que pasar todas
+   * igual. Lo único que aporta es la decisión de seguir.
+   *
+   * `refund` es la salida excepcional, cuando se decide que no habrá Extra.
+   */
+  operatorIntent: "none" | "complete" | "refund";
 };
 
 export type UpgradeSagaStep =
@@ -191,6 +205,8 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
     return { kind: "done", reason: f.changeStatus.toUpperCase() };
   }
 
+  const conDinero = f.deltaPayment !== null && aprobado(f.deltaPayment);
+
   // ── fallida CON dinero dentro ─────────────────────────────────────────────
   //
   // BILLING-EXTRA-01C. `failed` es terminal salvo en un caso: cuando llegó un
@@ -198,29 +214,42 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
   // cerrado y el dinero sigue dentro, y dar eso por resuelto es exactamente
   // cómo un cobro se queda sin devolver para siempre.
   if (f.changeStatus === "failed") {
-    return f.deltaPayment !== null && aprobado(f.deltaPayment)
-      ? { kind: "compensate", reason: "FAILED_WITH_APPROVED_PAYMENT" }
-      : { kind: "done", reason: "FAILED" };
+    if (!conDinero) return { kind: "done", reason: "FAILED" };
+    // Con una persona detrás que decide completarlo, se evalúa como cualquier
+    // otro: pasando TODAS las comprobaciones de abajo.
+    if (f.operatorIntent !== "complete") {
+      return { kind: "compensate", reason: "FAILED_WITH_APPROVED_PAYMENT" };
+    }
   }
 
-  // ── hay dinero pendiente de devolver ──────────────────────────────────────
+  // ── hay dinero observado y la operación no concluyó ───────────────────────
   //
-  // Va ANTES que cualquier otra cosa. Una compensación abierta manda sobre el
-  // resto: mientras haya algo que devolver, no se evalúa si se podría
-  // completar. De `compensation_required` no se sale hacia Extra.
+  // BILLING-EXTRA-01C.3 · CAMBIO DE POLÍTICA.
+  //
+  // Hasta aquí, `compensation_required` significaba «esto se devuelve» y de ahí
+  // no se salía hacia Extra. Ahora significa otra cosa: «entró dinero y la
+  // operación no terminó; hace falta resolverla». Puede acabar en Extra o en
+  // devolución, y quién lo decide es una persona con autoridad.
+  //
+  // Lo que NO cambia es ninguna guarda financiera: completar exige pasar las
+  // mismas comprobaciones que habría pasado el camino automático.
   if (f.changeStatus === "compensation_required") {
-    return decidirCompensacion(f);
+    if (f.operatorIntent === "refund") return decidirCompensacion(f);
+    if (f.operatorIntent !== "complete") {
+      return { kind: "hold", reason: "ACTION_REQUIRED" };
+    }
   }
 
   // ── todavía no ha salido al proveedor ─────────────────────────────────────
-  if (f.changeStatus !== "submitted") {
+  if (f.changeStatus !== "submitted" && f.changeStatus !== "failed"
+      && f.changeStatus !== "compensation_required") {
     return { kind: "wait", reason: "NOT_SUBMITTED" };
   }
 
   const ahora = Date.parse(f.now);
   const fin = Date.parse(f.periodEnd);
   const pago = f.deltaPayment;
-  const hayDinero = pago !== null && aprobado(pago);
+  const hayDinero = conDinero;
 
   // ── se acabó el tiempo contra el que se hizo la cuenta ────────────────────
   //

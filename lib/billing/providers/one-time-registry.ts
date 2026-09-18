@@ -40,6 +40,7 @@ export type OneTimeGateway = {
   createCheckout(input: {
     externalReference: string;
     title: string;
+    description?: string | null;
     amountMinor: number;
     currency: string;
     payerEmail?: string | null;

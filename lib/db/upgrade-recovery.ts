@@ -166,3 +166,128 @@ export async function resolveStuckUpgrade(changeId: string): Promise<StuckResolu
     status: estado, evidence: prueba.evidence, detail: prueba.detail,
   };
 }
+
+/**
+ * Trazaloop · BILLING-EXTRA-01C.3 · COMPLETAR UNA SUBIDA YA PAGADA.
+ *
+ *
+ * POR QUÉ ESTO NO ES «CAMBIAR EL PLAN A MANO»
+ *
+ * Alguien de plataforma no toca `plan_code`. Lo que hace es DECIDIR que un
+ * cobro observado es legítimo y que la subida debe seguir adelante; a partir de
+ * ahí manda exactamente la misma lógica que habría mandado sola: la saga
+ * canónica, con todas sus comprobaciones —importe congelado, moneda, identidad
+ * del vendedor, entorno, periodo vigente, autorización coherente— y la misma
+ * liquidación de 0181, que sigue siendo el único camino de un pago a Extra.
+ *
+ * La decisión de una persona no es un salvoconducto: si el importe no cuadra o
+ * la autorización recurrente no está donde tiene que estar, esto NO completa
+ * nada por mucho que se pulse.
+ *
+ *
+ * POR QUÉ HACÍA FALTA
+ *
+ * Porque devolver el dinero automáticamente resultó ser la política equivocada.
+ * Quien pagó una subida quiere la subida, no su dinero de vuelta; y en Sandbox
+ * el proveedor ni siquiera admite devoluciones. Desde 01C.3 el camino
+ * automático, cuando no puede completar, PARA y avisa — y esto es lo que
+ * permite terminar después, cuando el mundo vuelva a ser coherente.
+ */
+export type CompleteUpgradeResult = {
+  ok: boolean;
+  outcome: string;
+  reason: string;
+  evidence: StuckEvidence;
+  detail: string;
+};
+
+export async function completePaidUpgrade(
+  changeId: string
+): Promise<CompleteUpgradeResult> {
+  // 1 · La prueba, primero. Completar una subida sin mirar si hay un cobro
+  //     aprobado sería conceder Extra gratis.
+  const prueba = await gatherStuckUpgradeEvidence(changeId);
+  if (prueba.evidence !== "payment_approved") {
+    return { ok: false, outcome: "no_approved_payment", evidence: prueba.evidence,
+             reason: "NO_APPROVED_PAYMENT", detail: prueba.detail };
+  }
+
+  // 2 · Y a partir de aquí, la saga canónica. No hay un segundo camino a Extra.
+  const { reconcileUpgrade } = await import("@/lib/db/upgrade-reconcile");
+  const r = await reconcileUpgrade(changeId, "complete");
+  return {
+    ok: r.outcome === "upgraded",
+    outcome: r.outcome, reason: r.reason,
+    evidence: prueba.evidence, detail: prueba.detail,
+  };
+}
+
+/** Lo que una subida atascada le enseña a quien opera. Sin secretos. */
+export type PendingUpgradeRow = {
+  changeId: string;
+  organizationId: string;
+  organizationName: string;
+  status: string;
+  fromPlanCode: string;
+  toPlanCode: string;
+  totalAmount: number;
+  currency: string;
+  renewalMode: string | null;
+  hasObservedPayment: boolean;
+  compensationReason: string | null;
+  providerRecurringExpected: number | null;
+  providerRecurringObserved: number | null;
+  createdAt: string;
+};
+
+/**
+ * Las subidas que necesitan que alguien mire.
+ *
+ * Son las que tienen dinero observado y no han terminado. Una en `pending` o
+ * `submitted` sin cobro todavía no necesita a nadie: está esperando a que
+ * alguien pague, y eso no es una incidencia.
+ */
+export async function listUpgradesNeedingAction(): Promise<PendingUpgradeRow[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("billing_subscription_changes")
+    .select("id, organization_id, status, from_plan_code, to_plan_code, "
+      + "total_amount, charge_currency, delta_provider_payment_id, "
+      + "compensation_reason, provider_recurring_amount_before, "
+      + "provider_recurring_amount_observed, subscription_id, created_at")
+    .in("status", ["compensation_required", "failed", "submitted"])
+    .not("delta_provider_payment_id", "is", null)
+    .order("created_at", { ascending: false }).limit(50);
+  const filas = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  if (filas.length === 0) return [];
+
+  const orgIds = [...new Set(filas.map((f) => String(f.organization_id)))];
+  const { data: orgs } = await admin.from("organizations")
+    .select("id, name").in("id", orgIds);
+  const nombre = new Map(((orgs ?? []) as Array<{ id: string; name: string }>)
+    .map((o) => [o.id, o.name]));
+  const subIds = [...new Set(filas.map((f) => String(f.subscription_id)))];
+  const { data: subs } = await admin.from("billing_subscriptions")
+    .select("id, renewal_mode").in("id", subIds);
+  const modo = new Map(((subs ?? []) as Array<{ id: string; renewal_mode: string }>)
+    .map((x) => [x.id, x.renewal_mode]));
+
+  return filas.map((f) => ({
+    changeId: String(f.id),
+    organizationId: String(f.organization_id),
+    organizationName: nombre.get(String(f.organization_id)) ?? "—",
+    status: String(f.status),
+    fromPlanCode: String(f.from_plan_code),
+    toPlanCode: String(f.to_plan_code),
+    totalAmount: Number(f.total_amount),
+    currency: String(f.charge_currency),
+    renewalMode: modo.get(String(f.subscription_id)) ?? null,
+    hasObservedPayment: f.delta_provider_payment_id !== null,
+    compensationReason: f.compensation_reason === null
+      ? null : String(f.compensation_reason),
+    providerRecurringExpected: f.provider_recurring_amount_before === null
+      ? null : Number(f.provider_recurring_amount_before),
+    providerRecurringObserved: f.provider_recurring_amount_observed === null
+      ? null : Number(f.provider_recurring_amount_observed),
+    createdAt: String(f.created_at),
+  }));
+}
