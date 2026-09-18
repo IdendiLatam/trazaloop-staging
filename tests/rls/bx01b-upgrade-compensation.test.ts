@@ -399,6 +399,12 @@ async function main() {
         p_subscription_id: e.subscriptionId, p_target_plan_code: "extra" });
       assert((otra as Fila).status === "quoted",
         `no se pudo volver a presupuestar: ${(otra as Fila).status}`);
+      // Y se retira, que además comprueba que lo recién presupuestado SÍ se
+      // puede retirar —sólo `pending`— y no deja nada abierto detrás.
+      const { data: ret } = await e.quien.cli.rpc("billing_cancel_upgrade",
+        { p_change_id: (otra as Fila).change_id as string });
+      assert((ret as Fila).status === "cancelled",
+        `retirar la nueva: ${(ret as Fila).status}`);
     });
 
     await check("3C. Y el barrido sabe que hay una subida en el aire", async () => {
