@@ -274,10 +274,29 @@ check("E2. Y NUNCA cae a un plan por defecto ante un error", () => {
   // El resolutor de hoy hace `if (error) return "demo"`. Aquí no puede haber
   // ningún camino que devuelva un plan desde un `catch` o un `if (error)`.
   assert(!/if \(error\) return \{ status: "found"/.test(codigo), "un error devuelve un plan");
-  assert(!/catch \{[\s\S]{0,120}planCode/.test(codigo), "un catch devuelve un plan");
-  const catches = [...codigo.matchAll(/catch \{\s*return ([^;]+);/g)].map((m) => m[1]);
-  for (const c of catches) {
-    assert(/unavailable|null/.test(c), `un catch devuelve «${c}»`);
+
+  // COMMERCIAL-UX-01G. Antes esto miraba si la palabra `planCode` aparecía
+  // dentro de los 120 caracteres siguientes a un `catch`. Es cercanía, no
+  // estructura: se puso roja el día que nació un `type PublicPlanLimit` justo
+  // debajo de un `catch { return null; }`. El `catch` seguía siendo correcto.
+  //
+  // Una prueba que se pone roja por lo que hay AL LADO no está comprobando la
+  // regla, y la regla importa demasiado para dejarla en manos de una distancia.
+  // Ahora se lee el CUERPO de cada `catch`, contando llaves, y se exige que
+  // todo lo que devuelva sea una no-respuesta. Así también cubre los `catch` de
+  // varias líneas, que el recorrido de abajo nunca llegó a mirar.
+  for (let i = codigo.indexOf("catch {"); i !== -1; i = codigo.indexOf("catch {", i + 1)) {
+    let profundidad = 0, fin = i;
+    for (let j = codigo.indexOf("{", i); j < codigo.length; j += 1) {
+      if (codigo[j] === "{") profundidad += 1;
+      if (codigo[j] === "}") { profundidad -= 1; if (profundidad === 0) { fin = j; break; } }
+    }
+    const cuerpo = codigo.slice(i, fin + 1);
+    const devoluciones = [...cuerpo.matchAll(/return ([^;]*);/g)].map((m) => m[1].trim());
+    assert(devoluciones.length > 0, `un catch no devuelve nada: «${cuerpo.slice(0, 60)}»`);
+    for (const d of devoluciones) {
+      assert(/unavailable|null|\[\]/.test(d), `un catch devuelve «${d}»`);
+    }
   }
 });
 

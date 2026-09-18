@@ -218,12 +218,17 @@ console.log("\nG · Lo que ve cada quien");
 // ===========================================================================
 
 check("Al cliente no se le enseña vocabulario interno", () => {
+  // COMMERCIAL-UX-01G. Desde 01F quien traduce esta pantalla es
+  // `summarizeBilling`; `billing-state.ts` se quedó sin usar. La regla es la
+  // misma y se comprueba donde ahora vive, que es lo único que el cliente lee.
   const pagina = leer("app/(app)/(shell)/settings/billing/page.tsx");
-  assert(/describeBillingState/.test(pagina), "la pantalla no traduce el estado");
+  assert(/summarizeBilling|describeBillingState/.test(pagina),
+    "la pantalla no traduce el estado");
   assert(!/\{estado\.status\}/.test(pagina), "enseña el estado interno");
-  const copia = sinComentarios(leer("lib/domain/billing-state.ts"));
+  const copia = sinComentarios(leer("lib/domain/billing-experience.ts"));
   for (const p of [/past_due/, /provider_unknown/, /integrity_mismatch/, /failure_class/]) {
-    const textos = copia.match(/title: "[^"]*"|detail: "[^"]*"/g) ?? [];
+    const textos = copia.match(/displayStatus: "[^"]*"|primaryMessage:\s*"[^"]*"/g) ?? [];
+    assert(textos.length > 0, "no se encontró ni una frase que revisar");
     for (const t of textos) assert(!p.test(t), `el cliente lee ${p}: ${t}`);
   }
 });

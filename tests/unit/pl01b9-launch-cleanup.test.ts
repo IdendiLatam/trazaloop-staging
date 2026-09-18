@@ -130,11 +130,31 @@ check("Un modo desconocido o ausente cae del lado prudente", () => {
 });
 
 check("La ficha del plan usa la regla, y no escribe la etiqueta a mano", () => {
+  // COMMERCIAL-UX-01G. Desde 01F la pantalla no compone la frase: le pide el
+  // resumen a `summarizeBilling` y pinta su `validUntilLabel`. La regla que
+  // aquí se defiende no ha cambiado —la etiqueta la decide UN solo sitio— pero
+  // se comprueba un eslabón más allá: que ese resumen tampoco la escriba a
+  // mano, sino que se la pregunte a `billing-renewal-copy`.
+  //
+  // Durante un tiempo sí la escribió a mano, y las dos versiones ya habían
+  // empezado a divergir: una trataba el carril `platform` como cobro
+  // automático y la otra no.
   const pagina = sinComentarios(leer("app/(app)/(shell)/settings/billing/page.tsx"));
-  assert(/renewalCopyFor\(/.test(pagina), "la pantalla no usa la regla");
   assert(!/Siguiente cobro/.test(pagina),
     "la pantalla escribe «Siguiente cobro» a mano: entonces la regla no gobierna nada");
-  assert(/copiaRenovacion\.dateLabel/.test(pagina), "no se pinta la etiqueta de la regla");
+  const tarjeta = sinComentarios(leer("components/domain/billing/my-plan-card.tsx"));
+  assert(/summary\.validUntilLabel/.test(tarjeta)
+    || /copiaRenovacion\.dateLabel/.test(pagina),
+    "no se pinta la etiqueta que decide la regla");
+  assert(!/Siguiente cobro/.test(tarjeta),
+    "la tarjeta escribe «Siguiente cobro» a mano");
+
+  const resumen = sinComentarios(leer("lib/domain/billing-experience.ts"));
+  assert(/renewalCopyFor\(/.test(resumen), "el resumen no usa la regla");
+  for (const frase of ["Siguiente cobro", "Plan activo hasta", "Activo hasta"]) {
+    assert(!new RegExp(`etiquetaFecha\\("${frase}`).test(resumen),
+      `el resumen escribe «${frase}» a mano en vez de preguntarla`);
+  }
 });
 
 check("Y el botón de cancelar depende del modo, no del gusto", () => {
@@ -142,7 +162,11 @@ check("Y el botón de cancelar depende del modo, no del gusto", () => {
   assert(/offersCancellation \? \(/.test(panel),
     "«Cancelar el plan» se pinta siempre, haya recurrencia o no");
   const pagina = sinComentarios(leer("app/(app)/(shell)/settings/billing/page.tsx"));
-  assert(/offersCancellation=\{copiaRenovacion\.offersCancellation\}/.test(pagina),
+  // COMMERCIAL-UX-01B lo estrechó: con una recurrencia viva ya existe
+  // «Cancelar renovación automática», y dos botones que parecen lo mismo y
+  // mueven dinero distinto no pueden convivir. Lo que esta prueba defiende es
+  // que el valor SALGA de la regla, no la forma exacta de escribirlo.
+  assert(/offersCancellation=\{[^}]*copiaRenovacion\.offersCancellation/.test(pagina),
     "la pantalla no le pasa al panel si hay algo que cancelar");
 });
 

@@ -49,8 +49,8 @@ const fecha = (iso: string) => `[${iso.slice(0, 10)}]`;
 const hechos = (o: Partial<BillingFacts> = {}): BillingFacts => ({
   hasSubscription: false, contractedPlanCode: "free", effectivePlanCode: "free",
   grantKind: "base", grantEndsAt: null, currentPeriodEnd: null, renewsAt: null,
-  cancelAtPeriodEnd: false, hasLiveRecurring: false, subscriptionStatus: null,
-  manualReview: false, downgradeScheduled: false, paymentMethodMissing: false,
+  cancelAtPeriodEnd: false, hasLiveRecurring: false, renewalMode: null,
+  subscriptionStatus: null, manualReview: false, downgradeScheduled: false, paymentMethodMissing: false,
   pendingCheckout: false, isAdmin: true, ...o });
 
 const FIN = "2026-10-16T22:47:38.000Z";
@@ -64,6 +64,35 @@ check("1A. Free · el suelo, sin cobros programados", () => {
     "no se dice que no hay cobros");
   assert(r.offersStopRecurring === false && r.offersSchedulePlanEnd === false,
     "se ofrece cancelar algo a quien no paga");
+});
+
+check("1A.2. Plan concedido · no se llama «plan de entrada» a un plan de pago", () => {
+  // COMMERCIAL-UX-01G, encontrado mirando una empresa real de Staging. La
+  // consola puede habilitar un plan sin suscripción (`grant_kind` `sold` o
+  // `courtesy`, 0162). La tarjeta escribía a la vez el nombre del plan efectivo
+  // —«Full», del catálogo— y «Plan de entrada» debajo. Las dos no pueden ser
+  // ciertas, y quien lo lee no sabe cuál creer.
+  const r = summarizeBilling(hechos({
+    hasSubscription: false, grantKind: "sold",
+    contractedPlanCode: "full", effectivePlanCode: "full" }), fecha);
+  assert(r.state === "GRANTED_ACTIVE", `estado ${r.state}`);
+  assert(!/plan de entrada/i.test(r.displayStatus),
+    `a un plan de pago se le llama «${r.displayStatus}»`);
+  assert(/no hay ningún cobro programado/i.test(r.primaryMessage),
+    "no se dice que no hay cobros, que es lo único que le importa saber");
+  // Sin final declarado no se inventa uno: una concesión sin `ends_at` no vence.
+  assert(r.validUntilLabel === null,
+    `se anuncia un vencimiento que nadie declaró: «${r.validUntilLabel}»`);
+  // Y no se le ofrece cancelar algo que no contrató.
+  assert(r.offersStopRecurring === false && r.offersSchedulePlanEnd === false,
+    "se ofrece cancelar un plan que la empresa no contrató");
+  // Con final declarado —una cortesía con fecha— sí se dice hasta cuándo.
+  const conFinal = summarizeBilling(hechos({
+    hasSubscription: false, grantKind: "courtesy", grantEndsAt: FIN,
+    contractedPlanCode: "full", effectivePlanCode: "full" }), fecha);
+  assert(conFinal.validUntilLabel !== null
+    && /Activo hasta/.test(conFinal.validUntilLabel),
+    `la concesión con fecha se titula «${conFinal.validUntilLabel}»`);
 });
 
 check("1B. Prueba · NO es un contrato, y se dice qué pasa después", () => {
@@ -112,6 +141,31 @@ check("1E. Con cobros programados · «Siguiente cobro» y renovación activa", 
     `la fecha se titula «${r.validUntilLabel}»`);
   assert(r.renewalMessage === "Renovación automática activa.",
     `dice «${r.renewalMessage}»`);
+});
+
+check("1E.2. El carril de la plataforma también renueva solo", () => {
+  // COMMERCIAL-UX-01G. `hasLiveRecurring` solo ve el carril del PROVEEDOR. Hay
+  // suscripciones en modo `platform` —la plataforma cobra una tarjeta guardada—
+  // y existen de verdad: la auditoría encontró una en Staging.
+  //
+  // Contarlas como manuales le diría a alguien que tiene que renovar a mano
+  // algo que se le va a cobrar igual. Eso no es un matiz de redacción.
+  const r = summarizeBilling(hechos({
+    hasSubscription: true, contractedPlanCode: "full", effectivePlanCode: "full",
+    grantKind: "sold", subscriptionStatus: "active", renewalMode: "platform",
+    renewsAt: FIN }), fecha);
+  assert(r.state === "PROVIDER_ACTIVE", `estado ${r.state}`);
+  assert(!/no se renueva solo/i.test(r.primaryMessage),
+    "se le dice que no se renueva solo a quien SÍ se le va a cobrar solo");
+  assert(r.renewalMessage === "Renovación automática activa.",
+    `dice «${r.renewalMessage}»`);
+  assert(r.validUntilLabel !== null && /Siguiente cobro/.test(r.validUntilLabel),
+    `la fecha se titula «${r.validUntilLabel}»`);
+  // Y lo que NO se ofrece: detener cobros aquí cancela la autorización del
+  // proveedor, que en este carril no existe. Un botón que no cumple es peor
+  // que no tenerlo.
+  assert(r.offersStopRecurring === false,
+    "se ofrece detener una autorización de pasarela que no existe");
 });
 
 check("1F. Cancelada · «activo hasta», y NUNCA «siguiente cobro»", () => {
@@ -225,6 +279,13 @@ check("2B. Detener cobros SOLO con recurrencia viva", () => {
     hasLiveRecurring: true, renewsAt: FIN }), fecha);
   assert(conRecurrencia.offersStopRecurring === true,
     "con cobros programados no se puede detenerlos");
+  // Y en el carril de la plataforma tampoco: se renueva solo, pero lo que este
+  // botón cancela —la autorización del proveedor— no está ahí.
+  const plataforma = summarizeBilling(hechos({
+    hasSubscription: true, subscriptionStatus: "active",
+    renewalMode: "platform", renewsAt: FIN }), fecha);
+  assert(plataforma.offersStopRecurring === false,
+    "se ofrece detener una autorización que este carril no tiene");
 });
 
 check("2C. Ya cancelada · no se vuelve a ofrecer cancelar", () => {
@@ -250,6 +311,7 @@ check("2C.2. La promesa de renovación automática NO llega a un plan manual", (
     ["cobro a medias", hechos({ pendingCheckout: true })],
     ["en verificación", hechos({ hasSubscription: true, manualReview: true })],
     ["sin lectura", hechos({ hasSubscription: null })],
+    ["concedido", hechos({ grantKind: "sold", effectivePlanCode: "full" })],
   ];
   for (const [nombre, f] of estados) {
     const r = summarizeBilling(f, fecha);

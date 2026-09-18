@@ -1,5 +1,8 @@
 import type { CommercialPlan } from "@/lib/plans/commercial-catalog";
 import { formatLimitForCustomer } from "@/lib/plans/commercial-presentation";
+import {
+  COMMERCIAL_CAPABILITIES, formatInclusion,
+} from "@/lib/plans/commercial-capabilities";
 
 /**
  * Trazaloop · COMMERCIAL-UX-01D · La comparación, fila a fila.
@@ -29,6 +32,25 @@ import { formatLimitForCustomer } from "@/lib/plans/commercial-presentation";
  * `not_configured`, la celda queda vacía. No se escribe «0», ni «—», ni «sin
  * configurar»: lo primero miente, lo segundo no dice nada y lo tercero le
  * enseña a un cliente un hueco del catálogo interno.
+ *
+ *
+ * NI UNA FILA QUE DIGA LO MISMO EN LAS TRES COLUMNAS
+ *
+ * COMMERCIAL-UX-01G. Esto es una COMPARACIÓN: su trabajo es ayudar a elegir, y
+ * una fila idéntica en todos los planes no ayuda a elegir nada — ocupa sitio y
+ * diluye las que sí deciden. Hay una hoy: «Reportar fallos del producto», que
+ * está incluida en los tres.
+ *
+ * No se borra del catálogo ni se esconde: sigue siendo cierta y se puede
+ * contar en otro sitio. Simplemente no es material de comparación.
+ *
+ *
+ * Y LAS CAPACIDADES CUYA AUTORIDAD NO ES UN LÍMITE
+ *
+ * Los tutoriales guiados diferencian planes y su regla vive en
+ * `tutorial-access.ts`, no en `plan_revision_limits`. Se añaden al final,
+ * preguntándole a esa autoridad. Sin esto, la comparación callaba una
+ * diferencia real.
  */
 
 /** El orden en que una persona quiere leerlo: primero lo que separa planes. */
@@ -76,8 +98,22 @@ export function PlanComparison({ planes }: { planes: readonly CommercialPlan[] }
     return formatLimitForCustomer(l.resourceCode, l.state, l.value);
   };
 
-  // Una fila donde ningún plan tiene nada que decir no aporta y ocupa.
-  const filas = codigos.filter((c) => planes.some((p) => celda(p, c) !== null));
+  // Una fila donde ningún plan tiene nada que decir no aporta y ocupa. Y una
+  // donde todos dicen LO MISMO, tampoco: esto es una comparación.
+  const filas = codigos.filter((c) => {
+    const valores = planes.map((p) => celda(p, c));
+    if (!valores.some((v) => v !== null)) return false;
+    return new Set(valores.map((v) => v ?? "")).size > 1;
+  });
+
+  // Las capacidades con autoridad fuera de los límites, preguntándole a ella.
+  const extras = COMMERCIAL_CAPABILITIES
+    .map((cap) => ({
+      cap,
+      valores: planes.map((p) => formatInclusion(cap.resolve(p.code))),
+    }))
+    .filter((e) => new Set(e.valores.map((v) => v ?? "")).size > 1)
+    .sort((a, b) => a.cap.displayOrder - b.cap.displayOrder);
 
   return (
     // En móvil la tabla se desplaza DENTRO de su caja; la página nunca se mueve
@@ -117,6 +153,21 @@ export function PlanComparison({ planes }: { planes: readonly CommercialPlan[] }
                   </td>
                 );
               })}
+            </tr>
+          ))}
+          {extras.map(({ cap, valores }) => (
+            <tr key={cap.code} className="border-b border-hairline/60">
+              <th scope="row" className="py-3 pr-4 text-left font-normal text-ink-soft">
+                {cap.label}
+                {cap.description ? (
+                  <span className="block text-xs">{cap.description}</span>
+                ) : null}
+              </th>
+              {valores.map((v, n) => (
+                <td key={planes[n].code} className="px-4 py-3 text-ink">
+                  {v ?? <span className="sr-only">Sin dato</span>}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

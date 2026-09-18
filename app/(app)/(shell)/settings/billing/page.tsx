@@ -150,6 +150,7 @@ export default async function BillingPage({
     renewsAt: estado?.renewsAt ?? null,
     cancelAtPeriodEnd: estado?.cancelAtPeriodEnd ?? false,
     hasLiveRecurring: recurrenteViva !== null,
+    renewalMode: estado?.renewalMode ?? null,
     subscriptionStatus: estado?.status ?? null,
     manualReview: estado?.manualReview ?? false,
     downgradeScheduled: estado?.downgradeScheduled ?? false,

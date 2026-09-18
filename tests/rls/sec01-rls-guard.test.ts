@@ -76,6 +76,23 @@ const VISTAS_DEFINER_CLASIFICADAS: Record<string, string> = {
   v_organization_plan_usage: "Acotada a la empresa de quien pregunta dentro de la vista.",
   v_organization_module_usage: "Idem.",
   v_organization_onboarding_status: "Idem.",
+  // COMMERCIAL-UX-01D0 / 01D / 01E. Las cuatro se conceden a `anon` a
+  // propósito: son el catálogo comercial que cualquiera debe poder leer sin
+  // haber entrado. Corren como propietarias porque la alternativa —abrir las
+  // tablas base con RLS— filtra FILAS pero no COLUMNAS, y por PostgREST se
+  // escaparían las notas internas del catálogo.
+  v_public_plan_catalog: "Solo planes `active` con su revisión `published` "
+    + "vigente, y solo las columnas que se enseñan. Las notas internas y quién "
+    + "publicó no salen de la vista.",
+  v_public_plan_limits: "Solo límites de revisiones `published` vigentes y de "
+    + "recursos marcados `is_public`. Un recurso interno no se puede leer "
+    + "aunque exista.",
+  v_public_trial_policy: "No filtra filas porque no puede haber más de una: "
+    + "`ctp_singleton` lo impone en la tabla. Lo que la hace segura es la "
+    + "proyección: solo salen `enabled`, el plan de la prueba y su duración.",
+  v_public_home_video: "Solo el vídeo de portada `active` con una versión "
+    + "vigente y verificada. No expone la ruta del objeto: el enlace firmado "
+    + "lo da una función aparte, concedida solo a `service_role`.",
 };
 
 async function main() {

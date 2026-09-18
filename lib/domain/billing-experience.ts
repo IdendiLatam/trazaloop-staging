@@ -30,9 +30,13 @@
  */
 
 /** Los estados que esta pantalla sabe contar. */
+import { renewalCopyFor } from "./billing-renewal-copy";
+
 export type BillingDisplayState =
   /** Sin plan de pago. El suelo permanente. */
   | "FREE"
+  /** Un plan habilitado desde la consola, sin suscripción ni cobros. */
+  | "GRANTED_ACTIVE"
   /** Concesión temporal de un plan de pago. No es un contrato. */
   | "TRIAL_ACTIVE"
   /** Plan de pago que NO se renueva solo: vuelve a pagar la empresa. */
@@ -101,6 +105,18 @@ export type BillingFacts = {
   cancelAtPeriodEnd: boolean;
   /** ¿Hay cobros programados en la pasarela, vivos? */
   hasLiveRecurring: boolean;
+  /**
+   * Quién renueva, según 0190: `manual`, `platform` o `provider`.
+   *
+   * Hace falta porque `hasLiveRecurring` solo ve el carril del PROVEEDOR. Una
+   * suscripción en modo `platform` —la plataforma cobra una tarjeta guardada—
+   * también se renueva sola, y describirla como manual le diría a alguien que
+   * tiene que renovar a mano algo que se va a cobrar igual.
+   *
+   * Lo encontró la auditoría de 01G mirando los estados reales de Staging: hay
+   * una empresa en ese modo, y mi primera versión la contaba mal.
+   */
+  renewalMode: string | null;
   /** Estado canónico de la suscripción. */
   subscriptionStatus: string | null;
   manualReview: boolean;
@@ -163,7 +179,12 @@ export function summarizeBilling(
       primaryMessage:
         "Tu plan sigue funcionando mientras lo comprobamos. No hace falta que "
         + "hagas nada, y no vamos a cobrarte otra vez.",
-      validUntilLabel: etiquetaFecha("Plan activo hasta", hasta(f.currentPeriodEnd)),
+      validUntilLabel: etiquetaFecha(
+        // Hay un cobro automático de por medio, pero no se puede prometer:
+        // está en duda, falló, o no hay con qué cobrarlo. Lo único cierto es
+        // hasta dónde llega lo que ya pagó, y así se titula — con la frase de
+        // la regla, no con una escrita aquí.
+        etiquetaDeFecha("provider", true), hasta(f.currentPeriodEnd)),
     });
   }
 
@@ -185,6 +206,34 @@ export function summarizeBilling(
         ? { label: "Contratar ahora", href: BILLING, tone: "primary",
             financialEffect: "starts_checkout" }
         : null,
+    });
+  }
+
+  // ── un plan concedido, sin contrato detrás ────────────────────────────────
+  // COMMERCIAL-UX-01G. La consola puede habilitarle un plan a una empresa sin
+  // que exista una suscripción: es `grant_kind` `sold` o `courtesy` en 0162, y
+  // hay empresas así de verdad.
+  //
+  // Antes caían en la rama de abajo y la pantalla decía a la vez «Full» —el
+  // plan efectivo, del catálogo— y «Plan de entrada». Las dos frases juntas no
+  // pueden ser ciertas, y quien las lee no sabe cuál creer.
+  //
+  // Se distingue por la CLASE de concesión, no por el código del plan: `base`
+  // es el plan de entrada, y cualquier otra cosa es algo que alguien habilitó.
+  // Así no hay un `"free"` escrito aquí que haya que perseguir el día que ese
+  // código cambie.
+  if (f.hasSubscription === false
+      && f.grantKind !== null && f.grantKind !== "base") {
+    return base("GRANTED_ACTIVE", {
+      displayStatus: "Activo sin cobros",
+      primaryMessage:
+        "Trazaloop habilitó este plan para tu empresa. No hay ningún cobro "
+        + "programado.",
+      // Solo si la concesión tiene final. Las que no lo tienen no inventan uno.
+      validUntilLabel: etiquetaFecha(etiquetaDeFecha(null, false),
+                                     hasta(f.grantEndsAt)),
+      secondaryCta: { label: "Comparar planes", href: "/planes", tone: "quiet",
+                      financialEffect: "none" },
     });
   }
 
@@ -224,21 +273,33 @@ export function summarizeBilling(
       primaryMessage:
         "Tu plan sigue activo. Revisa el medio de pago para que no se "
         + "interrumpa.",
-      validUntilLabel: etiquetaFecha("Plan activo hasta", hasta(f.currentPeriodEnd)),
+      validUntilLabel: etiquetaFecha(
+        // Hay un cobro automático de por medio, pero no se puede prometer:
+        // está en duda, falló, o no hay con qué cobrarlo. Lo único cierto es
+        // hasta dónde llega lo que ya pagó, y así se titula — con la frase de
+        // la regla, no con una escrita aquí.
+        etiquetaDeFecha("provider", true), hasta(f.currentPeriodEnd)),
     });
   }
 
   // ── falta con qué cobrar ──────────────────────────────────────────────────
   // Antes que la cancelación y que la renovación: es lo único accionable, y es
   // lo que impedirá el próximo cobro si nadie lo arregla.
-  if (f.paymentMethodMissing && f.hasLiveRecurring) {
+  if (f.paymentMethodMissing && (f.hasLiveRecurring || f.renewalMode === "platform")) {
     return base("PAYMENT_METHOD_MISSING", {
       displayStatus: "Falta un medio de pago",
       primaryMessage:
         "Tu plan sigue activo, pero no tenemos con qué cobrar la próxima "
         + "renovación. Añade un medio de pago para que no se interrumpa.",
-      validUntilLabel: etiquetaFecha("Plan activo hasta", hasta(f.currentPeriodEnd)),
-      offersStopRecurring: f.isAdmin,
+      validUntilLabel: etiquetaFecha(
+        // Hay un cobro automático de por medio, pero no se puede prometer:
+        // está en duda, falló, o no hay con qué cobrarlo. Lo único cierto es
+        // hasta dónde llega lo que ya pagó, y así se titula — con la frase de
+        // la regla, no con una escrita aquí.
+        etiquetaDeFecha("provider", true), hasta(f.currentPeriodEnd)),
+      // Detener los cobros solo se puede donde hay una autorización que
+      // cancelar: el carril de la plataforma se gobierna en otra parte.
+      offersStopRecurring: f.isAdmin && f.hasLiveRecurring,
     });
   }
 
@@ -270,7 +331,16 @@ export function summarizeBilling(
       primaryMessage:
         "No se realizarán nuevos cobros automáticos. Conservas el plan hasta "
         + "que termine el tiempo que ya pagaste.",
-      validUntilLabel: etiquetaFecha("Plan activo hasta",
+      validUntilLabel: etiquetaFecha(
+        // Los cobros están detenidos: la fecha no cambia, cambia lo que
+        // significa. Lo dice la regla, no esta pantalla.
+        //
+        // El modo se afirma aquí porque la rama lo afirma: a este estado solo
+        // se llega si HUBO una renovación automática y alguien la canceló. Leer
+        // el modo de la fila sería peor —una fila puede haberse quedado sin él—
+        // y entonces la frase se caería al «Activo hasta» de un plan que nunca
+        // se renovó solo, que es otra cosa.
+        etiquetaDeFecha("provider", true),
         hasta(f.currentPeriodEnd ?? f.renewsAt)),
       renewalMessage:
         "Cuando llegue esa fecha, tu empresa vuelve al plan de entrada.",
@@ -281,14 +351,21 @@ export function summarizeBilling(
     });
   }
 
-  // ── con cobros programados en la pasarela ─────────────────────────────────
-  if (f.hasLiveRecurring) {
+  // ── con cobros programados ────────────────────────────────────────────────
+  // Los DOS carriles automáticos: el del proveedor y el de la plataforma. Para
+  // quien paga son lo mismo —le van a cobrar solo— y la diferencia de quién
+  // ejecuta el cargo no le sirve de nada.
+  if (f.hasLiveRecurring || f.renewalMode === "platform") {
     return base("PROVIDER_ACTIVE", {
       displayStatus: "Todo en orden",
       primaryMessage: "Tu plan está activo y se renueva solo.",
-      validUntilLabel: etiquetaFecha("Siguiente cobro", hasta(f.renewsAt)),
+      validUntilLabel: etiquetaFecha(
+        etiquetaDeFecha(f.hasLiveRecurring ? "provider" : f.renewalMode, false),
+        hasta(f.renewsAt)),
       renewalMessage: "Renovación automática activa.",
-      offersStopRecurring: f.isAdmin,
+      // Solo se ofrece detener lo que se puede detener aquí: la autorización
+      // del proveedor. Sin ella, ofrecerlo sería un botón que no cumple.
+      offersStopRecurring: f.isAdmin && f.hasLiveRecurring,
     });
   }
 
@@ -300,7 +377,10 @@ export function summarizeBilling(
     primaryMessage:
       "Tu plan está activo. No se renueva solo: cuando llegue la fecha, tendrás "
       + "que renovarlo desde aquí.",
-    validUntilLabel: etiquetaFecha("Activo hasta",
+    // Se llega aquí precisamente porque NO hay ningún carril automático vivo,
+    // así que el modo que hay que describir es «ninguno» — aunque la fila
+    // conserve un modo antiguo que ya no ejecuta nada.
+    validUntilLabel: etiquetaFecha(etiquetaDeFecha(null, false),
       hasta(f.currentPeriodEnd ?? f.renewsAt)),
     renewalMessage: "No hay cobros automáticos programados.",
     offersSchedulePlanEnd: f.isAdmin && !f.downgradeScheduled,
@@ -309,6 +389,22 @@ export function summarizeBilling(
 
 function etiquetaFecha(etiqueta: string, fecha: string | null): string | null {
   return fecha === null ? null : `${etiqueta} ${fecha}`;
+}
+
+/**
+ * Cómo se TITULA la fecha.
+ *
+ * No se escribe aquí: se pregunta a `billing-renewal-copy`, que es donde vive
+ * esa decisión desde PROD-LAUNCH-01B.9 y donde MP-REC-01C.2 dejó escrito que
+ * una renovación ya cancelada no puede seguir titulándose «Siguiente cobro».
+ *
+ * COMMERCIAL-UX-01G. Durante 01F estas tres frases se reescribieron aquí a
+ * mano. Dos módulos decidiendo la misma frase acaban divergiendo, y ya habían
+ * empezado: el de allí trataba el carril `platform` como cobro automático y
+ * este no. Se deja una sola autoridad.
+ */
+function etiquetaDeFecha(modo: string | null, cobrosDetenidos: boolean): string {
+  return renewalCopyFor(modo, cobrosDetenidos).dateLabel;
 }
 
 function base(

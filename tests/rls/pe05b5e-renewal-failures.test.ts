@@ -513,12 +513,57 @@ async function main() {
           `afirma algo que no sabe: ${duda.title} / ${duda.detail}`);
       }
 
-      // Y la pantalla usa esa traducción, no el estado crudo.
+      // Y la pantalla usa UNA traducción, no el estado crudo.
+      //
+      // COMMERCIAL-UX-01G. Esto nombraba a `describeBillingState`. Desde 01F la
+      // pantalla traduce con `summarizeBilling`, que cubre once estados en vez
+      // de cuatro; el módulo viejo se quedó sin usar. La regla no cambia —a
+      // quien paga no se le enseña vocabulario de dentro— pero tiene que
+      // comprobarse sobre el traductor QUE SE PINTA, o estaría guardando código
+      // que ya no corre.
       const pagina = readFileSync(
         "app/(app)/(shell)/settings/billing/page.tsx", "utf8");
-      assert(/describeBillingState/.test(pagina), "la pantalla no traduce el estado");
+      assert(/summarizeBilling|describeBillingState/.test(pagina),
+        "la pantalla no traduce el estado");
       assert(!/\{estado\.status\}/.test(pagina),
         "la pantalla sigue enseñando el estado interno");
+
+      // Y el traductor vivo se somete a las MISMAS palabras prohibidas, estado
+      // por estado. Sin esto, la garantía se habría quedado en el módulo viejo.
+      const { summarizeBilling } = await import("../../lib/domain/billing-experience");
+      const FIN = "2026-10-16T22:47:38.000Z";
+      const base = {
+        hasSubscription: true as boolean | null, contractedPlanCode: "full",
+        effectivePlanCode: "full", grantKind: "sold", grantEndsAt: null,
+        currentPeriodEnd: FIN, renewsAt: FIN, cancelAtPeriodEnd: false,
+        hasLiveRecurring: false, renewalMode: null as string | null,
+        subscriptionStatus: "active" as string | null, manualReview: false,
+        downgradeScheduled: false, paymentMethodMissing: false,
+        pendingCheckout: false, isAdmin: true,
+      };
+      const variantes = [
+        base,
+        { ...base, subscriptionStatus: "past_due" },
+        { ...base, subscriptionStatus: "ended" },
+        { ...base, subscriptionStatus: "cancel_at_period_end", cancelAtPeriodEnd: true },
+        { ...base, manualReview: true },
+        { ...base, pendingCheckout: true },
+        { ...base, paymentMethodMissing: true, hasLiveRecurring: true },
+        { ...base, downgradeScheduled: true },
+        { ...base, hasSubscription: false, grantKind: "base" },
+        { ...base, hasSubscription: false, grantKind: "trial", grantEndsAt: FIN },
+        { ...base, hasSubscription: false },
+        { ...base, hasSubscription: null },
+      ];
+      for (const v of variantes) {
+        const r = summarizeBilling(v, (iso) => iso.slice(0, 10));
+        const texto = `${r.displayStatus} ${r.primaryMessage} `
+          + `${r.renewalMessage ?? ""} ${r.validUntilLabel ?? ""}`;
+        for (const pr of PROHIBIDAS) {
+          assert(!pr.test(texto),
+            `el estado «${r.state}» le enseña ${pr} al cliente: ${texto.slice(0, 90)}`);
+        }
+      }
     });
 
   } finally {
