@@ -49,6 +49,103 @@ import {
  * fallo de nadie: se explica y se deja el botón para volver a comprobar,
  * porque quien acaba de pagar necesita una acción, no un diagnóstico.
  */
+/**
+ * La vuelta de una subida de plan.
+ *
+ * No enseña ni el importe ni el identificador del cobro: quien acaba de pagar
+ * necesita saber si su plan está activo, no el vocabulario de la pasarela.
+ */
+async function VueltaDeSubida({ changeId, orgId, volver }: {
+  changeId: string; orgId: string; volver: string;
+}) {
+  if (!/^[0-9a-f-]{36}$/i.test(changeId)) {
+    return (
+      <Marco>
+        <ErrorAlert message="No encontramos este cambio de plan." />
+        <Volver href={volver} />
+      </Marco>
+    );
+  }
+  // Y TIENE QUE SER DE ESTA EMPRESA. Sin esto, conocer un identificador ajeno
+  // dispararía la conciliación de otra.
+  const supabase = await createServerClient();
+  const { data: mio } = await supabase.from("billing_subscription_changes")
+    .select("id").eq("id", changeId).eq("organization_id", orgId).maybeSingle();
+  if (!mio) {
+    return (
+      <Marco>
+        <ErrorAlert message="No encontramos este cambio de plan." />
+        <Volver href={volver} />
+      </Marco>
+    );
+  }
+
+  // La pantalla NO sabe por qué pasarela se pagó: lo sabe el intento, y el
+  // despachador lo lee. Nombrar aquí una pasarela cruzaría la frontera que
+  // separa el modelo comercial del cobro.
+  const { reconcileUpgrade } = await import("@/lib/db/upgrade-reconcile");
+  const r = await reconcileUpgrade(changeId);
+
+  if (r.outcome === "upgraded") {
+    return (
+      <Marco>
+        <h1 className="text-xl font-semibold">Ya tienes Extra</h1>
+        <p className="text-sm text-muted-foreground">
+          Recibimos el pago de la diferencia y tu plan cambió ahora mismo. La
+          fecha de renovación no se mueve.
+        </p>
+        <Volver href={volver} etiqueta="Ir a mi plan" />
+      </Marco>
+    );
+  }
+  if (r.outcome === "refunded") {
+    return (
+      <Marco>
+        <h1 className="text-xl font-semibold">No pudimos completar el cambio</h1>
+        <p className="text-sm text-muted-foreground">
+          Te devolvimos el cobro de la diferencia y tu plan actual sigue
+          funcionando igual. Puedes volver a intentarlo cuando quieras.
+        </p>
+        <Volver href={volver} />
+      </Marco>
+    );
+  }
+  if (r.outcome === "compensation_required") {
+    return (
+      <Marco>
+        <h1 className="text-xl font-semibold">Estamos resolviendo tu cambio</h1>
+        <p className="text-sm text-muted-foreground">
+          No pudimos completar el paso a Extra. Tu plan actual sigue activo y no
+          te vamos a cobrar nada más; si el cobro de la diferencia llegó a
+          hacerse, te lo devolvemos. Lo estamos mirando.
+        </p>
+        <Volver href={volver} />
+      </Marco>
+    );
+  }
+  if (r.outcome === "abandoned") {
+    return (
+      <Marco>
+        <h1 className="text-xl font-semibold">El cambio no se completó</h1>
+        <p className="text-sm text-muted-foreground">
+          No se cobró nada y tu plan actual sigue igual.
+        </p>
+        <Volver href={volver} />
+      </Marco>
+    );
+  }
+  return (
+    <Marco>
+      <h1 className="text-xl font-semibold">Todavía no nos consta</h1>
+      <p className="text-sm text-muted-foreground">
+        Si acabas de pagar, puede tardar un momento en confirmarse. Tu plan
+        actual sigue funcionando mientras tanto.
+      </p>
+      <Volver href={volver} />
+    </Marco>
+  );
+}
+
 export default async function CheckoutReturnPage({
   searchParams,
 }: {
@@ -57,10 +154,22 @@ export default async function CheckoutReturnPage({
   const params = await searchParams;
   const crudo = params.c;
   const cobroId = typeof crudo === "string" ? crudo : "";
+  const subidaId = typeof params.u === "string" ? params.u : "";
   const org = await requireActiveOrg();
   const moduloActivo = activeShellModuleFrom(
     "/settings/billing/checkout/return", params);
   const volver = moduleAwareHref("/settings/billing", moduloActivo.key);
+
+  // BILLING-EXTRA-01B · La vuelta de una SUBIDA de plan.
+  //
+  // Mismo principio que abajo y por la misma razón: de la URL sólo se lee QUÉ
+  // mirar, nunca qué pasó. Quien concilia es el servidor preguntando al
+  // proveedor, y esta pantalla no es requisito de nada — si nadie vuelve, el
+  // barrido llega igual.
+  if (subidaId !== "") {
+    return await VueltaDeSubida({ changeId: subidaId, orgId: org.organizationId,
+                                  volver });
+  }
 
   if (!/^[0-9a-f-]{36}$/i.test(cobroId)) {
     return (

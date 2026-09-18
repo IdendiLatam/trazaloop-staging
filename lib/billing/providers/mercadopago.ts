@@ -1,5 +1,7 @@
 import "server-only";
-import { MercadoPagoConfig, PreApproval, Payment, Preference } from "mercadopago";
+import {
+  MercadoPagoConfig, PreApproval, Payment, Preference, PaymentRefund,
+} from "mercadopago";
 import type {
   BillingProvider, ProviderCheckout, ProviderPayment, ProviderResult,
   BillingSubscriptionState,
@@ -106,6 +108,31 @@ export type MercadoPagoAdapter = BillingProvider & {
    */
   updateRecurringAmount(id: string, amountMinor: number, currency: string):
     Promise<ProviderResult<{ amount: number | null; currency: string | null; version: number | null }>>;
+  /**
+   * BILLING-EXTRA-01B · Devolver un pago ENTERO.
+   *
+   * Existe por una sola razón: cuando la diferencia de una subida se cobra y
+   * después no se puede dejar la autorización cobrando el importe nuevo, la
+   * empresa ha pagado algo que no va a recibir. Devolverlo no es cortesía, es
+   * lo único honesto.
+   *
+   * La llave de idempotencia NO es opcional y NO se genera aquí: viene derivada
+   * del cambio, para que reintentar pida EL MISMO reembolso y no un segundo.
+   */
+  refundPayment(providerPaymentId: string, idempotencyKey: string):
+    Promise<ProviderResult<{ refundId: string; amount: number | null;
+                             currency: string | null; status: string | null }>>;
+  /**
+   * Los reembolsos que el proveedor YA tiene sobre un pago.
+   *
+   * Preguntar antes de pedir es más barato que deshacer después: si una
+   * petición salió y su respuesta se perdió, el reembolso puede existir allí
+   * sin constar aquí.
+   */
+  listRefunds(providerPaymentId: string): Promise<ProviderResult<{
+    refunds: Array<{ refundId: string; amount: number | null;
+                     currency: string | null; status: string | null }>;
+  }>>;
   /**
    * Reconciliar en vez de duplicar. Si una petición de creación se envía y la
    * respuesta se pierde —una caída, un tiempo agotado—, el objeto puede existir
@@ -372,6 +399,56 @@ export function mercadoPagoProvider(
         const auto = (r.auto_recurring ?? {}) as Record<string, unknown>;
         return { ok: true, value: { amount: num(auto.transaction_amount),
                                     currency: str(auto.currency_id), version: num(r.version) } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
+
+    async refundPayment(providerPaymentId, idempotencyKey) {
+      if (!cliente) return sinCredencial();
+      if (!providerPaymentId || !idempotencyKey) {
+        return { ok: false, failure: "invalid_request",
+                 message: "REFUND_IDENTITY_REQUIRED" };
+      }
+      try {
+        // TOTAL, nunca parcial. La compensación de una subida devuelve el cobro
+        // entero: un parcial dejaría a alguien pagando una parte de algo que no
+        // recibió, y nadie sabría cuál.
+        const r = await new PaymentRefund(cliente).total({
+          payment_id: providerPaymentId,
+          requestOptions: { idempotencyKey },
+        }) as unknown as Record<string, unknown>;
+        const id = str(r.id) ?? (num(r.id) !== null ? String(num(r.id)) : null);
+        if (!id) {
+          // Sin identificador no se puede afirmar que se devolvió. Se marca
+          // con la clase que NO se reintenta sola: la petición salió y el
+          // reembolso puede existir allí. Quien llame vuelve a PREGUNTAR.
+          return { ok: false, failure: "provider_unavailable",
+                   failureClass: "provider_unknown",
+                   message: "REFUND_WITHOUT_ID" };
+        }
+        return { ok: true, value: {
+          refundId: id, amount: num(r.amount),
+          currency: str(r.currency_id), status: str(r.status) } };
+      } catch (e) {
+        return fallo(e);
+      }
+    },
+
+    async listRefunds(providerPaymentId) {
+      if (!cliente) return sinCredencial();
+      if (!providerPaymentId) {
+        return { ok: false, failure: "invalid_request", message: "PAYMENT_ID_REQUIRED" };
+      }
+      try {
+        const r = await new PaymentRefund(cliente).list({
+          payment_id: providerPaymentId,
+        }) as unknown as Record<string, unknown>[];
+        return { ok: true, value: { refunds: (r ?? []).map((x) => ({
+          refundId: str(x.id) ?? (num(x.id) !== null ? String(num(x.id)) : ""),
+          amount: num(x.amount), currency: str(x.currency_id),
+          status: str(x.status),
+        })).filter((x) => x.refundId !== "") } };
       } catch (e) {
         return fallo(e);
       }

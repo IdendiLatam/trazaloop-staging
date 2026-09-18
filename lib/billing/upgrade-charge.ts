@@ -3,7 +3,7 @@ import {
   activePaymentMethod, markUpgradeUncertain, settleUpgradePayment,
 } from "@/lib/db/billing-upgrade";
 import { wompiFromEnv } from "@/lib/billing/providers/wompi";
-import { buildUpgradeReference } from "@/lib/billing/wompi/mapping";
+import { buildUpgradeReference } from "@/lib/billing/upgrade-reference";
 
 /**
  * Trazaloop · PE-05B6E · Cobrar la diferencia de una subida.

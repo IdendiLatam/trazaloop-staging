@@ -41,6 +41,7 @@ const candidata = (o: Partial<RunnerCandidate> = {}): RunnerCandidate => ({
   authorizationStatus: "authorized",
   hasProviderObject: true,
   paidThrough: FIN_FUTURO,
+  upgradeInFlight: false,
   ...o,
 });
 

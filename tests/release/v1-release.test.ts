@@ -133,6 +133,7 @@ const QUALITY_01_ALLOWED = new Set([
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0216_billing_upgrade_compensation.sql",
     "0215_public_home_video_placement.sql",
     "0214_public_trial_policy_without_session.sql",
     "0213_public_catalog_reads_without_session.sql",
@@ -1318,6 +1319,7 @@ check("13. Tras 0105: PCR-03 0106–0108 + hotfixes autorizados 0109 y 0110; no 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0216_billing_upgrade_compensation.sql",
     "0215_public_home_video_placement.sql",
     "0214_public_trial_policy_without_session.sql",
     "0213_public_catalog_reads_without_session.sql",
@@ -2684,6 +2686,16 @@ const FRONTERA_MERCADOPAGO = [
   // entorno y de qué aplicación viene un objeto no es presentar la pasarela
   // como integrada, es negarse a conciliar lo que no es nuestro.
   "lib/billing/mercadopago/identity.ts",
+  // BILLING-EXTRA-01B · La subida de plan por la pasarela, su recuperación y el
+  // despachador que elige carril. De servidor los tres (`server-only`), ninguna
+  // pantalla los importa y ninguno promete nada a nadie: el CTA de Extra sigue
+  // siendo «Hablemos de Extra» y lo comprueba `tests/unit/bx01b-upgrade-saga`.
+  //
+  // Nombran la pasarela porque son su frontera. La DECISIÓN que aplican vive en
+  // `lib/billing/upgrade/saga.ts`, que no la nombra y por eso no está aquí.
+  "lib/db/upgrade-mercadopago.ts",
+  "lib/db/upgrade-recovery.ts",
+  "lib/db/upgrade-reconcile.ts",
     // PROD-LAUNCH-01B · El registro del pago único. Existe PARA QUE ESTA LISTA
   // DEJE DE CRECER: es el único traductor de «código de proveedor» a
   // adaptador, así que el servicio de cobro, las acciones y las pantallas

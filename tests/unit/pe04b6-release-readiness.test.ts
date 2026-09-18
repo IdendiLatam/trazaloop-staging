@@ -190,6 +190,19 @@ const FRONTERA_PASARELA = [
   // PE-05B2; mientras tanto es de servidor, exige superadministrador y se
   // niega en Producción.
   "app/api/billing/qa/mercadopago-smoke/route.ts",
+  // BILLING-EXTRA-01B · La subida de plan por la pasarela, y su recuperación.
+  //
+  // Nombran la pasarela porque son su frontera: uno abre el cobro de la
+  // diferencia y concilia el desenlace, el otro le pregunta qué pasó con un
+  // cobro cuando una subida se quedó a medias. Los dos son de servidor
+  // (`server-only`), ninguna pantalla los importa, y la DECISIÓN que aplican no
+  // vive en ellos sino en `lib/billing/upgrade/saga.ts`, que no nombra ninguna
+  // pasarela y por eso no entra en esta lista.
+  "lib/db/upgrade-mercadopago.ts",
+  "lib/db/upgrade-recovery.ts",
+  // Y el despachador: nombra los carriles porque su trabajo es elegir entre
+  // ellos. Existe para que ninguna PANTALLA tenga que nombrarlos.
+  "lib/db/upgrade-reconcile.ts",
   "lib/billing/mercadopago/mapping.ts",
   "lib/billing/mercadopago/signature.ts",
   // MP-ENV-01 · La identidad de entorno y aplicación. Es hermana de `mapping`
@@ -337,11 +350,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0213_public_catalog_reads_without_session.sql",
     "0214_public_trial_policy_without_session.sql",
     "0215_public_home_video_placement.sql",
+    "0216_billing_upgrade_compensation.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0215_public_home_video_placement.sql",
+  assert(cabecera === "0216_billing_upgrade_compensation.sql",
     `la cabecera es ${cabecera}`);
 });
 

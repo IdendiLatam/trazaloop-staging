@@ -137,6 +137,11 @@ export async function POST(request: Request) {
         hasProviderObject: Boolean(a
           && !a.provider_subscription_id.startsWith("pending:")),
         paidThrough: (per as { period_end: string } | null)?.period_end ?? null,
+        // BILLING-EXTRA-01B · La pregunta la responde la base, que es quien
+        // sabe si hay un cambio abierto. Aquí no se interpreta nada.
+        upgradeInFlight: Boolean(
+          (await admin.rpc("billing_upgrade_in_flight",
+                           { p_subscription_id: f.id })).data),
       };
       const veredicto = decideRunnerAction(candidata, ahora);
 

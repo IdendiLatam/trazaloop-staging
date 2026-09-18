@@ -1,0 +1,411 @@
+import { readFileSync } from "node:fs";
+import {
+  decideUpgradeStep, recurringTotalFor,
+  type UpgradeSagaFacts, type ObservedDeltaPayment,
+} from "../../lib/billing/upgrade/saga";
+import {
+  buildAttemptReference, buildUpgradeReference,
+  parseAttemptReference, parseUpgradeReference,
+} from "../../lib/billing/upgrade-reference";
+import { decideRunnerAction } from "../../lib/billing/recurring/runner-policy";
+
+/**
+ * Trazaloop · BILLING-EXTRA-01B · La decisión de la subida, caso por caso.
+ *
+ * Aquí se comprueba lo que NO se puede comprobar contra un proveedor real sin
+ * mover dinero: qué pasa cuando el cobro sale y la autorización no, cuando el
+ * proveedor cobra una renovación en mitad de la transición, cuando el importe
+ * vuelve distinto del que se pidió.
+ *
+ * Son exactamente los casos que importan, y son deterministas porque la
+ * decisión está separada de las llamadas.
+ */
+
+let passed = 0, failed = 0;
+function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m); }
+function check(n: string, fn: () => void) {
+  try { fn(); passed += 1; console.log(`  ✔ ${n}`); }
+  catch (e) { failed += 1; console.error(`  ✘ ${n}: ${e instanceof Error ? e.message : e}`); }
+}
+const leer = (p: string) => readFileSync(p, "utf8");
+const sinComentarios = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+const AHORA = "2026-09-20T00:00:00.000Z";
+const FIN = "2026-10-16T22:47:38.000Z";
+const EFECTIVA = "2026-09-20T00:00:00.000Z";
+
+/** Extra mensual: 400 000 de base + 76 000 de IVA = 476 000. */
+const EXTRA_RECURRENTE = 476_000;
+/** La diferencia de media mensualidad: 120 000 + 22 800. */
+const DELTA_TOTAL = 142_800;
+
+const pago = (o: Partial<ObservedDeltaPayment> = {}): ObservedDeltaPayment => ({
+  providerPaymentId: "mp-1", canonicalStatus: "approved",
+  amountMinor: DELTA_TOTAL, currency: "COP", liveMode: false, ...o });
+
+const hechos = (o: Partial<UpgradeSagaFacts> = {}): UpgradeSagaFacts => ({
+  changeStatus: "submitted",
+  expectedTotalAmount: DELTA_TOTAL, expectedCurrency: "COP",
+  effectiveAt: EFECTIVA, periodEnd: FIN, now: AHORA,
+  renewalMode: "manual", configuredEnvironment: "test",
+  deltaPayment: null, providerCyclesInsideWindow: 0,
+  authorization: null, targetRecurringAmountMinor: EXTRA_RECURRENTE,
+  authorizationUpdateAttempted: false, ...o });
+
+const autorizacion = (o: Partial<NonNullable<UpgradeSagaFacts["authorization"]>> = {}) => ({
+  providerSubscriptionId: "preapproval-1", status: "authorized",
+  observedAmountMinor: 190_400, observedCurrency: "COP", ...o });
+
+async function main() {
+  console.log("\n1 · EL CARRIL MANUAL · LO SENCILLO SIGUE SIENDO SENCILLO");
+
+  check("1A. Sin cobro todavía no se decide nada", () => {
+    const r = decideUpgradeStep(hechos());
+    assert(r.kind === "wait", `decidió ${r.kind}`);
+  });
+
+  check("1B. Con el cobro aprobado y conciliado, se concede", () => {
+    const r = decideUpgradeStep(hechos({ deltaPayment: pago() }));
+    assert(r.kind === "settle", `decidió ${r.kind}`);
+  });
+
+  check("1C. Un cobro rechazado cierra la subida SIN devolver nada", () => {
+    // Porque no hay nada que devolver. Abrir una compensación aquí sería
+    // inventarse una deuda nuestra.
+    for (const estado of ["declined", "failed"]) {
+      const r = decideUpgradeStep(hechos({ deltaPayment: pago({ canonicalStatus: estado }) }));
+      assert(r.kind === "abandon", `«${estado}» decidió ${r.kind}`);
+    }
+  });
+
+  check("1D. Un cobro a medias NO concede y NO devuelve: se vuelve a mirar", () => {
+    for (const estado of ["pending", "manual_review", null]) {
+      const r = decideUpgradeStep(hechos({
+        deltaPayment: pago({ canonicalStatus: estado }) }));
+      assert(r.kind === "wait", `«${estado}» decidió ${r.kind}`);
+    }
+  });
+
+  check("1E. El carril de la plataforma tampoco necesita nada fuera", () => {
+    // Su importe se deriva de `base_charge_amount`, que la liquidación deja en
+    // el de Extra: el cobro siguiente se corrige solo.
+    const r = decideUpgradeStep(hechos({ renewalMode: "platform", deltaPayment: pago() }));
+    assert(r.kind === "settle", `decidió ${r.kind}`);
+  });
+
+  console.log("\n2 · CON DINERO DENTRO, CUALQUIER «NO» SE DEVUELVE");
+
+  check("2A. Importe distinto del congelado", () => {
+    const r = decideUpgradeStep(hechos({
+      deltaPayment: pago({ amountMinor: DELTA_TOTAL - 1 }) }));
+    assert(r.kind === "compensate" && r.reason === "PAYMENT_RECONCILIATION_MISMATCH",
+      `decidió ${r.kind}`);
+  });
+
+  check("2A.2. Importe que NO se pudo normalizar · tampoco concede", () => {
+    // `null` no es cero: es «no se puede afirmar cuánto entró». Con dinero
+    // dentro, eso se devuelve.
+    const r = decideUpgradeStep(hechos({ deltaPayment: pago({ amountMinor: null }) }));
+    assert(r.kind === "compensate", `decidió ${r.kind}`);
+  });
+
+  check("2B. Moneda distinta", () => {
+    const r = decideUpgradeStep(hechos({ deltaPayment: pago({ currency: "USD" }) }));
+    assert(r.kind === "compensate", `decidió ${r.kind}`);
+  });
+
+  check("2C. Entorno que no es el de este despliegue · y sin dato, tampoco", () => {
+    const vivo = decideUpgradeStep(hechos({ deltaPayment: pago({ liveMode: true }) }));
+    assert(vivo.kind === "compensate" && vivo.reason === "ENVIRONMENT_MISMATCH",
+      `decidió ${vivo.kind}`);
+    const sinDato = decideUpgradeStep(hechos({ deltaPayment: pago({ liveMode: null }) }));
+    assert(sinDato.kind === "compensate", `sin dato decidió ${sinDato.kind}`);
+  });
+
+  check("2D. El periodo se acabó DESPUÉS de cobrar", () => {
+    // La cuenta se hizo sobre un tiempo que ya pasó. Cobrarla sería quedarse
+    // con su dinero.
+    const r = decideUpgradeStep(hechos({
+      now: "2026-11-01T00:00:00.000Z", deltaPayment: pago() }));
+    assert(r.kind === "compensate" && r.reason === "PERIOD_ENDED_AFTER_PAYMENT",
+      `decidió ${r.kind}`);
+  });
+
+  check("2D.2. Y si se acabó sin que nadie pagara, se cierra sin más", () => {
+    const r = decideUpgradeStep(hechos({ now: "2026-11-01T00:00:00.000Z" }));
+    assert(r.kind === "abandon" && r.reason === "PERIOD_ENDED", `decidió ${r.kind}`);
+  });
+
+  console.log("\n3 · EL CARRIL DEL PROVEEDOR · LA AUTORIZACIÓN MANDA");
+
+  check("3A. Primero se cambia el importe, y sólo después se liquida", () => {
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion() }));
+    assert(r.kind === "update_authorization", `decidió ${r.kind}`);
+    assert(r.amountMinor === EXTRA_RECURRENTE, `pide ${r.amountMinor}`);
+  });
+
+  check("3B. Si ya está en el importe de Extra, se liquida", () => {
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(r.kind === "settle", `decidió ${r.kind}`);
+  });
+
+  check("3C. PUT que dice 200 y GET que no lo refleja · NO se liquida", () => {
+    // El caso que obliga a volver a preguntar. Se confía en lo que el proveedor
+    // dice DESPUÉS, no en el código de respuesta.
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: 190_400 }),
+      authorizationUpdateAttempted: true }));
+    assert(r.kind === "compensate" && r.reason === "AUTHORIZATION_AMOUNT_NOT_APPLIED",
+      `decidió ${r.kind}`);
+  });
+
+  check("3C.2. Y una autorización ilegible tampoco concede", () => {
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: null }),
+      authorizationUpdateAttempted: true }));
+    assert(r.kind === "compensate", `decidió ${r.kind}`);
+  });
+
+  check("3D. Sin autorización que tocar · no se concede Extra a ciegas", () => {
+    // El ciclo siguiente cobraría Full y nadie lo aceptaría.
+    const sinObjeto = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ providerSubscriptionId: null }) }));
+    assert(sinObjeto.kind === "compensate" && sinObjeto.reason === "AUTHORIZATION_MISSING",
+      `decidió ${sinObjeto.kind}`);
+    const sinNada = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(), authorization: null }));
+    assert(sinNada.kind === "compensate", `decidió ${sinNada.kind}`);
+  });
+
+  check("3E. Una autorización cancelada NO se resucita: se devuelve", () => {
+    for (const estado of ["cancelled", "ended", null]) {
+      const r = decideUpgradeStep(hechos({
+        renewalMode: "provider", deltaPayment: pago(),
+        authorization: autorizacion({ status: estado }) }));
+      assert(r.kind === "compensate" && r.reason === "AUTHORIZATION_NOT_ACTIVE",
+        `«${estado}» decidió ${r.kind}`);
+    }
+  });
+
+  check("3F. El importe recurrente es la base de Extra MÁS su impuesto", () => {
+    // Ponerlo sin IVA dejaría la autorización cobrando de menos justo el
+    // impuesto, y el ciclo siguiente no cuadraría con nada.
+    assert(recurringTotalFor(400_000, 76_000) === EXTRA_RECURRENTE,
+      "el importe recurrente no es base + impuesto");
+  });
+
+  console.log("\n4 · LA CARRERA CON LA RENOVACIÓN");
+
+  check("4A. Un ciclo del proveedor DENTRO de la ventana impide completar", () => {
+    const r = decideUpgradeStep(hechos({
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }),
+      providerCyclesInsideWindow: 1 }));
+    assert(r.kind === "compensate" && r.reason === "RENEWAL_DURING_UPGRADE",
+      `decidió ${r.kind}`);
+  });
+
+  check("4B. Y el barrido no concilia mientras haya una subida abierta", () => {
+    const base = {
+      subscriptionId: "s1", subscriptionStatus: "active", renewalMode: "provider",
+      authorizationStatus: "authorized", hasProviderObject: true,
+      paidThrough: FIN,
+    };
+    const conSubida = decideRunnerAction(
+      { ...base, upgradeInFlight: true }, new Date(AHORA));
+    assert(conSubida.action === "skip_upgrade_in_flight",
+      `el barrido hizo ${conSubida.action}`);
+    const sinSubida = decideRunnerAction(
+      { ...base, upgradeInFlight: false }, new Date(AHORA));
+    assert(sinSubida.action === "reconcile", `sin subida hizo ${sinSubida.action}`);
+  });
+
+  check("4C. La ventana es la vida del cambio · no un número de horas", () => {
+    // Si esto fuera «no subir en las 48 horas previas a la renovación», habría
+    // que justificar el 48. La guarda no elige ninguna cantidad: empieza cuando
+    // nace el cambio y termina cuando el cambio termina.
+    const pol = sinComentarios(leer("lib/billing/recurring/runner-policy.ts"));
+    assert(/upgradeInFlight/.test(pol), "el barrido no mira si hay una subida");
+    assert(!/\b(24|48|72)\s*\*\s*60|horasAntes|HOURS_BEFORE_RENEWAL/.test(pol),
+      "apareció una ventana en horas, que habría que justificar");
+  });
+
+  console.log("\n5 · IDEMPOTENCIA Y ESTADOS FINALES");
+
+  check("5A. Un estado final no vuelve a hacer nada", () => {
+    for (const estado of ["settled", "refunded", "cancelled", "declined", "failed"]) {
+      const r = decideUpgradeStep(hechos({ changeStatus: estado, deltaPayment: pago() }));
+      assert(r.kind === "done", `«${estado}» decidió ${r.kind}`);
+    }
+  });
+
+  check("5B. Una compensación abierta manda sobre todo lo demás", () => {
+    // Incluso con todo en orden: de `compensation_required` NO se sale hacia
+    // Extra. Un cobro que se decidió devolver no concede nada.
+    const r = decideUpgradeStep(hechos({
+      changeStatus: "compensation_required",
+      renewalMode: "provider", deltaPayment: pago(),
+      authorization: autorizacion({ observedAmountMinor: EXTRA_RECURRENTE }) }));
+    assert(r.kind === "compensate", `decidió ${r.kind}`);
+  });
+
+  check("5C. Y lo que aún no salió al proveedor, espera", () => {
+    const r = decideUpgradeStep(hechos({ changeStatus: "pending", deltaPayment: pago() }));
+    assert(r.kind === "wait", `decidió ${r.kind}`);
+  });
+
+  console.log("\n6 · LA REFERENCIA · UNA SOLA, Y SIN PASARELA DENTRO");
+
+  const UUID = "11111111-2222-3333-4444-555555555555";
+
+  check("6A. El formato no cambió · ni el prefijo ni la lectura", () => {
+    assert(buildAttemptReference(UUID) === `pay_${UUID}`, "la referencia de cobro");
+    assert(buildUpgradeReference(UUID) === `upg_${UUID}`, "la referencia de subida");
+    assert(parseAttemptReference(`pay_${UUID}`) === UUID, "no se lee de vuelta");
+    assert(parseAttemptReference(`UPG_${UUID.toUpperCase()}`) === UUID,
+      "no se lee en mayúsculas");
+  });
+
+  check("6B. La lectura de SUBIDA sólo acepta subidas", () => {
+    // Sin esto, una renovación podría entrar por la puerta de una subida y
+    // saldarla. Son dos hechos financieros distintos.
+    assert(parseUpgradeReference(`upg_${UUID}`) === UUID, "no reconoce la suya");
+    assert(parseUpgradeReference(`pay_${UUID}`) === null,
+      "una contratación entra por la puerta de una subida");
+    for (const malo of ["", "upg_", `upg_${UUID}x`, null, undefined, 42]) {
+      assert(parseUpgradeReference(malo as string) === null, `aceptó «${malo}»`);
+    }
+  });
+
+  check("6C. Y ya no vive dentro del mapeo de Wompi", () => {
+    const wompi = leer("lib/billing/wompi/mapping.ts");
+    assert(/from "@\/lib\/billing\/upgrade-reference"/.test(wompi),
+      "el mapeo de Wompi no reexporta la referencia común");
+    assert(!/^export function buildUpgradeReference/m.test(wompi),
+      "la referencia sigue definida dentro de la pasarela");
+    // Y el carril de Wompi la sigue importando sin enterarse del cambio.
+    const cobro = leer("lib/billing/upgrade-charge.ts");
+    assert(/upgrade-reference/.test(cobro), "el cobro de Wompi no usa la común");
+  });
+
+  console.log("\n7 · CÓMO SE DISPARA · TRES PUERTAS, UNA LÓGICA");
+
+  check("7A. La vuelta del navegador llama al conciliador, no decide", () => {
+    const vuelta = leer("app/(app)/(shell)/settings/billing/checkout/return/page.tsx");
+    assert(/reconcileUpgrade/.test(vuelta), "la vuelta no concilia la subida");
+    // Y NO nombra ninguna pasarela: quién cobró lo dice el intento.
+    assert(!/mercadopago|wompi/i.test(vuelta),
+      "la pantalla de vuelta nombra una pasarela");
+    assert(/eq\("organization_id", orgId\)/.test(vuelta),
+      "la vuelta no comprueba que el cambio sea de esta empresa");
+    const limpio = sinComentarios(vuelta);
+    assert(!/params\.(status|payment_id|collection_status)/.test(limpio),
+      "la vuelta se cree lo que trae la URL");
+  });
+
+  check("7B. El aviso del proveedor llama al MISMO conciliador", () => {
+    const hook = leer("app/api/billing/webhooks/mercadopago/route.ts");
+    assert(/parseUpgradeReference/.test(hook), "el aviso no distingue una subida");
+    assert(/reconcileMercadoPagoUpgrade/.test(hook),
+      "el aviso resuelve la subida por su cuenta en vez de conciliar");
+  });
+
+  check("7C. Y ninguna de las dos es requisito", () => {
+    // La lógica canónica vive en un módulo que no depende de ninguna de las dos
+    // puertas: cualquiera puede llamarla, y un barrido también.
+    const rec = leer("lib/db/upgrade-mercadopago.ts");
+    assert(/export async function reconcileMercadoPagoUpgrade/.test(rec),
+      "no hay una función de conciliación invocable desde fuera");
+    assert(!/next\/headers|searchParams|NextRequest/.test(rec),
+      "el conciliador depende de una petición del navegador");
+  });
+
+  console.log("\n8 · LO QUE NO SE PUEDE RECIBIR DE FUERA");
+
+  check("8A. El conciliador sólo recibe el cambio", () => {
+    const rec = leer("lib/db/upgrade-mercadopago.ts");
+    assert(/reconcileMercadoPagoUpgrade\(\s*changeId: string\s*\)/.test(rec),
+      "el conciliador recibe algo más que el identificador del cambio");
+    const limpio = sinComentarios(rec);
+    // El importe recurrente se DERIVA: de la fila y del impuesto de la base.
+    assert(/billing_tax_amount/.test(limpio),
+      "el impuesto del importe recurrente no sale de la autoridad de redondeo");
+    assert(/recurringTotalFor\(base, impuesto\)/.test(limpio),
+      "el importe recurrente no se deriva de la fila del cambio");
+  });
+
+  check("8B. La recuperación tampoco decide qué hacer: recoge la prueba", () => {
+    const rec = leer("lib/db/upgrade-recovery.ts");
+    assert(/resolveStuckUpgrade\(changeId: string\)/.test(rec),
+      "la recuperación recibe algo más que el cambio");
+    const limpio = sinComentarios(rec);
+    assert(/gatherStuckUpgradeEvidence/.test(limpio),
+      "la recuperación no consulta al proveedor antes de resolver");
+    assert(/createServerClient/.test(limpio),
+      "la recuperación llama a la base con el cliente administrativo: "
+      + "entonces la auditoría no guarda a una persona");
+  });
+
+  check("8C. Y el reembolso usa una llave derivada, no una inventada", () => {
+    const sql = leer("supabase/migrations/0216_billing_upgrade_compensation.sql");
+    assert(/v_llave := 'upgrefund:' \|\| v_c\.id::text \|\| ':' \|\| v_c\.delta_provider_payment_id/
+      .test(sql), "la llave del reembolso no se deriva del cambio y del cobro");
+    const rec = sinComentarios(leer("lib/db/upgrade-mercadopago.ts"));
+    assert(/refund_idempotency_key/.test(rec),
+      "el reembolso no lee la llave derivada");
+    assert(/listRefunds/.test(rec),
+      "no se pregunta si el reembolso ya existe antes de pedir otro");
+  });
+
+  console.log("\n9 · LO QUE ESTE TRAMO NO ENCIENDE");
+
+  check("9A. El CTA de Extra sigue siendo «Hablemos de Extra»", () => {
+    // El carril financiero está construido y probado, pero no se ofrece hasta
+    // que pase una prueba real en Sandbox. Encenderlo antes sería prometer una
+    // transacción que nadie ha visto completarse con dinero de verdad.
+    const cta = leer("lib/plans/pricing-cta.ts");
+    assert(/Hablemos de Extra/.test(cta), "desapareció el CTA de contacto");
+    const disp = leer("lib/billing/upgrade-availability.ts");
+    assert(/wompiFromEnv/.test(disp),
+      "la disponibilidad transaccional cambió de carril en este tramo");
+  });
+
+  check("9B. Y no se ha tocado nada de la experiencia comercial", () => {
+    for (const f of ["app/planes/page.tsx",
+                     "components/domain/commercial/pricing-plans.tsx",
+                     "components/domain/billing/upgrade-panel.tsx"]) {
+      const src = leer(f);
+      assert(!/reconcileMercadoPagoUpgrade|startMercadoPagoUpgradeCheckout/.test(src),
+        `${f} ya llama al carril nuevo: eso es del tramo siguiente`);
+    }
+  });
+
+  check("9C. La liquidación sigue siendo la MISMA primitiva de 0181", () => {
+    // Nada de esto duplica el motor: el camino de un pago verificado a Extra
+    // sigue siendo uno solo, y recibe el proveedor como parámetro.
+    const rec = sinComentarios(leer("lib/db/upgrade-mercadopago.ts"));
+    assert(/billing_settle_upgrade_payment/.test(rec),
+      "el carril nuevo no usa la liquidación canónica");
+    assert(!/insert into billing_payments|from\("billing_payments"\)\s*\.insert/.test(rec),
+      "el carril nuevo escribe pagos por su cuenta");
+    const sql = leer("supabase/migrations/0216_billing_upgrade_compensation.sql");
+    for (const f of ["billing_open_upgrade_intent", "billing_cancel_upgrade",
+                     "billing_mark_upgrade_uncertain"]) {
+      assert(!new RegExp(`create or replace function public\\.${f}\\b`).test(sql),
+        `0216 reescribe ${f}, que tenía que quedarse como estaba`);
+    }
+  });
+
+  console.log(`\nBILLING-EXTRA-01B · saga: ${passed} en verde, ${failed} en rojo\n`);
+  process.exit(failed === 0 ? 0 : 1);
+}
+
+void main();

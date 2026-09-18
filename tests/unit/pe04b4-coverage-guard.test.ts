@@ -138,6 +138,19 @@ console.log("\nB · Ninguna mutación de negocio sin puerta comercial");
  * conciencia en vez de descubrirlo pantalla por pantalla.
  */
 const ESCRITURAS_SIN_PUERTA: Record<string, string> = {
+  // BILLING-EXTRA-01B · Desatascar una subida de plan huérfana.
+  //
+  // La puerta comercial mide el consumo de UNA EMPRESA contra su plan, y esto
+  // no consume nada de nadie: no crea ni borra datos de negocio, resuelve el
+  // estado de un cambio de plan que se quedó a medias. Preguntarle a la puerta
+  // comercial si cabe sería preguntar por un cupo que esta operación no gasta.
+  //
+  // Su puerta es otra, y es más estrecha: `requirePlatformStaff` aquí, y debajo
+  // `is_platform_superadmin()` dentro de `billing_resolve_stuck_upgrade`, que
+  // además se niega a liberar nada si la prueba dice que hay un cobro aprobado.
+  "server/actions/billing.ts:resolveStuckUpgradeAction":
+    "Operación de plataforma sobre un cambio atascado, sin empresa que consuma "
+    + "nada. Su puerta es requirePlatformStaff + is_platform_superadmin en la base.",
   // PD-01D · Administración de campañas públicas de diagnóstico.
   //
   // La puerta comercial mide el consumo de UNA EMPRESA contra su plan, y estas

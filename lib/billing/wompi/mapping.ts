@@ -269,27 +269,18 @@ export function eventEnvironmentMatches(
  * idempotencia por identificador de pago no puede distinguir. Por eso el número
  * desapareció: la obligación es una fila, no un sufijo.
  */
-export function buildAttemptReference(attemptId: string): string {
-  return `pay_${attemptId.toLowerCase()}`;
-}
-
-/** El cobro de una SUBIDA de plan. Prefijo propio para que en el panel del
- *  proveedor se distinga de una renovación de un vistazo; lo que identifica la
- *  operación sigue siendo el intento, y quién es cada uno lo decide el dominio,
- *  no el prefijo. */
-export function buildUpgradeReference(attemptId: string): string {
-  return `upg_${attemptId.toLowerCase()}`;
-}
-
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const RE_INTENTO = new RegExp(`^(?:pay|upg)_(${UUID})$`, "i");
-
-/** Solo el formato exacto. Lo que no se reconozca va a revisión. */
-export function parseAttemptReference(referencia: string | null | undefined): string | null {
-  if (typeof referencia !== "string") return null;
-  const m = RE_INTENTO.exec(referencia.trim());
-  return m ? m[1].toLowerCase() : null;
-}
+/**
+ * BILLING-EXTRA-01B · Las tres viven ahora en `lib/billing/upgrade-reference.ts`.
+ *
+ * No tenían nada de Wompi: son la convención del DOMINIO para nombrar un intento
+ * cuando sale al mundo, y Mercado Pago necesita la misma. Se reexportan desde
+ * aquí —sin cambiar ni el formato ni el prefijo— para que nada de lo que ya
+ * importa este módulo se entere, y para que las referencias YA PERSISTIDAS se
+ * sigan leyendo exactamente igual.
+ */
+export {
+  buildAttemptReference, buildUpgradeReference, parseAttemptReference,
+} from "@/lib/billing/upgrade-reference";
 
 export function sanitizeEventEnvelope(evento: WompiEvent): Record<string, unknown> {
   const tx = (evento.data?.transaction ?? {}) as Record<string, unknown>;

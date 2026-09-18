@@ -11,6 +11,7 @@ import {
   type CheckoutStatus, type SubmitErrorCode,
 } from "@/lib/db/billing-checkout";
 import { resolveUpgradeAvailability } from "@/lib/billing/upgrade-availability";
+import { requirePlatformStaff } from "@/lib/auth/require-platform-staff";
 
 /**
  * Trazaloop · PE-05B2W4 · Contratar un plan de pago.
@@ -690,4 +691,37 @@ function etiquetaDePlan(planCode: string, interval: string): string {
   const plan = planCode === "extra" ? "Extra" : "Full";
   const periodo = interval === "annual" ? "anual" : "mensual";
   return `Trazaloop ${plan} · ${periodo}`;
+}
+
+/**
+ * BILLING-EXTRA-01B · Desatascar una subida huérfana.
+ *
+ * Es una acción de OPERACIÓN, no de cliente: la puerta la abre
+ * `requirePlatformStaff()` y quién puede de verdad lo vuelve a decidir la base,
+ * que exige superadministrador. Se comprueba dos veces a propósito — una aquí
+ * para no llegar con una sesión que no toca, y otra allí porque es donde la
+ * garantía no se puede saltar.
+ *
+ * No recibe importes, ni identificadores del proveedor, ni qué hacer: sólo el
+ * cambio. La prueba se recoge preguntando al proveedor y la decisión la toma la
+ * primitiva, que se niega a liberar un cobro aprobado.
+ */
+export async function resolveStuckUpgradeAction(
+  changeId: string
+): Promise<{ error: string | null; status?: string; evidence?: string }> {
+  const { isSuperadmin } = await requirePlatformStaff();
+  if (!isSuperadmin) {
+    return { error: "Solo un superadministrador de plataforma puede hacer esto." };
+  }
+  const { resolveStuckUpgrade } = await import("@/lib/db/upgrade-recovery");
+  const r = await resolveStuckUpgrade(changeId);
+  revalidatePath("/settings/billing");
+  if (!r.ok) {
+    return { error: r.status === "still_uncertain"
+      ? "No se pudo saber si hubo cobro. La subida sigue abierta a propósito: "
+        + "soltarla sin saberlo podría borrar un cobro real."
+      : `No se pudo resolver: ${r.status}.`,
+      status: r.status, evidence: r.evidence };
+  }
+  return { error: null, status: r.status, evidence: r.evidence };
 }

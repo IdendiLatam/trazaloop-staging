@@ -12,6 +12,8 @@ import {
   recordProviderEvent, closeProviderEvent, settleProviderPayment,
   recordRenewalPayment, markProviderSubscriptionState, reconcileProviderCycle,
 } from "@/lib/db/billing-provider";
+import { parseUpgradeReference } from "@/lib/billing/upgrade-reference";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -291,6 +293,35 @@ export async function POST(request: Request) {
     // El pago inicial trae la referencia externa del intento; una renovación,
     // no: llega colgada de la suscripción. Son dos caminos y NO se mezclan,
     // porque uno crea la suscripción y el otro no puede crear una segunda.
+    // BILLING-EXTRA-01B · UNA SUBIDA DE PLAN, antes que nada.
+    //
+    // Su referencia lleva el prefijo `upg_`, y `parseUpgradeReference` sólo
+    // acepta ése: una contratación no puede entrar por esta puerta ni al revés.
+    // El aviso NO decide nada — dispara el conciliador, que es la misma lógica
+    // que usan la vuelta del navegador y el barrido.
+    const intentoDeSubida = parseUpgradeReference(p.value.externalReference);
+    if (intentoDeSubida) {
+      const { data: c } = await createAdminClient()
+        .from("billing_checkout_intents")
+        .select("subscription_change_id").eq("id", intentoDeSubida).maybeSingle();
+      const cambio = (c as { subscription_change_id: string | null } | null)
+        ?.subscription_change_id ?? null;
+      if (!cambio) {
+        await cerrar("manual_review", "unknown_upgrade_intent", null, "NO_CHANGE");
+        return OK();
+      }
+      const { reconcileMercadoPagoUpgrade } =
+        await import("@/lib/db/upgrade-mercadopago");
+      const r = await reconcileMercadoPagoUpgrade(cambio);
+      const estado = r.outcome === "upgraded" || r.outcome === "refunded"
+        || r.outcome === "abandoned" || r.outcome === "waiting"
+        ? "processed" : "manual_review";
+      await cerrar(estado, r.outcome);
+      log("subida_conciliada", { resource: aviso.resourceId, outcome: r.outcome,
+                                 ms: Date.now() - inicio });
+      return OK();
+    }
+
     if (p.value.externalReference) {
       const r = await settleProviderPayment({
         provider: MERCADOPAGO, externalReference: p.value.externalReference,

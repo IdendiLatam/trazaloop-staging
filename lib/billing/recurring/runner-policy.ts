@@ -51,6 +51,13 @@ export type RunnerCandidate = {
   hasProviderObject: boolean;
   /** Fin del último periodo pagado, o `null` si no hay ninguno. */
   paidThrough: string | null;
+  /**
+   * BILLING-EXTRA-01B · ¿Hay una subida de plan abierta sobre esta suscripción?
+   *
+   * Lo responde `billing_upgrade_in_flight`: hay un cambio en `pending`,
+   * `submitted` o `compensation_required`.
+   */
+  upgradeInFlight: boolean;
 };
 
 export type RunnerAction =
@@ -63,7 +70,9 @@ export type RunnerAction =
   /** Terminada: no hay nada que conciliar ni que refrescar. */
   | "skip_ended"
   /** Todavía no hay objeto del proveedor al que preguntar. */
-  | "skip_no_provider_object";
+  | "skip_no_provider_object"
+  /** Hay una subida de plan en el aire: conciliar ahora mezclaría dos cuentas. */
+  | "skip_upgrade_in_flight";
 
 export type RunnerVerdict = {
   action: RunnerAction;
@@ -118,6 +127,26 @@ export function decideRunnerAction(
 
   if (!c.hasProviderObject) {
     return { action: "skip_no_provider_object", lifecycleRefresh: "none" };
+  }
+
+  // --- Una subida en el aire ------------------------------------------------
+  //
+  // BILLING-EXTRA-01B. La diferencia de una subida se calcula contra UN periodo
+  // concreto. Si mientras esa subida está en el aire el barrido saldara un ciclo
+  // del proveedor, el periodo se correría por debajo de una cuenta que ya se
+  // cobró: la empresa habría pagado el prorrateo de un tiempo que acaba de
+  // terminar.
+  //
+  // Aplazar no pierde nada, y esa es la razón de que esto sea seguro: el
+  // descubrimiento de ciclos es una PREGUNTA al proveedor, no un aviso que se
+  // caduque. El cobro que hoy no se concilia se seguirá viendo mañana, cuando la
+  // subida haya terminado —concedida o devuelta— y el periodo vuelva a ser el
+  // que la cuenta dice.
+  //
+  // Y no hace falta elegir ninguna cantidad de horas: la ventana es exactamente
+  // la vida del cambio, ni un minuto más.
+  if (c.upgradeInFlight) {
+    return { action: "skip_upgrade_in_flight", lifecycleRefresh: "none" };
   }
 
   // --- Se concilia ----------------------------------------------------------

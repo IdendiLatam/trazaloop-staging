@@ -226,9 +226,17 @@ async function main() {
     // lo que la AUTORIDAD trata como plan de entrada, que es la concesión
     // `base` de 0162. Se comprueba contra la base, no contra una lista escrita
     // aquí: si mañana nace otra clase de concesión, esta prueba la recorre.
-    const filas = await q(
-      "select distinct grant_kind from organization_plan_assignments");
-    const clases = filas.map((r) => String(r.grant_kind));
+    // Las clases salen de la RESTRICCIÓN, no de las filas que haya hoy.
+    //
+    // La primera versión leía `select distinct grant_kind` y se puso roja el
+    // día que una limpieza de pruebas dejó la tabla vacía. Una prueba que
+    // depende de que alguien haya dejado datos no comprueba la regla: comprueba
+    // el ambiente. `opa_grant_kind_check` es donde 0162 declaró las cuatro
+    // clases, y eso no se vacía.
+    const [c] = await q(`select pg_get_constraintdef(oid) def from pg_constraint
+                          where conname = 'opa_grant_kind_check'`);
+    assert(c !== undefined, "desapareció la restricción que declara las clases");
+    const clases = [...String(c.def).matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     assert(clases.includes("base"),
       "la base ya no declara la concesión que sostiene el plan de entrada");
     for (const clase of clases) {
