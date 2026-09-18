@@ -664,6 +664,28 @@ console.log("\n10 · QUITAR DE LA PORTADA, DESDE LA CONSOLA");
       "la consola no ofrece quitar el vídeo de la portada");
   });
 
+  await check("10C.2. Y retirar NO cierra el paso: se puede poner otro", () => {
+    // Lo cazó el humo operacional. La sección enseñaba el tutorial retirado,
+    // daba por hecho que ya había uno y escondía el formulario de creación.
+    // Resultado: quitabas el vídeo de la portada y te quedabas sin poder poner
+    // otro desde la consola — un callejón sin salida idéntico al que la acción
+    // de retirar venía a evitar.
+    const c = leer("app/(app)/platform/tutorials/page.tsx");
+    assert(/portadaActiva = portada\.filter\(\(r\) => r\.status === "active"\)/.test(c),
+      "la consola no distingue el vídeo de portada activo del retirado");
+    assert(/\{portadaActiva\.length === 0 \? \(/.test(c),
+      "el formulario de creación depende de que no exista NINGUNO, activo o no");
+    assert(/portadaRetirada/.test(c),
+      "los retirados no se enseñan en ninguna parte: su historia desaparecería");
+    // Y el botón de quitar solo cuelga del activo.
+    const i = c.indexOf("portadaActiva.map");
+    const j = c.indexOf("portadaRetirada.map");
+    assert(i > 0 && j > i, "no se listan los retirados después del activo");
+    const bloqueRetirados = c.slice(j, j + 400);
+    assert(!/RetireFromHomeForm/.test(bloqueRetirados),
+      "se ofrece quitar de la portada algo que ya está retirado");
+  });
+
   await check("10D. Retirar deja el hueco libre y conserva la historia", async () => {
     await soloActivo(null);
     const a = await crearPortada("CUX01E Retiro", 1);

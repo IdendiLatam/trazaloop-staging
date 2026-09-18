@@ -48,6 +48,12 @@ export default async function PlatformTutorialsPage(
 
   const bienvenida = rows.filter((r) => r.tutorialType === "welcome");
   const portada = rows.filter((r) => r.tutorialType === "public_home");
+  // COMMERCIAL-UX-01E.2 · ACTIVO y RETIRADO no son lo mismo, y confundirlos
+  // cerraba el paso: la sección enseñaba el retirado, daba por hecho que ya
+  // había uno y escondía el formulario. Resultado: quitabas el vídeo de la
+  // portada y te quedabas sin poder poner otro.
+  const portadaActiva = portada.filter((r) => r.status === "active");
+  const portadaRetirada = portada.filter((r) => r.status !== "active");
   const dePagina = rows.filter((r) => r.tutorialType === "page");
 
   // La cobertura se cuenta sobre el REGISTRO, no sobre lo que hay: lo que
@@ -222,15 +228,16 @@ export default async function PlatformTutorialsPage(
           nueva —y a quien ya lo hubiera descartado le volverá a aparecer— o
           retira éste antes de crear otro.
         </p>
-        {portada.length === 0 ? (
+        {portadaActiva.length === 0 ? (
           <div className="rounded-lg border border-hairline bg-paper p-4">
             <p className="text-sm text-ink-soft">
-              No hay ninguno. Mientras no lo haya, la portada no enseña ningún aviso.
+              No hay ninguno activo. Mientras no lo haya, la portada no enseña
+              ningún aviso.
             </p>
             <CreatePublicHomeVideoForm />
           </div>
         ) : (
-          portada.map((r) => (
+          portadaActiva.map((r) => (
             <div key={r.id} className="space-y-2">
               <FilaTutorial row={r} nombre="Portada pública" />
               {/* Quitar la identidad, no solo su vídeo: mientras siga activa
@@ -239,6 +246,21 @@ export default async function PlatformTutorialsPage(
             </div>
           ))
         )}
+
+        {/* Los retirados se enseñan, pero aparte y sin acciones: son historia.
+            Mezclarlos con el activo fue justamente lo que cerró el paso. */}
+        {portadaRetirada.length > 0 ? (
+          <details className="rounded-lg border border-hairline bg-paper p-4">
+            <summary className="cursor-pointer text-sm text-ink-soft">
+              {portadaRetirada.length} retirado(s) · su historia se conserva
+            </summary>
+            <div className="mt-3 space-y-2">
+              {portadaRetirada.map((r) => (
+                <FilaTutorial key={r.id} row={r} nombre="Portada pública · retirado" />
+              ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       {/* ---------------------------------------------------------------- */}
