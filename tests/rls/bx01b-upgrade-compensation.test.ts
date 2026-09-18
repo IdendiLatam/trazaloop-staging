@@ -756,6 +756,95 @@ async function main() {
           "el barrido quedó suelto");
       });
 
+    console.log("\n7 · UN COBRO APROBADO QUE LA LIQUIDACIÓN RECHAZA");
+
+    await check("7A. Liquidar con un importe que no cuadra deja el cambio fallido",
+      async () => {
+        // Es lo que hace `billing_settle_upgrade_payment` desde 0181, y está
+        // bien: un pago que no cuadra no concede nada. Lo que NO puede pasar es
+        // que ahí se acabe la historia con el dinero dentro.
+        const e = await empresaConFull("AD fallida");
+        const s = await subidaAbierta(e);
+        const pago = `mp-mism-${s.changeId.slice(0, 8)}`;
+        const { data: r } = await admin.rpc("billing_settle_upgrade_payment", {
+          p_intent_id: s.intento.intent_id as string, p_provider: MP,
+          p_provider_payment_id: pago, p_outcome: "approved",
+          p_amount: s.total - 1, p_currency: "COP",
+          p_live_mode: false, p_failure_reason: null });
+        assert((r as Fila).outcome === "reconciliation_mismatch",
+          `salió ${(r as Fila).outcome}`);
+        const c = await cambio(s.changeId);
+        assert(c.status === "failed", `quedó en ${c.status}`);
+        assert((await admin.from("billing_subscriptions").select("plan_code")
+          .eq("id", e.subscriptionId).single()).data!.plan_code === "full",
+          "se concedió Extra con un importe que no cuadra");
+      });
+
+    await check("7B. Y desde ahí SÍ se puede devolver el dinero", async () => {
+      // El defecto que cerró 0218: `failed` era terminal y la compensación
+      // exigía `submitted`, así que un pago aprobado y rechazado por cuentas se
+      // quedaba dentro para siempre.
+      const e = await empresaConFull("AE rescate");
+      const s = await subidaAbierta(e);
+      const pago = `mp-resc-${s.changeId.slice(0, 8)}`;
+      await admin.rpc("billing_settle_upgrade_payment", {
+        p_intent_id: s.intento.intent_id as string, p_provider: MP,
+        p_provider_payment_id: pago, p_outcome: "approved",
+        p_amount: s.total - 1, p_currency: "COP",
+        p_live_mode: false, p_failure_reason: null });
+      assert((await cambio(s.changeId)).status === "failed", "no quedó fallida");
+
+      await admin.rpc("billing_observe_upgrade_delta",
+        { p_change_id: s.changeId, p_provider_payment_id: pago });
+      const { data: ab } = await admin.rpc("billing_open_upgrade_compensation",
+        { p_change_id: s.changeId, p_reason: "SETTLE_RECONCILIATION_MISMATCH" });
+      assert((ab as Fila).status === "opened",
+        `no se pudo abrir la compensación: ${(ab as Fila).status}`);
+      const { data: dev } = await admin.rpc("billing_record_upgrade_refund", {
+        p_change_id: s.changeId, p_provider_refund_id: `refAE-${s.changeId.slice(0, 8)}`,
+        p_amount: s.total, p_currency: "COP" });
+      assert((dev as Fila).status === "refunded", `salió ${(dev as Fila).status}`);
+    });
+
+    await check("7C. Y mientras ese dinero no vuelva, el barrido NO se suelta",
+      async () => {
+        const e = await empresaConFull("AF lease fallida");
+        const s = await subidaAbierta(e);
+        const pago = `mp-lf-${s.changeId.slice(0, 8)}`;
+        await admin.rpc("billing_settle_upgrade_payment", {
+          p_intent_id: s.intento.intent_id as string, p_provider: MP,
+          p_provider_payment_id: pago, p_outcome: "approved",
+          p_amount: s.total - 1, p_currency: "COP",
+          p_live_mode: false, p_failure_reason: null });
+        await admin.rpc("billing_observe_upgrade_delta",
+          { p_change_id: s.changeId, p_provider_payment_id: pago });
+        const bloqueado = await admin.rpc("billing_upgrade_in_flight",
+          { p_subscription_id: e.subscriptionId });
+        assert(bloqueado.data === true,
+          "una subida fallida con el cobro dentro dejó suelto el barrido");
+      });
+
+    await check("7D. Una fallida SIN dinero sigue siendo el final que era",
+      async () => {
+        const e = await empresaConFull("AG fallida seca");
+        const s = await subidaAbierta(e);
+        await admin.rpc("billing_settle_upgrade_payment", {
+          p_intent_id: s.intento.intent_id as string, p_provider: MP,
+          p_provider_payment_id: `mp-seca-${s.changeId.slice(0, 8)}`,
+          p_outcome: "failed", p_amount: null, p_currency: null,
+          p_live_mode: false, p_failure_reason: "banco" });
+        const c = await cambio(s.changeId);
+        assert(c.status === "failed", `quedó en ${c.status}`);
+        const bloqueado = await admin.rpc("billing_upgrade_in_flight",
+          { p_subscription_id: e.subscriptionId });
+        assert(bloqueado.data === false,
+          "una subida fallida sin dinero bloquea el barrido sin motivo");
+        const { data: r } = await admin.rpc("billing_open_upgrade_compensation",
+          { p_change_id: s.changeId, p_reason: "X" });
+        assert((r as Fila).status === "no_delta_payment",
+          `se abrió una compensación sin nada que devolver: ${(r as Fila).status}`);
+      });
+
   } finally {
     for (const org of orgs) {
       // EL ORDEN IMPORTA. Los cambios los apuntan los pagos y los intentos, así

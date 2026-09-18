@@ -140,7 +140,7 @@ export type UpgradeSagaStep =
   | { kind: "done"; reason: string };
 
 const TERMINALES = new Set([
-  "settled", "refunded", "cancelled", "declined", "failed",
+  "settled", "refunded", "cancelled", "declined",
 ]);
 const AUTORIZACIONES_VIVAS = new Set(["authorized", "uncertain"]);
 
@@ -175,6 +175,18 @@ export function decideUpgradeStep(f: UpgradeSagaFacts): UpgradeSagaStep {
   // ── ya está resuelto ──────────────────────────────────────────────────────
   if (TERMINALES.has(f.changeStatus)) {
     return { kind: "done", reason: f.changeStatus.toUpperCase() };
+  }
+
+  // ── fallida CON dinero dentro ─────────────────────────────────────────────
+  //
+  // BILLING-EXTRA-01C. `failed` es terminal salvo en un caso: cuando llegó un
+  // pago APROBADO y la liquidación lo rechazó por cuentas. Ahí el cambio está
+  // cerrado y el dinero sigue dentro, y dar eso por resuelto es exactamente
+  // cómo un cobro se queda sin devolver para siempre.
+  if (f.changeStatus === "failed") {
+    return f.deltaPayment !== null && aprobado(f.deltaPayment)
+      ? { kind: "compensate", reason: "FAILED_WITH_APPROVED_PAYMENT" }
+      : { kind: "done", reason: "FAILED" };
   }
 
   // ── hay dinero pendiente de devolver ──────────────────────────────────────

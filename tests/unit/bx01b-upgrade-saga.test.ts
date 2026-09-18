@@ -245,10 +245,27 @@ async function main() {
   console.log("\n5 · IDEMPOTENCIA Y ESTADOS FINALES");
 
   check("5A. Un estado final no vuelve a hacer nada", () => {
-    for (const estado of ["settled", "refunded", "cancelled", "declined", "failed"]) {
+    for (const estado of ["settled", "refunded", "cancelled", "declined"]) {
       const r = decideUpgradeStep(hechos({ changeStatus: estado, deltaPayment: pago() }));
       assert(r.kind === "done", `«${estado}» decidió ${r.kind}`);
     }
+    // Y `failed` SIN dinero también lo es.
+    const seca = decideUpgradeStep(hechos({ changeStatus: "failed" }));
+    assert(seca.kind === "done", `una fallida sin cobro decidió ${seca.kind}`);
+  });
+
+  check("5A.2. Pero una fallida CON un cobro aprobado no está resuelta", () => {
+    // BILLING-EXTRA-01C. La liquidación deja el cambio en `failed` cuando llega
+    // un pago aprobado cuyo importe no cuadra. Dar eso por terminado es cómo un
+    // cobro se queda sin devolver para siempre.
+    const r = decideUpgradeStep(hechos({
+      changeStatus: "failed", deltaPayment: pago() }));
+    assert(r.kind === "compensate" && r.reason === "FAILED_WITH_APPROVED_PAYMENT",
+      `decidió ${r.kind}`);
+    // Y con un cobro que no entró, sigue siendo el final que era.
+    const rechazada = decideUpgradeStep(hechos({
+      changeStatus: "failed", deltaPayment: pago({ canonicalStatus: "declined" }) }));
+    assert(rechazada.kind === "done", `decidió ${rechazada.kind}`);
   });
 
   check("5B. De una compensación abierta NUNCA se sale hacia Extra", () => {

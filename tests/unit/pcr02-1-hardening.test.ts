@@ -381,6 +381,7 @@ check("6.2 TEXTILES_REGRESSION · migraciones 0001–0103 intactas; posteriores 
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0218_billing_upgrade_failed_with_money.sql",
     "0217_billing_upgrade_provider_restoration.sql",
     "0216_billing_upgrade_compensation.sql",
     "0215_public_home_video_placement.sql",
