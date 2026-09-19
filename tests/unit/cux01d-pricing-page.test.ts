@@ -176,44 +176,73 @@ check("2A. EXTRA NO SUGIERE UNA PRUEBA QUE NO EXISTE · en ningún estado", () =
   }
 });
 
-check("2B. Sin carril que cobre la mejora, Extra lleva a hablar · siempre", () => {
+check("2B. Extra SE VENDE, y cada quien entra por su puerta", () => {
+  // BILLING-EXTRA-01D sustituyó la política de 01D.1. Entonces esta rama
+  // mandaba a contacto SIEMPRE porque el carril que cobraba la subida no podía
+  // cobrar con la pasarela del lanzamiento. Ya cobra —compra y subida,
+  // demostrado contra el proveedor real— así que esconderlo sería vender menos
+  // de lo que el producto sabe hacer.
+  //
+  // Lo que NO cambia: esta página ORIENTA, no cobra. Cada botón lleva al flujo
+  // que ya existe y es allí donde se decide.
+  const destinos: Record<string, string> = {
+    anónimo: "/register",
+    "con cuenta sin empresa": "/select-org",
+  };
   for (const [nombre, v] of ESTADOS) {
-    const c = resolvePlanCta("extra", v, SIN_MEJORA);
-    const yaLoTiene = v.kind === "organization" && v.contractedPlanCode === "extra";
-    if (yaLoTiene) {
+    const c = resolvePlanCta("extra", v, TODO);
+    if (v.kind === "organization" && v.contractedPlanCode === "extra") {
       assert(c.label === null && c.suppressedReason === "ALREADY_ON_PLAN",
         `a quien ya tiene Extra se le ofrece «${c.label}»`);
       continue;
     }
-    assert(c.label === "Hablemos de Extra",
-      `«${nombre}» ve «${c.label}» en Extra`);
-    assert(c.href === CONTACT_HREF, `«${nombre}» va a ${c.href}`);
-    assert(c.suppressedReason === "UPGRADE_NOT_TRANSACTIONAL",
-      `«${nombre}» no deja constancia del motivo`);
+    assert(c.label !== null, `«${nombre}» no ve ninguna acción en Extra`);
+    assert(!/hablemos/i.test(c.label),
+      `«${nombre}» sigue viendo «${c.label}»: Extra ya se vende`);
+    const esperado = destinos[nombre] ?? "/settings/billing";
+    assert(c.href === esperado, `«${nombre}» va a ${c.href} y no a ${esperado}`);
   }
 });
 
-check("2C. Y NUNCA una acción transaccional de Extra", () => {
+check("2C. Y ninguna de esas puertas cobra nada", () => {
+  // La garantía que sí sobrevive entera: una página pública no abre un
+  // presupuesto ni un cobro. Lleva a registrarse, a elegir empresa o a la ficha
+  // de facturación, y el dinero lo gobierna quien siempre lo gobernó.
+  const permitidos = new Set(["/register", "/select-org", "/settings/billing",
+                              CONTACT_HREF]);
   for (const [nombre, v] of ESTADOS) {
-    const c = resolvePlanCta("extra", v, SIN_MEJORA);
-    assert(c.href !== "/settings/billing",
-      `«${nombre}» va al checkout por Extra, que hoy no puede cobrarse`);
-    assert(!/pasar a extra|contratar extra|subir a extra|comprar/i.test(c.label ?? ""),
-      `«${nombre}» ve una promesa transaccional: «${c.label}»`);
+    for (const plan of ["free", "full", "extra"]) {
+      const c = resolvePlanCta(plan, v, TODO);
+      if (c.href === null) continue;
+      assert(permitidos.has(c.href),
+        `«${nombre}» en ${plan} va a ${c.href}, que no es un flujo de producto`);
+      assert(!/checkout|quote|pay|billing_/i.test(c.href),
+        `«${nombre}» en ${plan} apunta a una primitiva: ${c.href}`);
+    }
   }
 });
 
-check("2D. El día que el carril pueda cobrar, se ofrece solo · y por su camino", () => {
-  // La decisión se pregunta por CAPACIDAD. Cuando cambie, esto cambia con ella
-  // sin que nadie tenga que acordarse de volver aquí — y aun entonces, a un
-  // anónimo se le ofrece crear cuenta, no una prueba de Extra.
-  const conEmpresa = empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
-                               grantKind: "sold", hasSubscription: true });
-  assert(resolvePlanCta("extra", conEmpresa, TODO).href === "/settings/billing",
-    "con carril disponible, Extra sigue sin ofrecerse desde la ficha");
-  const anon = resolvePlanCta("extra", anonimo, TODO);
-  assert(anon.label === "Crear cuenta" && anon.href === "/register",
-    `a un anónimo se le ofrece «${anon.label}» en Extra`);
+check("2D. Y quien ya tiene Full lo ve como lo que es: una SUBIDA", () => {
+  // Comprar y subir no cuestan lo mismo —una paga el plan entero, la otra sólo
+  // la diferencia del tiempo que queda— así que no pueden llamarse igual.
+  const conFull = empresa({ contractedPlanCode: "full", effectivePlanCode: "full",
+                            grantKind: "sold", hasSubscription: true });
+  const subida = resolvePlanCta("extra", conFull, TODO);
+  assert(subida.label === "Pasar a Extra", `con Full se ofrece «${subida.label}»`);
+  assert(subida.href === "/settings/billing", `va a ${subida.href}`);
+
+  const enFree = empresa({ contractedPlanCode: "free", effectivePlanCode: "free",
+                           grantKind: "base", hasSubscription: false });
+  const compra = resolvePlanCta("extra", enFree, TODO);
+  assert(compra.label === "Empezar con Extra", `en Free se ofrece «${compra.label}»`);
+});
+
+check("2D.2. Sin registro abierto, Extra no promete lo que no puede dar", () => {
+  const cerrado = { ...TODO, registrationOpen: false };
+  const c = resolvePlanCta("extra", anonimo, cerrado);
+  assert(c.label === "Solicitar acceso" && c.href === CONTACT_HREF,
+    `con el registro cerrado se ofrece «${c.label}» hacia ${c.href}`);
+  assert(c.suppressedReason === "REGISTRATION_CLOSED", "sin motivo declarado");
 });
 
 check("2E. «Empezar la prueba» SOLO en la tarjeta del plan que la prueba concede", () => {

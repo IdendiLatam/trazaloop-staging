@@ -45,6 +45,15 @@ export function UpgradePanel({
     setError(null); setAviso(null);
     const r = await confirmUpgradeAction(cuenta.changeId);
     if (r.error) { setError(r.error); setCuenta(null); return; }
+    // BILLING-EXTRA-01D · Hay dos carriles y quien decide cuál es el servidor.
+    //
+    // Con el de REDIRECCIÓN se paga en la pasarela: aquí sólo se lleva a la
+    // persona a donde el servidor dijo. No se compone ninguna dirección y no
+    // viaja ningún importe — lo congeló el intento.
+    //
+    // Con el de medio guardado no hay a dónde ir: el cobro ya salió y lo único
+    // que queda es esperar el desenlace.
+    if (r.initPoint) { window.location.assign(r.initPoint); return; }
     setCuenta(null);
     setAviso("Estamos confirmando el pago con tu banco. En cuanto se confirme, "
            + `${planLabel(targetPlanCode)} queda activo.`);

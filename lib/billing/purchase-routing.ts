@@ -186,3 +186,23 @@ export function resolvePurchaseRoutingFromEnv(): PurchaseRouting {
 export const PURCHASE_UNAVAILABLE_MESSAGE =
   "El pago en línea no está disponible ahora mismo. No se cobró nada; "
   + "vuelve a intentarlo en un momento.";
+
+/**
+ * BILLING-EXTRA-01D · La FORMA de cobro de una pasarela concreta.
+ *
+ * Traduce «cómo se llama» a «cómo se paga», que es lo único que cambia lo que
+ * una persona ve: con `redirect` se va a la pasarela y se vuelve; con
+ * `stored_source` se cobra contra un medio ya guardado y no hay a dónde ir.
+ *
+ * Vive aquí porque éste es el fichero que YA conoce las pasarelas por nombre y
+ * cuya frontera está declarada desde PROD-LAUNCH-01D.3A. Poner esta traducción
+ * en el resolutor de producto habría obligado a que también él supiera los
+ * nombres, y a declararlo en dos guardas más.
+ */
+export function paymentFlowOf(
+  provider: string | null
+): "redirect" | "stored_source" | null {
+  if (provider === "mercadopago") return "redirect";
+  if (provider === "wompi") return "stored_source";
+  return null;
+}

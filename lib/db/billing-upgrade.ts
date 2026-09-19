@@ -176,6 +176,29 @@ export async function readUpgrade(changeId: string): Promise<
 }
 
 /** La subida que está esperando desenlace, si la hay. */
+/**
+ * BILLING-EXTRA-01D · ¿Hay una subida con dinero SIN RESOLVER?
+ *
+ * Es distinto de «hay una subida en curso». Aquí entran las que quedaron en
+ * compensación y las fallidas con un cobro observado: en las dos hay dinero
+ * dentro y una persona tiene que mirarlas. Mientras tanto no se le ofrece a
+ * nadie pagar otra vez.
+ */
+export async function upgradeNeedingAction(
+  organizationId: string
+): Promise<{ changeId: string; status: string } | null> {
+  const supabase = await createServerClient();
+  const { data } = await supabase.from("billing_subscription_changes")
+    .select("id, status, delta_provider_payment_id, refund_provider_id")
+    .eq("organization_id", organizationId)
+    .in("status", ["compensation_required", "failed"])
+    .not("delta_provider_payment_id", "is", null)
+    .is("refund_provider_id", null)
+    .order("created_at", { ascending: false }).limit(1);
+  const r = ((data ?? [])[0]) as Record<string, unknown> | undefined;
+  return r ? { changeId: String(r.id), status: String(r.status) } : null;
+}
+
 export async function pendingUpgrade(organizationId: string): Promise<
   { changeId: string; status: string; toPlanCode: string;
     totalAmount: number; chargeCurrency: string } | null

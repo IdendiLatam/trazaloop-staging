@@ -22,6 +22,9 @@ import { renewalCopyFor } from "@/lib/domain/billing-renewal-copy";
 import { PlanDecisions } from "@/components/domain/billing/plan-decisions";
 import { RenewalPanel } from "@/components/domain/billing/renewal-panel";
 import { resolveUpgradeAvailability } from "@/lib/billing/upgrade-availability";
+import {
+  resolveExtraAction, extraActionNote, extraActionNeedsContact, CONTACT_HREF,
+} from "@/lib/billing/extra-action";
 import { RecurringCancelPanel }
   from "@/components/domain/billing/recurring-cancel-panel";
 import { findLiveRecurring } from "@/lib/db/recurring-checkout";
@@ -29,9 +32,12 @@ import { isRecurringLaneOpen } from "@/lib/billing/recurring/policy";
 import { PendingCheckoutPanel } from "@/components/domain/billing/pending-checkout-panel";
 import { UpgradePanel } from "@/components/domain/billing/upgrade-panel";
 import { storageImpactOf } from "@/lib/db/storage-impact";
-import { pendingUpgrade } from "@/lib/db/billing-upgrade";
+import {
+  pendingUpgrade, upgradeNeedingAction,
+} from "@/lib/db/billing-upgrade";
+import Link from "next/link";
 import { findOpenOneTimeCheckout } from "@/lib/db/one-time-checkout";
-import { resolvePurchaseRoutingFromEnv } from "@/lib/billing/purchase-routing";
+import { resolvePurchaseRoutingFromEnv, paymentFlowOf } from "@/lib/billing/purchase-routing";
 import {
   activeShellModuleFrom, moduleAwareHref,
 } from "@/lib/modules/registry";
@@ -87,14 +93,18 @@ export default async function BillingPage({
   const rutaDePago = resolvePurchaseRoutingFromEnv();
   const pasarela = rutaDePago.available ? rutaDePago.displayName : null;
   const esAdministrador = org.roleCode === "admin";
-  const [estado, catalogo, historial, subidaEnCurso, cobroEnCurso,
-         comercial, tiempo, creditos, espacioActual] = await Promise.all([
+  const [estado, catalogo, historial, subidaEnCurso, subidaRequiereAccion,
+         cobroEnCurso, comercial, tiempo, creditos, espacioActual]
+    = await Promise.all([
     getOrganizationBillingState(org.organizationId),
     // COMMERCIAL-UX-01F · El MISMO catálogo que /planes. No hay un segundo
     // sitio donde vivan los precios y los límites.
     readCommercialCatalog(),
     listPaymentHistory(org.organizationId),
     pendingUpgrade(org.organizationId),
+    // BILLING-EXTRA-01D · Y lo que tiene dinero SIN resolver, que no es lo
+    // mismo: ahí no se le ofrece a nadie pagar otra vez.
+    upgradeNeedingAction(org.organizationId),
     // 01B.4 · Un pago único abierto y sin confirmar. Es lo que ve quien cerró
     // la ventana de la pasarela: no tiene a dónde volver, así que el botón de
     // comprobar tiene que estar en la pantalla a la que sí vuelve.
@@ -160,6 +170,26 @@ export default async function BillingPage({
   }, longDate);
 
   // El nombre COMERCIAL del plan efectivo, del catálogo. Nunca un código.
+  // BILLING-EXTRA-01D · QUÉ SE PUEDE OFRECER SOBRE EXTRA, y por qué camino.
+  //
+  // Una sola autoridad. La pantalla no decide entre comprar, subir o no ofrecer
+  // nada: pregunta, y pinta lo que le digan. Las mismas reglas gobiernan
+  // `/planes`, así que no pueden contradecirse.
+  const accionExtra = resolveExtraAction({
+    billingState: resumen.state,
+    effectivePlanCode: comercial.effectivePlanCode,
+    renewalMode: estado?.renewalMode ?? null,
+    // La FORMA de cobro de ESTA suscripción, no la del despliegue: conviven
+    // empresas de las dos pasarelas y migrarlas por comodidad sería moverle a
+    // alguien su medio de pago sin pedírselo. Se traduce aquí para que el
+    // resolutor no tenga que saber cómo se llama ninguna.
+    paymentFlow: paymentFlowOf(estado?.provider ?? null),
+    upgradeInFlight: subidaEnCurso !== null,
+    upgradeNeedsAction: subidaRequiereAccion !== null,
+    isAdmin: esAdministrador,
+    storedSourceUpgradeAvailable: mejora.transactional,
+  });
+
   const planEfectivo = comercial.effectivePlanCode ?? estado?.planCode ?? "free";
   const fichaPlan = catalogo?.saasPlans.find((p) => p.code === planEfectivo) ?? null;
   const nombrePlan = fichaPlan?.headline
@@ -269,26 +299,44 @@ export default async function BillingPage({
         />
       ) : null}
 
-      {/* COMMERCIAL-UX-01B · El panel TRANSACCIONAL de mejora solo aparece si el
-          carril que la cobra puede cobrarla. Antes se ofrecía siempre, y con
-          Mercado Pago —que no guarda medios de pago— el botón contestaba «no
-          disponible» al pulsarlo. Un botón muerto en una pantalla de dinero es
-          una promesa que el producto no puede cumplir. */}
-      {esAdministrador && estado?.hasSubscription && estado.planCode === "full"
-        && !estado.cancelAtPeriodEnd && !estado.downgradeScheduled
-        && mejora.transactional ? (
+      {/* BILLING-EXTRA-01D · La acción sobre Extra, decidida en un solo sitio.
+          Antes esto eran seis condiciones encadenadas aquí mismo, y cada estado
+          nuevo —una subida en el aire, un cobro sin resolver— obligaba a añadir
+          otra y a acordarse de las cinco anteriores. */}
+      {accionExtra.kind === "upgrade" ? (
         <section className="rounded-md border border-hairline bg-surface p-4">
-          <h2 className="text-sm font-semibold">Subir a Extra</h2>
-          {subidaEnCurso ? (
-            <InfoAlert message={
-              "Estamos confirmando el pago del cambio a Extra. En cuanto se "
-              + "confirme, el plan queda activo. Tu plan actual sigue funcionando "
-              + "mientras tanto."} />
-          ) : (
-            <div className="pt-2">
-              <UpgradePanel targetPlanCode="extra" renewsAt={estado.renewsAt} />
-            </div>
-          )}
+          <h2 className="text-sm font-semibold">Pasar a Extra</h2>
+          <div className="pt-2">
+            <UpgradePanel targetPlanCode="extra" renewsAt={estado?.renewsAt ?? null} />
+          </div>
+        </section>
+      ) : accionExtra.kind === "purchase" ? (
+        <section className="rounded-md border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Pasar a Extra</h2>
+          <p className="pb-3 pt-1 text-sm text-ink-soft">
+            Extra se contrata como cualquier otro plan: verás el importe exacto
+            antes de pagar.
+          </p>
+          <Link href={moduleAwareHref("/settings/billing/checkout?plan=extra",
+                                      activeModule.key)}
+                className="inline-flex rounded-md bg-loop px-4 py-2 text-sm
+                           font-medium text-white">
+            Empezar con Extra
+          </Link>
+        </section>
+      ) : extraActionNote(accionExtra) !== null ? (
+        <section className="rounded-md border border-hairline bg-surface p-4">
+          <h2 className="text-sm font-semibold">Extra</h2>
+          <p className="pt-1 text-sm text-ink-soft">
+            {extraActionNote(accionExtra)}
+          </p>
+          {extraActionNeedsContact(accionExtra) ? (
+            <a href={CONTACT_HREF}
+               className="inline-flex pt-2 text-sm font-medium text-loop-deep
+                          underline">
+              Escríbenos
+            </a>
+          ) : null}
         </section>
       ) : null}
 

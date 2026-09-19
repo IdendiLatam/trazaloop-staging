@@ -135,13 +135,26 @@ check("C2. Sin carril configurado, tampoco", () => {
     "no se contempla que el carril de la mejora no exista en el despliegue");
 });
 
-check("C3. La pantalla condiciona el panel transaccional", () => {
+check("C3. El panel transaccional sigue condicionado a que el cobro pueda darse", () => {
+  // BILLING-EXTRA-01D movió la CONDICIÓN, no la regla. Antes se escribía en la
+  // pantalla; ahora la decide `resolveExtraAction`, que es una sola autoridad
+  // para las dos superficies. La garantía es la misma: un panel que cobra sólo
+  // aparece donde hay un carril capaz de cobrar.
   const p = leer(PAGINA);
-  assert(/mejora\.transactional \? \(/.test(p),
-    "el panel de mejora no depende de que el cobro pueda completarse");
+  assert(/accionExtra\.kind === "upgrade" \? \(/.test(p),
+    "el panel de mejora no depende de la decisión sobre Extra");
   const i = p.indexOf("<UpgradePanel");
-  const j = p.indexOf("mejora.transactional");
+  const j = p.indexOf("accionExtra.kind");
   assert(j > 0 && j < i, "la condición va después del panel que debe condicionar");
+
+  // Y la pantalla SIGUE pasándole al resolutor si ese carril puede cobrar: sin
+  // eso, la decisión no podría negarse.
+  assert(/storedSourceUpgradeAvailable: mejora\.transactional/.test(p),
+    "la pantalla ya no consulta si el carril de medio guardado puede cobrar");
+  const resolutor = leer("lib/billing/extra-action.ts");
+  assert(/storedSourceUpgradeAvailable\s*\?/.test(resolutor)
+    || /f\.storedSourceUpgradeAvailable/.test(resolutor),
+    "el resolutor ignora si el carril puede cobrar");
 });
 
 check("C4. Y el carril de Wompi NO se borra", () => {
@@ -157,12 +170,19 @@ check("C5. Y la puerta de verdad está en el SERVIDOR, no en la pantalla", () =>
   // Esconder el botón protege a quien mira la pantalla. Una acción de servidor
   // se puede invocar sin pantalla —para eso existe— así que la comprobación
   // tiene que estar también ahí, o la protección es decorativa.
+  // BILLING-EXTRA-01D · El cuerpo se acota por la función SIGUIENTE, no por un
+  // número de caracteres. La ventana fija se quedó corta en cuanto la acción
+  // creció, y una prueba que falla por la LONGITUD de una función no está
+  // comprobando esta regla.
   const a = leer(ACCIONES);
+  const cuerpoDe = (nombre: string) => {
+    const i = a.indexOf(`export async function ${nombre}`);
+    assert(i > 0, `no existe ${nombre}`);
+    const j = a.indexOf("\nexport ", i + 10);
+    return a.slice(i, j === -1 ? a.length : j);
+  };
   for (const accion of ["quoteUpgradeAction", "confirmUpgradeAction"]) {
-    const i = a.indexOf(`export async function ${accion}`);
-    assert(i > 0, `no existe ${accion}`);
-    const cuerpo = a.slice(i, i + 1400);
-    assert(/resolveUpgradeAvailability\(\)\.transactional/.test(cuerpo),
+    assert(/resolveUpgradeAvailability\(\)\.transactional/.test(cuerpoDe(accion)),
       `${accion} atiende una mejora que el carril no puede cobrar`);
   }
 });
@@ -173,7 +193,8 @@ check("C6. Y va DELANTE de la primera escritura", () => {
   // queda sin poder subir de plan nunca más, sin que se haya movido un peso.
   const a = leer(ACCIONES);
   const i = a.indexOf("export async function confirmUpgradeAction");
-  const cuerpo = a.slice(i, i + 1800);
+  const j = a.indexOf("\nexport ", i + 10);
+  const cuerpo = a.slice(i, j === -1 ? a.length : j);
   const guarda = cuerpo.indexOf("resolveUpgradeAvailability()");
   const escritura = cuerpo.indexOf("openUpgradeIntent(");
   assert(guarda > 0 && escritura > 0, "no se encontraron guarda y escritura");

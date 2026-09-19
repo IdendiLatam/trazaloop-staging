@@ -290,6 +290,12 @@ export type UpgradeConfirmState = {
   submitted?: boolean;
   /** No sabemos si se cobró. Nadie vuelve a cobrar solo. */
   uncertain?: boolean;
+  /**
+   * BILLING-EXTRA-01D · A dónde se manda a pagar, cuando el carril es de
+   * redirección. El importe NO viaja: lo congeló el intento y lo lleva la
+   * preferencia que el servidor creó.
+   */
+  initPoint?: string;
 };
 
 /**
@@ -301,6 +307,44 @@ export async function confirmUpgradeAction(
 ): Promise<UpgradeConfirmState> {
   const quien = await exigirAdministracion();
   if (!quien.ok) return { error: quien.error };
+
+  // BILLING-EXTRA-01D · QUIÉN COBRA ESTA SUBIDA.
+  //
+  // Se lee de la suscripción, no del navegador. Con Mercado Pago la subida se
+  // cobra con un checkout de pago único —no hay medio guardado que usar— y el
+  // desenlace lo resuelve la saga canónica. El carril de Wompi sigue entero
+  // debajo, con su medio guardado, y no se toca.
+  const { startUpgradeCharge } = await import("@/lib/db/upgrade-reconcile");
+  const { createServerClient: crear } = await import("@/lib/supabase/server");
+  // La vuelta va al despliegue QUE ATIENDE la petición, no a una variable con
+  // una URL clavada: MP-REC-01B.11 lo aprendió con un comprador que aterrizó
+  // en un 404 justo después de pagar.
+  const origen = await origenDeVueltaRecurrente();
+  if (!origen) {
+    return { error: "No pudimos preparar el pago. No se cobró nada." };
+  }
+  const apertura = await startUpgradeCharge({
+    changeId, organizationId: quien.organizationId, origin: origen,
+    payerEmail: quien.email || null, supabase: await crear(),
+  });
+  if (!apertura.ok) {
+    return { error: "No pudimos preparar el pago del cambio. No se cobró nada." };
+  }
+  if (apertura.flow === "redirect") {
+    revalidatePath("/settings/billing");
+    return { error: null, submitted: true, initPoint: apertura.initPoint };
+  }
+
+  // BILLING-EXTRA-01D · Y para el carril de MEDIO GUARDADO, la puerta de 01B
+  // sigue entera y en el mismo sitio: delante de la primera escritura.
+  //
+  // La comprobación es de ESE carril, no de la subida: el de redirección cobra
+  // sin medio guardado y ya devolvió arriba. Moverla o ampliarla a los dos
+  // habría cerrado un camino que sí puede cobrar.
+  if (!resolveUpgradeAvailability().transactional) {
+    return { error: NO_SE_PUEDE.upgrade_not_available };
+  }
+
   // Y aquí otra vez, ANTES de `openUpgradeIntent`. No es repetirse: es el orden.
   //
   // Abrir el intento pone el cambio en `submitted`, y desde ahí
@@ -309,10 +353,6 @@ export async function confirmUpgradeAction(
   // mover un peso, la empresa se quedaba sin poder volver a subir de plan nunca
   // y hacía falta una persona de plataforma para sacarla de ahí. La comprobación
   // tiene que ir DELANTE de la primera escritura, no detrás.
-  if (!resolveUpgradeAvailability().transactional) {
-    return { error: NO_SE_PUEDE.upgrade_not_available };
-  }
-
   const { openUpgradeIntent } = await import("@/lib/db/billing-upgrade");
   const { wompiFromEnv } = await import("@/lib/billing/providers/wompi");
   const proveedor = wompiFromEnv();

@@ -128,25 +128,33 @@ export function resolvePlanCta(
       return { label: null, href: null, tone: "quiet",
                suppressedReason: "ALREADY_ON_PLAN", note: "Tu plan actual." };
     }
-    if (!caps.upgradeTransactional) {
-      return {
-        label: "Hablemos de Extra", href: CONTACT_HREF, tone: "quiet",
-        suppressedReason: "UPGRADE_NOT_TRANSACTIONAL",
-        note: "El paso a Extra lo hacemos contigo.",
-      };
-    }
-    // El día que el carril pueda cobrar: cada quien por donde le toca, y sin
-    // prometerle una prueba a nadie.
+    // BILLING-EXTRA-01D · EXTRA YA SE VENDE.
+    //
+    // Hasta aquí esta rama mandaba a contacto SIEMPRE, porque el carril que
+    // cobraba la subida era el de Wompi y con la pasarela del lanzamiento no
+    // podía cobrar. Eso dejó de ser cierto: Mercado Pago cobra la compra y la
+    // subida, demostrado contra el proveedor real.
+    //
+    // Lo que NO cambia es qué hace esta página: orienta, no cobra. El botón
+    // lleva al flujo de siempre —registrarse, entrar, o la ficha de
+    // facturación— y allí decide el resolutor canónico si toca comprar, subir o
+    // ninguna de las dos. Aquí no se sabe lo suficiente para elegir: hace falta
+    // el estado de facturación, y una página pública no lo tiene.
+    // Cada quien por donde le toca, y sin prometerle una prueba a nadie: la
+    // prueba es de Full y Extra no la tiene.
     if (visitor.kind === "anonymous") {
       return caps.registrationOpen
-        ? { label: "Crear cuenta", href: "/register", tone: "quiet" }
+        ? { label: "Empezar con Extra", href: "/register", tone: "primary" }
         : { label: "Solicitar acceso", href: CONTACT_HREF, tone: "quiet",
             suppressedReason: "REGISTRATION_CLOSED" };
     }
     if (visitor.kind === "authenticated_no_org") {
       return { label: "Crear mi empresa", href: "/select-org", tone: "quiet" };
     }
-    return { label: "Pasar a Extra", href: "/settings/billing", tone: "primary" };
+    // Con empresa: a la ficha, que es donde la decisión tiene los datos para
+    // tomarse. Comprar y subir se dicen distinto porque son cosas distintas.
+    return { label: contratado === "full" ? "Pasar a Extra" : "Empezar con Extra",
+             href: "/settings/billing", tone: "primary" };
   }
 
   // ── sin cuenta ────────────────────────────────────────────────────────────

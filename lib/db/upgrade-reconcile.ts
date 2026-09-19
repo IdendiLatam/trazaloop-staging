@@ -27,6 +27,46 @@ import type { UpgradeReconcileResult } from "@/lib/db/upgrade-mercadopago";
 
 export type { UpgradeReconcileResult } from "@/lib/db/upgrade-mercadopago";
 
+export type StartUpgradeChargeResult =
+  | { ok: true; flow: "redirect"; initPoint: string }
+  | { ok: true; flow: "stored_source" }
+  | { ok: false; code: string };
+
+/**
+ * BILLING-EXTRA-01D · Empezar a cobrar una subida, por el carril que toque.
+ *
+ * La acción de servidor no tiene por qué saber cómo se llama ninguna pasarela:
+ * pide «cobra esta subida» y recibe, o un sitio a donde mandar a alguien, o la
+ * confirmación de que el cobro ya salió contra un medio guardado.
+ *
+ * El carril lo dice la suscripción. Cuando nazca un tercero, se añade aquí.
+ */
+export async function startUpgradeCharge(input: {
+  changeId: string;
+  organizationId: string;
+  origin: string;
+  payerEmail: string | null;
+  supabase: { rpc: (fn: string, args: Record<string, unknown>) =>
+    PromiseLike<{ data: unknown; error: { message: string } | null }> };
+}): Promise<StartUpgradeChargeResult> {
+  const { carrilDeSubida } = await import("@/lib/db/upgrade-lane");
+  const carril = await carrilDeSubida(input.changeId, input.organizationId);
+  if (carril === null) return { ok: false, code: "LANE_UNKNOWN" };
+
+  if (carril === "redirect") {
+    const { startMercadoPagoUpgradeCheckout } =
+      await import("@/lib/db/upgrade-mercadopago");
+    const r = await startMercadoPagoUpgradeCheckout({
+      changeId: input.changeId, origin: input.origin,
+      payerEmail: input.payerEmail, supabase: input.supabase,
+    });
+    return r.ok ? { ok: true, flow: "redirect", initPoint: r.initPoint }
+                : { ok: false, code: r.code };
+  }
+  // El carril de medio guardado lo sigue llevando quien lo llevaba.
+  return { ok: true, flow: "stored_source" };
+}
+
 export async function reconcileUpgrade(
   changeId: string,
   /** Lo que una persona con autoridad decidió, si hay alguna. */

@@ -133,6 +133,15 @@ export type OrganizationBillingState = {
   renewsAt: string | null;
   /** 0193 · Quién renueva: manual, platform o provider. `null` = sin leer. */
   renewalMode: string | null;
+  /**
+   * BILLING-EXTRA-01D · Qué pasarela cobra ESTA suscripción.
+   *
+   * Hace falta porque el camino de una subida depende de ella: con Mercado
+   * Pago se cobra la diferencia por redirección, con Wompi contra el medio
+   * guardado. Y es de la suscripción, no del despliegue: conviven empresas de
+   * las dos.
+   */
+  provider: string | null;
   cancelAtPeriodEnd: boolean;
   graceUntil: string | null;
   lastPaymentStatus: string | null;
@@ -161,6 +170,20 @@ export async function getOrganizationBillingState(
   // duda —y entonces no se dice ni que falló ni que se cobró— y si falta con
   // qué cobrar. Se preguntan al dominio; no se deducen del estado.
   const subId = str(r.subscription_id);
+
+  // BILLING-EXTRA-01D · Qué pasarela cobra ESTA suscripción.
+  //
+  // Se lee de la tabla en vez de ampliar `organization_billing_state`: esa
+  // función la comparten varias pantallas y cambiarle la forma para una
+  // necesidad de una sola obliga a revisarlas todas. Una lectura más, acotada
+  // a la suscripción que ya se identificó, cuesta menos que eso.
+  let proveedor: string | null = null;
+  if (subId) {
+    const { data: p } = await supabase.from("billing_subscriptions")
+      .select("provider").eq("id", subId).maybeSingle();
+    proveedor = (p as { provider: string | null } | null)?.provider ?? null;
+  }
+
   let enDuda = false;
   if (subId) {
     const { data: duda } = await supabase.rpc("billing_has_unresolved_charge",
@@ -182,6 +205,7 @@ export async function getOrganizationBillingState(
     currentPeriodEnd: str(r.current_period_end),
     renewsAt: str(r.renews_at),
     renewalMode: str(r.renewal_mode),
+    provider: proveedor,
     cancelAtPeriodEnd: r.cancel_at_period_end === true,
     graceUntil: str(r.grace_until),
     manualReview: enDuda,

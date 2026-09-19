@@ -606,27 +606,34 @@ async function main() {
     }
   });
 
-  console.log("\n9 · LO QUE ESTE TRAMO NO ENCIENDE");
+  console.log("\n9 · LO QUE SE ENCENDIÓ, Y LO QUE SIGUE CERRADO");
 
-  check("9A. El CTA de Extra sigue siendo «Hablemos de Extra»", () => {
-    // El carril financiero está construido y probado, pero no se ofrece hasta
-    // que pase una prueba real en Sandbox. Encenderlo antes sería prometer una
-    // transacción que nadie ha visto completarse con dinero de verdad.
+  check("9A. Extra ya se ofrece, y por la autoridad de decisión", () => {
+    // BILLING-EXTRA-01D sustituyó la política de este tramo. Entonces el motor
+    // estaba construido pero sin probar contra el proveedor, y encenderlo habría
+    // sido prometer una transacción que nadie había visto completarse. Ya se vio:
+    // compra, subida manual y subida recurrente, con dinero real de Sandbox.
+    //
+    // Lo que queda comprobado aquí es que la activación pasa por UNA autoridad y
+    // no por condiciones sueltas en cada pantalla.
     const cta = leer("lib/plans/pricing-cta.ts");
-    assert(/Hablemos de Extra/.test(cta), "desapareció el CTA de contacto");
-    const disp = leer("lib/billing/upgrade-availability.ts");
-    assert(/wompiFromEnv/.test(disp),
-      "la disponibilidad transaccional cambió de carril en este tramo");
+    assert(/Empezar con Extra/.test(cta), "la página pública no ofrece Extra");
+    assert(/CONTACT_HREF/.test(cta),
+      "desapareció la salida de contacto para cuando no hay nada que ofrecer");
+    const resolutor = leer("lib/billing/extra-action.ts");
+    assert(/export function resolveExtraAction/.test(resolutor),
+      "no existe una autoridad de decisión sobre Extra");
   });
 
-  check("9B. Y no se ha tocado nada de la experiencia comercial", () => {
-    for (const f of ["app/planes/page.tsx",
-                     "components/domain/commercial/pricing-plans.tsx",
-                     "components/domain/billing/upgrade-panel.tsx"]) {
-      const src = leer(f);
-      assert(!/reconcileMercadoPagoUpgrade|startMercadoPagoUpgradeCheckout/.test(src),
-        `${f} ya llama al carril nuevo: eso es del tramo siguiente`);
-    }
+  check("9B. Y sigue cerrado lo que no se demostró", () => {
+    // La subida por medio guardado sigue preguntando por su capacidad: si ese
+    // carril no puede cobrar, no se ofrece. Es la regla de 01B, intacta.
+    const disp = leer("lib/billing/upgrade-availability.ts");
+    assert(/wompiFromEnv/.test(disp),
+      "la disponibilidad del carril de medio guardado cambió en este tramo");
+    const resolutor = leer("lib/billing/extra-action.ts");
+    assert(/STORED_SOURCE_UPGRADE_UNAVAILABLE/.test(resolutor),
+      "el resolutor ya no contempla que ese carril no pueda cobrar");
   });
 
   check("9C. La liquidación sigue siendo la MISMA primitiva de 0181", () => {

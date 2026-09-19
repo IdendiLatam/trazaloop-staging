@@ -295,25 +295,52 @@ async function main() {
     }
   });
 
-  await check("4B. Y ninguna promete un upgrade que no puede completarse", () => {
-    // Cada superficie consulta la capacidad; la ETIQUETA puede vivir en la
-    // propia pantalla o en el módulo que decide por ella. /planes delega en
-    // `pricing-cta`, y eso es mejor que repetir el texto — buscarlo en el
-    // fichero equivocado daba un rojo que no era.
+  await check("4B. Y ninguna ofrece una acción que el carril no pueda cumplir", () => {
+    // BILLING-EXTRA-01D cambió la política, no la garantía.
+    //
+    // Antes la regla era «Extra siempre a contacto», porque el único carril que
+    // cobraba la subida no podía cobrar. Ahora Mercado Pago cobra la compra y la
+    // subida, y esconderlo sería vender menos de lo que el producto hace.
+    //
+    // Lo que sigue en pie —y es lo que 01B cerró— es que nadie ofrezca una
+    // acción que su carril no pueda completar. Cada superficie lo sigue
+    // preguntando, y donde la respuesta es «no», el texto de contacto existe.
     const decide: Record<string, string> = {
       [PLANES]: "lib/plans/pricing-cta.ts",
-      [BILLING]: BILLING,
+      [BILLING]: "lib/billing/extra-action.ts",
     };
     for (const [superficie, duenoDelTexto] of Object.entries(decide)) {
       const src = leer(superficie);
-      assert(/upgradeTransactional|resolveUpgradeAvailability/.test(src),
-        `${superficie} no consulta si el carril puede cobrar`);
-      assert(/Hablemos de Extra/.test(leer(duenoDelTexto)),
-        `${superficie} no ofrece la alternativa no transaccional`);
-      // Y en ninguna aparece una promesa transaccional suelta.
+      assert(/upgradeTransactional|resolveUpgradeAvailability|resolveExtraAction/
+        .test(src), `${superficie} no consulta si el carril puede cobrar`);
+      // La salida existe y lleva al canal de contacto. El TEXTO cambia según
+      // el caso —«Solicitar acceso» con el registro cerrado, «lo hacemos
+      // contigo» cuando el carril de subida no puede cobrar— así que se
+      // comprueba el destino, que es lo que de verdad importa.
+      const texto = leer(duenoDelTexto);
+      assert(/CONTACT_HREF|contacto@/.test(texto),
+        `${superficie} se quedó sin salida cuando el carril no puede cobrar`);
+      // Y ninguna inventa una promesa suelta fuera de su resolutor.
       assert(!/Comprar Extra|Actualizar ahora/i.test(src),
-        `${superficie} promete una transacción de Extra`);
+        `${superficie} promete una transacción de Extra por su cuenta`);
     }
+  });
+
+  await check("4B.2. Y la decisión de Extra vive en UN solo sitio", () => {
+    // El defecto que este tramo evita: cuatro pantallas decidiendo por su
+    // cuenta entre comprar, subir y no ofrecer nada. Se contradicen en cuanto
+    // alguien toca una.
+    const resolutor = leer("lib/billing/extra-action.ts");
+    assert(/export function resolveExtraAction/.test(resolutor),
+      "no existe una autoridad de decisión para Extra");
+    const billing = leer(BILLING);
+    assert(/resolveExtraAction\(/.test(billing),
+      "la ficha de facturación decide por su cuenta");
+    // Y no reimplementa la decisión con condiciones propias sobre el plan.
+    const limpio = billing.replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    assert(!/planCode === "full"[\s\S]{0,120}extra/i.test(limpio),
+      "la ficha vuelve a encadenar condiciones para decidir sobre Extra");
   });
 
   await check("4C. El contacto es un canal REAL, el mismo en todas", () => {
