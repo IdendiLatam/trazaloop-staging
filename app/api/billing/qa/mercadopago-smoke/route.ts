@@ -92,7 +92,11 @@ const ACCIONES = ["preflight", "prepare", "create_monthly", "create_annual",
                   "upgrade_reconcile", "upgrade_state",
                   "upgrade_force_settlement_mismatch",
                   // BILLING-EXTRA-01C.1 · la evidencia del proveedor, sin tocar nada.
-                  "upgrade_payment_evidence"] as const;
+                  "upgrade_payment_evidence",
+                  // BILLING-EXTRA-01C.4 · la fixture recurrente real.
+                  "upgrade_recurring_prepare",
+                  // BILLING-EXTRA-01C.4 · abrir la ventana que la saga no tiene.
+                  "upgrade_authorization_only"] as const;
 type Accion = (typeof ACCIONES)[number];
 
 /** Registro de servidor: tipo de operación y clasificación. Nunca un valor. */
@@ -681,6 +685,193 @@ async function manejar(request: Request) {
         organization_id: orgId, ...(await foto(orgId)) });
     }
 
+
+    // --- upgrade_recurring_prepare · Full RECURRENTE, por el carril real ---
+    //
+    // La fixture de los escenarios 2 y 3 tiene que nacer como nace una
+    // suscripción de verdad: presupuesto, carril recurrente de MP-REC,
+    // preapproval del proveedor y autorización de una persona. Insertarla a mano
+    // demostraría que Extra funciona sobre algo que el producto no crea.
+    //
+    // Esta acción llega hasta el punto donde hace falta esa persona, y para.
+    if (accion === "upgrade_recurring_prepare") {
+      const etiqueta = String(cuerpo.fixture ?? "");
+      if (!/^QA-EXTRA-PROVIDER-[A-Z]{3,20}$/.test(etiqueta)) {
+        return no("FIXTURE_LABEL_INVALID", 400);
+      }
+
+      // 1 · La empresa, por la primitiva de siempre y con una persona detrás.
+      const correo = `${etiqueta.toLowerCase()}@test.trazaloop.dev`;
+      const { data: yaOrg } = await adminUp.from("organizations")
+        .select("id, created_by").eq("name", etiqueta).maybeSingle();
+      let org = (yaOrg as { id: string } | null)?.id ?? null;
+      let uid = (yaOrg as { created_by: string | null } | null)?.created_by ?? null;
+
+      if (!org) {
+        const clave = `QA-${randomUUID()}`;
+        const { data: lista } = await adminUp.auth.admin.listUsers();
+        const existente = lista.users.find((u) => u.email === correo);
+        if (existente) {
+          uid = existente.id;
+          await adminUp.auth.admin.updateUserById(uid, { password: clave });
+        } else {
+          const { data: nuevo, error } = await adminUp.auth.admin.createUser({
+            email: correo, password: clave, email_confirm: true,
+            user_metadata: { full_name: etiqueta } });
+          if (error || !nuevo.user) return no(`QA_USER_FAILED:${error?.message}`, 500);
+          uid = nuevo.user.id;
+        }
+        const cliTmp: SupabaseClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+          (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+            ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string,
+          { auth: { persistSession: false } });
+        const { error: eLogin } = await cliTmp.auth.signInWithPassword(
+          { email: correo, password: clave });
+        if (eLogin) return no(`QA_SESSION_REFUSED:${eLogin.message.slice(0, 60)}`, 424);
+        await cliTmp.rpc("accept_active_legal_documents",
+          { p_ip_address: null, p_user_agent: "bx01c4" });
+        const { data: creada, error: eOrg } = await cliTmp.rpc("create_organization",
+          { p_name: etiqueta, p_tax_id: null, p_country: "CO" });
+        if (eOrg || !creada) return no(`QA_ORG_FAILED:${eOrg?.message}`, 500);
+        org = String(creada);
+        await adminUp.from("memberships").update({ role_code: "admin" })
+          .eq("organization_id", org).eq("user_id", uid as string);
+      }
+
+      const f = await foto(org as string);
+      if (f.subscription && f.subscription.status === "active") {
+        return NextResponse.json({ ok: true, reused: true,
+          organization: etiqueta, organization_id: org, ...f });
+      }
+
+      // 2 · El presupuesto, con la sesión de su administradora.
+      const ses = await sesionDeAdministrador(adminUp, org as string);
+      if ("error" in ses) return no(ses.error, 424);
+      const { data: q, error: eq } = await ses.cli.rpc("billing_create_quote", {
+        p_organization_id: org, p_plan_code: "full",
+        p_billing_interval: "monthly", p_coupon_code: null });
+      if (eq || !q) {
+        return NextResponse.json({ ok: false, error: "QUOTE_REFUSED",
+          detail: eq?.message ?? null }, { status: 409 });
+      }
+      const presupuesto = q as Record<string, unknown>;
+
+      // 3 · Y el carril RECURRENTE de MP-REC, el mismo que usa el producto.
+      const { openRecurringCheckout, OPEN_RECURRING_MESSAGE } =
+        await import("@/lib/db/recurring-checkout");
+      const url = new URL(request.url);
+      const abierto = await openRecurringCheckout({
+        quoteId: String(presupuesto.quote_id),
+        supabase: ses.cli,
+        origin: `${url.protocol}//${url.host}`,
+        planLabel: "Trazaloop Full · mensual",
+      });
+      if (!abierto.ok) {
+        return NextResponse.json({ ok: false, error: abierto.code,
+          message: OPEN_RECURRING_MESSAGE[abierto.code] ?? null,
+          detail: abierto.detail ?? null }, { status: 409 });
+      }
+
+      return NextResponse.json({ ok: true, reused: false,
+        organization: etiqueta, organization_id: org,
+        quote: presupuesto,
+        init_point: abierto.initPoint,
+        expected_recurring_amount: presupuesto.total_amount,
+        currency: presupuesto.charge_currency,
+        ...(await foto(org as string)) });
+    }
+
+
+    // --- upgrade_authorization_only · SOLO hasta dejar Extra en la autorización
+    //
+    // La saga canónica no tiene ventana entre «poner el importe de Extra» y
+    // «liquidar»: hace las dos en la misma pasada, y eso está bien — es
+    // justamente lo que evita que alguien se quede a medias.
+    //
+    // Pero el escenario 3 necesita esa ventana para demostrar qué pasa cuando
+    // la liquidación se niega DESPUÉS de que el proveedor ya está en Extra. Así
+    // que esta acción reproduce la coreografía con las MISMAS primitivas —anotar
+    // el cobro, congelar el importe anterior, pedir el cambio, volver a
+    // preguntar, anotar lo leído— y se detiene antes de liquidar.
+    //
+    // No decide nada por su cuenta: el importe objetivo se deriva exactamente
+    // igual que en la saga, de la fila del cambio y de la autoridad de redondeo.
+    if (accion === "upgrade_authorization_only") {
+      const changeId = String(cuerpo.change_id ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(changeId)) return no("CHANGE_ID_REQUIRED", 400);
+      if ((process.env.VERCEL_ENV ?? "local") === "production") {
+        return no("QA_FORBIDDEN_IN_PRODUCTION");
+      }
+      if (!duenno.ownerMatchesExpected) return no("QA_OWNER_MISMATCH");
+
+      const ctx = await contexto(changeId);
+      if (ctx.error !== undefined) return no(ctx.error, 403);
+      const { cambio, intento } = ctx;
+      if (!intento || intento.provider !== MERCADOPAGO) {
+        return no("NOT_MERCADOPAGO", 409);
+      }
+      if (cambio.status !== "submitted") {
+        return no(`CHANGE_STATE_${String(cambio.status).toUpperCase()}`, 409);
+      }
+
+      // 1 · El cobro, descubierto por referencia y anotado.
+      const { buildUpgradeReference } =
+        await import("@/lib/billing/upgrade-reference");
+      const pagos = await proveedor.searchPaymentsByReference(
+        buildUpgradeReference(String(intento.id)));
+      if (!pagos.ok) return no(`PROVIDER_UNREACHABLE:${pagos.failure}`, 424);
+      const aprobado = pagos.value.payments.find(
+        (x) => mapPaymentStatus(x.providerStatus) === "approved");
+      if (!aprobado) return no("NO_APPROVED_PAYMENT", 409);
+      await adminUp.rpc("billing_observe_upgrade_delta", {
+        p_change_id: changeId, p_provider_payment_id: aprobado.providerPaymentId });
+
+      // 2 · La autorización viva de esa suscripción.
+      const { data: authRaw } = await adminUp.from("billing_recurring_authorizations")
+        .select("provider_subscription_id, status")
+        .eq("subscription_id", String(cambio.subscription_id))
+        .in("status", ["authorized", "uncertain"])
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const pre = (authRaw as { provider_subscription_id: string } | null)
+        ?.provider_subscription_id ?? null;
+      if (!pre) return no("NO_LIVE_AUTHORIZATION", 409);
+
+      const antes = await proveedor.getSubscriptionDetail(pre);
+      if (!antes.ok) return no(`AUTHORIZATION_UNREADABLE:${antes.failure}`, 424);
+      await adminUp.rpc("billing_note_upgrade_recurring_before", {
+        p_change_id: changeId, p_amount: antes.value.amount,
+        p_currency: antes.value.currency });
+
+      // 3 · El importe objetivo, DERIVADO igual que en la saga.
+      const base = Number(cambio.target_full_base);
+      const { data: imp } = await adminUp.rpc("billing_tax_amount", {
+        p_base: base, p_rate_basis_points: Number(cambio.tax_rate_basis_points) });
+      const objetivo = base + Number(imp);
+
+      const puesto = await proveedor.updateRecurringAmount(
+        pre, objetivo, String(intento.expected_currency));
+
+      // 4 · Y SIEMPRE se vuelve a preguntar, salga como salga el PUT.
+      const despues = await proveedor.getSubscriptionDetail(pre);
+      await adminUp.rpc("billing_note_upgrade_recurring_observed", {
+        p_change_id: changeId,
+        p_amount: despues.ok ? despues.value.amount : null,
+        p_currency: despues.ok ? despues.value.currency : null });
+
+      return NextResponse.json({ ok: true,
+        organization: ctx.org.name, change_id: changeId,
+        delta_provider_payment_id: aprobado.providerPaymentId,
+        amount_before: antes.value.amount,
+        target_amount: objetivo,
+        put_ok: puesto.ok,
+        amount_after: despues.ok ? despues.value.amount : null,
+        provider_status_after: despues.ok ? despues.value.providerStatus : null,
+        preapproval_id_changed: despues.ok
+          ? despues.value.providerSubscriptionId !== pre : null,
+        ...(await foto(String(cambio.organization_id))) });
+    }
+
     // --- upgrade_payment_evidence · SOLO LECTURA, contra el proveedor ------
     //
     // Lo que Mercado Pago dice de un cobro y de sus devoluciones. Existe para
@@ -904,7 +1095,30 @@ async function manejar(request: Request) {
       if (mapPaymentStatus(detalle.value.providerStatus) !== "approved") {
         return no("QA_FAULT_PAYMENT_NOT_APPROVED", 409);
       }
-      if (detalle.value.liveMode !== false) return no("QA_FAULT_PAYMENT_NOT_TEST", 409);
+      // La identidad, NO la bandera.
+      //
+      // Aquí estaba escrito `liveMode !== false`, y es el mismo error que
+      // PROD-LAUNCH-01B.4 cerró en el carril de pago único y que 01C.1 tuvo que
+      // volver a cerrar en la saga: un cobro REAL de Sandbox llega con
+      // `live_mode: true` porque la bandera describe la CREDENCIAL, no nuestro
+      // entorno. Con la regla vieja esta guarda rechazaba justo los cobros que
+      // tenía que aceptar.
+      //
+      // Lo que separa «nuestro» de «ajeno» es quién cobró. El entorno ya está
+      // comprobado arriba, por configuración.
+      // `getPaymentDetail` no dice quién cobró; la búsqueda por referencia sí.
+      const { buildUpgradeReference: refDe } =
+        await import("@/lib/billing/upgrade-reference");
+      const porRef = await proveedor.searchPaymentsByReference(
+        refDe(String(intento.id)));
+      if (!porRef.ok) return no("QA_FAULT_PAYMENT_UNREADABLE", 424);
+      const visto = porRef.value.payments.find(
+        (x) => x.providerPaymentId === pagoId);
+      if (!visto) return no("QA_FAULT_PAYMENT_NOT_FOR_THIS_INTENT", 409);
+      if (visto.collectorId !== null && duenno.ownerId !== null
+          && visto.collectorId !== duenno.ownerId) {
+        return no("QA_FAULT_PAYMENT_COLLECTOR_MISMATCH", 409);
+      }
 
       // GUARDA 5 · la autorización ya está en Extra y verificada. Sin esto la
       // demostración no vale: el caso es justamente ése.

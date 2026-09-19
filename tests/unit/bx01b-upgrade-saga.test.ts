@@ -482,6 +482,35 @@ async function main() {
       "la llave del reembolso se genera al azar: entonces no es idempotente");
   });
 
+  check("2C.4. Y `live_mode` NO decide en NINGÚN sitio fuera de producción", () => {
+    // Este error ha vuelto tres veces: lo cerró PROD-LAUNCH-01B.4 en el carril
+    // de pago único, volvió en la saga de subidas (01C.1) y volvió otra vez en
+    // la guarda de la costura QA (01C.4), donde rechazaba justo los cobros
+    // reales de Sandbox que tenía que aceptar.
+    //
+    // La regla, dicha una vez: `live_mode` describe la CREDENCIAL. Sólo manda
+    // en producción. Fuera de ahí, lo que separa «nuestro» de «ajeno» es la
+    // identidad — el titular y el cobrador.
+    const sospechosos = [
+      "lib/billing/upgrade/saga.ts",
+      "app/api/billing/qa/mercadopago-smoke/route.ts",
+      "lib/db/upgrade-mercadopago.ts",
+    ];
+    for (const f of sospechosos) {
+      const src = sinComentarios(leer(f));
+      // Se permite exigirlo cuando el entorno configurado es `live`; cualquier
+      // otra comparación contra la bandera es la regla vieja volviendo.
+      const usos = [...src.matchAll(/liveMode\s*!==?\s*(true|false|null)/g)]
+        .map((m) => m[0]);
+      for (const u of usos) {
+        assert(/liveMode !== true/.test(u),
+          `${f} vuelve a decidir por live_mode: «${u}»`);
+      }
+      assert(!/liveMode\s*\?\s*"live"\s*:\s*"test"/.test(src),
+        `${f} deriva el entorno de live_mode`);
+    }
+  });
+
   console.log("\n13 · COMPLETAR UNA SUBIDA PAGADA · LA OPERACIÓN GOBERNADA");
 
   check("13A. La decide una persona, pero NO la ejecuta a mano", () => {
