@@ -294,6 +294,7 @@ check("secuencia de migraciones: 0001–0103 intactas de nombre, 0104 única, si
     "0139_document_contextual_review.sql",
     "0140_intelligence_usage_and_cost.sql",
     "0141_intelligence_platform_visibility.sql",
+    "0219_recurring_first_settlement_grants_plan.sql",
     "0218_billing_upgrade_failed_with_money.sql",
     "0217_billing_upgrade_provider_restoration.sql",
     "0216_billing_upgrade_compensation.sql",

@@ -353,11 +353,12 @@ check("AP1. La cadena comercial está completa y en orden", () => {
     "0216_billing_upgrade_compensation.sql",
     "0217_billing_upgrade_provider_restoration.sql",
     "0218_billing_upgrade_failed_with_money.sql",
+    "0219_recurring_first_settlement_grants_plan.sql",
   ];
   const enDisco = readdirSync("supabase/migrations");
   for (const m of esperadas) assert(enDisco.includes(m), `falta ${m}`);
   const cabecera = enDisco.filter((f) => f.endsWith(".sql")).sort().at(-1);
-  assert(cabecera === "0218_billing_upgrade_failed_with_money.sql",
+  assert(cabecera === "0219_recurring_first_settlement_grants_plan.sql",
     `la cabecera es ${cabecera}`);
 });
 
